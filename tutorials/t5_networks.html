@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>settings – Starsim</title>
+<title>T5 - Networks – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -20,6 +20,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -30,8 +65,8 @@ ul.task-list li input[type="checkbox"] {
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../api/utils.html" rel="next">
-<link href="../api/samples.html" rel="prev">
+<link href="../tutorials/t6_interventions.html" rel="next">
+<link href="../tutorials/t4_diseases.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -310,7 +345,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../api/arrays.html"><strong>Utilities</strong></a></li><li class="breadcrumb-item"><a href="../api/settings.html">settings</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../tutorials/t1_intro.html"><strong>Tutorials</strong></a></li><li class="breadcrumb-item"><a href="../tutorials/t5_networks.html">T5 - Networks</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -330,6 +365,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>What’s new</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../api/index.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><strong>API reference</strong></span></a>
   </div>
@@ -337,7 +378,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Basics</strong></span></a>
+ <span class="menu-text"><strong>Tutorials</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
@@ -345,26 +386,38 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/sim.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">sim</span></a>
+  <a href="../tutorials/t1_intro.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T1 - Getting started</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/loop.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">loop</span></a>
+  <a href="../tutorials/t2_model.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T2 - Building your model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/people.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">people</span></a>
+  <a href="../tutorials/t3_demographics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T3 - Demographics</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/parameters.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">parameters</span></a>
+  <a href="../tutorials/t4_diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T4 - Diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t5_networks.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">T5 - Networks</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t6_interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
       </ul>
@@ -372,126 +425,213 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Modules</strong></span></a>
+ <span class="menu-text"><strong>User guide</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
       <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/modules.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">modules</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">networks</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/demographics.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">demographics</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/interventions.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">interventions</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/products.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">products</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
+          <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Workflows</strong></span></a>
+ <span class="menu-text">Introduction</span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
-      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/run.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">run</span></a>
+  <a href="../user_guide/intro_starsim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">What is Starsim?</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">calibration</span></a>
+  <a href="../user_guide/intro_spokes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Starsim “spokes”</span></a>
   </div>
 </li>
       </ul>
   </li>
-        <li class="sidebar-item sidebar-item-section">
+          <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Utilities</strong></span></a>
+ <span class="menu-text">Basic concepts</span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
-      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">arrays</span></a>
+  <a href="../user_guide/basics_model.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Model structure</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">time</span></a>
+  <a href="../user_guide/basics_sim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">The Sim object</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/distributions.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">distributions</span></a>
+  <a href="../user_guide/basics_people.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">People, States, and Arrays</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/results.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">results</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">samples</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/settings.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text">settings</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/utils.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">utils</span></a>
+  <a href="../user_guide/basics_parameters.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Parameters</span></a>
   </div>
 </li>
       </ul>
   </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Modules</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Network</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Demographics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_analyzers.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Analyzers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_connectors.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Connectors</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Workflows</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Multiple runs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Calibration</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_deploy.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Deployment</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Managing samples</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Advanced topics</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Time units</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced indexing</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_distributions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Distributions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_random.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Random numbers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Profiling and performance</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_nonstandard.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Nonstandard usage</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+      </ul>
+  </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../conduct.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Code of Conduct</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../contributing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Contributing</strong></span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -502,24 +642,176 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#starsim.settings" id="toc-starsim.settings" class="nav-link active" data-scroll-target="#starsim.settings">settings</a></li>
+  <li><a href="#overview-of-starsims-contact-network-structure" id="toc-overview-of-starsims-contact-network-structure" class="nav-link active" data-scroll-target="#overview-of-starsims-contact-network-structure">Overview of Starsim’s contact network structure</a></li>
+  <li><a href="#sexual-networks" id="toc-sexual-networks" class="nav-link" data-scroll-target="#sexual-networks">Sexual networks</a></li>
+  <li><a href="#maternal-networks" id="toc-maternal-networks" class="nav-link" data-scroll-target="#maternal-networks">Maternal networks</a></li>
+  <li><a href="#making-your-own-contact-network" id="toc-making-your-own-contact-network" class="nav-link" data-scroll-target="#making-your-own-contact-network">Making your own contact network</a></li>
+  <li><a href="#step-5-introduction-to-mixing-pools" id="toc-step-5-introduction-to-mixing-pools" class="nav-link" data-scroll-target="#step-5-introduction-to-mixing-pools">Step 5: Introduction to mixing pools</a></li>
+  <li><a href="#simple-mixing-pool-example" id="toc-simple-mixing-pool-example" class="nav-link" data-scroll-target="#simple-mixing-pool-example">Simple mixing pool example</a></li>
+  <li><a href="#equivalent-contact-network" id="toc-equivalent-contact-network" class="nav-link" data-scroll-target="#equivalent-contact-network">Equivalent contact network</a>
+  <ul class="collapse">
+  <li><a href="#what-youve-learned" id="toc-what-youve-learned" class="nav-link" data-scroll-target="#what-youve-learned">What you’ve learned</a></li>
+  <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
+  </ul></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../api/arrays.html"><strong>Utilities</strong></a></li><li class="breadcrumb-item"><a href="../api/settings.html">settings</a></li></ol></nav></header>
+<main class="content" id="quarto-document-content">
+
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../tutorials/t1_intro.html"><strong>Tutorials</strong></a></li><li class="breadcrumb-item"><a href="../tutorials/t5_networks.html">T5 - Networks</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">T5 - Networks</h1>
+</div>
 
 
 
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
 
 
-<section id="starsim.settings" class="level1">
-<h1>settings</h1>
-<p><code>settings</code></p>
-<p>Define options for Starsim. All options should be set using set() or directly, e.g.:</p>
-<pre><code>ss.options(verbose=False)</code></pre>
+</header>
 
 
+<div class="alert alert-info">
+<p>An interactive version of this notebook is available on <a href="https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/transmission.ipynb">Google Colab</a> or <a href="https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Ftransmission.ipynb">Binder</a>.</p>
+</div>
+<p>Many infectious diseases transmit when people come into contact with one another. In the basic SIR example that we covered in the first two tutorials, we used a ‘random’ contact network, which creates random pairings of people. Generally speaking, the structure of network that you use depends on what disease you’re modeling.</p>
+<p>Starsim contains two different approaches to disease transmission.</p>
+<p><strong>Contact network:</strong> Disease transmits on individual person-to-person relationships. These are networks in the sense that each agent (person) can be viewed as a node and each contact is an edge. Networks are undirected in the sense that an edge will allow transmission in both directions, however you can make transmission stronger one way (p1–&gt;p2) than the other (p2–&gt;p1). The framework includes several pre-built contact network algorithms, each of which manages a list of edges that can change on each simulation step. In addition to the ‘random’ network, the framework include algorithms representing basic sexual networks for modeling sexually transmitted infections (STIs) and a ‘maternal’ network for modeling mother-to-child transmission.</p>
+<p><strong>Mixing pools:</strong> Simulate well-mixed transmission from one group of agents to another. Each mixing pool simulates directed transmission from a group of source agents to a group of destination agents. Instead of simulating individual edges like in a contact network, mixing pools first compute the total “contagion” that is shed by the source group. This total contagion value is normalized by the number of agents in the source group to arrive at a value that represents a typical infectious source agent. Then, each destination agent is exposed to this typical (average) infectious agent, likely resulting in new infections in the destination group. Multiple mixing pools can be run simultaneously to simulate heterogeneous transmission between various source and destination groups. Mixing pools could be used with age contact matrices like those developed by Prem et al.</p>
+<p>Note that contact networks and mixing pools can be used together in a single simulation.</p>
+<p>In this tutorial, we’ll demonstrate a couple of the built-in contact networks, and give an overview of how you might create your own for your own disease modeling work. We’ll also demonstrate how to use mixing pools.</p>
+<section id="overview-of-starsims-contact-network-structure" class="level2">
+<h2 class="anchored" data-anchor-id="overview-of-starsims-contact-network-structure">Overview of Starsim’s contact network structure</h2>
+<p>Starsim’s networks are stored in the <code>networks.py</code> file. At the top of this file you’ll see the <code>Network</code> class, which provides the template for all the other networks. At a high level, all you need to know is that network stores various <em>parameters</em> that determine how pairs of people form and dissolve, and a collection of all the <em>edges</em> that exist at a given point in time. Let’s look at a simple example of the <code>random</code> network:</p>
+<div id="04b07551" class="cell" data-tags="[]">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Make random network</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>random <span class="op">=</span> ss.RandomNet()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>The network we just made stores two very important things: the list of contacts (found in <code>random.edges</code>) and the parameters (<code>random.pars</code>).</p>
+<p>If we just make a network on its own like this, it’s not very interesting. Like all components of Starsim, it needs to be initialized within a <code>sim</code> before the database of contacts gets populated:</p>
+<div id="f2b1686b" class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">100</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span>net) <span class="co"># Decreasing n_agents so we can plot the network below</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim.init()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We can easily take a look at the list of edges between agents. All networks are stored in <code>sim.networks</code>, and individual networks can be found at their class name after conversion to lower case. So for this example, <code>sim.networks.randomnet.edges</code> has all the information about which agents (referenced by their UID) are paired with which other agents as well as a per-edge transmission multiplier called <code>beta</code> and a per-edge duration, <code>dur</code>.</p>
+<div id="a835439d" class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>sim.networks.randomnet</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Networks provide some basic functionality, for example to identify contacts. Additionally, the edge list can be quickly converted to a <code>pandas</code> dataframe or <code>networkx</code> graph for further analysis and manipulation:</p>
+<div id="09da79de" class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> sim.networks.randomnet</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use the "find_contacts" function to find all contacts of agent with uid 0</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>contacts_of_agent_0 <span class="op">=</span> net.find_contacts([<span class="dv">0</span>])</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'The following agents were identified as contacts of agent 0:'</span>, contacts_of_agent_0)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert to a pandas DataFrame and manually find all edges involving agent with uid 0</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> net.to_df()</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>uid0_edges <span class="op">=</span> df.loc[(df[<span class="st">'p1'</span>]<span class="op">==</span><span class="dv">0</span>) <span class="op">|</span> (df[<span class="st">'p2'</span>]<span class="op">==</span><span class="dv">0</span>)]</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">Edges involving UID 0 extracted from the edge list data frame:'</span>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>display(uid0_edges)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> networkx <span class="im">as</span> nx</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>G <span class="op">=</span> net.to_graph()</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>nx.draw(G, with_labels<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="sexual-networks" class="level2">
+<h2 class="anchored" data-anchor-id="sexual-networks">Sexual networks</h2>
+<p>Starsim contains a few basic sexual networks, including an <code>mf</code> network for modeling heterosexual partnerships and an <code>msm</code> network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here’s an example modeling syphilis:</p>
+<div id="dd802fdd" class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the disease</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> ss.Syphilis(</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>]},    <span class="co"># See notes below </span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a heterosexual network</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>mf <span class="op">=</span> ss.MFNet(</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    duration<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">24</span>,  <span class="co"># Using very short relationships so that we get more transmission </span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    acts<span class="op">=</span><span class="dv">80</span>,        <span class="co"># Distribution of the number of coital acts/year</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, dur<span class="op">=</span><span class="dv">20</span>, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">12</span>)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>pars, diseases<span class="op">=</span>syph, networks<span class="op">=</span>mf)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>The main difference here is that we’ve added the line <code>syph.pars['beta'] = {'mf': [0.25, 0.15]}</code>. Because STIs are generally more transmissible from males to females than vice versa, we can specify <code>beta</code> as a list, and we can also allow it to vary between networks. For instance, if we also had an MSM network here, we could set</p>
+<pre><code>syph.pars.update(beta = {'mf': [0.25, 0.15], 'msm': [0.4, 0.4]})</code></pre>
+<p>The sexual network itself is structurally similar to the <code>random</code> network that we looked at previously, and can be customized by changing the <code>pars</code> dictionary that’s used to construct it.</p>
+</section>
+<section id="maternal-networks" class="level2">
+<h2 class="anchored" data-anchor-id="maternal-networks">Maternal networks</h2>
+<p>Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the maternal network. Here’s an example showing how you would do this for syphilis:</p>
+<div id="860b879b" class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> ss.Syphilis(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>], <span class="st">'maternal'</span>: [<span class="fl">0.99</span>, <span class="dv">0</span>]}</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Make demographic modules</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span><span class="dv">15</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Make maternal network</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>maternal <span class="op">=</span> ss.MaternalNet()</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Make sim</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>pars, diseases<span class="op">=</span>syph, networks<span class="op">=</span>[mf, maternal], demographics<span class="op">=</span>[pregnancy, death], dur<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>sim.run().plot(show_module<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="making-your-own-contact-network" class="level2">
+<h2 class="anchored" data-anchor-id="making-your-own-contact-network">Making your own contact network</h2>
+<p>If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make an <code>mf</code> network that has more age structure, you could do something like this:</p>
+<div id="90ebaea5" class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> age_mf(ss.MFNet):</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> add_pairs(<span class="va">self</span>, people, ti<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom code to select pairs based on age</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>This network would operate exactly like the existing <code>mf</code> network, but you could control how new pairs were added.</p>
+</section>
+<section id="step-5-introduction-to-mixing-pools" class="level2">
+<h2 class="anchored" data-anchor-id="step-5-introduction-to-mixing-pools">Step 5: Introduction to mixing pools</h2>
+<p>While contact networks model individual relationships, mixing pools model group-level transmission. This is useful for: - Large populations where individual contacts are impractical - Age-structured mixing (like school, work, household contacts) - When you have contact matrices from epidemiological studies</p>
+<p>Here’s a simple comparison:</p>
+</section>
+<section id="simple-mixing-pool-example" class="level1">
+<h1>Simple mixing pool example</h1>
+<p>mp = ss.MixingPool(beta=ss.TimeProb(0.1), contacts=ss.poisson(lam=3)) sir_mp = ss.SIR() sim_mp = ss.Sim(diseases=sir_mp, networks=mp, verbose=0, label=‘Mixing Pool’)</p>
+</section>
+<section id="equivalent-contact-network" class="level1">
+<h1>Equivalent contact network</h1>
+<p>net = ss.RandomNet(n_contacts=ss.poisson(lam=3)) sir_net = ss.SIR(beta=ss.TimeProb(0.1)) sim_net = ss.Sim(diseases=sir_net, networks=net, verbose=0, label=‘Contact Network’)</p>
+<p>msim = ss.MultiSim([sim_mp, sim_net]).run() msim.plot() print(“Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts.”)</p>
+<section id="what-youve-learned" class="level2">
+<h2 class="anchored" data-anchor-id="what-youve-learned">What you’ve learned</h2>
+<p>Congratulations! You’ve now learned how to: - ✅ Use basic contact networks for disease transmission - ✅ Model disease-specific networks (sexual, maternal) - ✅ Create custom networks with your own connection rules - ✅ Understand the difference between contact networks and mixing pools</p>
+<p>For more advanced mixing pool techniques (age-structured mixing, contact matrices, multi-group models), see the Networks implementation guide.</p>
+</section>
+<section id="exercises" class="level2">
+<h2 class="anchored" data-anchor-id="exercises">Exercises</h2>
+<ol type="1">
+<li><strong>Multi-network STI model</strong>: Adapt the syphilis example to include both MF and MSM transmission</li>
+<li><strong>Custom network parameters</strong>: Modify the AgeMFNet to have different age bins and mixing probabilities</li>
+<li><strong>Network comparison</strong>: Compare random vs age-structured networks - how do they affect epidemic dynamics?</li>
+</ol>
+
+
+</section>
 </section>
 
 </main> <!-- /main -->
@@ -937,13 +1229,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../api/samples.html" class="pagination-link" aria-label="samples">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">samples</span>
+      <a href="../tutorials/t4_diseases.html" class="pagination-link" aria-label="T4 - Diseases">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">T4 - Diseases</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../api/utils.html" class="pagination-link" aria-label="utils">
-        <span class="nav-page-text">utils</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../tutorials/t6_interventions.html" class="pagination-link" aria-label="T6 - Interventions">
+        <span class="nav-page-text">T6 - Interventions</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

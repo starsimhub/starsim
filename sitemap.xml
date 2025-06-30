@@ -1,223 +1,223 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/workflows_samples.html</loc>
-    <lastmod>2025-05-04T19:00:49.065Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/workflows_cloud.html</loc>
-    <lastmod>2025-05-04T19:00:49.047Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/modules_networks.html</loc>
-    <lastmod>2025-05-04T19:00:49.047Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/modules_diseases.html</loc>
-    <lastmod>2025-05-04T19:00:49.045Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/modules_connectors.html</loc>
-    <lastmod>2025-05-04T19:00:49.040Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/intro_starsim.html</loc>
-    <lastmod>2025-05-04T19:00:49.066Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/basics_sim.html</loc>
-    <lastmod>2025-05-04T19:00:49.054Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/basics_model.html</loc>
-    <lastmod>2025-05-04T19:00:49.056Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_random.html</loc>
-    <lastmod>2025-05-04T19:00:49.054Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_parameters.html</loc>
-    <lastmod>2025-05-04T19:00:49.052Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_indexing.html</loc>
-    <lastmod>2025-05-04T19:00:49.058Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/transmission.html</loc>
-    <lastmod>2025-05-04T19:00:49.039Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/interventions.html</loc>
-    <lastmod>2025-05-04T19:00:49.032Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/dev_tut_pars.html</loc>
-    <lastmod>2025-05-04T19:00:49.029Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/buildsim.html</loc>
-    <lastmod>2025-05-04T19:00:49.037Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide.html</loc>
-    <lastmod>2025-05-04T16:10:50.291Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/index.html</loc>
-    <lastmod>2025-05-04T16:10:50.290Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/conduct.html</loc>
-    <lastmod>2025-05-04T16:10:50.290Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/time.html</loc>
-    <lastmod>2025-05-04T15:35:39.180Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/settings.html</loc>
-    <lastmod>2025-05-03T22:35:53.173Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/run.html</loc>
-    <lastmod>2025-05-04T06:50:38.906Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/products.html</loc>
-    <lastmod>2025-05-03T22:35:53.114Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/parameters.html</loc>
-    <lastmod>2025-05-04T06:50:38.833Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/modules.html</loc>
-    <lastmod>2025-05-04T06:50:38.748Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/interventions.html</loc>
-    <lastmod>2025-05-04T19:00:10.026Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/distributions.html</loc>
-    <lastmod>2025-05-04T06:50:38.675Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/demographics.html</loc>
-    <lastmod>2025-05-03T22:35:52.885Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/arrays.html</loc>
-    <lastmod>2025-05-04T19:00:09.909Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/calibration.html</loc>
-    <lastmod>2025-05-04T19:00:09.926Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/disease.html</loc>
-    <lastmod>2025-05-04T19:00:09.953Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/index.html</loc>
-    <lastmod>2025-05-04T19:00:09.874Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/loop.html</loc>
-    <lastmod>2025-05-04T19:00:10.037Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/networks.html</loc>
-    <lastmod>2025-05-04T06:50:38.812Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/people.html</loc>
-    <lastmod>2025-05-04T06:50:38.847Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/results.html</loc>
-    <lastmod>2025-05-04T06:50:38.876Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/samples.html</loc>
-    <lastmod>2025-05-03T22:35:53.173Z</lastmod>
-  </url>
-  <url>
-    <loc>https://starsimhub.github.io/starsim/api/sim.html</loc>
-    <lastmod>2025-05-04T06:50:38.955Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/contributing.html</loc>
+    <lastmod>2025-06-30T19:17:31.929Z</lastmod>
   </url>
   <url>
     <loc>https://starsimhub.github.io/starsim/api/utils.html</loc>
-    <lastmod>2025-05-04T06:50:39.013Z</lastmod>
+    <lastmod>2025-06-30T04:07:45.445Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/contributing.html</loc>
-    <lastmod>2025-05-04T16:10:50.290Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/networks.html</loc>
+    <lastmod>2025-06-30T14:34:32.316Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials.html</loc>
-    <lastmod>2025-05-04T16:10:50.290Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/calibration.html</loc>
+    <lastmod>2025-06-30T03:52:30.953Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/whatsnew.html</loc>
-    <lastmod>2025-05-04T16:10:50.292Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/arrays.html</loc>
+    <lastmod>2025-06-30T03:52:30.935Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/demographics.html</loc>
-    <lastmod>2025-05-04T19:00:49.038Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/time.html</loc>
+    <lastmod>2025-06-30T04:07:45.352Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/diseases.html</loc>
-    <lastmod>2025-05-04T19:00:49.037Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/settings.html</loc>
+    <lastmod>2025-06-30T02:26:59.878Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/tutorials/intro.html</loc>
-    <lastmod>2025-05-04T19:00:49.048Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/results.html</loc>
+    <lastmod>2025-06-30T04:07:45.413Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_distributions.html</loc>
-    <lastmod>2025-05-04T19:00:49.055Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/people.html</loc>
+    <lastmod>2025-06-30T14:34:32.354Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_nonstandard.html</loc>
-    <lastmod>2025-05-04T19:00:49.055Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/disease.html</loc>
+    <lastmod>2025-06-30T02:26:59.599Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_profiling.html</loc>
-    <lastmod>2025-05-04T19:00:49.060Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/api/interventions.html</loc>
+    <lastmod>2025-06-30T03:52:31.060Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_time.html</loc>
-    <lastmod>2025-05-04T19:00:49.056Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/tutorials/t2_model.html</loc>
+    <lastmod>2025-06-30T19:26:04.151Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/basics_people.html</loc>
-    <lastmod>2025-05-04T19:00:49.060Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/tutorials/solutions.html</loc>
+    <lastmod>2025-06-30T19:26:04.147Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/intro_spokes.html</loc>
-    <lastmod>2025-05-04T19:00:49.064Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/tutorials/t5_networks.html</loc>
+    <lastmod>2025-06-30T19:26:04.153Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/modules_analyzers.html</loc>
-    <lastmod>2025-05-04T19:00:49.057Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/tutorials/t1_intro.html</loc>
+    <lastmod>2025-06-30T19:26:04.151Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/modules_demographics.html</loc>
-    <lastmod>2025-05-04T19:00:49.040Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/user_guide/modules_networks.html</loc>
+    <lastmod>2025-06-30T19:26:04.163Z</lastmod>
   </url>
   <url>
-    <loc>https://starsimhub.github.io/starsim/user_guide/modules_interventions.html</loc>
-    <lastmod>2025-05-04T19:00:49.043Z</lastmod>
+    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_indexing.html</loc>
+    <lastmod>2025-06-30T19:26:04.168Z</lastmod>
   </url>
   <url>
     <loc>https://starsimhub.github.io/starsim/user_guide/workflows_calibration.html</loc>
-    <lastmod>2025-05-04T19:00:49.067Z</lastmod>
+    <lastmod>2025-06-30T19:26:04.181Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/basics_model.html</loc>
+    <lastmod>2025-06-30T19:26:04.169Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/modules_connectors.html</loc>
+    <lastmod>2025-06-30T19:26:04.160Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_random.html</loc>
+    <lastmod>2025-06-30T19:26:04.167Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_distributions.html</loc>
+    <lastmod>2025-06-30T19:26:04.153Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/intro_starsim.html</loc>
+    <lastmod>2025-06-30T19:26:04.170Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/modules_interventions.html</loc>
+    <lastmod>2025-06-30T19:26:04.162Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_profiling.html</loc>
+    <lastmod>2025-06-30T19:26:04.163Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_nonstandard.html</loc>
+    <lastmod>2025-06-30T19:26:04.158Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide.html</loc>
+    <lastmod>2025-06-30T19:17:31.933Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/whatsnew.html</loc>
+    <lastmod>2025-06-30T19:17:31.945Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/index.html</loc>
+    <lastmod>2025-06-30T19:17:31.929Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/intro_spokes.html</loc>
+    <lastmod>2025-06-30T19:26:04.173Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/advanced_time.html</loc>
+    <lastmod>2025-06-30T19:26:04.163Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/modules_analyzers.html</loc>
+    <lastmod>2025-06-30T19:26:04.174Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/modules_demographics.html</loc>
+    <lastmod>2025-06-30T19:26:04.160Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/workflows_samples.html</loc>
+    <lastmod>2025-06-30T19:26:04.181Z</lastmod>
   </url>
   <url>
     <loc>https://starsimhub.github.io/starsim/user_guide/workflows_run.html</loc>
-    <lastmod>2025-05-04T19:00:49.047Z</lastmod>
+    <lastmod>2025-06-30T19:26:04.162Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/workflows_deploy.html</loc>
+    <lastmod>2025-06-30T19:26:04.163Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/basics_people.html</loc>
+    <lastmod>2025-06-30T19:26:04.175Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/basics_sim.html</loc>
+    <lastmod>2025-06-30T19:26:04.171Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/basics_parameters.html</loc>
+    <lastmod>2025-06-30T19:26:04.165Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/user_guide/modules_diseases.html</loc>
+    <lastmod>2025-06-30T19:26:04.162Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/conduct.html</loc>
+    <lastmod>2025-06-30T19:17:31.929Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/tutorials/t6_interventions.html</loc>
+    <lastmod>2025-06-30T19:26:04.147Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/tutorials/t3_demographics.html</loc>
+    <lastmod>2025-06-30T19:26:04.152Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/tutorials/t4_diseases.html</loc>
+    <lastmod>2025-06-30T19:26:04.151Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/parameters.html</loc>
+    <lastmod>2025-06-30T04:07:45.091Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/run.html</loc>
+    <lastmod>2025-06-30T04:07:45.279Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/demographics.html</loc>
+    <lastmod>2025-06-30T14:34:32.121Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/index.html</loc>
+    <lastmod>2025-06-30T19:25:24.719Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/products.html</loc>
+    <lastmod>2025-06-30T14:34:32.362Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/modules.html</loc>
+    <lastmod>2025-06-30T04:07:45.115Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/distributions.html</loc>
+    <lastmod>2025-06-30T02:26:59.641Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/sim.html</loc>
+    <lastmod>2025-06-30T04:07:45.045Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/loop.html</loc>
+    <lastmod>2025-06-30T03:52:31.072Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/api/samples.html</loc>
+    <lastmod>2025-06-30T04:07:45.422Z</lastmod>
+  </url>
+  <url>
+    <loc>https://starsimhub.github.io/starsim/tutorials.html</loc>
+    <lastmod>2025-06-30T19:17:31.930Z</lastmod>
   </url>
 </urlset>

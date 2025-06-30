@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>settings – Starsim</title>
+<title>T3 - Demographics – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -20,6 +20,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -30,8 +65,8 @@ ul.task-list li input[type="checkbox"] {
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../api/utils.html" rel="next">
-<link href="../api/samples.html" rel="prev">
+<link href="../tutorials/t4_diseases.html" rel="next">
+<link href="../tutorials/t2_model.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -310,7 +345,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../api/arrays.html"><strong>Utilities</strong></a></li><li class="breadcrumb-item"><a href="../api/settings.html">settings</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../tutorials/t1_intro.html"><strong>Tutorials</strong></a></li><li class="breadcrumb-item"><a href="../tutorials/t3_demographics.html">T3 - Demographics</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -330,6 +365,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>What’s new</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../api/index.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><strong>API reference</strong></span></a>
   </div>
@@ -337,7 +378,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Basics</strong></span></a>
+ <span class="menu-text"><strong>Tutorials</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
@@ -345,26 +386,38 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/sim.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">sim</span></a>
+  <a href="../tutorials/t1_intro.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T1 - Getting started</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/loop.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">loop</span></a>
+  <a href="../tutorials/t2_model.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T2 - Building your model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/people.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">people</span></a>
+  <a href="../tutorials/t3_demographics.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">T3 - Demographics</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/parameters.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">parameters</span></a>
+  <a href="../tutorials/t4_diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T4 - Diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t5_networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T5 - Networks</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t6_interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
       </ul>
@@ -372,126 +425,213 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Modules</strong></span></a>
+ <span class="menu-text"><strong>User guide</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
       <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/modules.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">modules</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">networks</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/demographics.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">demographics</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/interventions.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">interventions</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/products.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">products</span></a>
-  </div>
-</li>
-      </ul>
-  </li>
-        <li class="sidebar-item sidebar-item-section">
+          <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Workflows</strong></span></a>
+ <span class="menu-text">Introduction</span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
-      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/run.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">run</span></a>
+  <a href="../user_guide/intro_starsim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">What is Starsim?</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">calibration</span></a>
+  <a href="../user_guide/intro_spokes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Starsim “spokes”</span></a>
   </div>
 </li>
       </ul>
   </li>
-        <li class="sidebar-item sidebar-item-section">
+          <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Utilities</strong></span></a>
+ <span class="menu-text">Basic concepts</span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
-      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">arrays</span></a>
+  <a href="../user_guide/basics_model.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Model structure</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">time</span></a>
+  <a href="../user_guide/basics_sim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">The Sim object</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/distributions.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">distributions</span></a>
+  <a href="../user_guide/basics_people.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">People, States, and Arrays</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/results.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">results</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">samples</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/settings.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text">settings</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/utils.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">utils</span></a>
+  <a href="../user_guide/basics_parameters.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Parameters</span></a>
   </div>
 </li>
       </ul>
   </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Modules</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Network</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Demographics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_analyzers.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Analyzers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_connectors.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Connectors</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Workflows</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Multiple runs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Calibration</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_deploy.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Deployment</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Managing samples</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Advanced topics</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Time units</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced indexing</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_distributions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Distributions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_random.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Random numbers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Profiling and performance</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_nonstandard.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Nonstandard usage</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+      </ul>
+  </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../conduct.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Code of Conduct</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../contributing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Contributing</strong></span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -502,22 +642,122 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#starsim.settings" id="toc-starsim.settings" class="nav-link active" data-scroll-target="#starsim.settings">settings</a></li>
+  <li><a href="#scaling-results-to-whole-populations" id="toc-scaling-results-to-whole-populations" class="nav-link active" data-scroll-target="#scaling-results-to-whole-populations">Scaling results to whole populations</a></li>
+  <li><a href="#using-realistic-vital-demographics" id="toc-using-realistic-vital-demographics" class="nav-link" data-scroll-target="#using-realistic-vital-demographics">Using realistic vital demographics</a></li>
+  <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../api/arrays.html"><strong>Utilities</strong></a></li><li class="breadcrumb-item"><a href="../api/settings.html">settings</a></li></ol></nav></header>
+<main class="content" id="quarto-document-content">
+
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../tutorials/t1_intro.html"><strong>Tutorials</strong></a></li><li class="breadcrumb-item"><a href="../tutorials/t3_demographics.html">T3 - Demographics</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">T3 - Demographics</h1>
+</div>
 
 
 
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
 
 
-<section id="starsim.settings" class="level1">
-<h1>settings</h1>
-<p><code>settings</code></p>
-<p>Define options for Starsim. All options should be set using set() or directly, e.g.:</p>
-<pre><code>ss.options(verbose=False)</code></pre>
+</header>
+
+
+<div class="alert alert-info">
+<p>An interactive version of this notebook is available on <a href="https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/demographics.ipynb">Google Colab</a> or <a href="https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Fdemographics.ipynb">Binder</a>.</p>
+</div>
+<p>There are a few basic ways to add vital dynamics to your model, e.g.&nbsp;</p>
+<div id="7dc8b21a" class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    birth_rate <span class="op">=</span> ss.peryear(<span class="dv">20</span>),      <span class="co"># Annual crude birth rate (per 1000 people)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    death_rate <span class="op">=</span> ss.peryear(<span class="dv">15</span>),      <span class="co"># Annual crude death rate (per 1000 people)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="st">'random'</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sir'</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>This will apply annual birth and death rates as specified in the <code>pars</code> dict. Alternatively, we can make demographic components, which achieves the same thing:</p>
+<div id="acfa0a44" class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(demographics<span class="op">=</span>demographics)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>You can even simply set <code>demographics=True</code> to use default rates:</p>
+<div id="3b914207" class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>ss.Sim(demographics<span class="op">=</span><span class="va">True</span>).run().plot()<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>By default, agents age if and only if at least one demographics module is included. You can override this behavior by setting <code>use_aging</code>, e.g.&nbsp;<code>ss.Sim(use_aging=False)</code></p>
+<section id="scaling-results-to-whole-populations" class="level2">
+<h2 class="anchored" data-anchor-id="scaling-results-to-whole-populations">Scaling results to whole populations</h2>
+<p>Even though we’ve been simulating populations of a few thousand agents, we can also use the <code>total_pop</code> parameter to scale our results so that they reflect a much larger population. You can think of this as a kind of statistical sampling approximation. If we want to model the population of Nigeria, for example, it would be much too computationally intensive to simulate 200 million agents. However, we could simulate 50,000 agents and then say that each agent represents 4,000 people. Again, we can do this by passing <code>total_pop=200e6</code> to the sim or in the <code>pars</code> dictionary. Here’s an example:</p>
+<div id="753528fa" class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>{<span class="st">'total_pop'</span>: <span class="fl">200e6</span>, <span class="st">'n_agents'</span>: <span class="fl">50e3</span>}, demographics<span class="op">=</span>demographics)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="using-realistic-vital-demographics" class="level2">
+<h2 class="anchored" data-anchor-id="using-realistic-vital-demographics">Using realistic vital demographics</h2>
+<p>For more realistic demographics, we can also pass in a file that has birth or death rates over time and by age/sex. There are examples of these files in the <code>test_data</code> folder. Here’s how we would read them in and construct realistic vital dynamics for Nigeria:</p>
+<div id="4bf3309e" class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Read in age-specific fertility rates</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>fertility_rates <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_asfr.csv'</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span>fertility_rates)</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>death_rates <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_deaths.csv'</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>death_rates, rate_units<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [pregnancy, death]</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Make people using the distribution of the population by age/sex in 1995</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span>  <span class="co"># Population of Nigeria in 1995, the year we will start the model</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim, run and plot</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(total_pop<span class="op">=</span>nga_pop_1995, start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, demographics<span class="op">=</span>demographics, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sir'</span>)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Read in a file with the actual population size</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>nigeria_popsize <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_popsize.csv'</span>)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> nigeria_popsize[(nigeria_popsize.year <span class="op">&gt;=</span> <span class="dv">1995</span>) <span class="op">&amp;</span> (nigeria_popsize.year <span class="op">&lt;=</span> <span class="dv">2030</span>)]</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the overall population size - simulated vs data</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>ax.scatter(data.year, data.n_alive, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>ax.plot(res.timevec, res.n_alive, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Model'</span>)</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Population'</span>)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting.</p>
+<p><em>Note</em>: In the code block above, we set the units of the mortality data to 1, as opposed to 1/1000. If your data come in the form of deaths per 1000 people, set units to 1/1000. Note also that as per standard definitions, <code>fertility_rate</code> is defined per <em>woman</em>, whereas <code>birth_rate</code> is defined per <em>person</em>.</p>
+</section>
+<section id="exercises" class="level2">
+<h2 class="anchored" data-anchor-id="exercises">Exercises</h2>
+<ol type="1">
+<li>In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with a total population of 24 million in 2020, how many people will there be in 2040? (You do not need to include any diseases in your model.)</li>
+</ol>
 
 
 </section>
@@ -937,13 +1177,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../api/samples.html" class="pagination-link" aria-label="samples">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">samples</span>
+      <a href="../tutorials/t2_model.html" class="pagination-link" aria-label="T2 - Building your model">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">T2 - Building your model</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../api/utils.html" class="pagination-link" aria-label="utils">
-        <span class="nav-page-text">utils</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../tutorials/t4_diseases.html" class="pagination-link" aria-label="T4 - Diseases">
+        <span class="nav-page-text">T4 - Diseases</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
