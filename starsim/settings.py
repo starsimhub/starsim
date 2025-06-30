@@ -233,4 +233,3 @@ class Options(sc.objdict):
 
 # Create the options on module load
 options = Options()
-options.set_show_type()
