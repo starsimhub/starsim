@@ -14,6 +14,7 @@ Additional arguments are passed to quarto render, e.g.:
 import os
 import sys
 import sciris as sc
+import starsim as ss
 
 def run(cmd):
     sc.printgreen(f'\n> {cmd}\n')
@@ -42,6 +43,12 @@ if execute == 'jupyter' and not all([os.path.exists(f'./{folder}/.jupyter_cache'
 T = sc.timer()
 
 sc.heading(f'Building docs with Quarto and execute="{execute}"', divider='★')
+
+sc.heading('Updating docs version number...')
+filename = '_variables.yml'
+data = dict(version=ss.__version__, versiondate=ss.__versiondate__)
+sc.saveyaml(filename, data)
+print('Version updated to:', data)
 
 # Generate API documentation using quartodoc
 sc.heading('Building API documentation...')
