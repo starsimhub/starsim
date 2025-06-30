@@ -533,35 +533,14 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
 
     # Actually run
     if parallel:
-        try:
-            sims = sc.parallelize(single_run, iterkwargs=iterkwargs, kwargs=kwargs, **par_args)  # Run in parallel
-        except RuntimeError as E:  # Handle if run outside __main__ on Windows
-            if 'freeze_support' in E.args[0]:  # For this error, add additional information
-                errormsg = '''
- Uh oh! It appears you are trying to run with multiprocessing on Windows outside
- of the __main__ block; please see https://docs.python.org/3/library/multiprocessing.html
- for more information. The correct syntax to use is e.g.
-
-     import starsim as ss
-     sim = ss.Sim()
-     msim = ss.MultiSim(sim)
-
-     if __name__ == '__main__':
-         msim.run()
-
-Alternatively, to run without multiprocessing, set parallel=False.
- '''
-                raise RuntimeError(errormsg) from E
-            else:  # For all other runtime errors, raise the original exception
-                raise E
+        sims = sc.parallelize(single_run, iterkwargs=iterkwargs, kwargs=kwargs, **par_args)  # Run in parallel
     else:  # Run in serial, not in parallel
         sims = []
         n_sims = len(list(iterkwargs.values())[0])  # Must have length >=1 and all entries must be the same length
         for s in range(n_sims):
             this_iter = {k: v[s] for k, v in iterkwargs.items()}  # Pull out items specific to this iteration
             this_iter.update(kwargs)  # Merge with the kwargs
-            this_iter['sim'] = this_iter[
-                'sim'].copy()  # Ensure we have a fresh sim; this happens implicitly on pickling with multiprocessing
+            this_iter['sim'] = this_iter['sim'].copy()  # Ensure we have a fresh sim; this happens implicitly on pickling with multiprocessing
             sim = single_run(**this_iter)  # Run in series
             sims.append(sim)
 
