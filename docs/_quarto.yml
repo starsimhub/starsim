@@ -63,60 +63,95 @@ website:
         text: API reference
 
   sidebar:
-    collapse-level: 3
-    contents:
-      - href: index.qmd
-        text: Home
-      - href: whatsnew.qmd
-        text: What's new
-      - href: api/index.qmd
-        text: API reference
-      - section: "Tutorials"
-        contents:
-          - tutorials/t1_intro.ipynb
-          - tutorials/t2_model.ipynb
-          - tutorials/t3_demographics.ipynb
-          - tutorials/t4_diseases.ipynb
-          - tutorials/t5_networks.ipynb
-          - tutorials/t6_interventions.ipynb
-      - section: "User guide"
-        contents:
-        - section: "Introduction"
+    - id: main
+      collapse-level: 3
+      contents:
+        - href: index.qmd
+          text: "**Home**"
+        - href: whatsnew.qmd
+          text: "**What's new**"
+        - href: api/index.qmd
+          text: "**API reference**"
+        - section: "**Tutorials**"
           contents:
-          - user_guide/intro_starsim.ipynb
-          - user_guide/intro_spokes.ipynb
-        - section: "Basic concepts"
+            - tutorials/t1_intro.ipynb
+            - tutorials/t2_model.ipynb
+            - tutorials/t3_demographics.ipynb
+            - tutorials/t4_diseases.ipynb
+            - tutorials/t5_networks.ipynb
+            - tutorials/t6_interventions.ipynb
+        - section: "**User guide**"
           contents:
-          - user_guide/basics_model.ipynb
-          - user_guide/basics_sim.ipynb
-          - user_guide/basics_people.ipynb
-          - user_guide/basics_parameters.ipynb
-        - section: "Modules"
+          - section: "Introduction"
+            contents:
+            - user_guide/intro_starsim.ipynb
+            - user_guide/intro_spokes.ipynb
+          - section: "Basic concepts"
+            contents:
+            - user_guide/basics_model.ipynb
+            - user_guide/basics_sim.ipynb
+            - user_guide/basics_people.ipynb
+            - user_guide/basics_parameters.ipynb
+          - section: "Modules"
+            contents:
+            - user_guide/modules_diseases.ipynb
+            - user_guide/modules_networks.ipynb
+            - user_guide/modules_demographics.ipynb
+            - user_guide/modules_interventions.ipynb
+            - user_guide/modules_analyzers.ipynb
+            - user_guide/modules_connectors.ipynb
+          - section: "Workflows"
+            contents:
+            - user_guide/workflows_run.ipynb
+            - user_guide/workflows_calibration.ipynb
+            - user_guide/workflows_deploy.ipynb
+            - user_guide/workflows_samples.ipynb
+          - section: "Advanced topics"
+            contents:
+            - user_guide/advanced_time.ipynb
+            - user_guide/advanced_indexing.ipynb
+            - user_guide/advanced_distributions.ipynb
+            - user_guide/advanced_random.ipynb
+            - user_guide/advanced_profiling.ipynb
+            - user_guide/advanced_nonstandard.ipynb
+        - href: conduct.qmd
+          text: "**Code of Conduct**"
+        - href: contributing.qmd
+          text: "**Contributing**"
+    - id: api
+      collapse-level: 2
+      contents:
+        - href: index.qmd
+          text: "**Home**"
+        - href: api/index.qmd
+          text: "**API reference**"
+        - section: "**Basics**"
           contents:
-          - user_guide/modules_diseases.ipynb
-          - user_guide/modules_networks.ipynb
-          - user_guide/modules_demographics.ipynb
-          - user_guide/modules_interventions.ipynb
-          - user_guide/modules_analyzers.ipynb
-          - user_guide/modules_connectors.ipynb
-        - section: "Workflows"
+            - api/sim.qmd
+            - api/loop.qmd
+            - api/people.qmd
+            - api/parameters.qmd
+        - section: "**Modules**"
           contents:
-          - user_guide/workflows_run.ipynb
-          - user_guide/workflows_calibration.ipynb
-          - user_guide/workflows_deploy.ipynb
-          - user_guide/workflows_samples.ipynb
-        - section: "Advanced topics"
+            - api/modules.qmd
+            - api/disease.qmd
+            - api/networks.qmd
+            - api/demographics.qmd
+            - api/interventions.qmd
+            - api/products.qmd
+        - section: "**Workflows**"
           contents:
-          - user_guide/advanced_time.ipynb
-          - user_guide/advanced_indexing.ipynb
-          - user_guide/advanced_distributions.ipynb
-          - user_guide/advanced_random.ipynb
-          - user_guide/advanced_profiling.ipynb
-          - user_guide/advanced_nonstandard.ipynb
-      - href: conduct.qmd
-        text: Code of Conduct
-      - href: contributing.qmd
-        text: Contributing
+            - api/run.qmd
+            - api/calibration.qmd
+        - section: "**Utilities**"
+          contents:
+            - api/arrays.qmd
+            - api/time.qmd
+            - api/distributions.qmd
+            - api/results.qmd
+            - api/samples.qmd
+            - api/settings.qmd
+            - api/utils.qmd
 
 format:
   html:
