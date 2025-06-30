@@ -191,33 +191,25 @@ quartodoc:
     - title: API reference
       desc: Full details on all classes and functions.
       contents:
-        - section: "**Basics**"
-          contents:
-            - sim
-            - loop
-            - people
-            - parameters
-        - section: "**Modules**"
-          contents:
-            - modules
-            - disease
-            - networks
-            - demographics
-            - interventions
-            - products
-        - section: "**Workflows**"
-          contents:
-            - run
-            - calibration
-        - section: "**Utilities**"
-          contents:
-            - arrays
-            - time
-            - distributions
-            - results
-            - samples
-            - settings
-            - utils
+        - sim
+        - loop
+        - people
+        - parameters
+        - modules
+        - disease
+        - networks
+        - demographics
+        - interventions
+        - products
+        - run
+        - calibration
+        - arrays
+        - time
+        - distributions
+        - results
+        - samples
+        - settings
+        - utils
 
 jupyter: python3
 execute:
