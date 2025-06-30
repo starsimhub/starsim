@@ -302,7 +302,7 @@ class Pregnancy(Demographics):
         self.define_pars(
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = ss.peryear(0), # Can be a number of Pandas DataFrame
+            fertility_rate = ss.peryear(100), # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             p_maternal_death = ss.bernoulli(0),
             p_neonatal_death = ss.bernoulli(0),

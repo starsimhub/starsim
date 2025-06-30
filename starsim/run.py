@@ -3,7 +3,6 @@ Utilities for running in parallel
 """
 import numpy as np
 import sciris as sc
-import matplotlib.pyplot as plt
 import starsim as ss
 
 __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
@@ -359,7 +358,19 @@ class MultiSim:
             alpha = 0.7 if len(self) < 5 else 0.5
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             with ss.options.context(jupyter=False): # Always return the figure
+                res_keys = None
                 for sim in self.sims:
+                    sim_keys = set(sim.results.flatten().keys()) # Check if keys match
+                    if res_keys is None:
+                        res_keys = sim_keys
+                    else:
+                        if res_keys != sim_keys:
+                            missing = res_keys - sim_keys
+                            extra = sim_keys - res_keys
+                            extratxt = f'\nExtra: {sc.strjoin(extra)}'
+                            missingtxt = f'\nMissing: {sc.strjoin(missing)}'
+                            warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
+                            ss.warn(warnmsg)
                     fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
             if legend:
                 lkw = sc.mergedicts(legend_kw)

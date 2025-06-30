@@ -102,13 +102,16 @@ class People(sc.prettyobj):
                          assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
 
-        Note: age_data can also be provided as a string
+        Note: `age_data` can also be provided as a string (interpreted as a filename).
+
+        If no value is provided, uniform ages from 0-60 are created (to match the
+        global mean age of ~30 years).
 
         Returns:
             An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            dist = ss.uniform(low=0, high=100, name='Age distribution')
+            dist = ss.uniform(low=0, high=60, name='Age distribution')
         else:
             # Try loading from file
             if isinstance(age_data, str) or isinstance(age_data, Path):
