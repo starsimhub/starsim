@@ -63,12 +63,14 @@ website:
         text: API reference
 
   sidebar:
-    collapse-level: 2
+    collapse-level: 3
     contents:
       - href: index.qmd
         text: Home
       - href: whatsnew.qmd
         text: What's new
+      - href: api/index.qmd
+        text: API reference
       - section: "Tutorials"
         contents:
           - tutorials/t1_intro.ipynb
@@ -115,8 +117,6 @@ website:
         text: Code of Conduct
       - href: contributing.qmd
         text: Contributing
-      - href: api/index.qmd
-        text: API reference
 
 format:
   html:
