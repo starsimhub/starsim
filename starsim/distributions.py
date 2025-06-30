@@ -1247,6 +1247,7 @@ class multi_random(sc.prettyobj):
             raise ValueError(errormsg)
 
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
+        rvs_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
         int_type = ss.dtypes.rand_uint
         int_max = np.iinfo(int_type).max
         rvs = self.combine_rvs(rvs_list, int_type, int_max)
