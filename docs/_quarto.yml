@@ -189,26 +189,26 @@ quartodoc:
   render_interlinks: true
   sections:
     - title: API reference
-      desc: Full details on all classes and functions.
+      desc: Full details on all Starsim classes and functions.
       contents:
-        - sim
-        - loop
-        - people
-        - parameters
-        - modules
-        - disease
-        - networks
-        - demographics
-        - interventions
-        - products
-        - run
-        - calibration
         - arrays
-        - time
+        - calibration
+        - demographics
+        - disease
         - distributions
+        - interventions
+        - loop
+        - modules
+        - networks
+        - parameters
+        - people
+        - products
         - results
+        - run
         - samples
         - settings
+        - sim
+        - time
         - utils
 
 jupyter: python3
