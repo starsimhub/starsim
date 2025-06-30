@@ -20,9 +20,16 @@ We recommend, but do not require, installing Starsim in a virtual environment, s
 
 ### Python
 
-Starsim is most easily installed via PyPI:
+Starsim is most easily installed via [PyPI](https://pypi.org):
 ```sh
 pip install starsim
+```
+
+Or with [uv](https://github.com/astral-sh/uv):
+```sh
+uv init example
+cd example
+uv add starsim
 ```
 
 Starsim can also be installed locally. To do this, clone first this repository, then run:
