@@ -1,18 +1,18 @@
 {
   "time": {
-    "initialize": 0.034,
-    "run": 0.877
+    "initialize": 0.04,
+    "run": 0.967
   },
   "parameters": {
     "n_agents": 10000,
     "dur": {
       "python_class": "<class 'starsim.time.YearDur'>",
-      "period": 20
+      "unit": 20
     },
     "dt": {
       "python_class": "<class 'starsim.time.YearDur'>",
-      "period": 0.2
+      "unit": 0.2
     }
   },
-  "cpu_performance": 0.6615766255981947
+  "cpu_performance": 1.0255823681818725
 }

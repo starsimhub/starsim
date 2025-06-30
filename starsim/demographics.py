@@ -133,8 +133,8 @@ class Deaths(Demographics):
 
         The probability of death for each agent on each timestep is determined
         by the `death_rate` parameter and the time step. The default value of
-        this parameter is 0.02, indicating that all agents will
-        face a 2% chance of death per year.
+        this parameter is 0.01, indicating that all agents will
+        face a 1% chance of death per year.
 
         However, this function can be made more realistic by using a dataframe
         for the `death_rate` parameter, to allow it to vary by year, sex, and
@@ -158,7 +158,7 @@ class Deaths(Demographics):
         super().__init__()
         self.define_pars(
             rel_death = 1,
-            death_rate = ss.peryear(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(**kwargs)
