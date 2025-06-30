@@ -173,7 +173,7 @@ class Infection(Disease):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.validate_beta(run_checks=True)
+        self.validate_beta()
         return
 
     @property
@@ -215,31 +215,13 @@ class Infection(Disease):
         )
         return
 
-    def validate_beta(self, run_checks=False):
+    def validate_beta(self):
         """ Validate beta and return as a map to match the networks """
         sim = self.sim
         β = self.pars.beta
 
         def scalar_beta(β):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
-
-        if run_checks:
-            scalar_warn = f'Beta is defined as a number ({β}); convert it to a rate to handle timestep conversions'
-
-            if 'beta' not in self.pars:
-                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-
-            if sc.isnumber(β):
-                ss.warn(scalar_warn)
-            elif isinstance(β, dict):
-                for netbeta in β.values():
-                    if sc.isnumber(netbeta):
-                        ss.warn(scalar_warn)
-                    elif isinstance(netbeta, (list, tuple)):
-                        for thisbeta in netbeta:
-                            if sc.isnumber(netbeta):
-                                ss.warn(scalar_warn)
 
         # If beta is a scalar, apply this bi-directionally to all networks
         if scalar_beta(β):
