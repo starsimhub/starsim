@@ -52,7 +52,7 @@ website:
       - href: user_guide.qmd
         text: User guide
       - href: conduct.qmd
-        text: Code of Conduct
+        text: Code of conduct
       - href: contributing.qmd
         text: Contributing
       - href: api/index.qmd
@@ -111,7 +111,7 @@ website:
             - user_guide/advanced_profiling.ipynb
             - user_guide/advanced_nonstandard.ipynb
         - href: conduct.qmd
-          text: "**Code of Conduct**"
+          text: "**Code of conduct**"
         - href: contributing.qmd
           text: "**Contributing**"
     - id: api
