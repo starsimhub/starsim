@@ -1,6 +1,6 @@
 """
 Define options for Starsim.
-All options should be set using set() or directly, e.g.::
+All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
 """
@@ -24,20 +24,20 @@ class Options(sc.objdict):
     """
     Set options for Starsim.
 
-    Use ``ss.options.set('defaults')`` to reset all values to default, or ``ss.options.set(dpi='default')``
-    to reset one parameter to default. See ``ss.options.help(detailed=True)`` for
+    Use `ss.options.set('defaults')` to reset all values to default, or `ss.options.set(dpi='default')`
+    to reset one parameter to default. See `ss.options.help(detailed=True)` for
     more information.
 
-    Options can also be saved and loaded using ``ss.options.save()`` and ``ss.options.load()``.
-    See ``ss.options.context()`` and ``ss.options.with_style()`` to set options
+    Options can also be saved and loaded using `ss.options.save()` and `ss.options.load()`.
+    See `ss.options.context()` and `ss.options.with_style()` to set options
     temporarily.
 
-    Common options are (see also ``ss.options.help(detailed=True)``):
+    Common options are (see also `ss.options.help(detailed=True)`):
 
         - verbose:        default verbosity for simulations to use
         - warnings:       how to handle warnings (e.g. print, raise as errors, ignore)
 
-    **Examples**::
+    **Examples**:
 
         ss.options(verbose=True) # Set more verbosity
         ss.options(warn='error') # Be more strict about warnings
@@ -55,7 +55,7 @@ class Options(sc.objdict):
     def get_orig_options():
         """
         Set the default options for Starsim -- not to be called by the user, use
-        ``ss.options.set('defaults')`` instead.
+        `ss.options.set('defaults')` instead.
         """
 
         # Options acts like a class, but is actually an objdict for simplicity
@@ -98,7 +98,7 @@ class Options(sc.objdict):
         return optdesc, options
 
     def __call__(self, *args, **kwargs):
-        """Allow ``ss.options(dpi=150)`` instead of ``ss.options.set(dpi=150)`` """
+        """Allow `ss.options(dpi=150)` instead of `ss.options.set(dpi=150)` """
         return self.set(*args, **kwargs)
 
     def to_dict(self):
@@ -144,7 +144,7 @@ class Options(sc.objdict):
 
     def set(self, key=None, value=None, use=False, **kwargs):
         """
-        Actually change the style. See ``ss.options.help()`` for more information.
+        Actually change the style. See `ss.options.help()` for more information.
 
         Args:
             key    (str):    the parameter to modify, or 'defaults' to reset everything to default
@@ -152,7 +152,7 @@ class Options(sc.objdict):
             use (bool): whether to use the chosen style
             kwargs (dict):   if supplied, set multiple key-value pairs
 
-        **Example**::
+        **Example**:
             ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)
         """
 
@@ -188,7 +188,7 @@ class Options(sc.objdict):
         """
         Alias to set(), for use in a "with" block.
 
-        **Examples**::
+        **Examples**:
 
             # Silence all output
             with ss.options.context(verbose=0):

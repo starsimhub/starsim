@@ -185,7 +185,7 @@ class SIS(ss.Infection):
 
 # %% Interventions
 
-__all__ += ['sir_vaccine']
+__all__ += ['sir_vaccine', 'sis_vaccine']
 
 class sir_vaccine(ss.Vx):
     """
@@ -201,7 +201,7 @@ class sir_vaccine(ss.Vx):
         efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
         leaky (bool): see above
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             efficacy = 0.9,
@@ -215,4 +215,16 @@ class sir_vaccine(ss.Vx):
             people.sir.rel_sus[uids] *= 1-self.pars.efficacy
         else:
             people.sir.rel_sus[uids] *= np.random.binomial(1, 1-self.pars.efficacy, len(uids))
+        return
+    
+class sis_vaccine(ss.Vx):
+    """ Same as sir_vaccine, but for SIS model, and only leaky (not all-or-nothing) """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(efficacy=0.9)
+        self.update_pars(**kwargs)
+        return
+
+    def administer(self, people, uids):
+        people.sis.rel_sus[uids] *= 1-self.pars.efficacy
         return

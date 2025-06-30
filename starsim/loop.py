@@ -20,6 +20,7 @@ class Loop:
     def __init__(self, sim): # TODO: consider eps=1e-6 and round times to this value
         self.sim = sim
         self.funcs = None
+        self.func_list = []
         self.abs_tvecs = None
         self.plan = None
         self.index = 0 # The next function to execute
@@ -52,7 +53,14 @@ class Loop:
         module = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
 
         # Create the row and append it to the function list
-        row = dict(func_order=len(self.funcs), module=module, func_name=func_name, func=func)
+        func_path = f'{parent.__class__.__module__}.{func_name}'
+        row = dict(
+            func_order = len(self.funcs),
+            module = module,
+            func_name = func_name,
+            func_path = func_path,
+            func = func,
+        )
         self.funcs.append(row)
         return self
 
@@ -243,9 +251,9 @@ class Loop:
 
         Args:
             simplify (bool): if True, skip update_results and finish_step events, which are automatically applied
-            fig_kw (dict): passed to ``plt.figure()``
-            plot_kw (dict): passed to ``plt.plot()``
-            scatter_kw (dict): passed to ``plt.scatter()``
+            fig_kw (dict): passed to `plt.figure()`
+            plot_kw (dict): passed to `plt.plot()`
+            scatter_kw (dict): passed to `plt.scatter()`
         """
 
         # Assemble data
@@ -270,20 +278,20 @@ class Loop:
         plt.scatter(x, y, c=colors[mod_int], **scatter_kw)
         plt.yticks(yticks, ylabels)
         plt.title(f'Integration plan ({len(df)} events)')
-        plt.xlabel(f'Time since simulation start')
+        plt.xlabel('Time since simulation start')
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
         return ss.return_fig(fig)
 
-    def plot_cpu(self, bytime=True, fig_kw=None, bar_kw=None):
+    def plot_cpu(self, bytime=True, max_entries=10, fig_kw=None, bar_kw=None):
         """
         Plot the CPU time spent on each event; visualization of Loop.cpu_df.
 
         Args:
             bytime (bool): if True, order events by total time rather than actual order
-            fig_kw (dict): passed to ``plt.figure()``
-            bar_kw (dict): passed to ``plt.bar()``
+            fig_kw (dict): passed to `plt.figure()`
+            bar_kw (dict): passed to `plt.bar()`
         """
         # Assemble data
         if self.cpu_df is None:
@@ -310,6 +318,12 @@ class Loop:
             timestr = sc.sigfig(x[i], 3) + f' {unit}'
             pctstr = sc.sigfig(pcts[i], 3) + '%'
             ylabels[i] += f'()\n{timestr}, {pctstr}'
+
+        # Trim if needed
+        if max_entries:
+            x = x[:max_entries]
+            y = y[:max_entries]
+            ylabels = ylabels[:max_entries]
 
         # Do the plotting
         bar_kw = sc.mergedicts(bar_kw)

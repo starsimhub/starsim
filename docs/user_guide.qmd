@@ -1,3 +1,7 @@
+---
+pagetitle: "User guide"
+---
+
 # User guide
 
 These user guides provide a more in-depth look at each topic compared to the corresponding tutorials.

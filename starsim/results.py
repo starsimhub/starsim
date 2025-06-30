@@ -27,7 +27,7 @@ class Result(ss.BaseArr):
         high (array): values for the upper bound
         summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
 
-    In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
+    In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
     """

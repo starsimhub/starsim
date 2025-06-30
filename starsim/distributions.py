@@ -187,7 +187,7 @@ class Dist:
         module (Module): usually determined on initialization; the module to use as input to callable parameters
         kwargs (dict): parameters of the distribution
 
-    **Examples**::
+    **Examples**:
 
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
@@ -316,7 +316,7 @@ class Dist:
 
         Use 0 for original state, -1 for most recent state.
 
-        **Example**::
+        **Example**:
 
             dist = ss.random(seed=5).init()
             r1 = dist(5)
@@ -782,7 +782,7 @@ class lognorm_im(Dist):
         mean (float): the mean of the underlying normal distribution (not this distribution) (default 0.0)
         sigma (float): the standard deviation of the underlying normal distribution (not this distribution) (default 1.0)
 
-    **Example**::
+    **Example**:
 
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
@@ -821,7 +821,7 @@ class lognorm_ex(Dist):
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
         std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
 
-    **Example**::
+    **Example**:
 
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
@@ -1089,7 +1089,7 @@ class choice(Dist):
         a (int or array): the number of choices, or the choices themselves (default 2)
         p (array): if supplied, the probability of each choice (default, 1/a for a choices)
 
-    **Examples**::
+    **Examples**:
 
         # Simulate 10 die rolls
         ss.choice(6, strict=False)(10) + 1
@@ -1145,7 +1145,7 @@ class histogram(Dist):
     The values can be supplied in either normalized (sum to 1) or un-normalized
     format.
 
-    **Examples**::
+    **Examples**:
 
         # Sample from an age distribution
         age_bins = [0,    10,  20,  40,  65, 100]

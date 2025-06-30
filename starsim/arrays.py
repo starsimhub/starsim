@@ -135,35 +135,36 @@ class Arr(BaseArr):
     """
     Store a state of the agents (e.g. age, infection status, etc.) as an array.
 
-    In practice, ``Arr`` objects can be used interchangeably with NumPy arrays.
-    They have two main data interfaces: ``Arr.raw`` contains the "raw", underlying
-    NumPy array of the data. ``Arr.values`` contains the "active" values, which
+    In practice, `Arr` objects can be used interchangeably with NumPy arrays.
+    They have two main data interfaces: `Arr.raw` contains the "raw", underlying
+    NumPy array of the data. `Arr.values` contains the "active" values, which
     usually corresponds to agents who are alive.
 
-    By default, operations are performed on active agents only (specified by ``Arr.auids``,
-    which is a pointer to ``sim.people.auids``). For example, ``sim.people.age.mean()``
-    will only use the ages of active agents. Thus, ``sim.people.age.mean()``
-    is equal to ``sim.people.age.values.mean()``, not ``sim.people.age.raw.mean()``.
+    By default, operations are performed on active agents only (specified by `Arr.auids`,
+    which is a pointer to `sim.people.auids`). For example, `sim.people.age.mean()`
+    will only use the ages of active agents. Thus, `sim.people.age.mean()`
+    is equal to `sim.people.age.values.mean()`, not `sim.people.age.raw.mean()`.
 
-    If indexing by an int or slice, ``Arr.values`` is used. If indexing by an
-    ``ss.uids`` object, ``Arr.raw`` is used. ``Arr`` objects can't be directly
+    If indexing by an int or slice, `Arr.values` is used. If indexing by an
+    [`ss.uids`](`starsim.arrays.uids`) object, `Arr.raw` is used. `Arr` objects can't be directly
     indexed by a list or array of ints, as this would be ambiguous about whether
-    ``values`` or ``raw`` is intended. For example, if there are 1000 people in a
-    simulation and 100 of them have died, ``sim.people.age[999]`` will return
-    an ``IndexError`` (since ``sim.people.age[899]`` is the last active agent),
-    whereas ``sim.people.age[ss.uids(999)]`` is valid.
+    `values` or `raw` is intended. For example, if there are 1000 people in a
+    simulation and 100 of them have died, `sim.people.age[999]` will return
+    an `IndexError` (since `sim.people.age[899]` is the last active agent),
+    whereas `sim.people.age[ss.uids(999)]` is valid.
 
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
         dtype (class): The dtype to use for this instance (if None, infer from value)
         default (any): Specify default value for new agents. This can be:
-            • A scalar with the same dtype (or castable to the same dtype) as the State;
-            • A callable, with a single argument for the number of values to produce;
-            • A [`ss.Dist`](`starsim.distributions.Dist`) instance.
+
+            * A scalar with the same dtype (or castable to the same dtype) as the State;
+            * A callable, with a single argument for the number of values to produce;
+            * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
         label (str): The human-readable name for the state
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
-        people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
+        people ([`ss.People`](`starsim.people.People`)): Optionally specify an initialized People object, used to construct temporary Arr instances
     """
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, skip_init=False, people=None):
         # Set attributes
@@ -207,7 +208,7 @@ class Arr(BaseArr):
     def _convert_key(self, key):
         """
         Used for getitem and setitem to determine whether the key is indexing
-        the raw array (``raw``) or the active agents (``values``), and to convert
+        the raw array (`raw`) or the active agents (`values`), and to convert
         the key to array indices if needed.
         """
         if isinstance(key, (uids, int, ss_int)):
@@ -474,8 +475,8 @@ class uids(np.ndarray):
     Class to specify that integers should be interpreted as UIDs.
 
     For all practical purposes, behaves like a NumPy integer array. However,
-    has additional methods ``uids.concat()`` (instance method), ``ss.uids.cat()``
-    (class method), ``uids.remove()``, and ``uids.intersect()`` to simplify common
+    has additional methods `uids.concat()` (instance method), [`ss.uids.cat()`](`starsim.arrays.uids.cat`)
+    (class method), `uids.remove()`, and `uids.intersect()` to simplify common
     UID operations.
     """
     def __new__(cls, arr=None):
