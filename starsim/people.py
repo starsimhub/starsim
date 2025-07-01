@@ -54,7 +54,7 @@ class People(sc.prettyobj):
         self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
         self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
-        for state in [self.uid, self.slot]:
+        for state in [self.uid, self.slot, self.parent]:
             state.people = self # Manually link to people since we don't want to link to states
 
         # Handle additional states
@@ -72,6 +72,7 @@ class People(sc.prettyobj):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
+        self._linked_modules = []
 
         return
 
@@ -160,6 +161,7 @@ class People(sc.prettyobj):
         if len(module.states):
             module_states = sc.objdict()
             setattr(self, module.name, module_states)
+            self._linked_modules.append(module.name)
             for state in module.states:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
@@ -269,8 +271,23 @@ class People(sc.prettyobj):
         """
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
-
         return
+
+    def filter(self, criteria=None, uids=None, split=False):
+        """
+        Store indices to allow for easy filtering of the People object.
+
+        Args:
+            criteria (bool array): a boolean array for the filtering critria
+            uids (array): alternatively, explicitly filter by these indices
+            split (bool): if True, return separate People objects matching both True and False
+
+        Returns:
+            A filtered People object, which works just like a normal People object
+            except only operates on a subset of indices.
+        """
+        filt = Filter(self)
+        return filt.filter(criteria=criteria, uids=uids, split=split)
 
     def scale_flows(self, inds):
         """
@@ -431,3 +448,145 @@ class Person(sc.objdict):
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
+
+
+class Filter(sc.prettyobj):
+    """
+    A filter on states
+    """
+    def __init__(self, people, uids=None):
+        self.people = people
+        self._uids = uids if uids is not None else people.auids
+        self.orig_uids = people.auids
+        self.states = ss.ndict(type=ss.Arr)
+        self.is_filtered = False
+        self._key = None
+        self._stale = False
+        self._linked_modules = people._linked_modules
+
+        # Copy states
+        for key,state in self.people.states.items():
+            new_state = object.__new__(state.__class__)
+            new_state.__dict__ = state.__dict__.copy() # Shallow copy
+            new_state.people = self
+            self.states[key] = new_state
+
+        # Set up links to modules
+        for mod in self._linked_modules:
+            setattr(self, mod, sc.dictobj())
+            for key in getattr(self.people, mod).keys():
+                getattr(self, mod)[key] = self.states[f'{mod}.{key}']
+        return
+
+    def __getitem__(self, key):
+        return self.states[key]
+
+    def __getattr__(self, key):
+        return self.states[key]
+
+    def __setitem__(self, key, value):
+        self.states[key] = value
+        return
+
+    def __call__(self, key):
+        self._key = key
+        self._stale = True
+        return self
+
+    @property
+    def stale(self):
+        return self._key is not None
+
+    @property
+    def auids(self):
+        """ Rename for use as a "people" object """
+        return self._uids
+
+    @property
+    def uids(self):
+        """ Get the UIDs, computing if necessary """
+        if self._stale:
+            return self.filter(self._key, new=False)._uids
+        else:
+            return self._uids
+
+    def _func(self, obj, op):
+        if not self.stale:
+            errormsg = "To use logical operations on a Filter object, call first, e.g. filt('age') > 5"
+            raise RuntimeError(errormsg)
+        else:
+            arr = self.states[self._key]
+            self._key = None
+            self._stale = False
+
+        match op:
+            case '==': criteria = arr == obj
+            case '!=': criteria = arr != obj
+            case '<':  criteria = arr <  obj
+            case '<=': criteria = arr <= obj
+            case '>':  criteria = arr >  obj
+            case '>=': criteria = arr >= obj
+            case '~': criteria = ~arr
+            case _: raise ValueError(f'Unsupported operator: {op}')
+
+        return self.filter(criteria=criteria)
+
+    def __eq__(self, obj): return self._func(obj, '==')
+    def __ne__(self, obj): return self._func(obj, '!=')
+    def __lt__(self, obj): return self._func(obj, '<')
+    def __le__(self, obj): return self._func(obj, '<=')
+    def __gt__(self, obj): return self._func(obj, '>')
+    def __ge__(self, obj): return self._func(obj, '>=')
+    def __invert__(self): return self._func(None, '~')
+
+    def filter(self, criteria=None, uids=None, split=False, new=None):
+        """
+        Store indices to allow for easy filtering of the People object.
+
+        Args:
+            criteria (bool array): a boolean array for the filtering critria
+            uids (array): alternatively, explicitly filter by these indices
+            split (bool): if True, return separate filter objects matching both True and False
+        """
+        if new is True:
+            filtered = Filter(self)
+        elif new is False:
+            filtered = self
+        else:
+            filtered = Filter(self) if (self.is_filtered and not split) else self
+
+        # Perform the filtering
+        if uids is not None: # Unless indices are supplied directly, in which case use them
+            new_uids = np.intersect1d(self._uids, uids)
+            if split:
+                inv_uids = np.setdiff1d(self._uids, uids)
+                f1 = Filter(self, uids=new_uids)
+                f2 = Filter(self, uids=inv_uids)
+                return f1, f2
+            else:
+                filtered._uids = new_uids
+
+        if criteria is not None: # Main use case: perform filtering
+            if isinstance(criteria, str): # Allow e.g. filter('female')
+                if criteria[0] == '~': # Allow e.g. filter('~female') # TODO: may not be working
+                    key = criteria[1:]
+                    criteria = ~self.states[key]
+                else:
+                    self._key = criteria
+                    criteria = self.states[criteria]
+            len_criteria = len(criteria)
+            if len_criteria == len(filtered._uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
+                new_uids = filtered._uids[criteria] # Criteria is already filtered, just get the indices
+                if split:
+                    inv_uids = filtered._uids[~criteria]
+                    f1 = Filter(self, uids=new_uids)
+                    f2 = Filter(self, uids=inv_uids)
+                    return f1, f2
+            else:
+                errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
+                raise ValueError(errormsg)
+            filtered._uids = new_uids
+
+        filtered.is_filtered = True
+
+        return filtered
