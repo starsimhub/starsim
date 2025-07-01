@@ -40,7 +40,7 @@ class Sim(ss.Base):
     """
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
-        self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
+        self.pars = ss.make_pars()  # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks,
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
