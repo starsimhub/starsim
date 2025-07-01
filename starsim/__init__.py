@@ -24,7 +24,7 @@ from .demographics     import *
 from .products         import *
 from .interventions    import *
 from .demographics     import *
-from .disease          import *
+from .diseases         import *
 from .diseases         import *
 from .loop             import *
 from .sim              import *
@@ -38,7 +38,7 @@ import sciris as sc
 root = sc.thispath(__file__).parent
 
 # Double-check key requirements -- should match pyproject.toml
-reqs = ['sciris>=3.2.0', 'pandas>=2.0.0']
+reqs = ['sciris>=3.2.2', 'pandas>=2.0.0']
 msg = f'The following dependencies for Starsim {__version__} were not met: <MISSING>.'
 sc.require(reqs, message=msg)
 del sc, reqs, msg # Don't keep this in the module

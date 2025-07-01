@@ -175,7 +175,7 @@ def test_simple_vax(do_plot=do_plot):
     sim_base = ss.Sim(pars=pars)
     sim_base.run()
 
-    my_vax = ss.sir_vaccine(efficacy=0.5)
+    my_vax = ss.simple_vx(efficacy=0.5)
     intv = ss.routine_vx(start_year=2015, prob=0.2, product=my_vax)
     sim_intv = ss.Sim(pars=pars, interventions=intv)
     sim_intv.run()
@@ -199,7 +199,7 @@ def test_shared_product(do_plot=do_plot):
     sc.heading('Testing sharing a product across interventions...')
 
     # Make interventions
-    vax = ss.sir_vaccine(efficacy=0.5)
+    vax = ss.simple_vx(efficacy=0.5)
     routine1 = ss.routine_vx(name='early-small', start_year=2010, prob=0.05, product=vax)
     routine2 = ss.routine_vx(name='late-big', start_year=2020, prob=0.5, product=vax)
 

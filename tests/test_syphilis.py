@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim_examples as sse
 import matplotlib.pyplot as plt
 
 quick_run = True
@@ -15,7 +16,7 @@ datadir = ss.root / 'tests/test_data'
 
 def make_syph_sim(dt=1, n_agents=500):
     """ Make a sim with syphilis - used by several subsequent tests """
-    syph = ss.Syphilis()
+    syph = sse.Syphilis()
     syph.pars.beta = dict(mf=[0.25, 0.15], maternal=[0.99, 0])
     syph.pars.init_prev = ss.bernoulli(p=0.1)
 
@@ -126,7 +127,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
     screen_eligible = lambda sim: sim.networks.mfnet.active(sim.people)
-    syph_screening = ss.syph_screening(
+    syph_screening = sse.syph_screening(
         product='rpr',
         prob=0.99,
         eligibility=screen_eligible,
@@ -135,7 +136,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
     )
 
     treat_eligible = lambda sim: ss.uids(sim.interventions['syph_screening'].outcomes['positive'])
-    bpg = ss.syph_treatment(
+    bpg = sse.syph_treatment(
         prob=0.9,
         product='bpg',
         eligibility=treat_eligible,

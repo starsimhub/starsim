@@ -14,7 +14,7 @@ __all__ = ['Pars', 'SimPars', 'make_pars']
 atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
 
-class Pars(sc.objdict):
+class Pars(sc.dictobj):
     """
     Dict-like container of parameters
 

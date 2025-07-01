@@ -142,7 +142,7 @@ class Loop:
 
         # Handle the sim and people first
         sim = self.sim
-        for key in ['sim', 'people']:
+        for key in ['sim', sim.people.__class__.__name__.lower()]: # To handle subclassing of People -- TODO, make more elegant!
             self.abs_tvecs[key] = sim.t.tvec
 
         # Handle all other modules
@@ -244,6 +244,14 @@ class Loop:
         cdf.sort_values('cpu_time', inplace=True, ascending=False)
         self.cpu_df = cdf
         return df
+
+    def shrink(self):
+        """ Shrink the size of the loop for saving to disk """
+        shrunk = ss.utils.shrink()
+        self.sim = shrunk
+        self.funcs = shrunk
+        self.plan = shrunk
+        return
 
     def plot(self, simplify=False, fig_kw=None, plot_kw=None, scatter_kw=None):
         """

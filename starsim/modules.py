@@ -357,6 +357,17 @@ class Module(Base):
         out.pars = self.pars.to_json()
         return out
 
+    def shrink(self):
+        """ Shrink the size of the module for saving to disk """
+        shrunk = ss.utils.shrink()
+        self.sim = shrunk
+        self.dists = shrunk
+        for state in self.states:
+            with sc.tryexcept():
+                state.people = shrunk
+                state.raw = shrunk
+        return
+
     def plot(self):
         """ Plot all results in the module """
         with sc.options.with_style('fancy'):

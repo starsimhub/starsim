@@ -5,12 +5,11 @@ Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
 
 import starsim as ss
-from starsim.diseases.sir import SIR
 
 __all__ = ['Measles']
 
 
-class Measles(SIR):
+class Measles(ss.SIR):
 
     def __init__(self, **kwargs):
         """ Initialize with parameters """
@@ -34,10 +33,6 @@ class Measles(SIR):
         )
 
         return
-
-    @property
-    def infectious(self):
-        return self.infected | self.exposed
 
     def step_state(self):
         # Progress exposed -> infected

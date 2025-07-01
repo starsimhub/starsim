@@ -419,40 +419,22 @@ class Sim(ss.Base):
         shrunk = ss.utils.shrink()
         sim.people = shrunk
         with sc.tryexcept():
-            sim.loop.sim = shrunk
-            sim.loop.funcs = shrunk
-            sim.loop.plan = shrunk
+            sim.loop.shrink()
 
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
-
-            # Shrink the networks
-            for network in sim.networks():
-                with sc.tryexcept():
-                    network.edges = shrunk
-                    network.participant = shrunk
 
             # Shrink the distributions
             sim.dists.sim = shrunk
             sim.dists.obj = shrunk
             for dist in sim.dists.dists.values():
                 with sc.tryexcept():
-                    dist.slots = shrunk
-                    dist._slots = shrunk
-                    dist.module = shrunk
-                    dist.sim = shrunk
-                    dist._n = shrunk
-                    dist._uids = shrunk
-                    dist.history = shrunk
+                    dist.shrink()
 
             # Finally, shrink the modules
             for mod in sim.modules:
-                mod.sim = shrunk
-                mod.dists = shrunk
-                for state in mod.states:
-                    with sc.tryexcept():
-                        state.people = shrunk
-                        state.raw = shrunk
+                with sc.tryexcept():
+                    mod.shrink()
 
             # Check that the module successfully shrunk
             if size_limit:

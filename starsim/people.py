@@ -54,7 +54,7 @@ class People(sc.prettyobj):
         self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
         self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
-        for state in [self.uid, self.slot]:
+        for state in [self.uid, self.slot, self.parent]:
             state.people = self # Manually link to people since we don't want to link to states
 
         # Handle additional states
@@ -72,6 +72,7 @@ class People(sc.prettyobj):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
+        self._linked_modules = []
 
         return
 
@@ -102,13 +103,16 @@ class People(sc.prettyobj):
                          assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
 
-        Note: age_data can also be provided as a string
+        Note: `age_data` can also be provided as a string (interpreted as a filename).
+
+        If no value is provided, uniform ages from 0-60 are created (to match the
+        global mean age of ~30 years).
 
         Returns:
             An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            dist = ss.uniform(low=0, high=100, name='Age distribution')
+            dist = ss.uniform(low=0, high=60, name='Age distribution')
         else:
             # Try loading from file
             if isinstance(age_data, str) or isinstance(age_data, Path):
@@ -157,6 +161,7 @@ class People(sc.prettyobj):
         if len(module.states):
             module_states = sc.objdict()
             setattr(self, module.name, module_states)
+            self._linked_modules.append(module.name)
             for state in module.states:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
@@ -266,8 +271,23 @@ class People(sc.prettyobj):
         """
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
-
         return
+
+    def filter(self, criteria=None, uids=None, split=False):
+        """
+        Store indices to allow for easy filtering of the People object.
+
+        Args:
+            criteria (bool array): a boolean array for the filtering critria
+            uids (array): alternatively, explicitly filter by these indices
+            split (bool): if True, return separate People objects matching both True and False
+
+        Returns:
+            A filtered People object, which works just like a normal People object
+            except only operates on a subset of indices.
+        """
+        filt = Filter(self)
+        return filt.filter(criteria=criteria, uids=uids, split=split)
 
     def scale_flows(self, inds):
         """
@@ -343,6 +363,19 @@ class People(sc.prettyobj):
 
         return
 
+    def update_results(self):
+        ti = self.sim.ti
+        res = self.sim.results
+        res.n_alive[ti] = np.count_nonzero(self.alive)
+        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+        return
+
+    def finish_step(self):
+        self.remove_dead()
+        self.update_post()
+        return
+
     @property
     def dead(self):
         """ Dead boolean """
@@ -353,23 +386,141 @@ class People(sc.prettyobj):
         """ Male boolean """
         return ~self.female
 
-    def update_results(self):
-        ti = self.sim.ti
-        res = self.sim.results
-        res.n_alive[ti] = np.count_nonzero(self.alive)
-        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
-        return
+
 
     def to_df(self):
+        """ Export to dataframe """
         df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
         return df
 
-    def finish_step(self):
-        # self.update_results() # This is called separately
-        self.remove_dead()
-        self.update_post()
-        return
+    def plot(self, key=None, alive=True, bins=50, hist_kw=None, max_plots=20, figsize=(16,12), **kwargs):
+        """
+        Plot all the properties of the People object
+
+        Args:
+            key (str/list): the state(s) to plot
+            alive (bool): if false, use all agents in the simulation instead of active (alive) ones
+            bins (int): the number of bins to use in `plt.hist()`
+            hist_kw (dict): passed to `plt.hist()`
+            max_plots (int): the maximum number of plots to create
+            figsize (tuple): passed to `plt.figure()`; by default large since the plots are crowded
+            **kwargs (dict): passed to `sc.getrowscols()`, including `fig_kw`
+        """
+        # Handle figsize
+        if 'figsize' not in kwargs:
+            kwargs['figsize'] = figsize
+
+        # Decide what to plot
+        if key is None:
+            key = self.states.keys()
+        key = sc.tolist(key)
+        if max_plots:
+            key = key[:max_plots]
+        n_keys = len(key)
+
+        # Create figure and plot
+        fig,axs = sc.getrowscols(n_keys, make=True, **kwargs)
+        for i,k in enumerate(key):
+            ax = fig.axes[i]
+            state = self.states[k]
+            if alive:
+                data = state.values
+            else:
+                data = state.raw
+
+            # It's a float array, plot a histogram
+            if isinstance(state, ss.FloatArr):
+                data = sc.rmnans(data)
+                if not len(data):
+                    print(f'Not plotting "{k}" since all values are NaN')
+                ax.hist(data, bins=bins, **sc.mergedicts(hist_kw))
+
+            # It's a boolean array, plot the proportions
+            elif isinstance(state, ss.BoolArr):
+                true,false = data.sum(), (~data).sum()
+                labels = ['False', 'True']
+                ax.bar(labels, [false,true], color=['#E0D3DE', '#3C88A3'])
+
+            # Give up
+            else:
+                warnmsg = f'Cannot understand state of {type(state)} for plotting; skipping'
+                ss.warn(warnmsg)
+
+            # Tidy up
+            ax.set_title(f'{state.name} (mean={data.mean():n})')
+            ax.set_ylabel('Count')
+            sc.commaticks(ax)
+            sc.boxoff(ax)
+
+        plt.tight_layout()
+        return ss.return_fig(fig)
+
+    def plot_ages(self, bins=None, absolute=False, fig_kw=None):
+        """
+        Plot the age pyramid for males and females.
+
+        Args:
+            bins (list/int): optional list or int for binning age groups (default: 5-year bins up to max age)
+            absolute (bool): whether to show absolute numbers or percentage of the population
+            fig_kw (dict): passed to `plt.subplots()`
+
+        **Example**:
+
+            sim = ss.demo(plot=False)
+            sim.people.plot_age()
+        """
+        # Preliminaries
+        age = self.age
+        female = self.female
+        f_age = age[female]
+        m_age = age[~female]
+        max_age = age.max()
+
+        # Define age bins
+        if np.iterable(bins):
+            width = None # Already defined, don't need
+        if np.isscalar(bins):
+            width = bins
+        else:
+            width = 5
+        if width is not None:
+            max_bin = (np.ceil(max_age / width) + 1) * width
+            bins = np.arange(0, max_bin, width)
+        y_pos = np.arange(len(bins)-1)
+
+        # Histogram counts
+        f_vals, _ = np.histogram(f_age, bins=bins)
+        m_vals, _ = np.histogram(m_age, bins=bins)
+
+        # Optionally convert to percentages
+        if absolute:
+            xlabel = 'Number of people'
+        else:
+            total = f_vals.sum() + f_vals.sum()
+            f_vals = f_vals / total * 100
+            m_vals = m_vals / total * 100
+            xlabel = 'Percentage of population'
+
+        # Plot
+        fig,ax = plt.subplots(**sc.mergedicts(fig_kw))
+        ax.barh(y_pos, -f_vals, color='salmon', label='Female')  # Negative = left
+        ax.barh(y_pos,  m_vals, color='skyblue', label='Male')
+
+        # Annotate
+        y_labels = [f'{bins[i]:n}–{bins[i+1]-1:n}' if i < len(bins)-1 else f'{bins[i]:n}+' for i in range(len(bins)-1)]
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(y_labels)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel('Age group')
+        ax.legend(loc='lower right')
+        max_val = max(f_vals.max(), m_vals.max()) * 1.1
+        ax.set_xlim([-max_val, max_val])
+        ax.axvline(0, color='black', linewidth=0.8)
+
+        # Tidy up
+        sc.boxoff()
+        plt.tight_layout()
+        return ss.return_fig(fig)
 
     def person(self, ind):
         """
@@ -387,39 +538,6 @@ class People(sc.prettyobj):
             person[key] = self.states[key][ind]
         return person
 
-    def plot_ages(self):
-        """ Plot the age distribution """
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-
-        # Create age bins
-        bins = np.arange(0, 100, 1)
-
-        # Split into male and female ages
-        age_m = self.age[~self.female]
-        age_f = self.age[self.female]
-
-        # Plot male ages on left (negative values) & female on right
-        kw = dict(bins=bins, orientation='horizontal', alpha=0.7)
-        mc, _, _ = ax.hist(age_m, label='Male', **kw)
-        fc, _, _ = ax.hist(age_f, label='Female', **kw)
-
-        # Make male counts negative
-        for patch in ax.patches[:len(bins)-1]:
-            patch.set_x(-patch.get_x())
-            patch.set_width(-patch.get_width())
-
-        # Add labels and title
-        ax.set_xlabel('Count')
-        ax.set_ylabel('Age')
-        ax.set_title('Age distribution by sex')
-        ax.legend()
-
-        # Center the plot on 0
-        max_count = sc.cat(mc, fc).max()
-        ax.set_xlim(-max_count*1.1, max_count*1.1)
-        return fig
-
 
 class Person(sc.objdict):
     """ A simple class to hold all attributes of a person """
@@ -428,3 +546,145 @@ class Person(sc.objdict):
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
+
+
+class Filter(sc.prettyobj):
+    """
+    A filter on states
+    """
+    def __init__(self, people, uids=None):
+        self.people = people
+        self._uids = uids if uids is not None else people.auids
+        self.orig_uids = people.auids
+        self.states = ss.ndict(type=ss.Arr)
+        self.is_filtered = False
+        self._key = None
+        self._stale = False
+        self._linked_modules = people._linked_modules
+
+        # Copy states
+        for key,state in self.people.states.items():
+            new_state = object.__new__(state.__class__)
+            new_state.__dict__ = state.__dict__.copy() # Shallow copy
+            new_state.people = self
+            self.states[key] = new_state
+
+        # Set up links to modules
+        for mod in self._linked_modules:
+            setattr(self, mod, sc.dictobj())
+            for key in getattr(self.people, mod).keys():
+                getattr(self, mod)[key] = self.states[f'{mod}.{key}']
+        return
+
+    def __getitem__(self, key):
+        return self.states[key]
+
+    def __getattr__(self, key):
+        return self.states[key]
+
+    def __setitem__(self, key, value):
+        self.states[key] = value
+        return
+
+    def __call__(self, key):
+        self._key = key
+        self._stale = True
+        return self
+
+    @property
+    def stale(self):
+        return self._key is not None
+
+    @property
+    def auids(self):
+        """ Rename for use as a "people" object """
+        return self._uids
+
+    @property
+    def uids(self):
+        """ Get the UIDs, computing if necessary """
+        if self._stale:
+            return self.filter(self._key, new=False)._uids
+        else:
+            return self._uids
+
+    def _func(self, obj, op):
+        if not self.stale:
+            errormsg = "To use logical operations on a Filter object, call first, e.g. filt('age') > 5"
+            raise RuntimeError(errormsg)
+        else:
+            arr = self.states[self._key]
+            self._key = None
+            self._stale = False
+
+        match op:
+            case '==': criteria = arr == obj
+            case '!=': criteria = arr != obj
+            case '<':  criteria = arr <  obj
+            case '<=': criteria = arr <= obj
+            case '>':  criteria = arr >  obj
+            case '>=': criteria = arr >= obj
+            case '~': criteria = ~arr
+            case _: raise ValueError(f'Unsupported operator: {op}')
+
+        return self.filter(criteria=criteria)
+
+    def __eq__(self, obj): return self._func(obj, '==')
+    def __ne__(self, obj): return self._func(obj, '!=')
+    def __lt__(self, obj): return self._func(obj, '<')
+    def __le__(self, obj): return self._func(obj, '<=')
+    def __gt__(self, obj): return self._func(obj, '>')
+    def __ge__(self, obj): return self._func(obj, '>=')
+    def __invert__(self): return self._func(None, '~')
+
+    def filter(self, criteria=None, uids=None, split=False, new=None):
+        """
+        Store indices to allow for easy filtering of the People object.
+
+        Args:
+            criteria (bool array): a boolean array for the filtering critria
+            uids (array): alternatively, explicitly filter by these indices
+            split (bool): if True, return separate filter objects matching both True and False
+        """
+        if new is True:
+            filtered = Filter(self)
+        elif new is False:
+            filtered = self
+        else:
+            filtered = Filter(self) if (self.is_filtered and not split) else self
+
+        # Perform the filtering
+        if uids is not None: # Unless indices are supplied directly, in which case use them
+            new_uids = np.intersect1d(self._uids, uids)
+            if split:
+                inv_uids = np.setdiff1d(self._uids, uids)
+                f1 = Filter(self, uids=new_uids)
+                f2 = Filter(self, uids=inv_uids)
+                return f1, f2
+            else:
+                filtered._uids = new_uids
+
+        if criteria is not None: # Main use case: perform filtering
+            if isinstance(criteria, str): # Allow e.g. filter('female')
+                if criteria[0] == '~': # Allow e.g. filter('~female') # TODO: may not be working
+                    key = criteria[1:]
+                    criteria = ~self.states[key]
+                else:
+                    self._key = criteria
+                    criteria = self.states[criteria]
+            len_criteria = len(criteria)
+            if len_criteria == len(filtered._uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
+                new_uids = filtered._uids[criteria] # Criteria is already filtered, just get the indices
+                if split:
+                    inv_uids = filtered._uids[~criteria]
+                    f1 = Filter(self, uids=new_uids)
+                    f2 = Filter(self, uids=inv_uids)
+                    return f1, f2
+            else:
+                errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
+                raise ValueError(errormsg)
+            filtered._uids = new_uids
+
+        filtered.is_filtered = True
+
+        return filtered

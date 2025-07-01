@@ -294,6 +294,14 @@ class Network(Route):
             self.edges[key] = df[key].to_numpy()
         return self
 
+    def shrink(self):
+        """ Shrink the size of the network for saving to disk """
+        super().shrink()
+        shrunk = ss.utils.shrink()
+        self.edges = shrunk
+        self.participant = shrunk
+        return
+
     def plot(self, max_edges=500, random=False, alpha=0.2, **kwargs):
         """
         Plot the network using NetworkX.
@@ -308,7 +316,7 @@ class Network(Route):
         fig = nx.draw_networkx(G, alpha=alpha, **kwargs)
         if max_edges:
             plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
-        return fig
+        return ss.return_fig(fig)
 
 
     def find_contacts(self, inds, as_array=True):
@@ -510,7 +518,14 @@ class StaticNet(Network):
 
 
 class RandomNet(DynamicNetwork):
-    """ Random connectivity between agents """
+    """
+    Random connectivity between agents
+
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+    """
 
     def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
@@ -518,6 +533,7 @@ class RandomNet(DynamicNetwork):
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = 0, # Note; network edge durations are required to have the same unit as the network
+            beta = 1.0,
         )
         self.update_pars(**kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
@@ -579,7 +595,7 @@ class RandomNet(DynamicNetwork):
         number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
 
         p1, p2 = self.get_edges(born.uids, number_of_contacts)
-        beta = np.ones(len(p1), dtype=ss_float_)
+        beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)

@@ -3,9 +3,10 @@ Run tests of disease models
 """
 
 # %% Imports and settings
-import starsim as ss
 import sciris as sc
 import matplotlib.pyplot as plt
+import starsim as ss
+import starsim_examples as sse
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
@@ -152,7 +153,7 @@ def test_gavi():
     sc.heading('Testing GAVI diseases')
 
     sims = sc.autolist()
-    for disease in ['cholera', 'measles', 'ebola']:
+    for disease in [sse.Cholera(), sse.Measles(), sse.Ebola()]:
         pars = dict(
             diseases = disease,
             n_agents = n_agents,

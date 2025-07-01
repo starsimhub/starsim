@@ -132,8 +132,9 @@ class SIS(ss.Infection):
         return
 
     def update_immunity(self):
+        waning = np.exp(-self.pars.waning*self.t.dt) # Exponential waning (NB: could be cached for a tiny performance boost)
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.t.dt)
+        self.immunity[has_imm] *= waning
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
@@ -216,7 +217,7 @@ class sir_vaccine(ss.Vx):
         else:
             people.sir.rel_sus[uids] *= np.random.binomial(1, 1-self.pars.efficacy, len(uids))
         return
-    
+
 class sis_vaccine(ss.Vx):
     """ Same as sir_vaccine, but for SIS model, and only leaky (not all-or-nothing) """
     def __init__(self, **kwargs):

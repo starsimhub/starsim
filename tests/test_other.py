@@ -4,6 +4,7 @@ Test Starsim features not covered by other test files
 import sciris as sc
 import numpy as np
 import starsim as ss
+import starsim_examples as sse
 import matplotlib.pyplot as plt
 import pytest
 
@@ -31,7 +32,7 @@ def test_people():
     ppl = ss.People(small, extra_states=extra_states)
 
     # Possible to add a module to people outside a sim (not typical workflow)
-    ppl.add_module(ss.HIV())
+    ppl.add_module(sse.HIV())
 
     return ppl
 
@@ -40,7 +41,7 @@ def test_microsim(do_plot=False):
     sc.heading('Test small HIV simulation')
 
     # Make HIV module
-    hiv = ss.HIV()
+    hiv = sse.HIV()
     # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
     # Need to be careful to get the ordering right. The set-up here assumes that in the simple
     # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
@@ -78,7 +79,7 @@ def test_ppl_construction(do_plot=False):
     }
     sim_pars = {'networks': [ss.MFNet(**mf_pars)], 'n_agents': small}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}}
-    gon = ss.Gonorrhea(**gon_pars)
+    gon = sse.Gonorrhea(**gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.init()

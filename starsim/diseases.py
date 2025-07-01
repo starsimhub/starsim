@@ -2,16 +2,17 @@
 Base classes for diseases
 """
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import networkx as nx
 from operator import itemgetter
-import pandas as pd
+import matplotlib.pyplot as plt
 
 ss_int_ = ss.dtypes.int
 ss_float_ = ss.dtypes.float
 
-__all__ = ['Disease', 'Infection', 'InfectionLog']
+__all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
 
 
 class Disease(ss.Module):
@@ -173,7 +174,7 @@ class Infection(Disease):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.validate_beta(run_checks=True)
+        self.validate_beta()
         return
 
     @property
@@ -215,31 +216,13 @@ class Infection(Disease):
         )
         return
 
-    def validate_beta(self, run_checks=False):
+    def validate_beta(self):
         """ Validate beta and return as a map to match the networks """
         sim = self.sim
         β = self.pars.beta
 
         def scalar_beta(β):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
-
-        if run_checks:
-            scalar_warn = f'Beta is defined as a number ({β}); convert it to a rate to handle timestep conversions'
-
-            if 'beta' not in self.pars:
-                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-
-            if sc.isnumber(β):
-                ss.warn(scalar_warn)
-            elif isinstance(β, dict):
-                for netbeta in β.values():
-                    if sc.isnumber(netbeta):
-                        ss.warn(scalar_warn)
-                    elif isinstance(netbeta, (list, tuple)):
-                        for thisbeta in netbeta:
-                            if sc.isnumber(netbeta):
-                                ss.warn(scalar_warn)
 
         # If beta is a scalar, apply this bi-directionally to all networks
         if scalar_beta(β):
@@ -445,3 +428,258 @@ class InfectionLog(nx.MultiDiGraph):
         df['target'] = df['target'].astype("Int64")
 
         return df
+
+
+class NCD(Disease):
+    """
+    Example non-communicable disease
+
+    This class implements a basic NCD model with risk of developing a condition
+    (e.g., hypertension, diabetes), a state for having the condition, and associated
+    mortality.
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
+            dur_risk = ss.expon(scale=ss.years(10)),
+            prognosis = ss.weibull(c=ss.years(2), scale=5), # Time in years between first becoming affected and death
+        )
+        self.update_pars(**kwargs)
+
+        self.define_states(
+            ss.State('at_risk', label='At risk'),
+            ss.State('affected', label='Affected'),
+            ss.FloatArr('ti_affected', label='Time of becoming affected'),
+            ss.FloatArr('ti_dead', label='Time of death'),
+        )
+        return
+
+    @property
+    def not_at_risk(self):
+        return ~self.at_risk
+
+    def init_post(self):
+        """
+        Set initial values for states. This could involve passing in a full set of initial conditions,
+        or using init_prev, or other. Note that this is different to initialization of the State objects
+        i.e., creating their dynamic array, linking them to a People instance. That should have already
+        taken place by the time this method is called.
+        """
+        super().init_post()
+        initial_risk = self.pars['initial_risk'].filter()
+        self.at_risk[initial_risk] = True
+        self.ti_affected[initial_risk] = self.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk))
+        return initial_risk
+
+    def step_state(self):
+        ti = self.ti
+        deaths = (self.ti_dead == ti).uids
+        self.sim.people.request_death(deaths)
+        if self.pars.log:
+            self.log.add_data(deaths, died=True)
+        self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
+        return
+
+    def step(self):
+        ti = self.ti
+        new_cases = (self.ti_affected == ti).uids
+        self.affected[new_cases] = True
+        dur_prog = self.pars.prognosis.rvs(new_cases)
+        self.ti_dead[new_cases] = ti + sc.randround(dur_prog)
+        super().set_prognoses(new_cases)
+        return new_cases
+
+    def init_results(self):
+        """
+        Initialize results
+        """
+        super().init_results()
+        self.define_results(
+            ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
+            ss.Result('prevalence',    dtype=float, label='Prevalence'),
+            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
+        )
+        return
+
+    def update_results(self):
+        super().update_results()
+        ti = self.ti
+        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
+        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(self.sim.people)
+        self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
+        return
+
+
+class SIR(Infection):
+    """
+    Example SIR model
+
+    This class implements a basic SIR model with states for susceptible,
+    infected/infectious, and recovered. It also includes deaths, and basic
+    results.
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            beta = ss.timeprob(0.1),
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
+            p_death = ss.bernoulli(p=0.01),
+        )
+        self.update_pars(**kwargs)
+
+        self.define_states(
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
+            ss.State('recovered', label='Recovered'),
+            ss.FloatArr('ti_infected', label='Time of infection'),
+            ss.FloatArr('ti_recovered', label='Time of recovery'),
+            ss.FloatArr('ti_dead', label='Time of death'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+        )
+        return
+
+    def step_state(self):
+        # Progress infectious -> recovered
+        sim = self.sim
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
+        self.infected[recovered] = False
+        self.recovered[recovered] = True
+
+        # Trigger deaths
+        deaths = (self.ti_dead <= sim.ti).uids
+        if len(deaths):
+            sim.people.request_death(deaths)
+        return
+
+    def set_prognoses(self, uids, sources=None):
+        """ Set prognoses """
+        super().set_prognoses(uids, sources)
+        ti = self.t.ti
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = ti
+
+        p = self.pars
+
+        # Sample duration of infection, being careful to only sample from the
+        # distribution once per timestep.
+        dur_inf = p.dur_inf.rvs(uids)
+
+        # Determine who dies and who recovers and when
+        will_die = p.p_death.rvs(uids)
+        dead_uids = uids[will_die]
+        rec_uids = uids[~will_die]
+        self.ti_dead[dead_uids] = ti + dur_inf[will_die] # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die]
+        return
+
+    def step_die(self, uids):
+        """ Reset infected/recovered flags for dead agents """
+        self.susceptible[uids] = False
+        self.infected[uids] = False
+        self.recovered[uids] = False
+        return
+
+    def plot(self, **kwargs):
+        """ Default plot for SIR model """
+        fig = plt.figure()
+        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+        res = self.results
+        for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
+            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
+        plt.legend(frameon=False)
+        plt.xlabel('Time')
+        plt.ylabel('Number of people')
+        plt.ylim(bottom=0)
+        sc.boxoff()
+        sc.commaticks()
+        return ss.return_fig(fig)
+
+
+class SIS(Infection):
+    """
+    Example SIS model
+
+    This class implements a basic SIS model with states for susceptible,
+    infected/infectious, and back to susceptible based on waning immunity. There
+    is no death in this case.
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            beta = ss.timeprob(0.05),
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=ss.years(10)),
+            waning = ss.peryear(0.05),
+            imm_boost = 1.0,
+        )
+        self.update_pars(**kwargs)
+
+        self.define_states(
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('immunity', default=0.0),
+        )
+        return
+
+    def step_state(self):
+        """ Progress infectious -> recovered """
+        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
+        self.infected[recovered] = False
+        self.susceptible[recovered] = True
+        self.update_immunity()
+        return
+
+    def update_immunity(self):
+        waning = np.exp(-self.pars.waning*self.t.dt) # Exponential waning (NB: could be cached for a tiny performance boost)
+        has_imm = (self.immunity > 0).uids
+        self.immunity[has_imm] *= waning
+        self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
+        return
+
+    def set_prognoses(self, uids, sources=None):
+        """ Set prognoses """
+        super().set_prognoses(uids, sources)
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = self.ti
+        self.immunity[uids] += self.pars.imm_boost
+
+        # Sample duration of infection
+        dur_inf = self.pars.dur_inf.rvs(uids)
+
+        # Determine when people recover
+        self.ti_recovered[uids] = self.ti + dur_inf
+
+        return
+
+    def init_results(self):
+        """ Initialize results """
+        super().init_results()
+        self.define_results(
+            ss.Result('rel_sus', dtype=float, label='Relative susceptibility')
+        )
+        return
+
+    def update_results(self):
+        """ Store the population immunity (susceptibility) """
+        super().update_results()
+        self.results['rel_sus'][self.ti] = self.rel_sus.mean()
+        return
+
+    def plot(self, **kwargs):
+        """ Default plot for SIS model """
+        fig = plt.figure()
+        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+        res = self.results
+        for rkey in ['n_susceptible', 'n_infected']:
+            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
+        plt.legend(frameon=False)
+        plt.xlabel('Time')
+        plt.ylabel('Number of people')
+        plt.ylim(bottom=0)
+        sc.boxoff()
+        sc.commaticks()
+        return ss.return_fig(fig)

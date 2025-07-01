@@ -693,6 +693,17 @@ class Dist:
         )
         return out
 
+    def shrink(self):
+        """ Shrink the size of the module for saving to disk """
+        shrunk = ss.utils.shrink()
+        self.slots = shrunk
+        self._slots = shrunk
+        self.module = shrunk
+        self.sim = shrunk
+        self._n = shrunk
+        self._uids = shrunk
+        self.history = shrunk
+        return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
@@ -1247,6 +1258,7 @@ class multi_random(sc.prettyobj):
             raise ValueError(errormsg)
 
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
+        rvs_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
         int_type = ss.dtypes.rand_uint
         int_max = np.iinfo(int_type).max
         rvs = self.combine_rvs(rvs_list, int_type, int_max)

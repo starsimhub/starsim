@@ -210,13 +210,25 @@ class Arr(BaseArr):
         Used for getitem and setitem to determine whether the key is indexing
         the raw array (`raw`) or the active agents (`values`), and to convert
         the key to array indices if needed.
+
+        Note that values[key] = raw[self.auids[key]]
+
+        In short:
+            - ss.uids, integer, or integer array: raw
+            - BoolArr, boolean array, or full slice: values
         """
-        if isinstance(key, (uids, int, ss_int)):
+        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
         elif isinstance(key, slice):
-            return self.auids[key]
+            if key.start is None and key.stop is None:
+                return self.auids[key]
+            elif isinstance(key.start, uids) and isinstance(key.stop, uids):
+                return key
+            else:
+                errormsg = f'Using {key} on an array is ambiguous. Use arr.values[slice] for alive agents, or arr.raw[slice] for all agents.'
+                raise ValueError(errormsg)
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
         elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
@@ -228,11 +240,13 @@ class Arr(BaseArr):
             raise Exception(errormsg)
 
     def __getitem__(self, key):
-        key = self._convert_key(key)
+        if not isinstance(key, uids): # Shortcut since main pathway
+            key = self._convert_key(key)
         return self.raw[key]
 
     def __setitem__(self, key, value):
-        key = self._convert_key(key)
+        if not isinstance(key, uids):
+            key = self._convert_key(key)
         self.raw[key] = value
         return
 
@@ -264,7 +278,12 @@ class Arr(BaseArr):
     @property
     def values(self):
         """ Return the values of the active agents """
-        return self.raw[self.auids]
+        try:
+            return self.raw[self.auids]
+        except:
+            warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
+            ss.warn(warnmsg)
+            return np.array([])
 
     def set(self, uids, new_vals=None):
         """ Set the values for the specified UIDs"""

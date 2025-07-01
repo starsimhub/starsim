@@ -6,7 +6,7 @@ import sciris as sc
 import numpy as np
 import pandas as pd
 
-__all__ = ['Product', 'Dx', 'Tx', 'Vx']
+__all__ = ['Product', 'Dx', 'Tx', 'Vx', 'simple_vx']
 
 
 class Product(ss.Module):
@@ -146,3 +146,43 @@ class Vx(Product):
     def administer(self, uids):
         """ Apply the vaccine to the requested uids. """
         pass
+
+
+class simple_vx(Vx):
+    """
+    Create a simple vaccine product that affects the probability of infection.
+
+    The vaccine can be either "leaky", in which everyone who receives the vaccine
+    receives the same amount of protection (specified by the efficacy parameter)
+    each time they are exposed to an infection. The alternative (leaky=False) is
+    that the efficacy is the probability that the vaccine "takes", in which case
+    that person is 100% protected (and the remaining people are 0% protected).
+
+    Args:
+        efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
+        disease (int/str/list): the disease to modify (if None, modify all)
+        leaky (bool): see above
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            efficacy = 0.9,
+            leaky = True,
+            disease = None,
+        )
+        self.update_pars(**kwargs)
+        return
+
+    def administer(self, people, uids):
+        if self.pars.leaky:
+            factor = 1-self.pars.efficacy
+        else:
+            factor = np.random.binomial(1, 1-self.pars.efficacy, len(uids))
+
+        if self.pars.disease is None:
+            self.pars.disease = self.sim.diseases.keys()
+
+        for key in sc.tolist(self.pars.disease):
+            self.sim.diseases[key].rel_sus[uids] *= factor
+        return
+

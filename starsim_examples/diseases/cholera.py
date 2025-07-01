@@ -56,10 +56,6 @@ class Cholera(ss.Infection):
         return
 
     @property
-    def infectious(self):
-        return self.infected | self.exposed
-
-    @property
     def asymptomatic(self):
         return self.infected & ~self.symptomatic
 

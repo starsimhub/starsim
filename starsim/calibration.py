@@ -410,7 +410,7 @@ class Calibration(sc.prettyobj):
 
         methods = sc.tolist(methods)
 
-        if methods is None:
+        if not methods:
             methods = [
                 'plot_contour',
                 'plot_edf',
