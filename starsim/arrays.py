@@ -216,7 +216,13 @@ class Arr(BaseArr):
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
         elif isinstance(key, slice):
-            return self.auids[key]
+            if key.start is None and key.stop is None:
+                return self.auids[key]
+            elif isinstance(key.start, uids) and isinstance(key.stop, uids):
+                return key
+            else:
+                errormsg = f'Using {key} on an array is ambiguous. Use arr.values[slice] for alive agents, or arr.raw[slice] for all agents.'
+                raise ValueError(errormsg)
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
         elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
@@ -228,11 +234,13 @@ class Arr(BaseArr):
             raise Exception(errormsg)
 
     def __getitem__(self, key):
-        key = self._convert_key(key)
+        if not isinstance(key, uids): # Shortcut since main pathway
+            key = self._convert_key(key)
         return self.raw[key]
 
     def __setitem__(self, key, value):
-        key = self._convert_key(key)
+        if not isinstance(key, uids):
+            key = self._convert_key(key)
         self.raw[key] = value
         return
 
