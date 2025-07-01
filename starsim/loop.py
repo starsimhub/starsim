@@ -245,6 +245,14 @@ class Loop:
         self.cpu_df = cdf
         return df
 
+    def shrink(self):
+        """ Shrink the size of the loop for saving to disk """
+        shrunk = ss.utils.shrink()
+        self.sim = shrunk
+        self.funcs = shrunk
+        self.plan = shrunk
+        return
+
     def plot(self, simplify=False, fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot a diagram of all the events

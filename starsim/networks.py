@@ -294,6 +294,14 @@ class Network(Route):
             self.edges[key] = df[key].to_numpy()
         return self
 
+    def shrink(self):
+        """ Shrink the size of the network for saving to disk """
+        super().shrink()
+        shrunk = ss.utils.shrink()
+        self.edges = shrunk
+        self.participant = shrunk
+        return
+
     def plot(self, max_edges=500, random=False, alpha=0.2, **kwargs):
         """
         Plot the network using NetworkX.
