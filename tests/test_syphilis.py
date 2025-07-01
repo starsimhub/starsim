@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim_examples as sse
 import matplotlib.pyplot as plt
 
 quick_run = True
@@ -126,7 +127,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
     screen_eligible = lambda sim: sim.networks.mfnet.active(sim.people)
-    syph_screening = ss.syph_screening(
+    syph_screening = sse.syph_screening(
         product='rpr',
         prob=0.99,
         eligibility=screen_eligible,
