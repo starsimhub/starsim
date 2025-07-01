@@ -210,8 +210,14 @@ class Arr(BaseArr):
         Used for getitem and setitem to determine whether the key is indexing
         the raw array (`raw`) or the active agents (`values`), and to convert
         the key to array indices if needed.
+
+        Note that values[key] = raw[self.auids[key]]
+
+        In short:
+            - ss.uids, integer, or integer array: raw
+            - BoolArr, boolean array, or full slice: values
         """
-        if isinstance(key, (uids, int, ss_int)):
+        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
