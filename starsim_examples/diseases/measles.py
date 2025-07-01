@@ -5,12 +5,11 @@ Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
 
 import starsim as ss
-from starsim.diseases.sir import SIR
 
 __all__ = ['Measles']
 
 
-class Measles(SIR):
+class Measles(ss.SIR):
 
     def __init__(self, **kwargs):
         """ Initialize with parameters """

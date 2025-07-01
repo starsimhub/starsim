@@ -6,12 +6,11 @@ Original version by@domdelport and @RomeshA
 
 import numpy as np
 import starsim as ss
-from starsim.diseases.sir import SIR
 
 __all__ = ['Ebola']
 
 
-class Ebola(SIR):
+class Ebola(ss.SIR):
 
     def __init__(self, **kwargs):
         """ Initialize with parameters """

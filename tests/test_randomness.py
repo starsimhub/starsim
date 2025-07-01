@@ -8,6 +8,7 @@ import sciris as sc
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 import starsim as ss
+import starsim_examples as sse
 
 n = 5 # Default number of samples
 
@@ -243,7 +244,7 @@ def test_independence(do_plot=False, thresh=0.1):
         diseases = [
             dict(type='sir', init_prev=0.1),
             dict(type='sis', init_prev=0.1),
-            dict(type='hiv', init_prev=0.1),
+            sse.HIV(init_prev=0.1),
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
