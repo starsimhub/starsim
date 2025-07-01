@@ -363,6 +363,19 @@ class People(sc.prettyobj):
 
         return
 
+    def update_results(self):
+        ti = self.sim.ti
+        res = self.sim.results
+        res.n_alive[ti] = np.count_nonzero(self.alive)
+        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+        return
+
+    def finish_step(self):
+        self.remove_dead()
+        self.update_post()
+        return
+
     @property
     def dead(self):
         """ Dead boolean """
@@ -373,23 +386,86 @@ class People(sc.prettyobj):
         """ Male boolean """
         return ~self.female
 
-    def update_results(self):
-        ti = self.sim.ti
-        res = self.sim.results
-        res.n_alive[ti] = np.count_nonzero(self.alive)
-        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
-        return
+
 
     def to_df(self):
+        """ Export to dataframe """
         df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
         return df
 
-    def finish_step(self):
-        # self.update_results() # This is called separately
-        self.remove_dead()
-        self.update_post()
+    def plot(self, states=None):
+        """
+        Plot the properties of the People object
+        """
         return
+
+    def plot_age(self, bins=None, absolute=False, fig_kw=None):
+        """
+        Plot the age pyramid for males and females.
+
+        Args:
+            bins (list/int): optional list or int for binning age groups (default: 5-year bins up to max age)
+            absolute (bool): whether to show absolute numbers or percentage of the population
+            fig_kw (dict): passed to `plt.subplots()`
+
+        **Example**:
+
+            sim = ss.demo(plot=False)
+            sim.people.plot_age()
+        """
+        # Preliminaries
+        age = self.age
+        female = self.female
+        f_age = age[female]
+        m_age = age[~female]
+        max_age = age.max()
+
+        # Define age bins
+        if np.iterable(bins):
+            width = None # Already defined, don't need
+        if np.isscalar(bins):
+            width = bins
+        else:
+            width = 5
+        if width is not None:
+            max_bin = (np.ceil(max_age / width) + 1) * width
+            bins = np.arange(0, max_bin, width)
+        y_pos = np.arange(len(bins)-1)
+
+        # Histogram counts
+        f_vals, _ = np.histogram(f_age, bins=bins)
+        m_vals, _ = np.histogram(m_age, bins=bins)
+
+        # Optionally convert to percentages
+        if absolute:
+            xlabel = 'Number of people'
+        else:
+            total = f_vals.sum() + f_vals.sum()
+            f_vals = f_vals / total * 100
+            m_vals = m_vals / total * 100
+            xlabel = 'Percentage of population'
+
+        # Plot
+        fig,ax = plt.subplots(**sc.mergedicts(fig_kw))
+        ax.barh(y_pos, -f_vals, color='salmon', label='Female')  # Negative = left
+        ax.barh(y_pos,  m_vals, color='skyblue', label='Male')
+
+        # Annotate
+        y_labels = [f'{bins[i]:n}–{bins[i+1]-1:n}' if i < len(bins)-1 else f'{bins[i]:n}+' for i in range(len(bins)-1)]
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(y_labels)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel('Age group')
+        ax.legend(loc='lower right')
+
+        max_val = max(f_vals.max(), m_vals.max()) * 1.1
+        ax.set_xlim([-max_val, max_val])
+        ax.axvline(0, color='black', linewidth=0.8)
+
+        plt.tight_layout()
+        sc.boxoff()
+        return fig
 
     def person(self, ind):
         """
