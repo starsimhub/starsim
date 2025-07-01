@@ -72,6 +72,7 @@ class People(sc.prettyobj):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
+        self._linked_modules = []
 
         return
 
@@ -160,6 +161,7 @@ class People(sc.prettyobj):
         if len(module.states):
             module_states = sc.objdict()
             setattr(self, module.name, module_states)
+            self._linked_modules.append(module.name)
             for state in module.states:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
@@ -460,6 +462,7 @@ class Filter(sc.prettyobj):
         self.is_filtered = False
         self._key = None
         self._stale = False
+        self._linked_modules = people._linked_modules
 
         # Copy states
         for key,state in self.people.states.items():
@@ -467,6 +470,12 @@ class Filter(sc.prettyobj):
             new_state.__dict__ = state.__dict__.copy() # Shallow copy
             new_state.people = self
             self.states[key] = new_state
+
+        # Set up links to modules
+        for mod in self._linked_modules:
+            setattr(self, mod, sc.dictobj())
+            for key in getattr(self.people, mod).keys():
+                getattr(self, mod)[key] = self.states[f'{mod}.{key}']
         return
 
     def __getitem__(self, key):
@@ -474,6 +483,10 @@ class Filter(sc.prettyobj):
 
     def __getattr__(self, key):
         return self.states[key]
+
+    def __setitem__(self, key, value):
+        self.states[key] = value
+        return
 
     def __call__(self, key):
         self._key = key
@@ -513,6 +526,8 @@ class Filter(sc.prettyobj):
             case '<=': criteria = arr <= obj
             case '>':  criteria = arr >  obj
             case '>=': criteria = arr >= obj
+            case '~': criteria = ~arr
+            case _: raise ValueError(f'Unsupported operator: {op}')
 
         return self.filter(criteria=criteria)
 
@@ -522,6 +537,7 @@ class Filter(sc.prettyobj):
     def __le__(self, obj): return self._func(obj, '<=')
     def __gt__(self, obj): return self._func(obj, '>')
     def __ge__(self, obj): return self._func(obj, '>=')
+    def __invert__(self): return self._func(None, '~')
 
     def filter(self, criteria=None, uids=None, split=False, new=None):
         """
@@ -552,7 +568,7 @@ class Filter(sc.prettyobj):
 
         if criteria is not None: # Main use case: perform filtering
             if isinstance(criteria, str): # Allow e.g. filter('female')
-                if criteria[0] == '~': # Allow e.g. filter('~female')
+                if criteria[0] == '~': # Allow e.g. filter('~female') # TODO: may not be working
                     key = criteria[1:]
                     criteria = ~self.states[key]
                 else:
