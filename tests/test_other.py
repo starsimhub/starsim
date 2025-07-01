@@ -76,9 +76,9 @@ def test_ppl_construction(do_plot=False):
     mf_pars = {
         'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
-    sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': small}
+    sim_pars = {'networks': [ss.MFNet(**mf_pars)], 'n_agents': small}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}}
-    gon = ss.Gonorrhea(pars=gon_pars)
+    gon = ss.Gonorrhea(**gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.init()
@@ -97,8 +97,8 @@ def test_arrs():
 
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')
-    p1 = sc.mergedicts(pars, birth_rate=10)
-    p2 = sc.mergedicts(pars, death_rate=10)
+    p1 = sc.mergedicts(pars, birth_rate=ss.peryear(10))
+    p2 = sc.mergedicts(pars, death_rate=ss.peryear(10))
     s1 = ss.Sim(pars=p1).run()
     s2 = ss.Sim(pars=p2).run()
 
@@ -138,10 +138,10 @@ def test_deepcopy():
 
 def test_deepcopy_until():
     sc.heading('Testing deepcopy with until')
-    s1 = ss.Sim(diseases='sir', networks='embedding', n_agents=small)
+    s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small)
     s1.init()
 
-    s1.run(until=5)
+    s1.run(until=ss.date(2005))
 
     s2 = sc.dcp(s1)
 
@@ -159,8 +159,8 @@ def test_results():
     sc.heading('Testing results export and plotting')
 
     # Make a sim with 2 SIS models with varying units and dt
-    d1 = ss.SIS(unit='month', name='sis1')
-    d2 = ss.SIS(dt=0.5, unit='year', name='sis2')
+    d1 = ss.SIS(dt=ss.Dur(1/12), name='sis1')
+    d2 = ss.SIS(dt=ss.Dur(0.5), name='sis2')
     sim = ss.Sim(diseases=[d1, d2], networks='random')
 
     # Run sim and pull out disease results
@@ -180,10 +180,10 @@ def test_results():
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
-    dfy2 = rs2.to_df(resample='5y')
-    assert dfs.new_infections[:12].sum() == dfy1.new_infections[0]
-    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible[0]  # Entries 0 and 1 represent 2000
-    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible[1]  # Entries 2-12 correspond to 2001-2005
+    dfy2 = rs2.to_df(resample='5YE')
+    assert dfs.new_infections.iloc[:12].sum() == dfy1.new_infections.iloc[0]
+    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible.iloc[0]  # Entries 0 and 1 represent 2000
+    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible.iloc[1]  # Entries 2-12 correspond to 2001-2005
 
     # Export whole sim to unified annualized dataframe
     sim_df = sim.to_df(resample='year', use_years=True)
@@ -193,6 +193,7 @@ def test_results():
     # Plot
     res.plot()
     sim.results.sis1.plot()
+    sim.results.sis2.plot()
 
     return sim
 

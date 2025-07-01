@@ -1,3 +1,7 @@
+---
+pagetitle: "User guide"
+---
+
 # User guide
 
 These user guides provide a more in-depth look at each topic compared to the corresponding tutorials.
@@ -14,7 +18,7 @@ To run these tutorials locally:
 1. Clone the Starsim repository
 2. Install Starsim and its dependencies
 3. Navigate to the `docs/user_guide` folder
-4. Launch Jupyter: `jupyter notebook`
+4. Launch Jupyter: `jupyter lab`
 :::
 
 ## Introduction
@@ -26,6 +30,7 @@ To run these tutorials locally:
 
 - [Understanding the model](user_guide/basics_model.ipynb)
 - [The Sim object](user_guide/basics_sim.ipynb)
+- [Parameter configuration](user_guide/basics_parameters.ipynb)
 
 ## Modules
 
@@ -40,14 +45,13 @@ To run these tutorials locally:
 
 - [Running simulations](user_guide/workflows_run.ipynb)
 - [Calibration](user_guide/workflows_calibration.ipynb)
+- [Deployment](user_guide/workflows_deploy.ipynb)
 - [Working with samples](user_guide/workflows_samples.ipynb)
-- [Cloud computing](user_guide/workflows_cloud.ipynb)
 
 ## Advanced topics
 
 - [Time handling](user_guide/advanced_time.ipynb)
 - [Indexing and arrays](user_guide/advanced_indexing.ipynb)
-- [Parameter configuration](user_guide/advanced_parameters.ipynb)
 - [Probability distributions](user_guide/advanced_distributions.ipynb)
 - [Random number generation](user_guide/advanced_random.ipynb)
 - [Profiling and optimization](user_guide/advanced_profiling.ipynb)

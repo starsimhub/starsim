@@ -18,15 +18,15 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.beta(0.1),
+            beta = ss.timeprob(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
+            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
             p_death = ss.bernoulli(p=0.01),
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
@@ -106,16 +106,16 @@ class SIS(ss.Infection):
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.beta(0.05),
+            beta = ss.timeprob(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.dur(10)),
-            waning = ss.rate(0.05),
+            dur_inf = ss.lognorm_ex(mean=ss.years(10)),
+            waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )
-        self.update_pars(pars=pars, *args, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.FloatArr('ti_recovered'),
@@ -132,8 +132,9 @@ class SIS(ss.Infection):
         return
 
     def update_immunity(self):
+        waning = np.exp(-self.pars.waning*self.t.dt) # Exponential waning (NB: could be cached for a tiny performance boost)
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning)
+        self.immunity[has_imm] *= waning
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
@@ -185,7 +186,7 @@ class SIS(ss.Infection):
 
 # %% Interventions
 
-__all__ += ['sir_vaccine']
+__all__ += ['sir_vaccine', 'sis_vaccine']
 
 class sir_vaccine(ss.Vx):
     """
@@ -201,13 +202,13 @@ class sir_vaccine(ss.Vx):
         efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
         leaky (bool): see above
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             efficacy = 0.9,
             leaky = True
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     def administer(self, people, uids):
@@ -215,4 +216,16 @@ class sir_vaccine(ss.Vx):
             people.sir.rel_sus[uids] *= 1-self.pars.efficacy
         else:
             people.sir.rel_sus[uids] *= np.random.binomial(1, 1-self.pars.efficacy, len(uids))
+        return
+
+class sis_vaccine(ss.Vx):
+    """ Same as sir_vaccine, but for SIS model, and only leaky (not all-or-nothing) """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(efficacy=0.9)
+        self.update_pars(**kwargs)
+        return
+
+    def administer(self, people, uids):
+        people.sis.rel_sus[uids] *= 1-self.pars.efficacy
         return

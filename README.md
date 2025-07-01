@@ -1,5 +1,9 @@
 # Starsim
 
+[![PyPI version](https://badgen.net/pypi/v/starsim/?color=blue)](https://pypi.org/project/starsim)
+[![Downloads](https://static.pepy.tech/personalized-badge/starsim?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/starsim)
+[![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml/badge.svg)](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml?query=workflow)
+
 Starsim is an agent-based modeling framework for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. Starsim allows detailed modeling of mother-child relationships from conception to study birth-related diseases. Additionally, Starsim lets users compare different intervention strategies, like vaccines or treatments, to see their impact through various delivery methods such as mass campaigns or targeted outreach.
 
 Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).
@@ -20,9 +24,16 @@ We recommend, but do not require, installing Starsim in a virtual environment, s
 
 ### Python
 
-Starsim is most easily installed via PyPI:
+Starsim is most easily installed via [PyPI](https://pypi.org):
 ```sh
 pip install starsim
+```
+
+Or with [uv](https://github.com/astral-sh/uv):
+```sh
+uv init example
+cd example
+uv add starsim
 ```
 
 Starsim can also be installed locally. To do this, clone first this repository, then run:
@@ -42,6 +53,8 @@ devtools::install_github("starsimhub/rstarsim")
 library(starsim)
 init_starsim()
 ````
+
+See [r.starsim.org](https://r.starsim.org) for more information.
 
 ## Usage and documentation
 

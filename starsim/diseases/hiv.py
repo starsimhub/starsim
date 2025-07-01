@@ -11,11 +11,10 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(ss.Infection):
 
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            unit = 'year',
-            beta = ss.beta(1.0), # Placeholder value
+            beta = ss.timeprob(1.0), # Placeholder value
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -23,9 +22,9 @@ class HIV(ss.Infection):
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
-            p_death = ss.rate(0.05), # NB: this is death per unit time, not death per infection
+            p_death = ss.rateprob(0.05), # NB: this is death per unit time, not death per infection
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # States
         self.define_states(
@@ -39,9 +38,7 @@ class HIV(ss.Infection):
     @staticmethod
     def death_prob_func(module, sim, uids):
         p = module.pars
-        out = p.p_death / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
-        out = np.array(out)
-        return out
+        return p.p_death.to_prob(module.t.dt, (module.cd4[uids] - p.cd4_max)**2 / (p.cd4_min - p.cd4_max)**2)
 
     def step_state(self):
         """ Update CD4 """
@@ -95,7 +92,7 @@ class ART(ss.Intervention):
         self.define_pars(
             art_delay = ss.constant(v=ss.years(1.0)) # Value in years
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         prob_art = lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage)
         self.prob_art_at_infection = ss.bernoulli(p=prob_art)

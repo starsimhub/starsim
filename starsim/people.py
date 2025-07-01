@@ -27,7 +27,7 @@ class People(sc.prettyobj):
         age_data (dataframe): a dataframe of years and population sizes, if available
         extra_states (list): non-default states to initialize
 
-    **Examples**::
+    **Examples**:
         ppl = ss.People(2000)
     """
 
@@ -93,7 +93,7 @@ class People(sc.prettyobj):
         The ages will be interpreted as lower bin edges. An upper bin edge will
         automatically be added based on the final age plus the difference of the
         last two bins. To explicitly control the width of the upper age bin, add
-        an extra entry to the ``age_data`` with a value of 0 and an age value
+        an extra entry to the `age_data` with a value of 0 and an age value
         corresponding to the desired upper age bound.
 
         Args:
@@ -102,13 +102,16 @@ class People(sc.prettyobj):
                          assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
 
-        Note: age_data can also be provided as a string
+        Note: `age_data` can also be provided as a string (interpreted as a filename).
+
+        If no value is provided, uniform ages from 0-60 are created (to match the
+        global mean age of ~30 years).
 
         Returns:
-            An ``ss.Dist`` instance that returns an age for newly created agents
+            An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            dist = ss.uniform(low=0, high=100, name='Age distribution')
+            dist = ss.uniform(low=0, high=60, name='Age distribution')
         else:
             # Try loading from file
             if isinstance(age_data, str) or isinstance(age_data, Path):
@@ -320,8 +323,11 @@ class People(sc.prettyobj):
         record state changes associated with death. It is therefore important that they can
         guarantee that after requesting death, the death is guaranteed to occur.
 
-        :param uids: Agent IDs to request deaths for
-        :return: UIDs of agents that have been scheduled to die on this timestep
+        Args:
+            uids: Agent IDs to request deaths for
+
+        Returns:
+            UIDs of agents that have been scheduled to die on this timestep
         """
         self.ti_dead[uids] = self.sim.ti
         return
@@ -373,6 +379,10 @@ class People(sc.prettyobj):
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 
+    def to_df(self):
+        df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
+        return df
+
     def finish_step(self):
         # self.update_results() # This is called separately
         self.remove_dead()
@@ -380,7 +390,14 @@ class People(sc.prettyobj):
         return
 
     def person(self, ind):
-        """ Get all the properties for a single person """
+        """
+        Get all the properties for a single person.
+
+        **Example**:
+
+            sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
+            print(sim.people.person(5)) # The 5th agent in the simulation
+        """
         person = Person()
         for key in ['uid', 'slot']:
             person[key] = self[key][ind]

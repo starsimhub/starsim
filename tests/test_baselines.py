@@ -41,7 +41,7 @@ def make_sim(run=False, **kwargs):
     return sim
 
 
-def save_baseline():
+def save_baseline(save_pars=False):
     """
     Refresh the baseline results. This function is not called during standard testing,
     but instead is called by the update_baseline script.
@@ -55,8 +55,9 @@ def save_baseline():
     # Export results
     sim.to_json(filename=baseline_filename, keys='summary')
 
-    # Save parameters
-    sim.to_json(filename=parameters_filename, keys='pars') # If not different from previous version, can safely delete
+    # Optionally save parameters
+    if save_pars:
+        sim.to_json(filename=parameters_filename, keys='pars') # If not different from previous version, can safely delete
 
     print('Done.')
     return
@@ -173,8 +174,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
                 },
             'parameters': {
                 'n_agents': sim.pars.n_agents,
-                'dur':      sim.pars.dur,
-                'dt':       sim.pars.dt,
+                'dur':      sim.t.dur,
+                'dt':       sim.t.dt,
                 },
             'cpu_performance': ratio,
             }

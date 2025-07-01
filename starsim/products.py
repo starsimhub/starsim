@@ -17,7 +17,7 @@ class Product(ss.Module):
         else:
             return
 
-    def administer(self, people, inds):
+    def administer(self, uids):
         """ Adminster a Product - implemented by derived classes """
         raise NotImplementedError
 
@@ -143,6 +143,6 @@ class Vx(Product):
         self.diseases = sc.tolist(diseases)
         return
 
-    def administer(self, people, uids):
+    def administer(self, uids):
         """ Apply the vaccine to the requested uids. """
         pass

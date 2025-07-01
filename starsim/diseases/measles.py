@@ -12,7 +12,7 @@ __all__ = ['Measles']
 
 class Measles(SIR):
 
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(
@@ -25,7 +25,7 @@ class Measles(SIR):
             dur_inf = ss.normal(loc=ss.days(11)),       # (days) - source: US CDC
             p_death = ss.bernoulli(p=0.005), # Probability of death
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # SIR are added automatically, here we add E
         self.define_states(
@@ -34,10 +34,6 @@ class Measles(SIR):
         )
 
         return
-
-    @property
-    def infectious(self):
-        return self.infected | self.exposed
 
     def step_state(self):
         # Progress exposed -> infected

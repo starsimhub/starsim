@@ -12,20 +12,20 @@ __all__ = ['Syphilis']
 
 class Syphilis(ss.Infection):
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         # Parameters
         super().__init__()
         self.define_pars(
             # Initial conditions
-            beta = 1.0, # Placeholder
+            beta = ss.timeprob(1), # Placeholder
             init_prev = ss.bernoulli(p=0.03),
 
             # Adult syphilis natural history, all specified in years
-            dur_exposed = ss.lognorm_ex(mean=1 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary = ss.lognorm_ex(mean=1.5 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp = ss.lognorm_ex(mean=1, std=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long = ss.lognorm_ex(mean=20, std=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed = ss.lognorm_ex(mean=ss.months(1), std=ss.months(1/3)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=ss.months(1.5), std=ss.months(1/3)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.lognorm_ex(mean=ss.months(3.6), std=ss.months(1.5)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=ss.years(1), std=ss.months(6)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=ss.years(20), std=ss.years(8)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
@@ -52,7 +52,7 @@ class Syphilis(ss.Infection):
             ),
             birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             # Adult syphilis states
@@ -265,14 +265,15 @@ class Syphilis(ss.Infection):
                 assigned_outcomes = birth_outcomes.rvs(len(state_uids))
                 time_to_birth = -sim.people.age.raw # TODO: make nicer
 
+                ti_birth = sim.ti-sim.people.age*(ss.years(1)/self.t.dt) # By using ss.years(1) we avoid constructing an array of Dur objects for each age individually
+
                 # Schedule events
-                ratio = ss.time_ratio(unit1='year', dt1=1.0, unit2=self.t.unit, dt2=self.t.dt) # TODO: think about simplifying
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
                     o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] * ratio)
+                        vals[o_uids] = sim.ti + rr(ti_birth[o_uids])
                         setattr(self, ti_outcome, vals)
 
         return
