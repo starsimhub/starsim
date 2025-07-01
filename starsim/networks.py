@@ -308,7 +308,7 @@ class Network(Route):
         fig = nx.draw_networkx(G, alpha=alpha, **kwargs)
         if max_edges:
             plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
-        return fig
+        return ss.return_fig(fig)
 
 
     def find_contacts(self, inds, as_array=True):

@@ -393,13 +393,69 @@ class People(sc.prettyobj):
         df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
         return df
 
-    def plot(self, states=None):
+    def plot(self, key=None, alive=True, bins=50, hist_kw=None, max_plots=20, figsize=(16,12), **kwargs):
         """
-        Plot the properties of the People object
-        """
-        return
+        Plot all the properties of the People object
 
-    def plot_age(self, bins=None, absolute=False, fig_kw=None):
+        Args:
+            key (str/list): the state(s) to plot
+            alive (bool): if false, use all agents in the simulation instead of active (alive) ones
+            bins (int): the number of bins to use in `plt.hist()`
+            hist_kw (dict): passed to `plt.hist()`
+            max_plots (int): the maximum number of plots to create
+            figsize (tuple): passed to `plt.figure()`; by default large since the plots are crowded
+            **kwargs (dict): passed to `sc.getrowscols()`, including `fig_kw`
+        """
+        # Handle figsize
+        if 'figsize' not in kwargs:
+            kwargs['figsize'] = figsize
+
+        # Decide what to plot
+        if key is None:
+            key = self.states.keys()
+        key = sc.tolist(key)
+        if max_plots:
+            key = key[:max_plots]
+        n_keys = len(key)
+
+        # Create figure and plot
+        fig,axs = sc.getrowscols(n_keys, make=True, **kwargs)
+        for i,k in enumerate(key):
+            ax = fig.axes[i]
+            state = self.states[k]
+            if alive:
+                data = state.values
+            else:
+                data = state.raw
+
+            # It's a float array, plot a histogram
+            if isinstance(state, ss.FloatArr):
+                data = sc.rmnans(data)
+                if not len(data):
+                    print(f'Not plotting "{k}" since all values are NaN')
+                ax.hist(data, bins=bins, **sc.mergedicts(hist_kw))
+
+            # It's a boolean array, plot the proportions
+            elif isinstance(state, ss.BoolArr):
+                true,false = data.sum(), (~data).sum()
+                labels = ['False', 'True']
+                ax.bar(labels, [false,true], color=['#E0D3DE', '#3C88A3'])
+
+            # Give up
+            else:
+                warnmsg = f'Cannot understand state of {type(state)} for plotting; skipping'
+                ss.warn(warnmsg)
+
+            # Tidy up
+            ax.set_title(f'{state.name} (mean={data.mean():n})')
+            ax.set_ylabel('Count')
+            sc.commaticks(ax)
+            sc.boxoff(ax)
+
+        plt.tight_layout()
+        return ss.return_fig(fig)
+
+    def plot_ages(self, bins=None, absolute=False, fig_kw=None):
         """
         Plot the age pyramid for males and females.
 
@@ -452,20 +508,19 @@ class People(sc.prettyobj):
 
         # Annotate
         y_labels = [f'{bins[i]:n}–{bins[i+1]-1:n}' if i < len(bins)-1 else f'{bins[i]:n}+' for i in range(len(bins)-1)]
-
         ax.set_yticks(y_pos)
         ax.set_yticklabels(y_labels)
         ax.set_xlabel(xlabel)
         ax.set_ylabel('Age group')
         ax.legend(loc='lower right')
-
         max_val = max(f_vals.max(), m_vals.max()) * 1.1
         ax.set_xlim([-max_val, max_val])
         ax.axvline(0, color='black', linewidth=0.8)
 
-        plt.tight_layout()
+        # Tidy up
         sc.boxoff()
-        return fig
+        plt.tight_layout()
+        return ss.return_fig(fig)
 
     def person(self, ind):
         """
@@ -482,39 +537,6 @@ class People(sc.prettyobj):
         for key in self.states.keys():
             person[key] = self.states[key][ind]
         return person
-
-    def plot_ages(self):
-        """ Plot the age distribution """
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-
-        # Create age bins
-        bins = np.arange(0, 100, 1)
-
-        # Split into male and female ages
-        age_m = self.age[~self.female]
-        age_f = self.age[self.female]
-
-        # Plot male ages on left (negative values) & female on right
-        kw = dict(bins=bins, orientation='horizontal', alpha=0.7)
-        mc, _, _ = ax.hist(age_m, label='Male', **kw)
-        fc, _, _ = ax.hist(age_f, label='Female', **kw)
-
-        # Make male counts negative
-        for patch in ax.patches[:len(bins)-1]:
-            patch.set_x(-patch.get_x())
-            patch.set_width(-patch.get_width())
-
-        # Add labels and title
-        ax.set_xlabel('Count')
-        ax.set_ylabel('Age')
-        ax.set_title('Age distribution by sex')
-        ax.legend()
-
-        # Center the plot on 0
-        max_count = sc.cat(mc, fc).max()
-        ax.set_xlim(-max_count*1.1, max_count*1.1)
-        return fig
 
 
 class Person(sc.objdict):
