@@ -43,7 +43,7 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
     uids = ss.uids(in_vac)
 
     # create and apply the vaccination
-    vac = ss.sir_vaccine(efficacy=efficacy, leaky=leaky)
+    vac = ss.simple_vx(efficacy=efficacy, leaky=leaky)
     vac.init_pre(sim)
     vac.administer(sim.people, uids)
 
