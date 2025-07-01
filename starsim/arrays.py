@@ -264,7 +264,12 @@ class Arr(BaseArr):
     @property
     def values(self):
         """ Return the values of the active agents """
-        return self.raw[self.auids]
+        try:
+            return self.raw[self.auids]
+        except:
+            warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
+            ss.warn(warnmsg)
+            return np.array([])
 
     def set(self, uids, new_vals=None):
         """ Set the values for the specified UIDs"""
