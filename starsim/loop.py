@@ -142,7 +142,7 @@ class Loop:
 
         # Handle the sim and people first
         sim = self.sim
-        for key in ['sim', 'people']:
+        for key in ['sim', sim.people.__class__.__name__.lower()]: # To handle subclassing of People -- TODO, make more elegant!
             self.abs_tvecs[key] = sim.t.tvec
 
         # Handle all other modules
