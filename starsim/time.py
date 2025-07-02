@@ -1037,7 +1037,7 @@ class rateprob(Rate):
 
 #%% Simulation time vectors
 
-class Time(sc.prettyobj):
+class Time:
     """
     Handle time vectors for both simulations and modules.
 
@@ -1108,6 +1108,9 @@ class Time(sc.prettyobj):
             return f'<Time t={self.tvec[self.ti]}, ti={self.ti}, {self.start}-{self.stop} dt={self.dt}>'
         else:
             return '<Time (uninitialized)>'
+
+    def disp(self):
+        return sc.pr(self)
 
     @property
     def timevec(self):
