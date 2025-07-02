@@ -210,7 +210,7 @@ class Loop:
                 break
         return
 
-    def insert(self, func, label=None, match_fn=None, after=True, verbose=True, die=True):
+    def insert(self, func, label=None, match_fn=None, func_label=None, before=False, verbose=True, die=True):
         """
         Insert a function into the loop plan at the specified location.
 
@@ -219,27 +219,42 @@ class Loop:
         By default, this method will match the conditions in the plan based on
         the criteria specified.
 
+        This functionality is similar to an analyzer or an intervention, but gives
+        additional flexibility since can be inserted at (almost) any point in a sim.
+
         Note: the loop must be initialized (`sim.init()`) before you can call this.
 
         Args:
-            func (func): the function to insert; must take a single argument, "sim"
-            label (str): the label (module.name) of the function to match
-            match_fn (func): if supplied, use this function to perform the matching on the plan dataframe (see example below)
-            module (str/func): the name of the module to match
-            name (str/func): the name of the function to match
-            time (date/fnc): the date to match
-            after (bool): whether to insert the function after the match
+            func (func): the function to insert; must take a single argument, `sim`
+            label (str): the label (module.name) of the function to match; see `sim.loop.plan.label.unique() for choices`
+            match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
+            func_label (func):
+            before (bool): if true, insert the function before rather than after the match
             die (bool): whether to raise an exception if no matches found
 
         **Examples**:
 
-            # Simple matching
+            # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
                 print(len(sim.people))
 
             sim = ss.Sim(diseases='sir', networks='random')
             sim.init()
             sim.loop.insert(check_pop_size, label='people.finish_step')
+
+            # Function-based matching with intervention-like functionality
+            def match_fn(plan):
+                past_2010 = plan.time > ss.date(2010)
+                is_step = (plan.label == 'sir.step') or (plan.label == 'randomnet.step')
+                return past_2010 * is_step
+
+            def update_betas(sim):
+                sim.diseases.sis.beta = 0.1
+                sim.networks.randomnet.edges.beta[:] = 0.5
+
+            sim = ss.Sim(diseases='sir', networks='random')
+            sim.init()
+            sim.loop.insert(update_betas, match_fn=match_fn, before=True)
         """
         if not self.initialized:
             errormsg = 'Please initialize the loop (typically sim.init()) before calling insert().'
@@ -252,6 +267,24 @@ class Loop:
         if label:
             match_fn = lambda plan: plan.func_label == label
 
+        # Compute the matches
+        matches = match_fn(self.plan)
+        if matches.dtype == bool:
+            matches = sc.findinds(matches)
+
+        # Perform the insertion in reverse order
+        for m in matches[::-1]:
+            ind = m-1 if before else m
+            current = self.plan[ind]
+            row = dict(
+                time = current.time,
+                func_order = None,
+                func = func,
+                label = sc.ifelse(func_label, func.__name__),
+                module = None,
+                func_name = func.__name__,
+            )
+            self.plan.insertrow(ind, row)
 
         return
 
