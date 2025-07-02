@@ -35,6 +35,7 @@ class Loop:
         self.collect_funcs()
         self.collect_abs_tvecs()
         self.make_plan()
+        self.to_df()
         self.initialized = True
         return
 
@@ -153,9 +154,9 @@ class Loop:
 
     def make_plan(self):
         """ Combine the module ordering and the time vectors into the integration plan """
-
         # Assemble the list of dicts
         raw = []
+        ti = -1
         for func_row in self.funcs:
             for t in self.abs_tvecs[func_row['module']]:
                 row = func_row.copy()
@@ -166,9 +167,19 @@ class Loop:
         self.plan = sc.dataframe(raw)
 
         # Sort it by step_order, a combination of time and function order
+        self.plan['ti'] = 0
         self.plan['label'] = self.plan.module + '.' + self.plan.func_name
-        col_order = ['time', 'func_order', 'func', 'label', 'module', 'func_name'] # Func in the middle to hide it
+        col_order = ['time', 'ti', 'func_order', 'func', 'label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = self.plan.sort_values(['time','func_order']).reset_index(drop=True)[col_order]
+
+        # Calculate the sim time index (ti)
+        start_step = 'sim.start_step'
+        ti = -1
+        for i,label in enumerate(self.plan.label):
+            if label == start_step:
+                ti += 1
+            self.plan.loc[i, 'ti'] = ti
+
         return
 
     def store_time(self):
@@ -208,9 +219,11 @@ class Loop:
             self.store_time()
             if until is not None and self.sim.now > until: # Terminate if asked to
                 break
+
+        self.to_df() # Store results as a dataframe
         return
 
-    def insert(self, func, label=None, match_fn=None, label=None, before=False, verbose=True, die=True):
+    def insert(self, func, label=None, match_fn=None, before=False, verbose=True, die=True):
         """
         Insert a function into the loop plan at the specified location.
 
@@ -228,7 +241,6 @@ class Loop:
             func (func): the function to insert; must take a single argument, `sim`
             label (str): the label (module.name) of the function to match; see `sim.loop.plan.label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
-            label (func):
             before (bool): if true, insert the function before rather than after the match
             die (bool): whether to raise an exception if no matches found
 
@@ -236,25 +248,31 @@ class Loop:
 
             # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
-                print(len(sim.people))
+                print(f'Population size is {len(sim.people)}')
 
-            sim = ss.Sim(diseases='sir', networks='random')
+            sim = ss.Sim(diseases='sir', networks='random', demographics=True)
             sim.init()
             sim.loop.insert(check_pop_size, label='people.finish_step')
+            sim.run()
 
             # Function-based matching with intervention-like functionality
             def match_fn(plan):
                 past_2010 = plan.time > ss.date(2010)
-                is_step = (plan.label == 'sir.step') or (plan.label == 'randomnet.step')
+                is_step = (plan.label == 'sir.step') | (plan.label == 'randomnet.step')
                 return past_2010 * is_step
 
             def update_betas(sim):
-                sim.diseases.sis.beta = 0.1
-                sim.networks.randomnet.edges.beta[:] = 0.5
+                if not sim.metadata.get('updated'):
+                    print(f'Updating beta values on {sim.now}')
+                    sim.diseases.sis.beta = 0.1
+                    sim.networks.randomnet.edges.beta[:] = 0.5
+                    sim.metadata.updated = True
+                return
 
-            sim = ss.Sim(diseases='sir', networks='random')
+            sim = ss.Sim(diseases='sis', networks='random')
             sim.init()
             sim.loop.insert(update_betas, match_fn=match_fn, before=True)
+            sim.run()
         """
         if not self.initialized:
             errormsg = 'Please initialize the loop (typically sim.init()) before calling insert().'
@@ -273,16 +291,19 @@ class Loop:
             matches = sc.findinds(matches)
 
         # Perform the insertion in reverse order
+        name = func.__name__
+        sim_func = lambda: func(self.sim) # Construct a partial function
         for m in matches[::-1]:
             ind = m-1 if before else m
             current = self.plan[ind]
             row = dict(
                 time = current.time,
+                ti = current.ti,
                 func_order = None,
-                func = func,
-                label = sc.ifelse(label, func.__name__),
+                func = sim_func,
+                label = name,
                 module = None,
-                func_name = func.__name__,
+                func_name = name,
             )
             self.plan.insertrow(ind, row)
 
@@ -291,7 +312,7 @@ class Loop:
     def to_df(self):
         """ Return a user-friendly version of the plan, omitting object columns """
         # Compute the main dataframe
-        cols = ['time', 'func_order', 'module', 'func_name', 'label']
+        cols = ['time', 'ti', 'func_order', 'label', 'module', 'func_name']
         if self.plan is not None:
             df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
         else:
