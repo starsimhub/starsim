@@ -578,7 +578,11 @@ class Dist:
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
+            if ss.options._centralized:
+                dtype = self._pars.pop('dtype', None)
             rvs = rvs_func(size=self._size, **self._pars)
+            if ss.options._centralized and dtype:
+                rvs = rvs.astype(dtype)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
