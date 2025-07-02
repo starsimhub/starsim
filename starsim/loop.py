@@ -166,8 +166,8 @@ class Loop:
         self.plan = sc.dataframe(raw)
 
         # Sort it by step_order, a combination of time and function order
-        self.plan['func_label'] = self.plan.module + '.' + self.plan.func_name
-        col_order = ['time', 'func_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
+        self.plan['label'] = self.plan.module + '.' + self.plan.func_name
+        col_order = ['time', 'func_order', 'func', 'label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = self.plan.sort_values(['time','func_order']).reset_index(drop=True)[col_order]
         return
 
@@ -196,7 +196,7 @@ class Loop:
 
         # Loop over every function in the integration loop, e.g. disease.step()
         self.store_time()
-        for f,label in zip(self.plan.func[self.index:], self.plan.func_label[self.index:]):
+        for f,label in zip(self.plan.func[self.index:], self.plan.label[self.index:]):
             if verbose:
                 row = self.plan[self.index]
                 print(f'Running t={row.time:n}, step={row.name}, {label}()')
@@ -210,7 +210,7 @@ class Loop:
                 break
         return
 
-    def insert(self, func, label=None, match_fn=None, func_label=None, before=False, verbose=True, die=True):
+    def insert(self, func, label=None, match_fn=None, label=None, before=False, verbose=True, die=True):
         """
         Insert a function into the loop plan at the specified location.
 
@@ -228,7 +228,7 @@ class Loop:
             func (func): the function to insert; must take a single argument, `sim`
             label (str): the label (module.name) of the function to match; see `sim.loop.plan.label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
-            func_label (func):
+            label (func):
             before (bool): if true, insert the function before rather than after the match
             die (bool): whether to raise an exception if no matches found
 
@@ -261,11 +261,11 @@ class Loop:
             raise RuntimeError(errormsg)
 
         if label and match_fn:
-            errormsg = "You can supply label or match, but not both; 'label' is equivalent to 'plan.func_label == label', please include this in your match function"
+            errormsg = "You can supply label or match, but not both; 'label' is equivalent to 'plan.label == label', please include this in your match function"
             raise ValueError(errormsg)
 
         if label:
-            match_fn = lambda plan: plan.func_label == label
+            match_fn = lambda plan: plan.label == label
 
         # Compute the matches
         matches = match_fn(self.plan)
@@ -280,7 +280,7 @@ class Loop:
                 time = current.time,
                 func_order = None,
                 func = func,
-                label = sc.ifelse(func_label, func.__name__),
+                label = sc.ifelse(label, func.__name__),
                 module = None,
                 func_name = func.__name__,
             )
@@ -291,7 +291,7 @@ class Loop:
     def to_df(self):
         """ Return a user-friendly version of the plan, omitting object columns """
         # Compute the main dataframe
-        cols = ['time', 'func_order', 'module', 'func_name', 'func_label']
+        cols = ['time', 'func_order', 'module', 'func_name', 'label']
         if self.plan is not None:
             df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
         else:
@@ -305,7 +305,7 @@ class Loop:
         self.df = df
 
         # Compute the CPU dataframe
-        by_func = df.groupby('func_label')
+        by_func = df.groupby('label')
         method = dict(func_order='first', module='first', func_name='first', cpu_time='sum')
         cdf = sc.dataframe(by_func.agg(method))
         cdf['percent'] = cdf.cpu_time / cdf.cpu_time.sum()*100
@@ -339,7 +339,7 @@ class Loop:
             filter_out = ['update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
         yticks = df.func_order.unique()
-        ylabels = df.func_label.unique()
+        ylabels = df.label.unique()
         x = df.time
         y = df.func_order
 
