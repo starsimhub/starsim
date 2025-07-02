@@ -198,8 +198,16 @@ class Loop:
         self.index += 1 # Increment the time
         return
 
+    def _check_initialized(self):
+        """ Check that the Loop has been initialized """
+        if not self.initialized:
+            errormsg = 'Please initialize the loop (typically sim.init()) before calling insert().'
+            raise RuntimeError(errormsg)
+        return
+
     def run(self, until=None, verbose=None):
         """ Actually run the integration loop; usually called by sim.run() """
+        self._check_initialized()
 
         # Convert e.g. '2020-01-01' to an actual date
         if isinstance(until, str):
@@ -274,9 +282,7 @@ class Loop:
             sim.loop.insert(update_betas, match_fn=match_fn, before=True)
             sim.run()
         """
-        if not self.initialized:
-            errormsg = 'Please initialize the loop (typically sim.init()) before calling insert().'
-            raise RuntimeError(errormsg)
+        self._check_initialized()
 
         if label and match_fn:
             errormsg = "You can supply label or match, but not both; 'label' is equivalent to 'plan.label == label', please include this in your match function"
@@ -343,12 +349,13 @@ class Loop:
         self.plan = shrunk
         return
 
-    def plot(self, simplify=False, fig_kw=None, plot_kw=None, scatter_kw=None):
+    def plot(self, simplify=False, max_len=100, fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot a diagram of all the events
 
         Args:
             simplify (bool): if True, skip update_results and finish_step events, which are automatically applied
+            max_len (int): maximum number of entries to plot
             fig_kw (dict): passed to `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
             scatter_kw (dict): passed to `plt.scatter()`
@@ -359,6 +366,8 @@ class Loop:
         if simplify:
             filter_out = ['update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
+        if max_len:
+            df = df[:max_len]
         yticks = df.func_order.unique()
         ylabels = df.label.unique()
         x = df.time
@@ -433,6 +442,74 @@ class Loop:
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
+        return ss.return_fig(fig)
+
+    def plot_step_order(self, which='default', max_len=500, plot_kw=None, scatter_kw=None, fig_kw=None, legend_kw=None):
+        """
+        Plot the order of the module steps across timesteps -- useful for debugging
+        when using different time units.
+
+        Note: generates a lot of data, best to debug with a small number of timesteps first!
+
+        Args:
+            which (dict): columns and values to filter to (default: {'func_name':'step'}; if None, do not filter)
+            max_len (int): maximum number of entries to plot
+            plot_kw (dict): passed to `plt.plot()`
+            scatter_kw (dict): passed to `plt.scatter()`
+            fig_kw (dict): passed to `plt.figure()`
+            legend_kw (dict): passed to `plt.legend()`
+
+        **Example**:
+
+            sis = ss.SIS(dt=0.1)
+            net = ss.RandomNet(dt=0.5)
+            births = ss.Births(dt=1)
+            sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
+            sim.init()
+            sim.loop.plot_step_order()
+        """
+        self._check_initialized()
+        df = self.plan
+        if which == 'default':
+            which = dict(func_name='step')
+        if which:
+            for col,value in which.items():
+                df = df[df[col] == value]
+        if max_len and len(df) > max_len:
+            print(f'Note: truncating from {len(df)} to {max_len} entries')
+            df = df[:max_len]
+
+        # Construct data
+        unique = df.label.unique()
+        n_unique = len(unique)
+        colors = sc.gridcolors(n_unique)
+        colormap = {k:v for k,v in zip(unique, colors)}
+        d = sc.dictobj()
+        for key in ['x', 'y', 'z', 'label']:
+            d[key] = sc.autolist()
+        for ti in df.ti.unique():
+            this = df[df.ti==ti]
+            d.x += list(range(len(this))) # Convert [0,0,0,...] to [0,1,2,...]
+            d.y += list(this.func_order)
+            d.z += list(this.ti)
+            d.label += list(this.label)
+
+        dd = sc.dataframe(d)
+
+        fig = plt.figure(**sc.mergedicts(fig_kw))
+
+        plot_kw = sc.mergedicts(dict(alpha=0.5, lw=2), plot_kw)
+        scatter_kw = sc.mergedicts(dict(s=100, alpha=0.5), scatter_kw)
+        ax = plt.axes(projection='3d')
+        sc.plot3d(dd.x, dd.y, dd.z, ax=ax, **plot_kw)
+        for label in unique:
+            this = dd[dd.label==label]
+            ax.scatter(this.x, this.y, this.z, color=colormap[label], label=label, **scatter_kw)
+        ax.set_xlabel('Position within timestep')
+        ax.set_ylabel('Original function order')
+        ax.set_zlabel('Timestep')
+        legend_kw = sc.mergedicts(dict(loc='upper left', bbox_to_anchor=(1.05, 1)), legend_kw)
+        ax.legend(**legend_kw)
         return ss.return_fig(fig)
 
     def __deepcopy__(self, memo):
