@@ -166,8 +166,8 @@ class Loop:
         self.plan = sc.dataframe(raw)
 
         # Sort it by step_order, a combination of time and function order
-        self.plan['label'] = self.plan.module + '.' + self.plan.func_name
-        col_order = ['time', 'func_order', 'func', 'label', 'module', 'func_name'] # Func in the middle to hide it
+        self.plan['func_label'] = self.plan.module + '.' + self.plan.func_name
+        col_order = ['time', 'func_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = self.plan.sort_values(['time','func_order']).reset_index(drop=True)[col_order]
         return
 
@@ -196,7 +196,7 @@ class Loop:
 
         # Loop over every function in the integration loop, e.g. disease.step()
         self.store_time()
-        for f,label in zip(self.plan.func[self.index:], self.plan.label[self.index:]):
+        for f,label in zip(self.plan.func[self.index:], self.plan.func_label[self.index:]):
             if verbose:
                 row = self.plan[self.index]
                 print(f'Running t={row.time:n}, step={row.name}, {label}()')
@@ -210,19 +210,55 @@ class Loop:
                 break
         return
 
-    def manual_reset(self): # TODO: do we need this? I feel if we don't have it, people will be tempted to manually set loop.index = 0.
+    def insert(self, func, label=None, match_fn=None, after=True, verbose=True, die=True):
         """
-        Reset the loop to run again. Note, does not reset sim quantities so should
-        only be used for debugging.
+        Insert a function into the loop plan at the specified location.
+
+        The loop plan is a dataframe with columns including time (e.g. `date('2025-05-05')`),
+        label (e.g. `'randomnet.step'`), module ('`randomnet'`), and function name (`'step'`).
+        By default, this method will match the conditions in the plan based on
+        the criteria specified.
+
+        Note: the loop must be initialized (`sim.init()`) before you can call this.
+
+        Args:
+            func (func): the function to insert; must take a single argument, "sim"
+            label (str): the label (module.name) of the function to match
+            match_fn (func): if supplied, use this function to perform the matching on the plan dataframe (see example below)
+            module (str/func): the name of the module to match
+            name (str/func): the name of the function to match
+            time (date/fnc): the date to match
+            after (bool): whether to insert the function after the match
+            die (bool): whether to raise an exception if no matches found
+
+        **Examples**:
+
+            # Simple matching
+            def check_pop_size(sim):
+                print(len(sim.people))
+
+            sim = ss.Sim(diseases='sir', networks='random')
+            sim.init()
+            sim.loop.insert(check_pop_size, label='people.finish_step')
         """
-        self.index = 0
-        self.sim.complete = False
+        if not self.initialized:
+            errormsg = 'Please initialize the loop (typically sim.init()) before calling insert().'
+            raise RuntimeError(errormsg)
+
+        if label and match_fn:
+            errormsg = "You can supply label or match, but not both; 'label' is equivalent to 'plan.func_label == label', please include this in your match function"
+            raise ValueError(errormsg)
+
+        if label:
+            match_fn = lambda plan: plan.func_label == label
+
+
         return
 
     def to_df(self):
         """ Return a user-friendly version of the plan, omitting object columns """
         # Compute the main dataframe
-        cols = ['time', 'func_order', 'module', 'func_name', 'label']
+        cols = ['time', 'func_order', 'module', 'func_name', 'func_label']
         if self.plan is not None:
             df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
         else:
@@ -236,7 +272,7 @@ class Loop:
         self.df = df
 
         # Compute the CPU dataframe
-        by_func = df.groupby('label')
+        by_func = df.groupby('func_label')
         method = dict(func_order='first', module='first', func_name='first', cpu_time='sum')
         cdf = sc.dataframe(by_func.agg(method))
         cdf['percent'] = cdf.cpu_time / cdf.cpu_time.sum()*100
@@ -270,7 +306,7 @@ class Loop:
             filter_out = ['update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
         yticks = df.func_order.unique()
-        ylabels = df.label.unique()
+        ylabels = df.func_label.unique()
         x = df.time
         y = df.func_order
 
