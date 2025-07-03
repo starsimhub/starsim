@@ -406,7 +406,7 @@ class Connector(Module):
     pass
 
 
-class seasonality(ss.Connector):
+class seasonality(Connector):
     """
     Example connector -- apply sine-wave seasonality of transmission to one or more diseases
 
