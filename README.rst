@@ -1,9 +1,9 @@
 Starsim
 =======
 
-Starsim is an agent-based modeling framework for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. Starsim allows detailed modeling of mother-child relationships from conception to study birth-related diseases. Additionally, Starsim lets users compare different intervention strategies, like vaccines or treatments, to see their impact through various delivery methods such as mass campaigns or targeted outreach.
+Starsim is an agent-based modeling framework designed for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Additionally, users can include non-infectious diseases either on their own or as factors affecting infectious diseases. To enable the study of birth-related diseases, Starsim allows detailed modeling of mother-child relationships starting from conception. Finally, Starsim lets users compare different intervention strategies, such as vaccines or treatments, to examine their impact through various delivery methods such as mass campaigns or targeted outreach.
 
-Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).
+Examples of systems that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as malnutrition).
 
 Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_. In cases where a distinction needs to be made, Starsim is also known as "the Starsim framework" or "Starsim Core", while this collection of other models is known as the "Starsim suite".
 
@@ -84,7 +84,7 @@ The model consists of core classes including ``Sim``, ``People``, ``Disease``, `
 
 The submodules of the Starsim folder are as follows:
 
-• ``arrays.py``: Classes to handle store and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
+• ``arrays.py``: Classes to handle, store, and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
 • ``calibration.py``: Class to handle automated calibration of the model to data.
 • ``calib_components.py``: Classes to handle additional operations related to calibration (e.g., the likelihood function).
 •	``demographics.py``: Classes to transform initial condition input parameters for use in building and utilizing networks.
