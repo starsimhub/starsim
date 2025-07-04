@@ -5,7 +5,6 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
@@ -550,8 +549,8 @@ class Sim(ss.Base):
         d = sc.jsonify(d)
         return d
 
-    def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False,
-             show_module=26, show_label=False, fig_kw=None, plot_kw=None, scatter_kw=None):
+    def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False, show_module=None,
+             show_label=False, n_ticks=None, fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot all results in the Sim object
 
@@ -561,8 +560,9 @@ class Sim(ss.Base):
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
-            show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length; if -1, use a newline
+            show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
+            n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
             fig_kw (dict): passed to `plt.subplots()`
             plot_kw (dict): passed to `plt.plot()`
             scatter_kw (dict): passed to `plt.scatter()`, for plotting the data
@@ -634,18 +634,9 @@ class Sim(ss.Base):
 
                 # Plot results
                 ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
-                if show_module == -1:
-                    label = res.full_label.replace(':', '\n')
-                elif len(res.full_label) > show_module:
-                    label = sc.ifelse(res.label, res.name)
-                else:
-                    label = res.full_label
-
+                ss.utils.format_axes(ax, res, n_ticks)
+                label = ss.utils.get_result_plot_label(res, show_module)
                 ax.set_title(label)
-                sc.commaticks(ax)
-                if res.has_dates:
-                    locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
-                    sc.dateformatter(ax, locator=locator)
 
         if show_label in ['title', 'suptitle'] and self.label:
             fig.suptitle(self.label, weight='bold')
