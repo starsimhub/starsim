@@ -1291,7 +1291,7 @@ class Time:
             if self.is_absolute != sim.t.is_absolute:
                 raise Exception('Cannot mix absolute/relative times across modules')
 
-        if sim.t.initialized and \
+        if sim is not None and sim.t.initialized and \
                 all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in ('start', 'stop', 'dt')]) and \
                 all([getattr(self, key) == getattr(sim.t, key) for key in ('start', 'stop', 'dt')]):
             self._yearvec = sc.dcp(sim.t._yearvec)
