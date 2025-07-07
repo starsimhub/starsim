@@ -6,8 +6,9 @@ All options should be set using set() or directly, e.g.:
 """
 import numpy as np
 import sciris as sc
+import matplotlib.font_manager as fm
 
-__all__ = ['dtypes', 'options']
+__all__ = ['dtypes', 'options', 'style']
 
 # Define Starsim-default data types
 class dtypes:
@@ -17,6 +18,22 @@ class dtypes:
     rand_uint = np.uint32
     float = np.float32
     result_float = np.float64
+
+
+# Define simple plotting options -- similar to Matplotlib default
+rc_starsim = {
+    'font.family':       'sans-serif', # Replaced with Mulish in load_fonts() if import succeeds
+    'axes.axisbelow':    True, # So grids show up behind
+    'axes.spines.right': False,
+    'axes.spines.top':   False,
+    'legend.frameon':    False,
+    'figure.facecolor':  'white',
+    'axes.facecolor':    'white',
+    'axes.grid':         True,
+    'grid.color':        '#f2f2f2',
+    'grid.linewidth':    1,
+    'lines.linewidth':   2.5,      # Slightly thicker lines
+}
 
 
 # Not public to avoid confusion with ss.options
@@ -82,6 +99,9 @@ class Options(sc.objdict):
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, 'int')
+
+        optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
+        options.style = sc.parse_env('STARSIM_STYLE', 'starsim', 'str')
 
         optdesc.reticulate = 'Set whether to use Reticulate (R) settings'
         options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, 'bool')
@@ -176,6 +196,8 @@ class Options(sc.objdict):
                 # Handle special cases
                 if key == 'precision':
                     self.set_precision()
+                elif key == 'style':
+                    self.set_style()
 
         return
 
@@ -230,6 +252,55 @@ class Options(sc.objdict):
             raise ValueError(errormsg)
         return
 
+    def set_style(self):
+        """ Change the plotting style """
+        if self.style == 'starsim':
+            self._style = sc.dcp(rc_starsim)
+        else:
+            self._style = self.style
+        return
+
+
+
+def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwargs):
+    """
+    Helper function to load custom fonts for plotting -- (usually) not for the user.
+
+    Note: if fonts don't load, try running ``cv.settings.load_fonts(rebuild=True)``,
+    and/or rebooting the system.
+
+    Args:
+        folder (str): the folder to add fonts from
+        name (str): the name of the font to load
+        rebuild (bool): whether to rebuild the font cache
+        verbose (bool): whether to print out progress/errors
+    """
+    if folder is None:
+        folder = str(sc.thispath(__file__) / 'assets')
+    sc.fonts(add=folder, rebuild=rebuild, verbose=verbose, **kwargs)
+
+    # Try to find the font, and if it succeeds, update the styles
+    try:
+        fm.findfont(name, fallback_to_default=False) # Raise an exception if the font isn't found
+        rc_starsim['font.family']  = name # Need to set both
+        if verbose: print(f'Default Starsim font reset to "{name}"')
+    except Exception as E:
+        if verbose: print(f'Could not find font {name}: {str(E)}')
+
+    return
+
+
+# Load the fonts
+load_fonts()
 
 # Create the options on module load
 options = Options()
+options.set_style()
+
+
+def style(style=None):
+    """ Set the style """
+    if style is None:
+        style = options._style
+    out = sc.options.with_style(style)
+    return out

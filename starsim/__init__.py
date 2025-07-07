@@ -4,7 +4,7 @@ Import all Starsim modules
 
 # Start imports: version and settings
 from .version import __version__, __versiondate__, __license__
-from .settings import dtypes, options
+from .settings import *
 
 # Optionally print the license
 if options.license:
