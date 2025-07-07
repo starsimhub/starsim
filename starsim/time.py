@@ -142,17 +142,24 @@ class date(pd.Timestamp):
         """ Convert to a standard pd.Timestamp instance """
         return pd.Timestamp(self.to_numpy()) # Need to convert to NumPy first or it doesn't do anything
 
+    def _timestamp_add(self, other):
+        """ Uses pd.Timestamp's __add__ and avoids creating duplicate objects """
+        orig_class = self.__class__
+        self.__class__ = pd.Timestamp
+        out = orig_class._reset_class(self + other)
+        orig_class._reset_class(self)
+        return out
 
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
 
         if isinstance(other, DateDur):
-            return date(self.to_pandas() + other.unit)
+            return self._timestamp_add(other.unit)
         elif isinstance(other, YearDur):
             return date(self.to_year() + other.unit)
         elif isinstance(other, pd.DateOffset):
-            return date(self.to_pandas() + other)
+            return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
         elif sc.isnumber(other):
