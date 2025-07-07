@@ -550,7 +550,7 @@ class Sim(ss.Base):
         return d
 
     def plot(self, key=None, fig=None, style=None, show_data=True, show_skipped=False, show_module=None,
-             show_label=False, n_ticks=None, fig_kw=None, plot_kw=None, data_kw=None, style_kw=None, **kwargs):
+             show_label=False, n_ticks=None, **kwargs):
         """
         Plot all results in the Sim object
 
@@ -563,11 +563,7 @@ class Sim(ss.Base):
             show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
             n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
-            fig_kw (dict): passed to `plt.subplots()`
-            plot_kw (dict): passed to `plt.plot()`
-            data_kw (dict): passed to `plt.scatter()`, for plotting the data
-            style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
-            **kwargs (dict): known arguments (e.g. figsize, font) split between fig, plot, scatter, and style
+            **kwargs (dict): known arguments (e.g. figsize, font) split between fig, plot, scatter, and style; see `ss.plot_args()` for all valid options
 
         **Examples**:
 
@@ -602,17 +598,14 @@ class Sim(ss.Base):
             show_module = 999
 
         # Set plotting defaults
-        kw = ss.utils.process_plot_kw(
-            figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k',
-            fig_kw=fig_kw, plot_kw=plot_kw, data_kw=data_kw, style_kw=style_kw, **kwargs
-        )
+        kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
 
         def normkey(key):
             """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
             return key.replace('.','_').lower()
 
         # Do the plotting
-        with ss.style(style, **style_kw):
+        with ss.style(style, **kw.style):
 
             if key is not None:
                 if isinstance(key, str):
@@ -635,8 +628,8 @@ class Sim(ss.Base):
                     while plt.fignum_exists(plotlabel):
                         figlist += plotlabel
                         plotlabel = sc.uniquename(self.label, figlist, human=True)
-                    fig_kw['num'] = plotlabel
-                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    kw.fig['num'] = plotlabel
+                fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
             else:
@@ -661,7 +654,7 @@ class Sim(ss.Base):
                         ax.scatter(df.index.values, df[dfkey].values, **kw.data)
 
                 # Plot results
-                ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
+                ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
                 ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         if show_label in ['title', 'suptitle'] and self.label:

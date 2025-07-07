@@ -103,6 +103,9 @@ class Options(sc.objdict):
         optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
         options.style = sc.parse_env('STARSIM_STYLE', 'starsim', str)
 
+        optdesc.install_fonts = 'Choose whether or not to install Starsim-specific fonts on first import -- NOTE, only has effect via the environment variable since executed on load'
+        options.install_fonts = sc.parse_env('STARSIM_INSTALL_FONTS', True, bool)
+
         optdesc.show = 'Whether to show the plot immediately (i.e. call plt.show())'
         options.show = sc.parse_env('STARSIM_SHOW', True, bool)
 
@@ -293,11 +296,14 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
     return
 
 
-# Load the fonts
-load_fonts()
-
 # Create the options on module load
 options = Options()
+
+# Load the fonts
+if options.install_fonts:
+    load_fonts()
+
+# Set the style
 options.set_style()
 
 
@@ -305,8 +311,7 @@ def style(style=None, **kwargs):
     """
     Set the style in a with block.
 
-    Note: Starsim comes bundled with two fonts, Mulish (sans serif, default)
-    and Rosario (serif).
+    Note: Starsim comes bundled with three fonts, Mulish (default), Raleway, and Rosario.
 
     Args:
         style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options

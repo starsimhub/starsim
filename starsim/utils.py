@@ -13,8 +13,9 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig', 'show', 'Profile']
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires',
+           'standardize_netkey', 'standardize_data', 'validate_sim_data',
+           'Profile', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 
 class ndict(sc.objdict):
@@ -443,7 +444,7 @@ class Profile(sc.profile):
 
 def load(filename, **kwargs):
     """
-    Alias to Sciris sc.loadany()
+    Alias to Sciris `sc.loadany()`
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
     this function. This can also be used to load other objects of known type
@@ -451,7 +452,7 @@ def load(filename, **kwargs):
 
     Args:
         filename (str/path): the name of the file to load
-        kwargs (dict): passed to sc.loadany()
+        kwargs (dict): passed to `sc.loadany()`
 
     Returns:
         The loaded object
@@ -461,7 +462,7 @@ def load(filename, **kwargs):
 
 def save(filename, obj, **kwargs):
     """
-    Alias to Sciris sc.save()
+    Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
@@ -469,7 +470,7 @@ def save(filename, obj, **kwargs):
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to sc.save()
+        kwargs (dict): passed to `sc.save()`
     """
     return sc.save(filename=filename, obj=obj, **kwargs)
 
@@ -483,40 +484,51 @@ class shrink:
 
 #%% Plotting helper functions
 
-def return_fig(fig, **kwargs):
-    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
-    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
-    is_reticulate = ss.options.reticulate
-    do_show = ss.options.show
-    if is_jupyter or is_reticulate:
-        print(fig)
-        plt.show()
-        return None
-    else:
-        if do_show:
-            plt.show()
-        return fig
-
-
 # Specify known keywords
 plotting_kw = sc.objdict()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
 plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
-plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color'} # For plt.scatter()
+plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
 plotting_kw.style = ['font', 'fontsize', 'interactive'] # For sc.options.with_style()
 
-def process_plot_kw(suffix='_kw', **kwargs):
+def plot_args(kwargs=None, suffix='_kw', _verbose=True, **defaults):
     """
     Process known plotting kwargs.
 
-    Args:
-        fig_
+    This function handles arguments to `sim.plot()` and other plotting functions
+    by splitting known kwargs among all the different aspects of the plot.
 
+    Note: the kwargs supplied to the parent function should be supplied as the
+    first argument of this function; keyword arguments to this function are treated
+    as default values that will be overwritten by user-supplied values in `kwargs`.
+
+    Args:
+        fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+        plot_kw (dict): passed to `plt.plot()`
+        data_kw (dict): passed to `plt.scatter()`, for plotting the data
+        style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
+        **kwargs (dict): parsed among the above dictionaries
+
+    Returns:
+        A dict-of-dicts with plotting arguments, for use with subsequent plotting commands
+
+    Valid kwarg arguments are:
+
+        - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
+        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - data: 'data_alpha', 'data_color', 'data_size'
+        - style: 'font', 'fontsize', 'interactive'
+
+    **Examples**:
+
+        kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
+        kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
     """
-    _None = '<not provided>'
-    kwargs = sc.mergedicts(kwargs)
-    kw = sc.objdict()
+    _None = '<None>'
+    kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
+    kw = sc.objdict() # Output arguments
     for subtype,args in plotting_kw.items():
+        if _verbose: print('Subtype & args:', subtype, args)
         kw[subtype] = sc.objdict() # e.g. kw.fig
 
         # Handle kwargs, e.g. "figsize"
@@ -524,20 +536,26 @@ def process_plot_kw(suffix='_kw', **kwargs):
             args = {k:k for k in args}
         for inkey,outkey in args.items():
             val = kwargs.pop(inkey, _None) # Handle None as a valid argument
-            if val != _None:
+            if _verbose: print('  In, out, value: ', inkey, outkey, val)
+            if val is not _None:
                 kw[subtype][outkey] = val
 
         # Handle dicts of kwargs, e.g. "fig_kw"
         subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
         if subtype_dict:
+            if _verbose: print('Subtype dict:', subtype_dict)
             kw[subtype].update(subtype_dict)
 
+    # Expect everything has been converted
     if len(kwargs):
         valid = f'\n\nValid:\n{plotting_kw}\n'
         converted = f'\n\nConverted:\n{kw}\n'
         unconverted = f'\n\nUnconverted:\n{sc.newlinejoin(kwargs.keys())}'
         errormsg = f'Did not successfully convert all plotting keys:{valid}{converted}{unconverted}'
         raise sc.KeyNotFoundError(errormsg)
+
+    if _verbose:
+        if _verbose: print('Final output:', kw)
 
     return kw
 
@@ -583,6 +601,22 @@ def format_axes(ax, res, n_ticks, show_module):
     ax.set_title(label)
     return
 
+
 def show(**kwargs):
     """ Shortcut for matplotlib.pyplot.show() """
     return plt.show(**kwargs)
+
+
+def return_fig(fig, **kwargs):
+    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
+    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
+    is_reticulate = ss.options.reticulate
+    do_show = ss.options.show
+    if is_jupyter or is_reticulate:
+        print(fig)
+        plt.show()
+        return None
+    else:
+        if do_show:
+            plt.show()
+        return fig
