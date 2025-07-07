@@ -281,7 +281,7 @@ class MultiSim:
         if output:
             return self.base_sim
         else:
-            return
+            return self
 
     def mean(self, bounds=None, **kwargs):
         """
