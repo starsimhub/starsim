@@ -373,7 +373,7 @@ class MultiSim:
                             missingtxt = f'\nMissing: {sc.strjoin(missing)}'
                             warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
                             ss.warn(warnmsg)
-                    fig = sim.plot(key=key, show_module=show_module, n_ticks=n_ticks, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
+                    fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw, **kwargs)
             if legend:
                 lkw = sc.mergedicts(legend_kw)
                 leg = None
