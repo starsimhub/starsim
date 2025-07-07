@@ -47,7 +47,6 @@ class Result(ss.BaseArr):
         self.values = values
         self.summarize_by = summarize_by
         self.init_values()
-
         return
 
     def __repr__(self):
