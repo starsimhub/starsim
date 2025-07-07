@@ -6,6 +6,7 @@ import numpy as np
 import numba as nb
 import pandas as pd
 import sciris as sc
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import starsim as ss
 
@@ -480,8 +481,10 @@ class shrink:
         return s
 
 
+#%% Plotting helper functions
+
 def return_fig(fig, **kwargs):
-    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead """
+    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
     is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
     is_reticulate = ss.options.reticulate
     if is_jupyter or is_reticulate:
@@ -490,6 +493,44 @@ def return_fig(fig, **kwargs):
         return None
     else:
         return fig
+
+
+def get_result_plot_label(res, show_module=None):
+    """ Helper function for getting the label to plot for a result; not for the user """
+    # Sanitize
+    if show_module is None:
+        show_module = 26 # Default maximum length
+    elif isinstance(show_module):
+        if show_module is True:
+            show_module = 999
+        else:
+            show_module = 0
+    if not isinstance(show_module, int):
+        errormsg = f'"show_module" must be a bool or int, not {show_module}'
+        raise TypeError(errormsg)
+
+    if show_module == -1:
+        label = res.full_label.replace(':', '\n')
+    elif len(res.full_label) > show_module:
+        label = sc.ifelse(res.label, res.name)
+    else:
+        label = res.full_label
+    return label
+
+
+def format_axes(ax, res, n_ticks):
+    """ Standard formatting for axis results; not for the user """
+    if n_ticks is None:
+        n_ticks = (2,5)
+
+    # Set y axis -- commas
+    sc.commaticks(ax)
+
+    # Set x axis -- date formatting
+    if res.has_dates:
+        locator = mpl.dates.AutoDateLocator(minticks=n_ticks[0], maxticks=n_ticks[1]) # Fewer ticks since lots of plots
+        sc.dateformatter(ax, locator=locator)
+    return
 
 def show(**kwargs):
     """ Shortcut for matplotlib.pyplot.show() """

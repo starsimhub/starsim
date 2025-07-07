@@ -336,7 +336,8 @@ class MultiSim:
 
         return summary
 
-    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None, legend_kw=None, legend=True):
+    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None,
+             legend_kw=None, legend=True, **kwargs):
         """
         Plot all results in the MultiSim object.
 
@@ -351,6 +352,7 @@ class MultiSim:
             fill_kw (dict): passed to `plt.fill_between()`
             legend_kw (dict): passed to `plt.legend()`
             legend (bool): whether to show the legend
+            **kwargs (dict): passed to `sim.plot()` if sim has not been reduced; else raises an error
         """
         # Has not been reduced yet, plot individual sim
         if self.which is None:
@@ -371,7 +373,7 @@ class MultiSim:
                             missingtxt = f'\nMissing: {sc.strjoin(missing)}'
                             warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
                             ss.warn(warnmsg)
-                    fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
+                    fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw, **kwargs)
             if legend:
                 lkw = sc.mergedicts(legend_kw)
                 leg = None
@@ -391,8 +393,15 @@ class MultiSim:
             default_figsize = np.array([8, 6])
             figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
             figsize = default_figsize*figsize_factor
+
+            # Handle common arguments
+            n_ticks = kwargs.pop('n_ticks', None)
+            show_module = kwargs.pop('show_module', None)
+            figsize = kwargs.pop('figsize', figsize)
+            if len(kwargs):
+                errormsg = f'Keyword arguments {sc.strjoin(kwargs.keys())} are ambiguous; please specify fig_kw, fill_kw, plot_kw instead'
+                raise ValueError(errormsg)
             fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
-            fig_kw = sc.mergedicts(fig_kw)
             fill_kw = sc.mergedicts({'alpha':0.2}, fill_kw)
             plot_kw = sc.mergedicts({'lw':2, 'alpha':0.8}, plot_kw)
             with sc.options.with_style('simple'):
@@ -407,8 +416,9 @@ class MultiSim:
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
                     ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
                     ax.plot(res.timevec, res, **plot_kw)
-                    ax.set_title(getattr(res, 'label', key))
-                    ax.set_xlabel('Year')
+                    ss.utils.format_axes(ax, res, n_ticks)
+                    label = ss.utils.get_result_plot_label(res, show_module)
+                    ax.set_title(label)
 
         return ss.return_fig(fig)
 
