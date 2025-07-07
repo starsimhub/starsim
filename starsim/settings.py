@@ -292,7 +292,6 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
         if verbose: print(f'Default Starsim font reset to "{name}"')
     except Exception as E:
         if verbose: print(f'Could not find font {name}: {str(E)}')
-
     return
 
 
@@ -311,7 +310,8 @@ def style(style=None, **kwargs):
     """
     Set the style in a with block.
 
-    Note: Starsim comes bundled with three fonts, Mulish (default), Raleway, and Rosario.
+    Note: Starsim comes bundled with three fonts: Mulish (default), Raleway, and Rosario.
+    Use `font='sans-serif'` to use the Matplotlib default font.
 
     Args:
         style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options

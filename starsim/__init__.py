@@ -58,7 +58,7 @@ def _load_fonts(verbose=False):
                 if verbose: print('Rebuilding fonts...')
                 settings.load_fonts(rebuild=True)
                 if options.verbose:
-                    print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_FONTS=0 to disable.')
+                    print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
             except Exception as E:
                 if verbose: print(f'File not writable or another error: {E}')
                 pass  # Not writable or something else went wrong; ignore
