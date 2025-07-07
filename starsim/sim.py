@@ -550,7 +550,7 @@ class Sim(ss.Base):
         return d
 
     def plot(self, key=None, fig=None, style=None, show_data=True, show_skipped=False, show_module=None,
-             show_label=False, n_ticks=None, fig_kw=None, plot_kw=None, scatter_kw=None):
+             show_label=False, n_ticks=None, fig_kw=None, plot_kw=None, scatter_kw=None, style_kw=None):
         """
         Plot all results in the Sim object
 
@@ -566,11 +566,23 @@ class Sim(ss.Base):
             fig_kw (dict): passed to `plt.subplots()`
             plot_kw (dict): passed to `plt.plot()`
             scatter_kw (dict): passed to `plt.scatter()`, for plotting the data
+            style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
+
+        **Examples**:
+
+            sim = ss.Sim(diseases='sis', networks='random').run()
+
+            # Basic usage
+            sim.plot()
+
+            # Plot a single result
+            sim.plot('sis.prevalence')
         """
         self.check_results_ready('Please run the sim before plotting')
 
         # Configuration
-        flat = self.results.flatten()
+        flat_orig = self.results.flatten()
+        flat = flat_orig
         if not show_skipped: # Skip plots with auto_plot set to False
             for k in list(flat.keys()): # NB: can't call it "key", shadows argument
                 res = flat[k]
@@ -589,15 +601,27 @@ class Sim(ss.Base):
         fig_kw     = sc.mergedicts(dict(figsize=figsize), fig_kw)
         plot_kw    = sc.mergedicts(dict(alpha=0.8), plot_kw)
         scatter_kw = sc.mergedicts(dict(alpha=0.3, color='k'), scatter_kw)
+        style_kw   = sc.mergedicts(style_kw)
+
+        def normkey(key):
+            """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
+            return key.replace('.','_').lower()
 
         # Do the plotting
-        with ss.style(style):
+        with ss.style(style, **style_kw):
 
             if key is not None:
                 if isinstance(key, str):
-                    flat = {k:v for k,v in flat.items() if (key.lower() in k)}
+                    flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+                    if len(flat) != 1:
+                        errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
+                        raise sc.KeyNotFoundError(errormsg)
                 else:
-                    flat = {k.lower():flat[k.lower()] for k in key}
+                    try:
+                        flat = {k.lower():flat[normkey(k)] for k in key}
+                    except sc.KeyNotFoundError as e:
+                        errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
+                        raise sc.KeyNotFoundError(errormsg) from e
 
             # Get the figure
             if fig is None:

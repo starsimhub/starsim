@@ -266,7 +266,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
     """
     Helper function to load custom fonts for plotting -- (usually) not for the user.
 
-    Note: if fonts don't load, try running ``cv.settings.load_fonts(rebuild=True)``,
+    Note: if fonts don't load, try running ``ss.settings.load_fonts(rebuild=True)``,
     and/or rebooting the system.
 
     Args:
@@ -298,9 +298,42 @@ options = Options()
 options.set_style()
 
 
-def style(style=None):
-    """ Set the style """
+def style(style=None, **kwargs):
+    """
+    Set the style in a with block.
+
+    Note: Starsim comes bundled with two fonts, Mulish (sans serif, default)
+    and Rosario (serif).
+
+    Args:
+        style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options
+        **kwargs (dict): passed to `sc.options.with_style()`
+
+    **Examples**::
+
+        # Create a plot using default Starsim styling
+        with ss.style():
+            plt.plot()
+
+        # Create a plot using a built-in Matplotlib style
+        with ss.style('seaborn-v0_8-whitegrid'):
+            plt.plot()
+
+        # Customize the current style
+        with ss.style(font='Rosario'):
+            plt.plot()
+    """
     if style is None:
         style = options._style
-    out = sc.options.with_style(style)
+    elif style in ['starsim', 'default']:
+        style = sc.dcp(rc_starsim)
+
+    # Rename to avoid name collisions (e.g. font vs font.family)
+    mapping = {'font':'font.family', 'facecolor':'axes.facecolor', 'grid':'axes.grid'}
+    for key,val in mapping.items():
+        if key in kwargs:
+            kwargs[val] = kwargs.pop(key)
+
+    # Reset
+    out = sc.options.with_style(style, **kwargs)
     return out
