@@ -416,9 +416,7 @@ class MultiSim:
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
                     ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
                     ax.plot(res.timevec, res, **plot_kw)
-                    ss.utils.format_axes(ax, res, n_ticks)
-                    label = ss.utils.get_result_plot_label(res, show_module)
-                    ax.set_title(label)
+                    ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         return ss.return_fig(fig)
 

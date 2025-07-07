@@ -12,6 +12,9 @@ n_agents = 1_000
 do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
+import warnings
+warnings.simplefilter('error')
+
 
 def make_sim_pars():
     pars = sc.objdict(
@@ -61,7 +64,7 @@ def test_multisim():
     msim.plot()
 
     # Export results
-    res_df = msim.results.to_df(resample='2y')
+    res_df = msim.results.to_df(resample='2YE')
     assert res_df.sir_n_susceptible_low.loc['2030-12-31'] == msim.results.sir_n_susceptible.low[29:31].mean()
 
     # Reduce and plot median
