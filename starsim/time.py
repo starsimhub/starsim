@@ -115,7 +115,7 @@ class date(pd.Timestamp):
         else:
             year_start = pd.Timestamp(year=int(year), month=1, day=1)
             year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
-            return cls(year_start + year % 1 * (year_end - year_start))
+            return cls._reset_class(year_start + year % 1 * (year_end - year_start))
 
     def to_year(self):
         """
