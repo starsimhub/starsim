@@ -312,7 +312,7 @@ def load_syph_tx():
     return txprods
 
 
-class syph_screening(ss.routine_screening):
+class syph_screening(ss.Intervention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -348,7 +348,7 @@ class syph_screening(ss.routine_screening):
         return
 
 
-class syph_treatment(ss.treat_num):
+class syph_treatment(ss.Intervention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
