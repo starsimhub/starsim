@@ -115,7 +115,7 @@ class date(pd.Timestamp):
         else:
             year_start = pd.Timestamp(year=int(year), month=1, day=1)
             year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
-            return cls(year_start + year % 1 * (year_end - year_start))
+            return cls._reset_class(year_start + year % 1 * (year_end - year_start))
 
     def to_year(self):
         """
@@ -142,17 +142,24 @@ class date(pd.Timestamp):
         """ Convert to a standard pd.Timestamp instance """
         return pd.Timestamp(self.to_numpy()) # Need to convert to NumPy first or it doesn't do anything
 
+    def _timestamp_add(self, other):
+        """ Uses pd.Timestamp's __add__ and avoids creating duplicate objects """
+        orig_class = self.__class__
+        self.__class__ = pd.Timestamp
+        out = orig_class._reset_class(self + other)
+        orig_class._reset_class(self)
+        return out
 
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
 
         if isinstance(other, DateDur):
-            return date(self.to_pandas() + other.unit)
+            return self._timestamp_add(other.unit)
         elif isinstance(other, YearDur):
             return date(self.to_year() + other.unit)
         elif isinstance(other, pd.DateOffset):
-            return date(self.to_pandas() + other)
+            return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
         elif sc.isnumber(other):
@@ -1283,6 +1290,14 @@ class Time:
         if sim is not None:
             if self.is_absolute != sim.t.is_absolute:
                 raise Exception('Cannot mix absolute/relative times across modules')
+
+        if sim is not None and sim.t.initialized and \
+                all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in ('start', 'stop', 'dt')]) and \
+                all([getattr(self, key) == getattr(sim.t, key) for key in ('start', 'stop', 'dt')]):
+            self._yearvec = sc.dcp(sim.t._yearvec)
+            self._tvec    = sc.cp(sim.t._tvec)  # ss.Dates are immutable so only need shallow copy
+            self.initialized = True
+            return self
 
         # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
