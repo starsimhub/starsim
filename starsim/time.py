@@ -1291,6 +1291,14 @@ class Time:
             if self.is_absolute != sim.t.is_absolute:
                 raise Exception('Cannot mix absolute/relative times across modules')
 
+        if sim.t.initialized and \
+                all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in ('start', 'stop', 'dt')]) and \
+                all([getattr(self, key) == getattr(sim.t, key) for key in ('start', 'stop', 'dt')]):
+            self._yearvec = sc.dcp(sim.t._yearvec)
+            self._tvec    = sc.cp(sim.t._tvec)  # ss.Dates are immutable so only need shallow copy
+            self.initialized = True
+            return self
+
         # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
