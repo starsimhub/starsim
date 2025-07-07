@@ -549,7 +549,7 @@ class Sim(ss.Base):
         d = sc.jsonify(d)
         return d
 
-    def plot(self, key=None, fig=None, style=None, show_data=True, show_skipped=False, show_module=None,
+    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
              show_label=False, n_ticks=None, **kwargs):
         """
         Plot all results in the Sim object
@@ -557,13 +557,17 @@ class Sim(ss.Base):
         Args:
             key (str/list): the results key to plot (by default, all); if a list, plot exactly those keys
             fig (Figure): if provided, plot results into an existing figure
-            style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
+            style (str): the plotting style to use
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
             show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
             n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
-            **kwargs (dict): known arguments (e.g. figsize, font) split between fig, plot, scatter, and style; see `ss.plot_args()` for all valid options
+            fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+            plot_kw (dict): passed to `plt.plot()`
+            data_kw (dict): passed to `plt.scatter()`, for plotting the data
+            style_kw (dict): passed to `ss.style()`, for controlling the detailed plotting style (default "starsim"; other options are "simple", None, or any Matplotlib style)
+            **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
 
         **Examples**:
 
@@ -575,50 +579,25 @@ class Sim(ss.Base):
             # Plot a single result
             sim.plot('sis.prevalence')
 
-            # Plot with a custom figure size and font
-            sim.plot(figsize=(12,16), font='Rosario')
+            # Plot with a custom figure size, font, and style
+            sim.plot(figsize=(12,16), font='Raleway', style='fancy')
         """
         self.check_results_ready('Please run the sim before plotting')
 
-        # Configuration
-        flat_orig = self.results.flatten()
-        flat = flat_orig
-        if not show_skipped: # Skip plots with auto_plot set to False
-            for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-                res = flat[k]
-                if isinstance(res, ss.Result) and not res.auto_plot:
-                    flat.pop(k)
+        # Figure out the flat structure of results to plot
+        flat = ss.utils.match_result_keys(self.results, key, show_skipped=show_skipped)
 
         # Set figure defaults
-        n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
+        n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes
         default_figsize = np.array([8, 6])
         figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
         figsize = default_figsize*figsize_factor
-        if show_module is True: # Set no limit for the label length
-            show_module = 999
 
         # Set plotting defaults
         kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
 
-        def normkey(key):
-            """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
-            return key.replace('.','_').lower()
-
         # Do the plotting
-        with ss.style(style, **kw.style):
-
-            if key is not None:
-                if isinstance(key, str):
-                    flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
-                    if len(flat) != 1:
-                        errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
-                        raise sc.KeyNotFoundError(errormsg)
-                else:
-                    try:
-                        flat = {k.lower():flat[normkey(k)] for k in key}
-                    except sc.KeyNotFoundError as e:
-                        errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
-                        raise sc.KeyNotFoundError(errormsg) from e
+        with ss.style(**kw.style):
 
             # Get the figure
             if fig is None:

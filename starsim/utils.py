@@ -484,14 +484,16 @@ class shrink:
 
 #%% Plotting helper functions
 
-# Specify known keywords
+# Specify known/common keywords
 plotting_kw = sc.objdict()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
 plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
-plotting_kw.style = ['font', 'fontsize', 'interactive'] # For sc.options.with_style()
+plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
+plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
+plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
 
-def plot_args(kwargs=None, suffix='_kw', _verbose=True, **defaults):
+def plot_args(kwargs=None, _verbose=False, **defaults):
     """
     Process known plotting kwargs.
 
@@ -501,6 +503,8 @@ def plot_args(kwargs=None, suffix='_kw', _verbose=True, **defaults):
     Note: the kwargs supplied to the parent function should be supplied as the
     first argument of this function; keyword arguments to this function are treated
     as default values that will be overwritten by user-supplied values in `kwargs`.
+    The argument "_verbose" is used internally to print debugging output, but is
+    not typically set by the user.
 
     Args:
         fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
@@ -524,6 +528,7 @@ def plot_args(kwargs=None, suffix='_kw', _verbose=True, **defaults):
         kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
     """
+    suffix='_kw',
     _None = '<None>'
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
     kw = sc.objdict() # Output arguments
@@ -558,6 +563,40 @@ def plot_args(kwargs=None, suffix='_kw', _verbose=True, **defaults):
         if _verbose: print('Final output:', kw)
 
     return kw
+
+
+def match_result_keys(results, key, show_skipped=False, flattened=False):
+    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
+
+    def normkey(key):
+        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
+        return key.replace('.','_').lower()
+
+    # Get results
+    flat = results if flattened else results.flatten()
+
+    # Configuration
+    flat_orig = flat # Copy reference before we modify in place
+    if not show_skipped: # Skip plots with auto_plot set to False
+        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
+            res = flat[k]
+            if isinstance(res, ss.Result) and not res.auto_plot:
+                flat.pop(k)
+
+    if key is not None:
+        if isinstance(key, str):
+            flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+            if len(flat) != 1:
+                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+        else:
+            try:
+                flat = {k.lower():flat[normkey(k)] for k in key}
+            except sc.KeyNotFoundError as e:
+                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
+                raise sc.KeyNotFoundError(errormsg) from e
+
+    return flat
 
 
 def get_result_plot_label(res, show_module=None):
