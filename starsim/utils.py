@@ -487,12 +487,59 @@ def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
     is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
     is_reticulate = ss.options.reticulate
+    do_show = ss.options.show
     if is_jupyter or is_reticulate:
         print(fig)
         plt.show()
         return None
     else:
+        if do_show:
+            plt.show()
         return fig
+
+
+# Specify known keywords
+plotting_kw = sc.objdict()
+plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
+plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color'} # For plt.scatter()
+plotting_kw.style = ['font', 'fontsize', 'interactive'] # For sc.options.with_style()
+
+def process_plot_kw(suffix='_kw', **kwargs):
+    """
+    Process known plotting kwargs.
+
+    Args:
+        fig_
+
+    """
+    _None = '<not provided>'
+    kwargs = sc.mergedicts(kwargs)
+    kw = sc.objdict()
+    for subtype,args in plotting_kw.items():
+        kw[subtype] = sc.objdict() # e.g. kw.fig
+
+        # Handle kwargs, e.g. "figsize"
+        if isinstance(args, list): # Ensure everything's a dict, although only kw.data is
+            args = {k:k for k in args}
+        for inkey,outkey in args.items():
+            val = kwargs.pop(inkey, _None) # Handle None as a valid argument
+            if val != _None:
+                kw[subtype][outkey] = val
+
+        # Handle dicts of kwargs, e.g. "fig_kw"
+        subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
+        if subtype_dict:
+            kw[subtype].update(subtype_dict)
+
+    if len(kwargs):
+        valid = f'\n\nValid:\n{plotting_kw}\n'
+        converted = f'\n\nConverted:\n{kw}\n'
+        unconverted = f'\n\nUnconverted:\n{sc.newlinejoin(kwargs.keys())}'
+        errormsg = f'Did not successfully convert all plotting keys:{valid}{converted}{unconverted}'
+        raise sc.KeyNotFoundError(errormsg)
+
+    return kw
 
 
 def get_result_plot_label(res, show_module=None):
@@ -518,7 +565,7 @@ def get_result_plot_label(res, show_module=None):
     return label
 
 
-def format_axes(ax, res, n_ticks):
+def format_axes(ax, res, n_ticks, show_module):
     """ Standard formatting for axis results; not for the user """
     if n_ticks is None:
         n_ticks = (2,5)
@@ -530,6 +577,10 @@ def format_axes(ax, res, n_ticks):
     if res.has_dates:
         locator = mpl.dates.AutoDateLocator(minticks=n_ticks[0], maxticks=n_ticks[1]) # Fewer ticks since lots of plots
         sc.dateformatter(ax, locator=locator)
+
+    # Set the axes title
+    label = ss.utils.get_result_plot_label(res, show_module)
+    ax.set_title(label)
     return
 
 def show(**kwargs):

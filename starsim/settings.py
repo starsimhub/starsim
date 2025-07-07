@@ -80,37 +80,40 @@ class Options(sc.objdict):
         options = sc.objdict()  # The options
 
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, 'float')
+        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, float)
 
         optdesc.license = 'Whether to print the license on import'
-        options.license = sc.parse_env('STARSIM_LICENSE', False, 'bool')
+        options.license = sc.parse_env('STARSIM_LICENSE', False, bool)
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
-        options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', 'str')
+        options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, 'float') # If unit = 'year', corresponds to ~30 seconds
+        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
 
         optdesc.sep = 'Set thousands seperator for text output'
-        options.sep = sc.parse_env('STARSIM_SEP', ',', 'str')
+        options.sep = sc.parse_env('STARSIM_SEP', ',', str)
 
         optdesc.date_sep = 'Set seperator for dates'
-        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', 'str')
+        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
-        options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, 'int')
+        options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
 
         optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
-        options.style = sc.parse_env('STARSIM_STYLE', 'starsim', 'str')
+        options.style = sc.parse_env('STARSIM_STYLE', 'starsim', str)
+
+        optdesc.show = 'Whether to show the plot immediately (i.e. call plt.show())'
+        options.show = sc.parse_env('STARSIM_SHOW', True, bool)
 
         optdesc.reticulate = 'Set whether to use Reticulate (R) settings'
-        options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, 'bool')
+        options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
 
         optdesc.precision = 'Set arithmetic precision'
-        options.precision = sc.parse_env('STARSIM_PRECISION', 64, 'int')
+        options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
 
         optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
-        options._centralized = sc.parse_env('STARSIM_CENTRALIZED', False, 'bool')
+        options._centralized = sc.parse_env('STARSIM_CENTRALIZED', False, bool)
 
         return optdesc, options
 
