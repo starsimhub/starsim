@@ -1,40 +1,44 @@
+---
+pagetitle: "Tutorials"
+---
+
 # Tutorials
 
 These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
 
 ::: {.grid}
 ::: {.g-col-4}
-[**T1 - Introduction to Starsim**](tutorials/intro.ipynb)
+[**T1 - Introduction to Starsim**](tutorials/t1_intro.ipynb)
 
 A quick introduction to the Starsim framework.
 :::
 
 ::: {.g-col-4}
-[**T2 - Building a simulation**](tutorials/buildsim.ipynb)
+[**T2 - Building a simulation**](tutorials/t2_model.ipynb)
 
 How to build your first simulation.
 :::
 
 ::: {.g-col-4}
-[**T3 - Demographics**](tutorials/demographics.ipynb)
+[**T3 - Demographics**](tutorials/t3_demographics.ipynb)
 
 Implementing demographics: births, deaths, and population structure.
 :::
 
 ::: {.g-col-4}
-[**T4 - Diseases**](tutorials/diseases.ipynb)
+[**T4 - Diseases**](tutorials/t4_diseases.ipynb)
 
 How to implement disease dynamics.
 :::
 
 ::: {.g-col-4}
-[**T5 - Transmission and networks**](tutorials/transmission.ipynb)
+[**T5 - Networks**](tutorials/t5_networks.ipynb)
 
 How diseases spread between agents: networks and mixing pools.
 :::
 
 ::: {.g-col-4}
-[**T6 - Interventions**](tutorials/interventions.ipynb)
+[**T6 - Interventions**](tutorials/t6_interventions.ipynb)
 
 It's not all doom and gloom: implementing interventions to save lives.
 :::

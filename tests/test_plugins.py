@@ -6,13 +6,14 @@ import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
+import starsim_examples as sse
 
 sc.options(interactive=False) # Assume not running interactively
 
 
 class hiv_syph(ss.Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             label = 'HIV-Syphilis',
@@ -23,7 +24,7 @@ class hiv_syph(ss.Connector):
             rel_sus_hiv_syph    = 2.7, # People with syphilis are 2.7x more likely to acquire HIV
             rel_trans_hiv_syph  = 2.7, # People with syphilis are 2.7x more likely to transmit HIV
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     def step(self):
@@ -55,7 +56,7 @@ class Penicillin(ss.Intervention):
     def __init__(self, year=2020, prob=0.8):
         super().__init__() # Initialize the intervention
         self.prob = prob # Store the probability of treatment
-        self.year = year
+        self.year = ss.date(year)
         return
 
     def step(self):
@@ -80,9 +81,9 @@ class Penicillin(ss.Intervention):
 def make_args():
     """ Make people, HIV, syphilis, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, std=0.5)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
-    hiv = ss.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
-    syph = ss.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, std=0.5)) # TODO: think about whether these should be ss.Dur(); currently they are not since stored in natural units with -self.dt
+    hiv = sse.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
+    syph = sse.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
     args = dict(pars=pars, networks=mf, diseases=[hiv, syph])
     return args
 

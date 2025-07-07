@@ -2,6 +2,7 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
+import numpy as np
 import sciris as sc
 import starsim as ss
 from functools import partial
@@ -110,7 +111,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Time(**kwargs, name=self.name, init=False)
+        self.t = ss.Time(**kwargs, name=self.name)
 
         # Properties to be added by init_pre()
         self.sim = None
@@ -160,9 +161,8 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
-    def update_pars(self, pars=None, **kwargs):
+    def update_pars(self, **pars):
         """ Pull out recognized parameters, returning the rest """
-        pars = sc.mergedicts(pars, kwargs)
 
         # Update matching module parameters
         matches = {}
@@ -173,12 +173,12 @@ class Module(Base):
 
         # Update module attributes
         metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
-        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.time.time_args}
+        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Time.time_args}
         self.set_metadata(**metadata)
         self.t.update(**timepars)
 
         # Should be no remaining pars
-        remaining = set(pars.keys()) - set(module_args + ss.time.time_args)
+        remaining = set(pars.keys()) - set(module_args) - set(ss.Time.time_args)
         if len(remaining):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
             raise ValueError(errormsg)
@@ -195,10 +195,10 @@ class Module(Base):
         if force or not self.pre_initialized:
             self.sim = sim # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            self.t.init(sim=self.sim) # Initialize time vector
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
-            self.init_time() # Initialize the modules' time parameters and link them to the sim
             self.init_results()
             self.pre_initialized = True
         return
@@ -216,24 +216,10 @@ class Module(Base):
         self.initialized = True
         return
 
-    def init_time(self, force=False):
-        """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
-        # Update time and initialize
-        self.t.init(sim=self.sim) # Sets the absolute sim time vector
-
-        # Find all time parameters in the module
-        timepars = sc.search(self.pars, type=ss.TimePar, skip=dict(keys='sim')) # Should it be self or self.pars?
-
-        # Initialize them with the parent module
-        for timepar in timepars.values():
-            if force or not timepar.initialized:
-                timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
-        return
-
     def match_time_inds(self, inds=None):
          """ Find the nearest matching sim time indices for the current module """
-         self_tvec = self.t.abstvec
-         sim_tvec = self.sim.t.abstvec
+         self_tvec = self.t.yearvec
+         sim_tvec = self.sim.t.yearvec
          if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
              return Ellipsis if inds is None else inds
          else:
@@ -372,6 +358,17 @@ class Module(Base):
         out.pars = self.pars.to_json()
         return out
 
+    def shrink(self):
+        """ Shrink the size of the module for saving to disk """
+        shrunk = ss.utils.shrink()
+        self.sim = shrunk
+        self.dists = shrunk
+        for state in self.states:
+            with sc.tryexcept():
+                state.people = shrunk
+                state.raw = shrunk
+        return
+
     def plot(self):
         """ Plot all results in the module """
         with sc.options.with_style('fancy'):
@@ -391,7 +388,7 @@ class Analyzer(Module):
     about a simulation than is available by default -- for example, pulling states
     out of sim.people on a particular timestep before they get updated on the next step.
 
-    The key method of the analyzer is ``step()``, which is called with the sim
+    The key method of the analyzer is `step()`, which is called with the sim
     on each timestep.
 
     To retrieve a particular analyzer from a sim, use sim.get_analyzer().
@@ -407,3 +404,71 @@ class Connector(Module):
     up to the user to define how they behave.
     """
     pass
+
+
+class seasonality(Connector):
+    """
+    Example connector -- apply sine-wave seasonality of transmission to one or more diseases
+
+    This works by modifying the disease's `rel_trans` state; note that it replaces
+    it with the seasonality variable, and will overwrite any existing values.
+    (Note: this function would work more or less identically as an intervention,
+    but it is closer in spirit to a connector.)
+
+    Args:
+        diseases (str/list): disease or list of diseases to apply seasonality to
+        scale (float): how strong of a seasonality effect to apply (0.1 = 90-110% relative transmission rate depending on time of year)
+        shift (float): offset by time of year (0.5 = 6 month offset)
+
+    **Example**:
+
+        import starsim as ss
+
+        pars = dict(
+            n_agents = 10_000,
+            start = '2020-01-01',
+            stop = '2023-01-01',
+            dt = ss.weeks(1.0),
+            diseases = dict(
+                type = 'sis',
+                beta = ss.perweek(0.05),
+                dur_inf = ss.weeks(5),
+                waning = ss.perweek(0.1),
+                dt = ss.weeks(1),
+            ),
+            networks = 'random',
+        )
+
+        s1 = ss.Sim(pars, connectors=None, label='Random network')
+        s2 = ss.Sim(pars, connectors=ss.seasonality(), label='Seasonality')
+        s3 = ss.Sim(pars, connectors=ss.seasonality(scale=0.5, shift=0.2), label='Extreme seasonality')
+
+        sc.options(dpi=200)
+        msim = ss.parallel(s1, s2, s3)
+        msim.plot('sis')
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            diseases = None,
+            scale = 0.2,
+            shift = 0.0,
+        )
+        self.update_pars(**kwargs)
+        return
+
+    def step(self, *args, **kwargs):
+        """ Apply seasonality """
+        # Handle input -- here to avoid defining init_pre()
+        p = self.pars
+        if p.diseases is None:
+            p.diseases = list(self.sim.diseases.keys())
+
+        # Apply seasonality
+        frac_year = self.t.now('year') % 1.0
+        rel_beta = 1.0 + np.cos((frac_year-p.shift)*2*np.pi)*p.scale
+        rel_beta = np.maximum(0, rel_beta) # Don't allow it to go negative
+        for key in sc.tolist(p.diseases):
+            disease = self.sim.diseases[key]
+            disease.rel_trans[:] = rel_beta
+        return

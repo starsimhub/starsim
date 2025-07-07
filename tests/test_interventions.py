@@ -25,13 +25,13 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
           diseases = dict(
                 type      = 'sir',
                 init_prev = 0.01,
-                dur_inf   = ss.dur(10),
+                dur_inf   = ss.years(10),
                 p_death   = 0,
-                beta      = ss.beta(0.06),
+                beta      = ss.timeprob(0.06),
           )
         ),
-        dur = 10,
-        dt  = 0.01
+        dur = ss.years(10),
+        dt  = ss.years(0.01)
     )
     sim.init(verbose=False)
 
@@ -43,7 +43,7 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
     uids = ss.uids(in_vac)
 
     # create and apply the vaccination
-    vac = ss.sir_vaccine(efficacy=efficacy, leaky=leaky)
+    vac = ss.simple_vx(efficacy=efficacy, leaky=leaky)
     vac.init_pre(sim)
     vac.administer(sim.people, uids)
 

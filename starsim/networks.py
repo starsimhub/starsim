@@ -6,8 +6,7 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
-import scipy.optimize as spo
-import scipy.spatial as spsp
+import matplotlib.pyplot as plt
 
 # This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
@@ -46,7 +45,7 @@ class Network(Route):
     although not all have to be supplied at the time of creation (they must all
     be the same at the time of initialization, though, or else validation will fail).
 
-    **Examples**::
+    **Examples**:
 
         # Generate an average of 10 contacts for 1000 people
         n_contacts_pp = 10
@@ -249,11 +248,15 @@ class Network(Route):
         self.results['n_edges'][self.ti] = len(self)
         return
 
-    def to_graph(self): # pragma: no cover
+    def to_graph(self, max_edges=None, random=False): # pragma: no cover
         """
         Convert to a networkx DiGraph
 
-        **Example**::
+        Args:
+            max_edges (int): the maximum number of edges to show
+            random (bool): if true, select edges randomly; otherwise, show the first N
+
+        **Example**:
 
             import networkx as nx
             sim = ss.Sim(n_agents=100, networks='mf').init()
@@ -261,7 +264,13 @@ class Network(Route):
             nx.draw(G)
         """
         keys = [('p1', int), ('p2', int), ('beta', float)]
-        data = [np.array(self.edges[k], dtype=dtype).tolist() for k,dtype in keys]
+        data = [np.array(self.edges[k], dtype=dtype) for k,dtype in keys]
+        if max_edges:
+            if random:
+                inds = np.sort(np.random.choice(len(data[0]), max_edges, replace=False))
+                data = [col[inds] for col in data]
+            else:
+                data = [col[:max_edges] for col in data]
         G = nx.DiGraph()
         G.add_weighted_edges_from(zip(*data), weight='beta')
         nx.set_edge_attributes(G, self.label, name='layer')
@@ -284,6 +293,31 @@ class Network(Route):
         for key in keys:
             self.edges[key] = df[key].to_numpy()
         return self
+
+    def shrink(self):
+        """ Shrink the size of the network for saving to disk """
+        super().shrink()
+        shrunk = ss.utils.shrink()
+        self.edges = shrunk
+        self.participant = shrunk
+        return
+
+    def plot(self, max_edges=500, random=False, alpha=0.2, **kwargs):
+        """
+        Plot the network using NetworkX.
+
+        Args:
+            max_edges (int): the maximum number of edges to show
+            random (bool): if true, select edges randomly; otherwise, show the first N
+            alpha (float): the alpha value of the edges
+            kwargs (dict): passed to nx.draw_networkx()
+        """
+        G = self.to_graph(max_edges=max_edges, random=random)
+        fig = nx.draw_networkx(G, alpha=alpha, **kwargs)
+        if max_edges:
+            plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
+        return ss.return_fig(fig)
+
 
     def find_contacts(self, inds, as_array=True):
         """
@@ -361,7 +395,7 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.t.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
+        self.edges.dur = self.edges.dur - 1 # Assume that the edge duration is in units of self.t.dt
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -397,7 +431,7 @@ class SexualNetwork(DynamicNetwork):
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
         if inds is None: inds = Ellipsis
-        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds] * self.t.dt))
+        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds]))
 
 
 # %% Specific instances of networks
@@ -413,7 +447,8 @@ class StaticNet(Network):
     If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
     The parameter "n" is supplied automatically to be equal to n_agents.
 
-    **Examples**::
+    **Examples**:
+
         # Generate a networkx graph and pass to Starsim
         import networkx as nx
         import starsim as ss
@@ -422,15 +457,13 @@ class StaticNet(Network):
 
         # Pass a networkx graph generator to Starsim
         ss.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
-
-        # Just create a default graph
     """
 
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
         self.graph = graph
         self.define_pars(seed=True, p=None, n_contacts=10)
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
 
@@ -485,16 +518,24 @@ class StaticNet(Network):
 
 
 class RandomNet(DynamicNetwork):
-    """ Random connectivity between agents """
+    """
+    Random connectivity between agents
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+    """
+
+    def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = 0, # Note; network edge durations are required to have the same unit as the network
+            beta = 1.0,
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
@@ -554,12 +595,14 @@ class RandomNet(DynamicNetwork):
         number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
 
         p1, p2 = self.get_edges(born.uids, number_of_contacts)
-        beta = np.ones(len(p1), dtype=ss_float_)
+        beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
+        elif self.pars.dur == 0:
+            dur = np.zeros(len(p1))
         else:
-            dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+            dur = np.ones(len(p1))*self.pars.dur/self.t.dt # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
@@ -581,14 +624,14 @@ class ErdosRenyiNet(DynamicNetwork):
     accumulate over time.
     """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             p = 0.1, # Probability of each edge
-            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
+            dur = ss.Dur(0), # Duration of zero ensures that new random edges are formed on each time step
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
         return
 
@@ -620,7 +663,7 @@ class ErdosRenyiNet(DynamicNetwork):
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.ones(len(p1))*self.pars.dur
+            dur = np.ones(len(p1))*self.pars.dur/self.t.dt
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
@@ -638,14 +681,14 @@ class DiskNet(Network):
     Edges are formed between two agents if they are within r distance of each other.
     """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             r = 0.1, # Radius
-            v = 0.05, # Velocity
+            v = ss.Rate(0.05), # Velocity
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.define_states(
             ss.FloatArr('x', default=ss.random(), label='X position'),
             ss.FloatArr('y', default=ss.random(), label='Y position'),
@@ -749,16 +792,16 @@ class MFNet(SexualNetwork):
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
-    def __init__(self, pars=None, key_dict=None, **kwargs):
-        super().__init__(key_dict=key_dict)
+    def __init__(self, **kwargs):
+        super().__init__()
         self.define_pars(
-            duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            duration = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=80), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
+            acts = ss.poisson(lam=ss.peryear(80)),
             rel_part_rates = 1.0,
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Finish initialization
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
@@ -830,7 +873,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.t.dt) # TODO: check
+        self.set_network_states(upper_age=float(self.t.dt)) # TODO: check
         self.add_pairs()
         return
 
@@ -840,7 +883,7 @@ class MSMNet(SexualNetwork):
     A network that randomly pairs males
     """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             duration = ss.lognorm_ex(mean=2, std=1),
@@ -848,7 +891,7 @@ class MSMNet(SexualNetwork):
             acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     def init_post(self):
@@ -899,10 +942,13 @@ class MSMNet(SexualNetwork):
 
 class EmbeddingNet(MFNet):
     """
-    Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
+    Heterosexual age-assortative network based on a one-dimensional embedding.
+
+    Warning: this network is random-number safe, but is very slow compared to
+    RandomNet.
     """
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Create a sexual network from a 1D embedding based on age
 
@@ -915,7 +961,7 @@ class EmbeddingNet(MFNet):
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     @staticmethod
@@ -925,6 +971,9 @@ class EmbeddingNet(MFNet):
         return loc
 
     def add_pairs(self):
+        import scipy.optimize as spo
+        import scipy.spatial as spsp
+
         people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
@@ -1055,7 +1104,7 @@ class MixingPools(Route):
         beta (float): overall transmission via these mixing pools
         contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
         mps = ss.MixingPools(
@@ -1068,18 +1117,20 @@ class MixingPools(Route):
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
             src = None,
             dst = None,
-            beta = 0.2,
+            beta = ss.Rate(0.2),
             contacts = None,
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.validate_pars()
         self.pools = []
+        self.prenatal = False # Does not make sense for mixing pools
+        self.postnatal = False
         return
 
     def __len__(self):
@@ -1114,6 +1165,7 @@ class MixingPools(Route):
     def init_pre(self, sim):
         super().init_pre(sim)
         p = self.pars
+        time_args = {k:p.get(k) for k in ss.Time.time_args} # get() allows None
 
         self.pools = []
         for i,sk,src in p.src.enumitems():
@@ -1122,7 +1174,7 @@ class MixingPools(Route):
                 if sc.isnumber(contacts): # If it's a number, convert to a distribution
                     contacts = ss.poisson(lam=contacts)
                 name = f'pool:{sk}->{dk}'
-                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst, **time_args)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
         return
@@ -1146,6 +1198,8 @@ class MixingPools(Route):
         return
 
     def step(self):
+        for mp in self.pools:
+            mp.step()
         return
 
 
@@ -1160,7 +1214,7 @@ class MixingPool(Route):
         beta (float): overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
         contacts (Dist): the number of effective contacts of the destination agents
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
 
@@ -1168,7 +1222,7 @@ class MixingPool(Route):
         mp_pars = dict(
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
-            beta = 0.2,
+            beta = ss.Rate(0.2),
             contacts = ss.poisson(lam=4),
         )
 
@@ -1183,28 +1237,28 @@ class MixingPool(Route):
         sim.run()
         sim.plot()
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
             src = None,
             dst = None, # Same as src
-            beta = 1.0,
+            beta = ss.Rate(0.2),
             contacts = ss.poisson(1.0),
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
         )
 
-        self.pars.diseases = sc.promotetolist(self.pars.diseases)
+        self.pars.diseases = sc.tolist(self.pars.diseases)
         self.diseases = None
         self.src_uids = None
         self.dst_uids = None
-
+        self.prenatal = False # Does not make sense for mixing pools
+        self.postnatal = False
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
-
         return
 
     def __len__(self):
@@ -1261,35 +1315,33 @@ class MixingPool(Route):
         Args:
             rel_sus (float): Relative susceptibility
             rel_trans (float): Relative infectiousness
-            disease_beta (float): The beta value for the disease. This is typically calculated as a
-                pair of values as networks are bidirectional, however, only the first value
-                is used because mixing pools are unidirectional.
+            disease_beta (float): The beta value for the disease
         Returns:
             UIDs of agents who acquired the disease at this step
         """
-        if disease_beta[0] == 0:
+        if disease_beta == 0:
             return []
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
-        if isinstance(beta, ss.beta):
-            ss.warn(f'In mixing pools, beta should typically be a float, not {beta}; ignoring time value')
-            beta = beta.values
+        if isinstance(beta, ss.Rate):
+            ss.warn(f'In mixing pools, beta should typically be a float')
+            beta = beta * self.t.dt
         if sc.isnumber(beta) and beta == 0:
             return []
 
-        # Get source and target UIDs
-        self.src_uids = self.get_uids(self.pars.src)
-        self.dst_uids = self.get_uids(self.pars.dst)
         if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
             return []
 
         # Calculate transmission
         trans = np.mean(rel_trans[self.src_uids])
         acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
-        p = beta*disease_beta[0]*trans*acq
+        p = beta*disease_beta*trans*acq
         self.p_acquire.set(p=p)
         return self.p_acquire.filter(self.dst_uids)
 
     def step(self):
+        """ Update source and target UIDs """
+        self.src_uids = self.get_uids(self.pars.src)
+        self.dst_uids = self.get_uids(self.pars.dst)
         return

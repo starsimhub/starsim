@@ -12,7 +12,7 @@ class Intervention(ss.Module):
     """
     Base class for interventions.
 
-    The key method of the intervention is ``step()``, which is called with the sim
+    The key method of the intervention is `step()`, which is called with the sim
     on each timestep.
     """
 

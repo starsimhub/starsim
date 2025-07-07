@@ -3,13 +3,14 @@ Run tests of disease models
 """
 
 # %% Imports and settings
-import starsim as ss
 import sciris as sc
 import matplotlib.pyplot as plt
+import starsim as ss
+import starsim_examples as sse
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
-do_plot = False
+do_plot = True
 sc.options(interactive=do_plot) # Assume not running interactively
 
 
@@ -20,15 +21,15 @@ def test_sir():
     network_pars = {
         'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
     }
-    networks = ss.RandomNet(pars=network_pars)
+    networks = ss.RandomNet(**network_pars)
 
     sir_pars = {
         'dur_inf': ss.normal(loc=10),  # Override the default distribution
     }
-    sir = ss.SIR(sir_pars)
+    sir = ss.SIR(**sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': ss.rate(0.1)}
+    sir.pars.beta = {'random': ss.peryear(0.1)}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -124,8 +125,8 @@ def test_ncd():
     sc.heading('Testing NCDs')
 
     ppl = ss.People(n_agents)
-    ncd = ss.NCD(pars={'log':True})
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
+    ncd = ss.NCD(log=True)
+    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1)) # Since using ncd directly below
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
@@ -152,7 +153,7 @@ def test_gavi():
     sc.heading('Testing GAVI diseases')
 
     sims = sc.autolist()
-    for disease in ['cholera', 'measles', 'ebola']:
+    for disease in [sse.Cholera(), sse.Measles(), sse.Ebola()]:
         pars = dict(
             diseases = disease,
             n_agents = n_agents,
@@ -160,6 +161,7 @@ def test_gavi():
         )
         sim = ss.Sim(pars)
         sim.run()
+        sim.plot()
         sims += sim
     return sims
 
@@ -173,7 +175,7 @@ def test_multidisease():
 
     sir1.pars.beta = {'randomnet': 0.1}
     sir2.pars.beta = {'randomnet': 0.2}
-    networks = ss.RandomNet(pars=dict(n_contacts=ss.poisson(4)))
+    networks = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
     sim.run()
@@ -183,11 +185,12 @@ def test_multidisease():
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
-    sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
+    sis = ss.SIS(beta={'random':[ss.timeprob(0.005, ss.Dur(months=1)), ss.timeprob(0.001, ss.Dur(months=1))], 'prenatal':[ss.timeprob(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.timeprob(0.1, ss.Dur(months=1)), 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
-    demographics = ss.Pregnancy(fertility_rate=20)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    demographics = ss.Pregnancy(fertility_rate=ss.peryear(20))
+    sim = ss.Sim(dt=ss.Dur(1/12), people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
+    sim.plot()
     return sim
 
 

@@ -32,7 +32,7 @@ class Sim(ss.Base):
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
-    **Examples**::
+    **Examples**:
 
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
@@ -78,7 +78,10 @@ class Sim(ss.Base):
         try:
             labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
-            timestr = f'{self.pars.start}—{self.pars.stop}'
+            if self.initialized:
+                timestr = f'{self.t.start}—{self.t.stop}'
+            else:
+                timestr = f'{self.pars.start}—{self.pars.stop}'
 
             moddict = {}
             for modkey in ss.module_map().keys():
@@ -157,7 +160,8 @@ class Sim(ss.Base):
 
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.t = ss.Time(pars=self.pars, name='sim', sim=True)
+        self.t = ss.Time(name='sim')
+        self.t.init(self)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
@@ -415,40 +419,22 @@ class Sim(ss.Base):
         shrunk = ss.utils.shrink()
         sim.people = shrunk
         with sc.tryexcept():
-            sim.loop.sim = shrunk
-            sim.loop.funcs = shrunk
-            sim.loop.plan = shrunk
+            sim.loop.shrink()
 
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
-
-            # Shrink the networks
-            for network in sim.networks():
-                with sc.tryexcept():
-                    network.edges = shrunk
-                    network.participant = shrunk
 
             # Shrink the distributions
             sim.dists.sim = shrunk
             sim.dists.obj = shrunk
             for dist in sim.dists.dists.values():
                 with sc.tryexcept():
-                    dist.slots = shrunk
-                    dist._slots = shrunk
-                    dist.module = shrunk
-                    dist.sim = shrunk
-                    dist._n = shrunk
-                    dist._uids = shrunk
-                    dist.history = shrunk
+                    dist.shrink()
 
             # Finally, shrink the modules
             for mod in sim.modules:
-                mod.sim = shrunk
-                mod.dists = shrunk
-                for state in mod.states:
-                    with sc.tryexcept():
-                        state.people = shrunk
-                        state.raw = shrunk
+                with sc.tryexcept():
+                    mod.shrink()
 
             # Check that the module successfully shrunk
             if size_limit:
@@ -482,6 +468,11 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
+    def profile(self, do_run=True, plot=True, **kwargs):
+        """ Profile the performance of the simulation """
+        prof = ss.Profile(self, do_run=do_run, plot=plot, **kwargs)
+        return prof
+
     def save(self, filename=None, shrink=None, **kwargs):
         """
         Save to disk as a gzipped pickle.
@@ -494,7 +485,7 @@ class Sim(ss.Base):
         Returns:
             filename (str): the validated absolute path to the saved file
 
-        **Example**::
+        **Example**:
 
             sim.save() # Saves to a .sim file
         """
@@ -527,7 +518,7 @@ class Sim(ss.Base):
             A dictionary representation of the parameters and/or summary results
             (or write that dictionary to a file)
 
-        **Examples**::
+        **Examples**:
 
             json = sim.to_json()
             sim.to_json('results.json')
@@ -572,9 +563,9 @@ class Sim(ss.Base):
             show_skipped (bool): show even results that are skipped by default
             show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length; if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
-            fig_kw (dict): passed to ``plt.subplots()``
-            plot_kw (dict): passed to ``plt.plot()``
-            scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
+            fig_kw (dict): passed to `plt.subplots()`
+            plot_kw (dict): passed to `plt.plot()`
+            scatter_kw (dict): passed to `plt.scatter()`, for plotting the data
         """
         self.check_results_ready('Please run the sim before plotting')
 
@@ -679,9 +670,9 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         run (bool): whether to run the sim
         plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
-        kwargs (dict): passed to ``ss.Sim()``
+        kwargs (dict): passed to `ss.Sim()`
 
-    **Examples**::
+    **Examples**:
 
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
@@ -716,7 +707,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         die (bool): whether to raise an exception if the sims don't match
         require_run (bool): require that the simulations have been run
 
-    **Example**::
+    **Example**:
 
         s1 = ss.Sim(rand_seed=1).run()
         s2 = ss.Sim(rand_seed=2).run()
@@ -870,7 +861,7 @@ def check_sims_match(*args, full=False):
         args (list): a list of 2 or more sims to compare
         full (bool): if True, return whether each sim matches the first
 
-    **Example**::
+    **Example**:
 
         s1 = ss.Sim(diseases='sir', networks='random')
         s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
