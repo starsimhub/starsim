@@ -217,6 +217,7 @@ class SimPars(Pars):
 
         # Modules: demographics, diseases, networks, analyzers, and interventions
         self.people = None
+        self.modules       = ss.ndict()
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
@@ -368,13 +369,6 @@ class SimPars(Pars):
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
         a Sim object.
-        Used for starsim classes:
-        - networks,
-        - demographics,
-        - diseases,
-        - analyzers,
-        - interventions, and
-        - connectors.
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR

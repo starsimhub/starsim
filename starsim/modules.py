@@ -15,12 +15,13 @@ module_args = ['name', 'label'] # Define allowable module arguments
 def module_map(key=None):
     """ Define the mapping between module names and types """
     module_map = sc.objdict(
-        networks      = ss.Network,
+        modules       = None, # Handled separately as a fallback
         demographics  = ss.Demographics,
-        diseases      = ss.Disease,
-        interventions = ss.Intervention,
-        analyzers     = ss.Analyzer,
         connectors    = ss.Connector,
+        networks      = ss.Network,
+        interventions = ss.Intervention,
+        diseases      = ss.Disease,
+        analyzers     = ss.Analyzer,
     )
     return module_map if key is None else module_map[key]
 
@@ -34,14 +35,15 @@ def find_modules(key=None, flat=False):
         modules[modkey] = sc.objdict()
         for attr in attrs: # Loop over each attribute (inefficient, but doesn't need to be optimized)
             item = getattr(ss, attr)
+            low_attr = attr.lower()
             try:
                 assert issubclass(item, modtype) # Check that it's a class, and instance of this module
-                low_attr = attr.lower()
                 modules[modkey][low_attr] = item # It passes, so assign it to the dict
                 if modkey == 'networks' and low_attr.endswith('net'): # Also allow networks without 'net' suffix
                     modules[modkey][low_attr.removesuffix('net')] = item
             except:
-                pass
+                if isinstance(item, type) and issubclass(item, ss.Module): # For any other modules, add them to the "modules" list
+                    modules['modules'][low_attr] = item
     if flat:
         modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]

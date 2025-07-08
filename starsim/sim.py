@@ -20,12 +20,13 @@ class Sim(ss.Base):
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
         label (str): the human-readable name of the simulation
         people (People): if provided, use this ss.People object
+        modules (Module/list): if provided, use these modules (and divide among demographics, diseases, etc. based on type)
         demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
-        diseases (str/Disease/list): as above, for diseases
+        connectors (str/Connector/list): as above, for connectors
         networks (str/Network/list): as above, for networks
         interventions (str/Intervention/list): as above, for interventions
+        diseases (str/Disease/list): as above, for diseases
         analyzers (str/Analyzer/list): as above, for analyzers
-        connectors (str/Connector/list): as above, for connectors
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
@@ -36,11 +37,11 @@ class Sim(ss.Base):
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
     """
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
+    def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
         self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
-        args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks,
-                    interventions=interventions, analyzers=analyzers, connectors=connectors)
+        args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
+                    networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
         self.pars.update(input_pars)  # Update the parameters
@@ -117,12 +118,13 @@ class Sim(ss.Base):
     def module_list(self):
         """ Return a list of all Module instances (stored in standard places) in the Sim; see module_dict for the dict version """
         out = sc.mergelists(
+            self.modules(),
             self.demographics(),
-            self.networks(),
-            self.diseases(),
             self.connectors(),
+            self.networks(),
             self.interventions(),
             [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
+            self.diseases(),
             self.analyzers(),
         )
         return out
@@ -210,15 +212,15 @@ class Sim(ss.Base):
 
     def init_sim_attrs(self, force=False):
         """ Move initialized modules to the sim """
-        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
-        for key in keys:
-            orig = getattr(self, key, None)
+        attrs = ['label', 'modules', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
+        for attr in attrs:
+            orig = getattr(self, attr, None)
             if not force and orig is not None:
-                if key != 'label': # Don't worry about overwriting the label
-                    warnmsg = f'Skipping key "{key}" in parameters since already present in sim and force=False'
+                if attr != 'label': # Don't worry about overwriting the label
+                    warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
                     ss.warn(warnmsg)
             else:
-                setattr(self, key, self.pars.pop(key))
+                setattr(self, attr, self.pars.pop(attr))
         return
 
     def init_mods_pre(self):
