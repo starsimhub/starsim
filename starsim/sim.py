@@ -1,7 +1,6 @@
 """
 Define core Sim classes
 """
-import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -116,8 +115,8 @@ class Sim(ss.Base):
 
     @property
     def module_list(self):
-        """ Return iterator over all Module instances (stored in standard places) in the Sim """
-        return itertools.chain(
+        """ Return a list of all Module instances (stored in standard places) in the Sim; see module_dict for the dict version """
+        out = sc.mergelists(
             self.demographics(),
             self.networks(),
             self.diseases(),
@@ -126,6 +125,24 @@ class Sim(ss.Base):
             [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
             self.analyzers(),
         )
+        return out
+
+    @property
+    def module_dict(self):
+        """ Return a dictionary of all Module instances; see module_list for the list version """
+        out = sc.objdict()
+        collisions = []
+        for mod in self.module_list:
+            key = mod.name
+            if key not in out:
+                out[key] = mod
+            else:
+                collisions.append(key)
+        if collisions:
+            errormsg = f'Cannot list modules as a dict since one or more modules have the same name; use sim.module_list instead. Collisions:\n{collisions}'
+            raise ValueError(errormsg)
+        else:
+            return out
 
     def init(self, force=False, **kwargs):
         """
