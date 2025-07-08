@@ -9,6 +9,7 @@ import starsim as ss
 ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
+int_nan  = ss.dtypes.int_nan
 type_def = {
     ss_float: ('float', float, np.float64, np.float32),
     ss_int: ('int', int, np.int64, np.int32),
@@ -16,7 +17,7 @@ type_def = {
 }
 type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
-__all__ = ['BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
+__all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -172,6 +173,7 @@ class Arr(BaseArr):
         self.label = label or name
         self.default = default
         self.nan = nan
+        self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
         self.dtype = dtype
         self.people = people # Used solely for accessing people.auids
 
@@ -306,11 +308,24 @@ class Arr(BaseArr):
 
     @property
     def isnan(self):
-        return self.asnew(self.values == self.nan, cls=BoolArr)
+        """ Return BoolArr for NaN values """
+        out = self.values == self.nan if self.nan_eq else np.isnan(self.values)
+        return self.asnew(out, cls=BoolArr)
 
     @property
     def notnan(self):
-        return self.asnew(self.values != self.nan, cls=BoolArr)
+        """ Return BoolArr for non-NaN values """
+        out = self.values != self.nan if self.nan_eq else ~np.isnan(self.values)
+        return self.asnew(out, cls=BoolArr)
+
+    @property
+    def notnanvals(self):
+        """ Return values that are not-NaN """
+        vals = self.values # Shorten and avoid double indexing
+        if self.nan_eq:
+            return vals[np.nonzero(vals != self.nan)[0]]
+        else:
+            return vals[np.nonzero(~np.isnan(vals))[0]]
 
     def grow(self, new_uids=None, new_vals=None):
         """
@@ -403,22 +418,17 @@ class FloatArr(Arr):
         super().__init__(name=name, dtype=ss_float, nan=nan, **kwargs)
         return
 
-    @property
-    def isnan(self):
-        """ Return BoolArr for NaN values """
-        return self.asnew(np.isnan(self.values), cls=BoolArr)
 
-    @property
-    def notnan(self):
-        """ Return BoolArr for non-NaN values """
-        return self.asnew(~np.isnan(self.values), cls=BoolArr)
+class IntArr(Arr):
+    """
+    Subclass of Arr with defaults for ints.
 
-    @property
-    def notnanvals(self):
-        """ Return values that are not-NaN """
-        vals = self.values # Shorten and avoid double indexing
-        out = vals[np.nonzero(~np.isnan(vals))[0]]
-        return out
+    Note: Because integer arrays do not handle NaN values natively, users are
+    recommended to use `ss.FloatArr()` in most cases instead.
+    """
+    def __init__(self, name=None, nan=int_nan, **kwargs):
+        super().__init__(name=name, dtype=ss_int, nan=nan, **kwargs)
+        return
 
 
 class BoolArr(Arr):
