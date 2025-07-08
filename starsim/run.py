@@ -281,7 +281,7 @@ class MultiSim:
         if output:
             return self.base_sim
         else:
-            return
+            return self
 
     def mean(self, bounds=None, **kwargs):
         """
@@ -336,8 +336,7 @@ class MultiSim:
 
         return summary
 
-    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None,
-             legend_kw=None, legend=True, **kwargs):
+    def plot(self, key=None, fig=None, legend=True, **kwargs):
         """
         Plot all results in the MultiSim object.
 
@@ -347,18 +346,18 @@ class MultiSim:
         Args:
             key (str): the results key to plot (by default, all)
             fig (Figure): if provided, plot results into an existing figure
-            fig_kw (dict): passed to `plt.subplots()`
+            fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
+            data_kw (dict): passed to `plt.scatter()`, for plotting the data
+            style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
             fill_kw (dict): passed to `plt.fill_between()`
             legend_kw (dict): passed to `plt.legend()`
             legend (bool): whether to show the legend
-            **kwargs (dict): passed to `sim.plot()` if sim has not been reduced; else raises an error
+            **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
         """
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
-            alpha = 0.7 if len(self) < 5 else 0.5
-            plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             with ss.options.context(jupyter=False): # Always return the figure
                 res_keys = None
                 for sim in self.sims:
@@ -373,9 +372,10 @@ class MultiSim:
                             missingtxt = f'\nMissing: {sc.strjoin(missing)}'
                             warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
                             ss.warn(warnmsg)
-                    fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw, **kwargs)
+                    alpha = 0.7 if len(self) < 5 else 0.5
+                    fig = sim.plot(key=key, fig=fig, alpha=alpha, **kwargs)
             if legend:
-                lkw = sc.mergedicts(legend_kw)
+                lkw = ss.plot_args(kwargs).legend
                 leg = None
                 shape = getattr(fig, '_subplots_shape', None) # Sciris-generated figure
                 if shape: # If we have empty space on the bottom right, put the legend there
@@ -388,37 +388,33 @@ class MultiSim:
 
         # Has been reduced, plot with uncertainty bounds
         else:
-            flat = self.results
-            n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
+            # Get arguments
+            n_ticks = kwargs.pop('n_ticks', None)
+            show_module = kwargs.pop('show_module', None)
+            show_skipped = kwargs.pop('show_skipped', None)
+
+            # Figure out the flat structure of results to plot
+            flat = ss.utils.match_result_keys(self.results, key, show_skipped=show_skipped, flattened=True)
+
+            # Set figure size
+            n_cols,_ = sc.getrowscols(len(flat))
             default_figsize = np.array([8, 6])
             figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
             figsize = default_figsize*figsize_factor
+            kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, fill_alpha=0.2, lw=2)
 
-            # Handle common arguments
-            n_ticks = kwargs.pop('n_ticks', None)
-            show_module = kwargs.pop('show_module', None)
-            figsize = kwargs.pop('figsize', figsize)
-            if len(kwargs):
-                errormsg = f'Keyword arguments {sc.strjoin(kwargs.keys())} are ambiguous; please specify fig_kw, fill_kw, plot_kw instead'
-                raise ValueError(errormsg)
-            fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
-            fill_kw = sc.mergedicts({'alpha':0.2}, fill_kw)
-            plot_kw = sc.mergedicts({'lw':2, 'alpha':0.8}, plot_kw)
-            with sc.options.with_style('simple'):
-                if key is not None:
-                    flat = {k:v for k,v in flat.items() if k.startswith(key)}
+            # Get ready to plot
+            with ss.style(**kw.style):
                 if fig is None:
-                    fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 else:
                     axs = sc.toarray(fig.axes)
 
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
-                    ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
-                    ax.plot(res.timevec, res, **plot_kw)
-                    ss.utils.format_axes(ax, res, n_ticks)
-                    label = ss.utils.get_result_plot_label(res, show_module)
-                    ax.set_title(label)
+                    ax.fill_between(res.timevec, res.low, res.high, **kw.fill)
+                    ax.plot(res.timevec, res, **kw.plot)
+                    ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         return ss.return_fig(fig)
 

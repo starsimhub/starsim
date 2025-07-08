@@ -539,10 +539,6 @@ class RandomNet(DynamicNetwork):
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    def init_post(self):
-        self.add_pairs()
-        return
-
     @staticmethod
     @nb.njit(fastmath=True, parallel=False, cache=True)
     def get_source(inds, n_contacts):
@@ -635,10 +631,6 @@ class ErdosRenyiNet(DynamicNetwork):
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
         return
 
-    def init_post(self):
-        self.add_pairs()
-        return
-
     def add_pairs(self):
         """ Generate contacts """
         people = self.sim.people
@@ -694,10 +686,6 @@ class DiskNet(Network):
             ss.FloatArr('y', default=ss.random(), label='Y position'),
             ss.FloatArr('theta', default=ss.uniform(high=2*np.pi), label='Heading'),
         )
-        return
-
-    def init_post(self):
-        self.add_pairs()
         return
 
     def step(self):
@@ -809,7 +797,7 @@ class MFNet(SexualNetwork):
 
     def init_post(self):
         self.set_network_states()
-        self.add_pairs()
+        super().init_post()
         return
 
     def set_network_states(self, upper_age=None):
@@ -896,7 +884,7 @@ class MSMNet(SexualNetwork):
 
     def init_post(self):
         self.set_network_states()
-        self.add_pairs()
+        super().init_post()
         return
 
     def set_network_states(self, upper_age=None):
@@ -1181,6 +1169,7 @@ class MixingPools(Route):
 
     def init_post(self):
         """ Initialize each mixing pool """
+        super().init_post()
         for mp in self.pools:
             mp.init_post()
         return

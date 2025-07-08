@@ -31,7 +31,7 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
           )
         ),
         dur = ss.years(10),
-        dt  = ss.years(0.01)
+        dt  = ss.years(0.05)
     )
     sim.init(verbose=False)
 

@@ -292,9 +292,15 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None):
-        """ Run the model once """
+    def run(self, until=None, verbose=None, check_method_calls=True):
+        """
+        Run the model -- the main method for running a simulation.
 
+        Args:
+            until (date/str/float): the date to run the sim until
+            verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
+            check_method_calls (bool): whether to check that all required methods were called
+        """
         # Initialization steps
         if not self.initialized: self.init()
         self.verbose = sc.ifelse(verbose, self.pars.verbose)
@@ -320,6 +326,8 @@ class Sim(ss.Base):
             for mod in self.modules: # May not be needed, but keeps it consistent with the sim
                 mod.t.ti -= 1
             self.finalize()
+            if check_method_calls:
+                self.check_method_calls()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()
 
@@ -456,6 +464,52 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
+    def check_method_calls(self, die=None, warn=None, verbose=False):
+        """
+        Check if any required methods were not called.
+
+        Typically called automatically by `sim.run()`; default behavior is to warn
+        (see `options.check_method_calls`).
+
+        Args:
+            die (bool): whether to raise an exception if missing methods were found (default False)
+            warn (bool): whether to raise a warning if missing methods were found (default False)
+            verbose (bool): whether to print the number of times each method was called (default False)
+
+        Returns:
+            A list of missing method calls by module
+        """
+        # Handle arguments, or fall back to options
+        valid = ['die', 'warn', False]
+        if die is not None or warn is not None:
+            check = 'die' if die else 'warn' if warn else False
+        else:
+            check = ss.options.check_method_calls
+        if check not in valid:
+            errormsg = f'Could not understand {check=}, must be one of {valid}'
+            raise ValueError(errormsg)
+
+        if check:
+            if verbose:
+                sc.pp(self._call_required)
+
+            missing = []
+            for mod in self.modules:
+                modmissing = mod.check_method_calls()
+                if modmissing:
+                    missing.append([type(mod), modmissing])
+            if missing:
+                errormsg = 'The following methods are required, but were not called.\n'
+                errormsg += 'Did you mistype a method name, forget a super() call,\n'
+                errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
+                for modtype,modmissing in missing:
+                    errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
+                if check == 'die':
+                    raise RuntimeError(errormsg)
+                elif check == 'warn':
+                    ss.warn(errormsg)
+        return missing
+
     def to_df(self, sep='_', **kwargs):
         """
         Export results as a Pandas dataframe
@@ -549,55 +603,55 @@ class Sim(ss.Base):
         d = sc.jsonify(d)
         return d
 
-    def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False, show_module=None,
-             show_label=False, n_ticks=None, fig_kw=None, plot_kw=None, scatter_kw=None):
+    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
+             show_label=False, n_ticks=None, **kwargs):
         """
         Plot all results in the Sim object
 
         Args:
             key (str/list): the results key to plot (by default, all); if a list, plot exactly those keys
             fig (Figure): if provided, plot results into an existing figure
-            style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
+            style (str): the plotting style to use
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
             show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
             n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
-            fig_kw (dict): passed to `plt.subplots()`
+            fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
-            scatter_kw (dict): passed to `plt.scatter()`, for plotting the data
+            data_kw (dict): passed to `plt.scatter()`, for plotting the data
+            style_kw (dict): passed to `ss.style()`, for controlling the detailed plotting style (default "starsim"; other options are "simple", None, or any Matplotlib style)
+            **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
+
+        **Examples**:
+
+            sim = ss.Sim(diseases='sis', networks='random').run()
+
+            # Basic usage
+            sim.plot()
+
+            # Plot a single result
+            sim.plot('sis.prevalence')
+
+            # Plot with a custom figure size, font, and style
+            sim.plot(figsize=(12,16), font='Raleway', style='fancy')
         """
         self.check_results_ready('Please run the sim before plotting')
 
-        # Configuration
-        flat = self.results.flatten()
-        if not show_skipped: # Skip plots with auto_plot set to False
-            for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-                res = flat[k]
-                if isinstance(res, ss.Result) and not res.auto_plot:
-                    flat.pop(k)
+        # Figure out the flat structure of results to plot
+        flat = ss.utils.match_result_keys(self.results, key, show_skipped=show_skipped)
 
         # Set figure defaults
-        n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
+        n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes
         default_figsize = np.array([8, 6])
         figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
         figsize = default_figsize*figsize_factor
-        if show_module is True: # Set no limit for the label length
-            show_module = 999
 
         # Set plotting defaults
-        fig_kw     = sc.mergedicts(dict(figsize=figsize), fig_kw)
-        plot_kw    = sc.mergedicts(dict(lw=2), plot_kw)
-        scatter_kw = sc.mergedicts(dict(alpha=0.3, color='k'), scatter_kw)
+        kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
 
         # Do the plotting
-        with sc.options.with_style(style):
-
-            if key is not None:
-                if isinstance(key, str):
-                    flat = {k:v for k,v in flat.items() if (key.lower() in k)}
-                else:
-                    flat = {k.lower():flat[k.lower()] for k in key}
+        with ss.style(**kw.style):
 
             # Get the figure
             if fig is None:
@@ -607,8 +661,8 @@ class Sim(ss.Base):
                     while plt.fignum_exists(plotlabel):
                         figlist += plotlabel
                         plotlabel = sc.uniquename(self.label, figlist, human=True)
-                    fig_kw['num'] = plotlabel
-                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    kw.fig['num'] = plotlabel
+                fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
             else:
@@ -630,13 +684,11 @@ class Sim(ss.Base):
                             found = True
                             break
                     if found:
-                        ax.scatter(df.index.values, df[dfkey].values, **scatter_kw)
+                        ax.scatter(df.index.values, df[dfkey].values, **kw.data)
 
                 # Plot results
-                ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
-                ss.utils.format_axes(ax, res, n_ticks)
-                label = ss.utils.get_result_plot_label(res, show_module)
-                ax.set_title(label)
+                ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
+                ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         if show_label in ['title', 'suptitle'] and self.label:
             fig.suptitle(self.label, weight='bold')

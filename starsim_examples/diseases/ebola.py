@@ -85,10 +85,11 @@ class Ebola(ss.SIR):
 
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses for those who get infected """
-        # Do not call set_prognoses on the parent
-        #super().set_prognoses(sim, uids, source_uids)
+         # We don't want to call super().set_prognoses(), but we could also do ss.Disease.set_prognoses(self, uids, sources)
+        if self.pars.log:
+            self.log_infections(uids, sources)
 
         ti = self.ti
         self.susceptible[uids] = False

@@ -1,5 +1,7 @@
 """
-Define interventions
+Define interventions, which are used to modify the state of the sim during run.
+
+Interventions typically include things like testing, treatment, and vaccination.
 """
 import starsim as ss
 import sciris as sc

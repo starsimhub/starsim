@@ -2,12 +2,12 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
-import numpy as np
+import inspect
+import functools as ft
 import sciris as sc
 import starsim as ss
-from functools import partial
 
-__all__ = ['module_map', 'find_modules', 'Base', 'Module', 'Analyzer', 'Connector']
+__all__ = ['module_map', 'find_modules', 'required', 'Base', 'Module']
 
 module_args = ['name', 'label'] # Define allowable module arguments
 
@@ -45,6 +45,44 @@ def find_modules(key=None, flat=False):
     if flat:
         modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]
+
+
+def required(val=True):
+    """
+    Decorator to mark module methods as required.
+
+    A common gotcha in Starsim is to forget to call super(), or to mistype a method
+    name so it's never called. This decorator lets you mark methods (of Modules only)
+    to be sure that they are called either on sim initialization or on sim run.
+
+    Args:
+        val (True/'disable'): by default, mark method as required; if set to 'disable', then disable method checking for parent classes as well (i.e. remove previous "required" calls)
+
+    **Example**:
+
+        class CustomSIS(ss.SIS):
+
+            def step(self):
+                super().step()
+                self.custom_step() # Will raise an exception if this line is not here
+                return
+
+            @ss.required() # Mark this method as required on run
+            def custom_step(self):
+                pass
+    """
+    # Wrap the function
+    def decorator(func):
+        func._call_required = val  # Mark for collection
+
+        @ft.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            key = func.__qualname__
+            self._call_required[key] += 1
+            return func(self, *args, **kwargs)
+
+        return wrapper
+    return decorator
 
 
 class Base(sc.quickobj):
@@ -106,8 +144,12 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
+    _immutable_attrs = ['pars', 't', 'sim', 'dists']
 
     def __init__(self, name=None, label=None, **kwargs):
+        # Housekeeping
+        self._collect_required() # First, collect methods marked as required on creation
+
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
@@ -122,6 +164,7 @@ class Module(Base):
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False
+        self._lock_attrs = True
         return
 
     def __call__(self, *args, **kwargs):
@@ -132,6 +175,20 @@ class Module(Base):
         """ Allow modules to act like dictionaries """
         return getattr(self, key)
 
+    def __setattr__(self, name, value):
+        """ Don't allow locked attributes to be overwritten """
+        if getattr(self, '_lock_attrs', False) and name in self._immutable_attrs:
+            errormsg = f'Cannot modify attribute "{name}"; reserved attributes are {sc.strjoin(self._immutable_attrs)}.\n'
+            errormsg += 'If you really mean to do this, use module.set_attr()'
+            raise AttributeError(errormsg)
+        else:
+            super().__setattr__(name, value)
+        return
+
+    def set_attr(self, name, value):
+        """ Method for setting an attribute that does not perform checking against immutable attributes """
+        return super().__setattr__(name, value)
+
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
         parval = self.pars.get(key)
@@ -139,6 +196,41 @@ class Module(Base):
         val = sc.ifelse(value, attrval, default)
         return val
 
+    def _collect_required(self):
+        """ Collect all methods marked as required """
+        reqs = {}
+        disabled = []
+        for cls in inspect.getmro(type(self)):
+            for attr,method in cls.__dict__.items():
+                req = getattr(method, '_call_required', False)
+                if req:
+                    valid = [True, 'disable']
+                    if req not in valid:
+                        errormsg = f'ss.require() must be True or "disable", not "{req}"'
+                        raise ValueError(errormsg)
+                    elif req == 'disable':
+                        disabled.append(attr)
+                    key = f'{cls.__qualname__}.{attr}'
+                    reqs[key] = 0 # Meaning it's been called 0 times
+
+        # Collate and manually increment any that are set to be disabled
+        self._call_required = reqs
+        if disabled:
+            for k in self._call_required.keys():
+                if k.split('.')[-1] in disabled: # Look for matches for disabled, omitting the class name
+                    self._call_required[k] += 1 # Manually increment the call to pass checking
+        return required
+
+    def check_method_calls(self):
+        """
+        Check if any required methods were not called.
+
+        Typically called automatically by `sim.run()`.
+        """
+        missing = [key for key, called in self._call_required.items() if not called]
+        return missing
+
+    @required()
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
         # Validation
@@ -184,6 +276,7 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
+    @required()
     def init_pre(self, sim, force=False):
         """
         Perform initialization steps
@@ -193,7 +286,7 @@ class Module(Base):
         distributions are initialized).
         """
         if force or not self.pre_initialized:
-            self.sim = sim # Link back to the sim object
+            self.set_attr('sim', sim) # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
             self.t.init(sim=self.sim) # Initialize time vector
             sim.pars[self.name] = self.pars
@@ -203,11 +296,13 @@ class Module(Base):
             self.pre_initialized = True
         return
 
+    @required()
     def init_results(self):
         """ Initialize any results required; part of init_pre() """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting
         return
 
+    @required()
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """
         for state in self.states:
@@ -226,6 +321,7 @@ class Module(Base):
              out = sc.findnearest(sim_tvec, self_tvec)
              return out
 
+    @required()
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
         if self.dists is not None: # Will be None if no distributions are defined
@@ -237,6 +333,7 @@ class Module(Base):
         errormsg = f'Module "{self.name}" does not define a "step" method: use "def step(self): pass" if this is intentional'
         raise NotImplementedError(errormsg)
 
+    @required()
     def finish_step(self):
         """ Define what should happen at the end of the step; at minimum, increment ti """
         self.t.ti += 1
@@ -246,12 +343,14 @@ class Module(Base):
         """ Perform any results updates on each timestep """
         pass
 
+    @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
         self.finalize_results()
         self.finalized = True
         return
 
+    @required()
     def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called *after* a custom finalize_results()
         """ Finalize results """
         # Scale results
@@ -344,7 +443,7 @@ class Module(Base):
         name = func.__name__
         mod = cls(name=name)
         mod.func = func
-        mod.step = partial(step, mod)
+        mod.step = ft.partial(step, mod)
         mod.step.__name__ = name # Manually add these in as for a regular class method
         mod.step.__self__ = mod
         return mod
@@ -380,95 +479,3 @@ class Module(Base):
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return ss.return_fig(fig)
-
-
-class Analyzer(Module):
-    """
-    Base class for Analyzers. Analyzers are used to provide more detailed information
-    about a simulation than is available by default -- for example, pulling states
-    out of sim.people on a particular timestep before they get updated on the next step.
-
-    The key method of the analyzer is `step()`, which is called with the sim
-    on each timestep.
-
-    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
-    """
-    pass
-
-
-class Connector(Module):
-    """
-    Base class for Connectors, which mediate interactions between disease (or other) modules
-
-    Because connectors can do anything, they have no specified structure: it is
-    up to the user to define how they behave.
-    """
-    pass
-
-
-class seasonality(Connector):
-    """
-    Example connector -- apply sine-wave seasonality of transmission to one or more diseases
-
-    This works by modifying the disease's `rel_trans` state; note that it replaces
-    it with the seasonality variable, and will overwrite any existing values.
-    (Note: this function would work more or less identically as an intervention,
-    but it is closer in spirit to a connector.)
-
-    Args:
-        diseases (str/list): disease or list of diseases to apply seasonality to
-        scale (float): how strong of a seasonality effect to apply (0.1 = 90-110% relative transmission rate depending on time of year)
-        shift (float): offset by time of year (0.5 = 6 month offset)
-
-    **Example**:
-
-        import starsim as ss
-
-        pars = dict(
-            n_agents = 10_000,
-            start = '2020-01-01',
-            stop = '2023-01-01',
-            dt = ss.weeks(1.0),
-            diseases = dict(
-                type = 'sis',
-                beta = ss.perweek(0.05),
-                dur_inf = ss.weeks(5),
-                waning = ss.perweek(0.1),
-                dt = ss.weeks(1),
-            ),
-            networks = 'random',
-        )
-
-        s1 = ss.Sim(pars, connectors=None, label='Random network')
-        s2 = ss.Sim(pars, connectors=ss.seasonality(), label='Seasonality')
-        s3 = ss.Sim(pars, connectors=ss.seasonality(scale=0.5, shift=0.2), label='Extreme seasonality')
-
-        sc.options(dpi=200)
-        msim = ss.parallel(s1, s2, s3)
-        msim.plot('sis')
-    """
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            diseases = None,
-            scale = 0.2,
-            shift = 0.0,
-        )
-        self.update_pars(**kwargs)
-        return
-
-    def step(self, *args, **kwargs):
-        """ Apply seasonality """
-        # Handle input -- here to avoid defining init_pre()
-        p = self.pars
-        if p.diseases is None:
-            p.diseases = list(self.sim.diseases.keys())
-
-        # Apply seasonality
-        frac_year = self.t.now('year') % 1.0
-        rel_beta = 1.0 + np.cos((frac_year-p.shift)*2*np.pi)*p.scale
-        rel_beta = np.maximum(0, rel_beta) # Don't allow it to go negative
-        for key in sc.tolist(p.diseases):
-            disease = self.sim.diseases[key]
-            disease.rel_trans[:] = rel_beta
-        return

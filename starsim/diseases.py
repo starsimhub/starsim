@@ -24,7 +24,6 @@ class Disease(ss.Module):
             log = False,
         )
         self.update_pars(**kwargs)
-        self.results = ss.Results(self.name)
         return
 
     @property
@@ -41,6 +40,7 @@ class Disease(ss.Module):
                 yield state
         return
 
+    @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
@@ -48,6 +48,7 @@ class Disease(ss.Module):
             self.log = InfectionLog()
         return
 
+    @ss.required()
     def init_results(self):
         """
         Initialize results
@@ -105,6 +106,7 @@ class Disease(ss.Module):
         """
         pass
 
+    # Ideally would use @ss.required(), but can't since it's not called if no infections occur
     def set_prognoses(self, uids, sources=None):
         """
         Set prognoses upon infection/acquisition
@@ -131,6 +133,7 @@ class Disease(ss.Module):
         self.log.add_entries(uids, sources, self.now)
         return
 
+    @ss.required()
     def update_results(self):
         """
         Update results
@@ -663,6 +666,7 @@ class SIS(Infection):
         )
         return
 
+    @ss.required()
     def update_results(self):
         """ Store the population immunity (susceptibility) """
         super().update_results()

@@ -5,6 +5,7 @@ tests/figs/*
 tests/devtests/figs/*
 figs/*
 archive/
+fonts_installed_successfully
 
 # Quarto-generated files
 .jupyter_cache/

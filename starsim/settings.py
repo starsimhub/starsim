@@ -6,8 +6,9 @@ All options should be set using set() or directly, e.g.:
 """
 import numpy as np
 import sciris as sc
+import matplotlib.font_manager as fm
 
-__all__ = ['dtypes', 'options']
+__all__ = ['dtypes', 'options', 'style']
 
 # Define Starsim-default data types
 class dtypes:
@@ -17,6 +18,22 @@ class dtypes:
     rand_uint = np.uint32
     float = np.float32
     result_float = np.float64
+
+
+# Define simple plotting options -- similar to Matplotlib default
+rc_starsim = {
+    'font.family':       'sans-serif', # Replaced with Mulish in load_fonts() if import succeeds
+    'axes.axisbelow':    True, # So grids show up behind
+    'axes.spines.right': False,
+    'axes.spines.top':   False,
+    'legend.frameon':    False,
+    'figure.facecolor':  'white',
+    'axes.facecolor':    'white',
+    'axes.grid':         True,
+    'grid.color':        '#f2f2f2',
+    'grid.linewidth':    1,
+    'lines.linewidth':   2.5,      # Slightly thicker lines
+}
 
 
 # Not public to avoid confusion with ss.options
@@ -63,34 +80,46 @@ class Options(sc.objdict):
         options = sc.objdict()  # The options
 
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, 'float')
+        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, float)
 
         optdesc.license = 'Whether to print the license on import'
-        options.license = sc.parse_env('STARSIM_LICENSE', False, 'bool')
+        options.license = sc.parse_env('STARSIM_LICENSE', False, bool)
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
-        options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', 'str')
+        options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
+
+        optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
+        options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
 
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, 'float') # If unit = 'year', corresponds to ~30 seconds
+        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
 
         optdesc.sep = 'Set thousands seperator for text output'
-        options.sep = sc.parse_env('STARSIM_SEP', ',', 'str')
+        options.sep = sc.parse_env('STARSIM_SEP', ',', str)
 
         optdesc.date_sep = 'Set seperator for dates'
-        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', 'str')
+        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
-        options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, 'int')
+        options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
+
+        optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
+        options.style = sc.parse_env('STARSIM_STYLE', 'starsim', str)
+
+        optdesc.install_fonts = 'Choose whether or not to install Starsim-specific fonts on first import -- NOTE, only has effect via the environment variable since executed on load'
+        options.install_fonts = sc.parse_env('STARSIM_INSTALL_FONTS', True, bool)
+
+        optdesc.show = 'Whether to show the plot immediately (i.e. call plt.show())'
+        options.show = sc.parse_env('STARSIM_SHOW', True, bool)
 
         optdesc.reticulate = 'Set whether to use Reticulate (R) settings'
-        options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, 'bool')
+        options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
 
         optdesc.precision = 'Set arithmetic precision'
-        options.precision = sc.parse_env('STARSIM_PRECISION', 64, 'int')
+        options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
 
-        optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
-        options._centralized = sc.parse_env('STARSIM_CENTRALIZED', False, 'bool')
+        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only.'
+        options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
 
         return optdesc, options
 
@@ -176,6 +205,8 @@ class Options(sc.objdict):
                 # Handle special cases
                 if key == 'precision':
                     self.set_precision()
+                elif key == 'style':
+                    self.set_style()
 
         return
 
@@ -230,6 +261,90 @@ class Options(sc.objdict):
             raise ValueError(errormsg)
         return
 
+    def set_style(self):
+        """ Change the plotting style """
+        if self.style == 'starsim':
+            self._style = sc.dcp(rc_starsim)
+        else:
+            self._style = self.style
+        return
+
+
+
+def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwargs):
+    """
+    Helper function to load custom fonts for plotting -- (usually) not for the user.
+
+    Note: if fonts don't load, try running ``ss.settings.load_fonts(rebuild=True)``,
+    and/or rebooting the system.
+
+    Args:
+        folder (str): the folder to add fonts from
+        name (str): the name of the font to load
+        rebuild (bool): whether to rebuild the font cache
+        verbose (bool): whether to print out progress/errors
+    """
+    if folder is None:
+        folder = str(sc.thispath(__file__) / 'assets')
+    sc.fonts(add=folder, rebuild=rebuild, verbose=verbose, **kwargs)
+
+    # Try to find the font, and if it succeeds, update the styles
+    try:
+        fm.findfont(name, fallback_to_default=False) # Raise an exception if the font isn't found
+        rc_starsim['font.family']  = name # Need to set both
+        if verbose: print(f'Default Starsim font reset to "{name}"')
+    except Exception as E:
+        if verbose: print(f'Could not find font {name}: {str(E)}')
+    return
+
 
 # Create the options on module load
 options = Options()
+
+# Load the fonts
+if options.install_fonts:
+    load_fonts()
+
+# Set the style
+options.set_style()
+
+
+def style(style=None, **kwargs):
+    """
+    Set the style in a with block.
+
+    Note: Starsim comes bundled with three fonts: Mulish (default), Raleway, and Rosario.
+    Use `font='sans-serif'` to use the Matplotlib default font.
+
+    Args:
+        style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options
+        **kwargs (dict): passed to `sc.options.with_style()`
+
+    **Examples**::
+
+        # Create a plot using default Starsim styling
+        with ss.style():
+            plt.plot()
+
+        # Create a plot using a built-in Matplotlib style
+        with ss.style('seaborn-v0_8-whitegrid'):
+            plt.plot()
+
+        # Customize the current style
+        with ss.style(font='Rosario'):
+            plt.plot()
+    """
+    if style is None:
+        style = options._style
+    elif style in ['starsim', 'default']:
+        style = sc.dcp(rc_starsim)
+
+    # Rename to avoid name collisions (e.g. font vs font.family)
+    mapping = {'font':'font.family', 'facecolor':'axes.facecolor', 'grid':'axes.grid'}
+    for key,val in mapping.items():
+        if key in kwargs:
+            kwargs[val] = kwargs.pop(key)
+
+    # Reset
+    out = sc.options.with_style(style, **kwargs)
+    return out

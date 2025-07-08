@@ -13,8 +13,9 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig', 'show', 'Profile']
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires',
+           'standardize_netkey', 'standardize_data', 'validate_sim_data',
+           'Profile', 'check_version', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 
 class ndict(sc.objdict):
@@ -439,11 +440,45 @@ class Profile(sc.profile):
         return
 
 
+def check_version(expected, die=False, warn=True):
+    """
+    Check the expected Starsim version with the one actually installed. The expected
+    version string may optionally start with '>=' or '<=' (== is implied otherwise),
+    but other operators (e.g. ~=) are not supported. Note that '>' and '<' are interpreted
+    to mean '>=' and '<='; '>' and '<' are not supported.
+
+    Args:
+        expected (str): expected version information
+        die (bool): whether or not to raise an exception if the check fails
+        warn (bool): whether to raise a warning if the check fails
+
+    **Example**:
+
+        ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
+    """
+    if   expected.startswith('>'): valid = [0,1]
+    elif expected.startswith('<'): valid = [0,-1]
+    elif expected.startswith('!'): valid = [1,-1]
+    else: valid = [0] # Assume == is the only valid comparison
+    expected = expected.lstrip('<=>') # Remove comparator information
+    version = ss.__version__
+    compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
+    relation = ['older', '', 'newer'][compare+1] # Picks the right string
+    if relation: # Versions mismatch, print warning or raise error
+        string = f'Starsim is {relation} than expected ({version} vs. {expected})'
+        if compare not in valid:
+            if die:
+                raise ValueError(string)
+            elif warn:
+                ss.warn(string)
+    return compare
+
+
 #%% Other helper functions
 
 def load(filename, **kwargs):
     """
-    Alias to Sciris sc.loadany()
+    Alias to Sciris `sc.loadany()`
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
     this function. This can also be used to load other objects of known type
@@ -451,7 +486,7 @@ def load(filename, **kwargs):
 
     Args:
         filename (str/path): the name of the file to load
-        kwargs (dict): passed to sc.loadany()
+        kwargs (dict): passed to `sc.loadany()`
 
     Returns:
         The loaded object
@@ -461,7 +496,7 @@ def load(filename, **kwargs):
 
 def save(filename, obj, **kwargs):
     """
-    Alias to Sciris sc.save()
+    Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
@@ -469,7 +504,7 @@ def save(filename, obj, **kwargs):
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to sc.save()
+        kwargs (dict): passed to `sc.save()`
     """
     return sc.save(filename=filename, obj=obj, **kwargs)
 
@@ -483,16 +518,118 @@ class shrink:
 
 #%% Plotting helper functions
 
-def return_fig(fig, **kwargs):
-    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
-    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
-    is_reticulate = ss.options.reticulate
-    if is_jupyter or is_reticulate:
-        print(fig)
-        plt.show()
-        return None
-    else:
-        return fig
+# Specify known/common keywords
+plotting_kw = sc.objdict()
+plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
+plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
+plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
+plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
+plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
+
+def plot_args(kwargs=None, _debug=False, **defaults):
+    """
+    Process known plotting kwargs.
+
+    This function handles arguments to `sim.plot()` and other plotting functions
+    by splitting known kwargs among all the different aspects of the plot.
+
+    Note: the kwargs supplied to the parent function should be supplied as the
+    first argument of this function; keyword arguments to this function are treated
+    as default values that will be overwritten by user-supplied values in `kwargs`.
+    The argument "_debug" is used internally to print debugging output, but is
+    not typically set by the user.
+
+    Args:
+        fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+        plot_kw (dict): passed to `plt.plot()`
+        data_kw (dict): passed to `plt.scatter()`, for plotting the data
+        style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
+        **kwargs (dict): parsed among the above dictionaries
+
+    Returns:
+        A dict-of-dicts with plotting arguments, for use with subsequent plotting commands
+
+    Valid kwarg arguments are:
+
+        - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
+        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - data: 'data_alpha', 'data_color', 'data_size'
+        - style: 'font', 'fontsize', 'interactive'
+
+    **Examples**:
+
+        kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
+        kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
+    """
+    suffix='_kw',
+    _None = '<None>'
+    kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
+    kw = sc.objdict() # Output arguments
+    for subtype,args in plotting_kw.items():
+        if _debug: print('Subtype & args:', subtype, args)
+        kw[subtype] = sc.objdict() # e.g. kw.fig
+
+        # Handle kwargs, e.g. "figsize"
+        if isinstance(args, list): # Ensure everything's a dict, although only kw.data is
+            args = {k:k for k in args}
+        for inkey,outkey in args.items():
+            val = kwargs.pop(inkey, _None) # Handle None as a valid argument
+            if _debug: print('  In, out, value: ', inkey, outkey, val)
+            if val is not _None:
+                kw[subtype][outkey] = val
+
+        # Handle dicts of kwargs, e.g. "fig_kw"
+        subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
+        if subtype_dict:
+            if _debug: print('Subtype dict:', subtype_dict)
+            kw[subtype].update(subtype_dict)
+
+    # Expect everything has been converted
+    if len(kwargs):
+        valid = f'\n\nValid:\n{plotting_kw}\n'
+        converted = f'\n\nConverted:\n{kw}\n'
+        unconverted = f'\n\nUnconverted:\n{sc.newlinejoin(kwargs.keys())}'
+        errormsg = f'Did not successfully convert all plotting keys:{valid}{converted}{unconverted}'
+        raise sc.KeyNotFoundError(errormsg)
+
+    if _debug: print('Final output:', kw)
+
+    return kw
+
+
+def match_result_keys(results, key, show_skipped=False, flattened=False):
+    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
+
+    def normkey(key):
+        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
+        return key.replace('.','_').lower()
+
+    # Get results
+    flat = results if flattened else results.flatten()
+
+    # Configuration
+    flat_orig = flat # Copy reference before we modify in place
+    if not show_skipped: # Skip plots with auto_plot set to False
+        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
+            res = flat[k]
+            if isinstance(res, ss.Result) and not res.auto_plot:
+                flat.pop(k)
+
+    if key is not None:
+        if isinstance(key, str):
+            flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+            if len(flat) != 1:
+                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+        else:
+            try:
+                flat = {k.lower():flat[normkey(k)] for k in key}
+            except sc.KeyNotFoundError as e:
+                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
+                raise sc.KeyNotFoundError(errormsg) from e
+
+    return flat
 
 
 def get_result_plot_label(res, show_module=None):
@@ -509,16 +646,18 @@ def get_result_plot_label(res, show_module=None):
         errormsg = f'"show_module" must be a bool or int, not {show_module}'
         raise TypeError(errormsg)
 
+    # Decide how/if to show the module
     if show_module == -1:
         label = res.full_label.replace(':', '\n')
     elif len(res.full_label) > show_module:
         label = sc.ifelse(res.label, res.name)
     else:
         label = res.full_label
+
     return label
 
 
-def format_axes(ax, res, n_ticks):
+def format_axes(ax, res, n_ticks=None, show_module=None):
     """ Standard formatting for axis results; not for the user """
     if n_ticks is None:
         n_ticks = (2,5)
@@ -530,8 +669,28 @@ def format_axes(ax, res, n_ticks):
     if res.has_dates:
         locator = mpl.dates.AutoDateLocator(minticks=n_ticks[0], maxticks=n_ticks[1]) # Fewer ticks since lots of plots
         sc.dateformatter(ax, locator=locator)
+
+    # Set the axes title
+    label = ss.utils.get_result_plot_label(res, show_module)
+    ax.set_title(label)
     return
+
 
 def show(**kwargs):
     """ Shortcut for matplotlib.pyplot.show() """
     return plt.show(**kwargs)
+
+
+def return_fig(fig, **kwargs):
+    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
+    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
+    is_reticulate = ss.options.reticulate
+    do_show = ss.options.show
+    if is_jupyter or is_reticulate:
+        print(fig)
+        plt.show()
+        return None
+    else:
+        if do_show:
+            plt.show()
+        return fig
