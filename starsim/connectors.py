@@ -93,7 +93,7 @@ class seasonality(Connector):
 
     def plot(self, **kwargs):
         x,y = list(map(list, zip(*self.factors))) # Swap from long to wide
-        kw = ss.utils.plot_args(kwargs)
+        kw = ss.plot_args(kwargs)
         with ss.style(**kw.style):
             fig = plt.figure(**kw.fig)
             plt.plot(x, y, **kw.plot)

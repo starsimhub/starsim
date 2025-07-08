@@ -55,7 +55,7 @@ class dynamics_by_age(Analyzer):
         return
 
     def plot(self, **kwargs):
-        kw = ss.utils.plot_args(kwargs)
+        kw = ss.plot_args(kwargs)
         with ss.style(**kw.style):
             fig = plt.figure(**kw.fig)
             for minage, maxage in zip(self.mins, self.maxes):
