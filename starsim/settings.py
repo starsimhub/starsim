@@ -115,8 +115,8 @@ class Options(sc.objdict):
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
 
-        optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
-        options._centralized = sc.parse_env('STARSIM_CENTRALIZED', False, bool)
+        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only.'
+        options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
 
         return optdesc, options
 

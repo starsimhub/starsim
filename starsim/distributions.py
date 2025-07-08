@@ -116,7 +116,7 @@ class Dists(sc.prettyobj):
         out = sc.autolist()
 
         # Do not jump if centralized
-        if ss.options._centralized:
+        if ss.options.single_rng:
             return out
 
         for dist in self.dists.values():
@@ -133,7 +133,7 @@ class Dists(sc.prettyobj):
         out = sc.autolist()
 
         # Do not jump if centralized
-        if ss.options._centralized:
+        if ss.options.single_rng:
             return out
 
         for dist in self.dists.values():
@@ -339,7 +339,7 @@ class Dist:
         """ Advance the RNG, e.g. to timestep "to", by jumping """
 
         # Do not jump if centralized # TODO: remove
-        if ss.options._centralized:
+        if ss.options.single_rng:
             return self.state
 
         # Validation
@@ -380,8 +380,8 @@ class Dist:
         self.process_seed(trace, seed)
 
         # Create the actual RNG
-        if ss.options._centralized:
-            self.rng = np.random.mtrand._rand # If _centralized, return the centralized numpy random number instance
+        if ss.options.single_rng:
+            self.rng = np.random.mtrand._rand # If single_rng, return the centralized numpy random number instance
         else:
             self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
@@ -570,7 +570,7 @@ class Dist:
 
     def rand(self, size):
         """ Simple way to get simple random numbers """
-        if ss.options._centralized:
+        if ss.options.single_rng:
             return np.random.mtrand._rand.random(size).astype(ss.dtypes.float)
         return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
 
@@ -578,10 +578,10 @@ class Dist:
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
-            if ss.options._centralized:
+            if ss.options.single_rng:
                 dtype = self._pars.pop('dtype', None)
             rvs = rvs_func(size=self._size, **self._pars)
-            if ss.options._centralized and dtype:
+            if ss.options.single_rng and dtype:
                 rvs = rvs.astype(dtype)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
@@ -617,11 +617,11 @@ class Dist:
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
-        if not self.ready and self.strict and not ss.options._centralized:
+        if not self.ready and self.strict and not ss.options.single_rng:
             raise DistNotReadyError(self)
 
         # Figure out size, UIDs, and slots
-        if ss.options._centralized and not (np.isscalar(n) or isinstance(n, tuple)):
+        if ss.options.single_rng and not (np.isscalar(n) or isinstance(n, tuple)):
             n = len(n) # If centralized, treat n as a size
         size, slots = self.process_size(n)
 
@@ -944,7 +944,7 @@ class randint(Dist):
         if high is None:
             high = np.iinfo(ss.dtypes.rand_int).max
 
-        if ss.options._centralized: # randint because we're accessing via numpy.random
+        if ss.options.single_rng: # randint because we're accessing via numpy.random
             super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
         else: # integers instead of randint because interfacing a numpy.random.Generator
             super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
@@ -969,7 +969,7 @@ class rand_raw(Dist):
     Typicaly only used with ss.combine_rands().
     """
     def make_rvs(self):
-        if ss.options._centralized:
+        if ss.options.single_rng:
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
         else:
             return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
