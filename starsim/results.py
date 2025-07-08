@@ -50,12 +50,14 @@ class Result(ss.BaseArr):
         return
 
     def __repr__(self):
+        """ Show all data """
         cls_name = self.__class__.__name__
         arrstr = super().__repr__().removeprefix(cls_name)
         out = f'{cls_name}({self.key}):\narray{arrstr}'
         return out
 
     def __str__(self, label=True):
+        """ Short representation for string """
         cls_name = self.__class__.__name__
         try:
             minval = self.values.min()
@@ -68,12 +70,9 @@ class Result(ss.BaseArr):
         out = f'{cls_name}({labelstr}{valstr})'
         return out
 
-    def disp(self, label=True, output=False):
-        string = self.__str__(label=label)
-        if not output:
-            print(string)
-        else:
-            return string
+    def disp(self):
+        """ Full display of all attributes/methods """
+        return sc.pr(self)
 
     def __getitem__(self, key):
         """ Allow e.g. result['low'] """

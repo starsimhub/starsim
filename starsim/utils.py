@@ -493,7 +493,7 @@ plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'ha
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
 
-def plot_args(kwargs=None, _verbose=False, **defaults):
+def plot_args(kwargs=None, _debug=False, **defaults):
     """
     Process known plotting kwargs.
 
@@ -503,7 +503,7 @@ def plot_args(kwargs=None, _verbose=False, **defaults):
     Note: the kwargs supplied to the parent function should be supplied as the
     first argument of this function; keyword arguments to this function are treated
     as default values that will be overwritten by user-supplied values in `kwargs`.
-    The argument "_verbose" is used internally to print debugging output, but is
+    The argument "_debug" is used internally to print debugging output, but is
     not typically set by the user.
 
     Args:
@@ -533,7 +533,7 @@ def plot_args(kwargs=None, _verbose=False, **defaults):
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
     kw = sc.objdict() # Output arguments
     for subtype,args in plotting_kw.items():
-        if _verbose: print('Subtype & args:', subtype, args)
+        if _debug: print('Subtype & args:', subtype, args)
         kw[subtype] = sc.objdict() # e.g. kw.fig
 
         # Handle kwargs, e.g. "figsize"
@@ -541,14 +541,14 @@ def plot_args(kwargs=None, _verbose=False, **defaults):
             args = {k:k for k in args}
         for inkey,outkey in args.items():
             val = kwargs.pop(inkey, _None) # Handle None as a valid argument
-            if _verbose: print('  In, out, value: ', inkey, outkey, val)
+            if _debug: print('  In, out, value: ', inkey, outkey, val)
             if val is not _None:
                 kw[subtype][outkey] = val
 
         # Handle dicts of kwargs, e.g. "fig_kw"
         subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
         if subtype_dict:
-            if _verbose: print('Subtype dict:', subtype_dict)
+            if _debug: print('Subtype dict:', subtype_dict)
             kw[subtype].update(subtype_dict)
 
     # Expect everything has been converted
@@ -559,8 +559,7 @@ def plot_args(kwargs=None, _verbose=False, **defaults):
         errormsg = f'Did not successfully convert all plotting keys:{valid}{converted}{unconverted}'
         raise sc.KeyNotFoundError(errormsg)
 
-    if _verbose:
-        if _verbose: print('Final output:', kw)
+    if _debug: print('Final output:', kw)
 
     return kw
 
@@ -599,7 +598,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
     return flat
 
 
-def get_result_plot_label(res, show_module=None):
+def get_result_plot_label(res, show_module=None, debug=True):
     """ Helper function for getting the label to plot for a result; not for the user """
     # Sanitize
     if show_module is None:
@@ -619,6 +618,9 @@ def get_result_plot_label(res, show_module=None):
         label = sc.ifelse(res.label, res.name)
     else:
         label = res.full_label
+
+    if debug:
+        print(f'\n***\nDebug: {label}\n{res}')
     return label
 
 
