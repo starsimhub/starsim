@@ -144,9 +144,13 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
+    _immutable_attrs = ['pars', 't', 'sim', 'dists']
+
     def __init__(self, name=None, label=None, **kwargs):
-        # Handle parameters
+        # Housekeeping
         self._collect_required() # First, collect methods marked as required on creation
+
+        # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.t = ss.Time(**kwargs, name=self.name)
@@ -160,6 +164,7 @@ class Module(Base):
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False
+        self._lock_attrs = True
         return
 
     def __call__(self, *args, **kwargs):
@@ -169,6 +174,20 @@ class Module(Base):
     def __getitem__(self, key):
         """ Allow modules to act like dictionaries """
         return getattr(self, key)
+
+    def __setattr__(self, name, value):
+        """ Don't allow locked attributes to be overwritten """
+        if getattr(self, '_lock_attrs', False) and name in self._immutable_attrs:
+            errormsg = f'Cannot modify attribute "{name}"; reserved attributes are {sc.strjoin(self._immutable_attrs)}.\n'
+            errormsg += 'If you really mean to do this, use module.set_attr()'
+            raise AttributeError(errormsg)
+        else:
+            super().__setattr__(name, value)
+        return
+
+    def set_attr(self, name, value):
+        """ Method for setting an attribute that does not perform checking against immutable attributes """
+        return super().__setattr__(name, value)
 
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
@@ -267,7 +286,7 @@ class Module(Base):
         distributions are initialized).
         """
         if force or not self.pre_initialized:
-            self.sim = sim # Link back to the sim object
+            self.set_attr('sim', sim) # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
             self.t.init(sim=self.sim) # Initialize time vector
             sim.pars[self.name] = self.pars

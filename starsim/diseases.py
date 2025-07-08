@@ -24,7 +24,6 @@ class Disease(ss.Module):
             log = False,
         )
         self.update_pars(**kwargs)
-        self.results = ss.Results(self.name)
         return
 
     @property
