@@ -657,7 +657,7 @@ def get_result_plot_label(res, show_module=None):
     return label
 
 
-def format_axes(ax, res, n_ticks, show_module):
+def format_axes(ax, res, n_ticks=None, show_module=None):
     """ Standard formatting for axis results; not for the user """
     if n_ticks is None:
         n_ticks = (2,5)

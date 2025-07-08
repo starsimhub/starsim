@@ -33,6 +33,8 @@ from .results          import *
 from .demographics     import *
 from .products         import *
 from .interventions    import *
+from .analyzers        import *
+from .connectors       import *
 from .demographics     import *
 from .diseases         import *
 from .diseases         import *
