@@ -155,7 +155,7 @@ class Dists(sc.prettyobj):
             new.__dict__.update(self.__dict__) # Shallow-copy all values over
             new.obj = module # Replace the module
             new.dists = sc.objdict(matches) # Replace the dists with a shallow copy the matching dists
-            module.set_attr('dists', new) # Copy to the module
+            module.setattribute('dists', new) # Copy to the module
         else:
             new = None
         return new

@@ -217,6 +217,7 @@ class SimPars(Pars):
 
         # Modules: demographics, diseases, networks, analyzers, and interventions
         self.people = None
+        self.modules       = ss.ndict()
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
@@ -309,6 +310,14 @@ class SimPars(Pars):
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
 
+        # Find any modules that belong to other types and move them -- e.g. ss.Sim(modules=[ss.SIS(), ss.RandomNet()])
+        for modkey,modclass in modmap.items():
+            if modkey != 'modules': # Skip
+                for mod in self.modules():
+                    if isinstance(mod, modclass):
+                        self[modkey].append(mod) # Add to the correct list
+                        self.modules.pop(mod.name) # Remove from the modules list
+
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
         return
@@ -368,13 +377,6 @@ class SimPars(Pars):
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
         a Sim object.
-        Used for starsim classes:
-        - networks,
-        - demographics,
-        - diseases,
-        - analyzers,
-        - interventions, and
-        - connectors.
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
@@ -430,9 +432,14 @@ class SimPars(Pars):
                         elif not isinstance(mod, ss.Module) and callable(mod):
                             mod = expected_cls.from_func(mod)
 
+                    # Convert plain modules from functions to actual modules
+                    if modkey == 'modules':
+                        if not isinstance(mod, ss.Module) and callable(mod):
+                            mod = ss.Module.from_func(mod)
+
                     # Do final check
-                    if not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'
+                    if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
         return

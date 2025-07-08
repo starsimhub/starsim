@@ -190,8 +190,8 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
 def check_requires(sim, requires, *args):
     """ Check that the module's requirements (of other modules) are met """
     errs = sc.autolist()
-    all_classes = [m.__class__ for m in sim.modules]
-    all_names = [m.name for m in sim.modules]
+    all_classes = [m.__class__ for m in sim.module_list]
+    all_names = [m.name for m in sim.module_list]
     for req in sc.mergelists(requires, *args):
         if req not in all_classes + all_names:
             errs += req

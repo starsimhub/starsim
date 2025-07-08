@@ -16,8 +16,34 @@ __all__ = ['Loop']
 #%% Loop class
 
 class Loop:
-    """ Base class for integration loop """
-    def __init__(self, sim): # TODO: consider eps=1e-6 and round times to this value
+    """
+    Define the integration loop
+
+    The Loop handles the order in which each function is called in the sim. The
+    order is defined in `Loop.collect_funcs()`, which searches through the sim
+    and collects all methods to call, in order, in the integration loop.
+
+    Each type of module is called at a different time. Within each module type,
+    they are called in the order listed. The default loop order is:
+
+        1. sim:               start_step()     # Initialize the sim, including plotting progress
+        2. all modules:       start_step()     # Initialize the modules, including the random number distribution
+        3. sim.modules:       step()           # Run any custom modules
+        4. sim.demographics:  step()           # Update the demographics, including adding new agents
+        5. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
+        6. sim.connectors:    step()           # Run the connectors
+        7. sim.networks:      step()           # Run the networks, including adding/removing edges
+        8. sim.interventions: step()           # Run the interventions
+        9. sim.diseases:      step()           # Run the diseases, including transmission
+        10. people:           step_die()       # Figure out who died on this timestep
+        11. people:           update_results() # Update basic state results
+        12. all modules:      update_results() # Update any results
+        13. sim.analyzers:    step()           # Run the analyzers
+        14. all modules:      finish_step()    # Do any final tidying
+        15. people:           finish_step()    # Clean up dead agents
+        16. sim:              finish_step()    # Increment the timestep
+    """
+    def __init__(self, sim):
         self.sim = sim
         self.funcs = None
         self.func_list = []
@@ -86,8 +112,12 @@ class Loop:
 
         # Collect the start_steps
         self += sim.start_step # Note special __iadd__() method above, which appends these to the funcs list
-        for mod in sim.modules:
+        for mod in sim.module_list:
             self += mod.start_step
+
+        # Update any nonspecific modules
+        for mod in sim.modules():
+            self += mod.step
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem in sim.demographics():
@@ -96,7 +126,7 @@ class Loop:
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in sim.diseases():
-            if isinstance(disease, ss.Disease): # Could be a connector instead -- TODO, rethink this
+            if isinstance(disease, ss.Disease):
                 self += disease.step_state
 
         # Update connectors
@@ -122,7 +152,7 @@ class Loop:
 
         # Update results
         self += sim.people.update_results
-        for mod in sim.modules:
+        for mod in sim.module_list:
             self += mod.update_results
 
         # Apply analyzers
@@ -130,7 +160,7 @@ class Loop:
             self += ana.step
 
         # Clean up dead agents, increment the time index, and perform other housekeeping tasks
-        for mod in sim.modules:
+        for mod in sim.module_list:
             self += mod.finish_step
         self += sim.people.finish_step
         self += sim.finish_step
@@ -147,7 +177,7 @@ class Loop:
             self.abs_tvecs[key] = sim.t.tvec
 
         # Handle all other modules
-        for mod in sim.modules:
+        for mod in sim.module_list:
             self.abs_tvecs[mod.name] = mod.t.tvec
 
         return self.abs_tvecs
