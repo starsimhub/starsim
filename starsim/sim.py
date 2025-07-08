@@ -292,9 +292,15 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None):
-        """ Run the model once """
+    def run(self, until=None, verbose=None, check_required=True):
+        """
+        Run the model -- the main method for running a simulation.
 
+        Args:
+            until (date/str/float): the date to run the sim until
+            verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
+            check_required (bool): whether to check that all required methods were called
+        """
         # Initialization steps
         if not self.initialized: self.init()
         self.verbose = sc.ifelse(verbose, self.pars.verbose)
@@ -320,6 +326,8 @@ class Sim(ss.Base):
             for mod in self.modules: # May not be needed, but keeps it consistent with the sim
                 mod.t.ti -= 1
             self.finalize()
+            if check_required:
+                self.check_required()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()
 
