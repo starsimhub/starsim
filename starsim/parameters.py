@@ -310,6 +310,14 @@ class SimPars(Pars):
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
 
+        # Find any modules that belong to other types and move them -- e.g. ss.Sim(modules=[ss.SIS(), ss.RandomNet()])
+        for modkey,modclass in modmap.items():
+            if modkey != 'modules': # Skip
+                for mod in self.modules():
+                    if isinstance(mod, modclass):
+                        self[modkey].append(mod) # Add to the correct list
+                        self.modules.pop(mod.name) # Remove from the modules list
+
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
         return
@@ -423,6 +431,11 @@ class SimPars(Pars):
                             mod = mod()  # Convert from a class to an instance of a class
                         elif not isinstance(mod, ss.Module) and callable(mod):
                             mod = expected_cls.from_func(mod)
+
+                    # Convert plain modules from functions to actual modules
+                    if modkey == 'modules':
+                        if not isinstance(mod, ss.Module) and callable(mod):
+                            mod = ss.Module.from_func(mod)
 
                     # Do final check
                     if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?

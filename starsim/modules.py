@@ -12,8 +12,8 @@ __all__ = ['module_map', 'find_modules', 'required', 'Base', 'Module']
 module_args = ['name', 'label'] # Define allowable module arguments
 
 
-def module_map(key=None):
-    """ Define the mapping between module names and types """
+def module_map(key=None, include_modules=True):
+    """ Define the mapping between module names and types; not for the user """
     module_map = sc.objdict(
         modules       = None, # Handled separately as a fallback
         demographics  = ss.Demographics,
@@ -23,6 +23,8 @@ def module_map(key=None):
         diseases      = ss.Disease,
         analyzers     = ss.Analyzer,
     )
+    if not include_modules:
+        module_map.pop('modules')
     return module_map if key is None else module_map[key]
 
 
