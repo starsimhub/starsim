@@ -85,10 +85,12 @@ class Ebola(ss.SIR):
 
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    @ss.require('disable') # Do not call the parent method; instead log infections manually
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses for those who get infected """
-        # Do not call set_prognoses on the parent
-        #super().set_prognoses(sim, uids, source_uids)
+         # Alternatively: ss.Disease.set_prognoses(self, uids, sources)
+         if self.pars.log:
+            self.log_infections(uids, sources)
 
         ti = self.ti
         self.susceptible[uids] = False

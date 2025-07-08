@@ -48,13 +48,16 @@ def find_modules(key=None, flat=False):
     return modules if key is None else modules[key]
 
 
-def required():
+def required(val=True):
     """
     Decorator to mark module methods as required.
 
     A common gotcha in Starsim is to forget to call super(), or to mistype a method
     name so it's never called. This decorator lets you mark methods (of Modules only)
     to be sure that they are called either on sim initialization or on sim run.
+
+    Args:
+        val (True/'disable'): by default, mark method as required; if set to 'disable', then disable method checking for parent classes as well (i.e. remove previous "required" calls)
 
     **Example**:
 
@@ -71,7 +74,7 @@ def required():
     """
     # Wrap the function
     def decorator(func):
-        func._call_required = True  # Mark for collection
+        func._call_required = val  # Mark for collection
 
         @ft.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -178,13 +181,26 @@ class Module(Base):
     def _collect_required(self):
         """ Collect all methods marked as required """
         reqs = {}
+        disabled = []
         for cls in inspect.getmro(type(self)):
             for attr,method in cls.__dict__.items():
                 req = getattr(method, '_call_required', False)
                 if req:
+                    valid = [True, 'disable']
+                    if req not in valid:
+                        errormsg = f'ss.require() must be True or "disable", not "{req}"'
+                        raise ValueError(errormsg)
+                    elif req == 'disable':
+                        disabled.append(attr)
                     key = f'{cls.__qualname__}.{attr}'
                     reqs[key] = 0 # Meaning it's been called 0 times
+
+        # Collate and manually increment any that are set to be disabled
         self._call_required = reqs
+        if disabled:
+            for k in self._call_required.keys():
+                if k.split('.')[-1] in disabled: # Look for matches for disabled, omitting the class name
+                    self._call_required[k] += 1 # Manually increment the call to pass checking
         return required
 
     def check_method_calls(self):

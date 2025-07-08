@@ -186,10 +186,11 @@ class Syphilis(ss.Infection):
         self.results.new_congenital[ti] = np.count_nonzero(self.ti_congenital == ti)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
+        super().set_prognoses(uids, sources)
 
         ti = self.ti
 
