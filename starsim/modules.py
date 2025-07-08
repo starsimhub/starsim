@@ -2,12 +2,13 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
+import inspect
+import functools as ft
 import numpy as np
 import sciris as sc
 import starsim as ss
-from functools import partial
 
-__all__ = ['module_map', 'find_modules', 'Base', 'Module', 'Analyzer', 'Connector']
+__all__ = ['module_map', 'find_modules', 'required', 'Base', 'Module', 'Analyzer', 'Connector']
 
 module_args = ['name', 'label'] # Define allowable module arguments
 
@@ -45,6 +46,21 @@ def find_modules(key=None, flat=False):
     if flat:
         modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]
+
+
+def required():
+    """ Decorator to mark module methods as required; call with @ss.required() """
+    def decorator(func):
+        func._call_required = True  # Mark for collection
+
+        @ft.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            key = func.__qualname__
+            self._call_required[key] += 1
+            return func(self, *args, **kwargs)
+
+        return wrapper
+    return decorator
 
 
 class Base(sc.quickobj):
@@ -122,6 +138,7 @@ class Module(Base):
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False
+        self._collect_required()
         return
 
     def __call__(self, *args, **kwargs):
@@ -138,6 +155,28 @@ class Module(Base):
         attrval = getattr(self, key, parval)
         val = sc.ifelse(value, attrval, default)
         return val
+
+    def _collect_required(self):
+        """ Collect all methods marked as required """
+        required = []
+        for cls in inspect.getmro(type(self)):
+            for attr,method in cls.__dict__.items():
+                if getattr(method, '_call_required', False):
+                    key = f"{cls.__qualname__}.{attr}"
+                    required.append(key)
+        self._call_required = {k:0 for k in required}
+        return required
+
+    def check_required(self, die=True):
+        """ Check if any required methods were not called """
+        missing = [key for key, called in self._call_required.items() if not called]
+        if missing:
+            errormsg = f'Missing required method calls for {type(self)}: {missing}'
+            if die:
+                raise RuntimeError(errormsg)
+            else:
+                ss.warn(errormsg)
+        return
 
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
@@ -344,7 +383,7 @@ class Module(Base):
         name = func.__name__
         mod = cls(name=name)
         mod.func = func
-        mod.step = partial(step, mod)
+        mod.step = ft.partial(step, mod)
         mod.step.__name__ = name # Manually add these in as for a regular class method
         mod.step.__self__ = mod
         return mod

@@ -663,6 +663,7 @@ class SIS(Infection):
         )
         return
 
+    @ss.required()
     def update_results(self):
         """ Store the population immunity (susceptibility) """
         super().update_results()
