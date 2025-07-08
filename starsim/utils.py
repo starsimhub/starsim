@@ -15,7 +15,7 @@ import starsim as ss
 # What functions are externally visible
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires',
            'standardize_netkey', 'standardize_data', 'validate_sim_data',
-           'Profile', 'load', 'save', 'plot_args', 'show', 'return_fig']
+           'Profile', 'check_version', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 
 class ndict(sc.objdict):
@@ -438,6 +438,40 @@ class Profile(sc.profile):
         """ Shortcut to sim.loop.plot_cpu() """
         self.sim.loop.plot_cpu()
         return
+
+
+def check_version(expected, die=False, warn=True):
+    """
+    Check the expected Starsim version with the one actually installed. The expected
+    version string may optionally start with '>=' or '<=' (== is implied otherwise),
+    but other operators (e.g. ~=) are not supported. Note that '>' and '<' are interpreted
+    to mean '>=' and '<='; '>' and '<' are not supported.
+
+    Args:
+        expected (str): expected version information
+        die (bool): whether or not to raise an exception if the check fails
+        warn (bool): whether to raise a warning if the check fails
+
+    **Example**:
+
+        ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
+    """
+    if   expected.startswith('>'): valid = [0,1]
+    elif expected.startswith('<'): valid = [0,-1]
+    elif expected.startswith('!'): valid = [1,-1]
+    else: valid = [0] # Assume == is the only valid comparison
+    expected = expected.lstrip('<=>') # Remove comparator information
+    version = ss.__version__
+    compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
+    relation = ['older', '', 'newer'][compare+1] # Picks the right string
+    if relation: # Versions mismatch, print warning or raise error
+        string = f'Starsim is {relation} than expected ({version} vs. {expected})'
+        if compare not in valid:
+            if die:
+                raise ValueError(string)
+            elif warn:
+                ss.warn(string)
+    return compare
 
 
 #%% Other helper functions
