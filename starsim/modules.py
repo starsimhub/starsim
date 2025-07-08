@@ -48,16 +48,13 @@ def find_modules(key=None, flat=False):
     return modules if key is None else modules[key]
 
 
-def required(when='run'):
+def required():
     """
     Decorator to mark module methods as required.
 
     A common gotcha in Starsim is to forget to call super(), or to mistype a method
     name so it's never called. This decorator lets you mark methods (of Modules only)
     to be sure that they are called either on sim initialization or on sim run.
-
-    Args:
-        when (str): when to check that the function is called; choices are 'init' or 'run'
 
     **Example**:
 
@@ -68,19 +65,13 @@ def required(when='run'):
                 self.custom_step() # Will raise an exception if this line is not here
                 return
 
-            @ss.required() # Mark this method as required (on run by default)
+            @ss.required() # Mark this method as required on run
             def custom_step(self):
                 pass
     """
-    # Validation
-    valid = ['init', 'run', False]
-    if when not in valid:
-        errormsg = f'"when" must be one of {valid}, not "{when}"'
-        raise ValueError(errormsg)
-
     # Wrap the function
     def decorator(func):
-        func._call_required = when  # Mark for collection
+        func._call_required = True  # Mark for collection
 
         @ft.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -151,7 +142,7 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
-
+    @required()
     def __init__(self, name=None, label=None, **kwargs):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
@@ -187,50 +178,26 @@ class Module(Base):
 
     def _collect_required(self):
         """ Collect all methods marked as required """
-        req_init = {}
-        req_run = {}
+        reqs = {}
         for cls in inspect.getmro(type(self)):
             for attr,method in cls.__dict__.items():
                 req = getattr(method, '_call_required', False)
                 if req:
                     key = f'{cls.__qualname__}.{attr}'
-                    if req == 'init':
-                        req_init[key] = 0 # Meaning it's been called 0 times
-                    elif req == 'run':
-                        req_run[key] = 0
-                    else:
-                        errormsg = f'Expecting "init" or "run", not {req}'
-                        raise ValueError(errormsg)
-        self._call_required = sc.objdict(init=req_init, run=req_run)
+                    reqs[key] = 0 # Meaning it's been called 0 times
+        self._call_required = reqs
         return required
 
-    def check_required(self, when=None, die=None, warn=None, verbose=False):
-        """ Check if any required methods were not called; warn by default """
+    def check_required(self):
+        """
+        Check if any required methods were not called.
 
-        # Handle arguments, or fall back to options
-        if die is not None or warn is not None:
-            check = 'die' if die else 'warn' if warn else False
-        else:
-            check = ss.options.check_required
+        Typically called automatically by `sim.run()`.
+        """
+        missing = [key for key, called in self._call_required.items() if not called]
+        return missing
 
-        # Handle when
-        if when is None:
-            when = ['init', 'run']
-        else:
-            when = sc.tolist(when)
-
-        if check:
-            missing = [key for key, called in self._call_required.items() if not called]
-            if missing:
-                errormsg = f'Missing required method calls for {type(self)}: {missing}'
-                if die:
-                    raise RuntimeError(errormsg)
-                elif warn:
-                    ss.warn(errormsg)
-            if verbose:
-                sc.pp(self._call_required)
-        return
-
+    @required()
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
         # Validation
@@ -276,6 +243,7 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
+    @required()
     def init_pre(self, sim, force=False):
         """
         Perform initialization steps
@@ -295,11 +263,13 @@ class Module(Base):
             self.pre_initialized = True
         return
 
+    @required()
     def init_results(self):
         """ Initialize any results required; part of init_pre() """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting
         return
 
+    @required()
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """
         for state in self.states:
@@ -318,6 +288,7 @@ class Module(Base):
              out = sc.findnearest(sim_tvec, self_tvec)
              return out
 
+    @required()
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
         if self.dists is not None: # Will be None if no distributions are defined
@@ -329,6 +300,7 @@ class Module(Base):
         errormsg = f'Module "{self.name}" does not define a "step" method: use "def step(self): pass" if this is intentional'
         raise NotImplementedError(errormsg)
 
+    @required()
     def finish_step(self):
         """ Define what should happen at the end of the step; at minimum, increment ti """
         self.t.ti += 1
@@ -338,12 +310,14 @@ class Module(Base):
         """ Perform any results updates on each timestep """
         pass
 
+    @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
         self.finalize_results()
         self.finalized = True
         return
 
+    @required()
     def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called *after* a custom finalize_results()
         """ Finalize results """
         # Scale results

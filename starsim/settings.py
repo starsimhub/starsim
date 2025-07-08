@@ -88,6 +88,9 @@ class Options(sc.objdict):
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
+        optdesc.check_required = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
+        options.check_required = sc.parse_env('STARSIM_CHECK_REQUIRED', 'warn', str)
+
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
         options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
 

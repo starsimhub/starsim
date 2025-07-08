@@ -456,6 +456,51 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
+    def check_required(self, die=None, warn=None, verbose=False):
+        """
+        Check if any required methods were not called.
+
+        Typically called automatically by `sim.run()`; default behavior is to warn
+        (see `options.check_required`).
+
+        Args:
+            die (bool): whether to raise an exception if missing methods were found (default False)
+            warn (bool): whether to raise a warning if missing methods were found (default False)
+            verbose (bool): whether to print the number of times each method was called (default False)
+
+        Returns:
+            A list of missing method calls by module
+        """
+        # Handle arguments, or fall back to options
+        valid = ['die', 'warn', False]
+        if die is not None or warn is not None:
+            check = 'die' if die else 'warn' if warn else False
+        else:
+            check = ss.options.check_required
+        if check not in valid:
+            errormsg = f'Could not understand {check=}, must be one of {valid}'
+            raise ValueError(errormsg)
+
+        if check:
+            if verbose:
+                sc.pp(self._call_required)
+
+            missing = []
+            for mod in self.modules:
+                modmissing = mod.check_required()
+                if modmissing:
+                    missing.append([type(mod), modmissing])
+            if missing:
+                errormsg = 'The following methods are required, but were not called.\n'
+                errormsg += 'Did you mistype a method name or forget a super() call?\n'
+                for modtype,modmissing in missing:
+                    errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
+                if check == 'die':
+                    raise RuntimeError(errormsg)
+                elif check == 'warn':
+                    ss.warn(errormsg)
+        return missing
+
     def to_df(self, sep='_', **kwargs):
         """
         Export results as a Pandas dataframe
