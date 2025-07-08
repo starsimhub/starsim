@@ -142,9 +142,9 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
-    @required()
     def __init__(self, name=None, label=None, **kwargs):
         # Handle parameters
+        self._collect_required() # First, collect methods marked as required on creation
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.t = ss.Time(**kwargs, name=self.name)
@@ -158,7 +158,6 @@ class Module(Base):
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False
-        self._collect_required()
         return
 
     def __call__(self, *args, **kwargs):
