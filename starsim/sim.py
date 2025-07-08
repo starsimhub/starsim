@@ -292,14 +292,14 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, check_required=True):
+    def run(self, until=None, verbose=None, check_method_calls=True):
         """
         Run the model -- the main method for running a simulation.
 
         Args:
             until (date/str/float): the date to run the sim until
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
-            check_required (bool): whether to check that all required methods were called
+            check_method_calls (bool): whether to check that all required methods were called
         """
         # Initialization steps
         if not self.initialized: self.init()
@@ -326,8 +326,8 @@ class Sim(ss.Base):
             for mod in self.modules: # May not be needed, but keeps it consistent with the sim
                 mod.t.ti -= 1
             self.finalize()
-            if check_required:
-                self.check_required()
+            if check_method_calls:
+                self.check_method_calls()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()
 
@@ -464,12 +464,12 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
-    def check_required(self, die=None, warn=None, verbose=False):
+    def check_method_calls(self, die=None, warn=None, verbose=False):
         """
         Check if any required methods were not called.
 
         Typically called automatically by `sim.run()`; default behavior is to warn
-        (see `options.check_required`).
+        (see `options.check_method_calls`).
 
         Args:
             die (bool): whether to raise an exception if missing methods were found (default False)
@@ -484,7 +484,7 @@ class Sim(ss.Base):
         if die is not None or warn is not None:
             check = 'die' if die else 'warn' if warn else False
         else:
-            check = ss.options.check_required
+            check = ss.options.check_method_calls
         if check not in valid:
             errormsg = f'Could not understand {check=}, must be one of {valid}'
             raise ValueError(errormsg)
@@ -495,7 +495,7 @@ class Sim(ss.Base):
 
             missing = []
             for mod in self.modules:
-                modmissing = mod.check_required()
+                modmissing = mod.check_method_calls()
                 if modmissing:
                     missing.append([type(mod), modmissing])
             if missing:

@@ -188,7 +188,7 @@ class Module(Base):
         self._call_required = reqs
         return required
 
-    def check_required(self):
+    def check_method_calls(self):
         """
         Check if any required methods were not called.
 
