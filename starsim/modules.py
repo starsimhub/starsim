@@ -179,13 +179,13 @@ class Module(Base):
         """ Don't allow locked attributes to be overwritten """
         if getattr(self, '_lock_attrs', False) and name in self._immutable_attrs:
             errormsg = f'Cannot modify attribute "{name}"; reserved attributes are {sc.strjoin(self._immutable_attrs)}.\n'
-            errormsg += 'If you really mean to do this, use module.set_attr()'
+            errormsg += 'If you really mean to do this, use module.setattribute()'
             raise AttributeError(errormsg)
         else:
             super().__setattr__(name, value)
         return
 
-    def set_attr(self, name, value):
+    def setattribute(self, name, value):
         """ Method for setting an attribute that does not perform checking against immutable attributes """
         return super().__setattr__(name, value)
 
@@ -286,7 +286,7 @@ class Module(Base):
         distributions are initialized).
         """
         if force or not self.pre_initialized:
-            self.set_attr('sim', sim) # Link back to the sim object
+            self.setattribute('sim', sim) # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
             self.t.init(sim=self.sim) # Initialize time vector
             sim.pars[self.name] = self.pars
