@@ -48,10 +48,39 @@ def find_modules(key=None, flat=False):
     return modules if key is None else modules[key]
 
 
-def required():
-    """ Decorator to mark module methods as required; call with @ss.required() """
+def required(when='run'):
+    """
+    Decorator to mark module methods as required.
+
+    A common gotcha in Starsim is to forget to call super(), or to mistype a method
+    name so it's never called. This decorator lets you mark methods (of Modules only)
+    to be sure that they are called either on sim initialization or on sim run.
+
+    Args:
+        when (str): when to check that the function is called; choices are 'init' or 'run'
+
+    **Example**:
+
+        class CustomSIS(ss.SIS):
+
+            def step(self):
+                super().step()
+                self.custom_step() # Will raise an exception if this line is not here
+                return
+
+            @ss.required() # Mark this method as required (on run by default)
+            def custom_step(self):
+                pass
+    """
+    # Validation
+    valid = ['init', 'run', False]
+    if when not in valid:
+        errormsg = f'"when" must be one of {valid}, not "{when}"'
+        raise ValueError(errormsg)
+
+    # Wrap the function
     def decorator(func):
-        func._call_required = True  # Mark for collection
+        func._call_required = when  # Mark for collection
 
         @ft.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -158,24 +187,48 @@ class Module(Base):
 
     def _collect_required(self):
         """ Collect all methods marked as required """
-        required = []
+        req_init = {}
+        req_run = {}
         for cls in inspect.getmro(type(self)):
             for attr,method in cls.__dict__.items():
-                if getattr(method, '_call_required', False):
-                    key = f"{cls.__qualname__}.{attr}"
-                    required.append(key)
-        self._call_required = {k:0 for k in required}
+                req = getattr(method, '_call_required', False)
+                if req:
+                    key = f'{cls.__qualname__}.{attr}'
+                    if req == 'init':
+                        req_init[key] = 0 # Meaning it's been called 0 times
+                    elif req == 'run':
+                        req_run[key] = 0
+                    else:
+                        errormsg = f'Expecting "init" or "run", not {req}'
+                        raise ValueError(errormsg)
+        self._call_required = sc.objdict(init=req_init, run=req_run)
         return required
 
-    def check_required(self, die=True):
-        """ Check if any required methods were not called """
-        missing = [key for key, called in self._call_required.items() if not called]
-        if missing:
-            errormsg = f'Missing required method calls for {type(self)}: {missing}'
-            if die:
-                raise RuntimeError(errormsg)
-            else:
-                ss.warn(errormsg)
+    def check_required(self, when=None, die=None, warn=None, verbose=False):
+        """ Check if any required methods were not called; warn by default """
+
+        # Handle arguments, or fall back to options
+        if die is not None or warn is not None:
+            check = 'die' if die else 'warn' if warn else False
+        else:
+            check = ss.options.check_required
+
+        # Handle when
+        if when is None:
+            when = ['init', 'run']
+        else:
+            when = sc.tolist(when)
+
+        if check:
+            missing = [key for key, called in self._call_required.items() if not called]
+            if missing:
+                errormsg = f'Missing required method calls for {type(self)}: {missing}'
+                if die:
+                    raise RuntimeError(errormsg)
+                elif warn:
+                    ss.warn(errormsg)
+            if verbose:
+                sc.pp(self._call_required)
         return
 
     def set_metadata(self, name=None, label=None):
