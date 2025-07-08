@@ -328,13 +328,16 @@ class Module(Base):
     @required()
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
+        if self.finalized:
+            errormsg = f'The module "{self.name}" ({type(self)}) has already been run. Did you mean to copy it before running it?'
+            raise RuntimeError(errormsg)
         if self.dists is not None: # Will be None if no distributions are defined
             self.dists.jump_dt() # Advance random number generators forward for calls on this step
         return
 
     def step(self):
         """ Define how the module updates over time -- the key part of Starsim!! """
-        errormsg = f'Module "{self.name}" does not define a "step" method: use "def step(self): pass" if this is intentional'
+        errormsg = f'Module "{self.name}" ({type(self)}) does not define a "step" method: use "def step(self): pass" if this is intentional'
         raise NotImplementedError(errormsg)
 
     @required()
