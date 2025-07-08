@@ -26,20 +26,6 @@ class Disease(ss.Module):
         self.update_pars(**kwargs)
         return
 
-    @property
-    def _disease_states(self):
-        """
-        Iterator over disease states with boolean type
-
-        For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to store
-        results for.
-        """
-        for state in self.states:
-            if isinstance(state, ss.State):
-                yield state
-        return
-
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
@@ -59,7 +45,7 @@ class Disease(ss.Module):
         """
         super().init_results()
         results = sc.autolist()
-        for state in self._disease_states:
+        for state in self.state_list:
             results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
         self.define_results(*results)
         return
@@ -131,19 +117,6 @@ class Disease(ss.Module):
 
     def log_infections(self, uids, sources=None):
         self.log.add_entries(uids, sources, self.now)
-        return
-
-    @ss.required()
-    def update_results(self):
-        """
-        Update results
-
-        This function is executed after transmission in all modules has been resolved.
-        This allows result updates at this point to capture outcomes dependent on multiple
-        modules, where relevant.
-        """
-        for state in self._disease_states:
-            self.results[f'n_{state.name}'][self.ti] = state.sum()
         return
 
 

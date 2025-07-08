@@ -315,6 +315,18 @@ class Module(Base):
         self.initialized = True
         return
 
+    @property
+    def state_list(self):
+        """
+        Iterator over true states with boolean type (`ss.State`)
+
+        For diseases, these states typically represent attributes like 'susceptible',
+        'infectious', 'diagnosed' etc. These variables are typically useful to store
+        results for.
+        """
+        out = [state for state in self.states if isinstance(state, ss.State)]
+        return out
+
     def match_time_inds(self, inds=None):
          """ Find the nearest matching sim time indices for the current module """
          self_tvec = self.t.yearvec
@@ -347,8 +359,16 @@ class Module(Base):
         return
 
     def update_results(self):
-        """ Perform any results updates on each timestep """
-        pass
+        """
+        Update results; by default, compute counts of each state at each point in time
+
+        This function is executed after transmission in all modules has been resolved.
+        This allows result updates at this point to capture outcomes dependent on multiple
+        modules, where relevant.
+        """
+        for state in self.state_list:
+            self.results[f'n_{state.name}'][self.ti] = state.sum()
+        return
 
     @required()
     def finalize(self):
