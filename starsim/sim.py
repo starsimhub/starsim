@@ -115,7 +115,7 @@ class Sim(ss.Base):
         return string
 
     @property
-    def modules(self):
+    def module_list(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """
         return itertools.chain(
             self.demographics(),
@@ -206,7 +206,7 @@ class Sim(ss.Base):
 
     def init_mods_pre(self):
         """ Initialize all the modules with the sim """
-        for mod in self.modules:
+        for mod in self.module_list:
             mod.init_pre(self)
         return
 
@@ -216,7 +216,7 @@ class Sim(ss.Base):
         self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
 
         # Copy relevant dists to each module
-        for mod in self.modules:
+        for mod in self.module_list:
             self.dists.copy_to_module(mod)
         return
 
@@ -227,13 +227,13 @@ class Sim(ss.Base):
 
     def init_mod_vals(self):
         """ Initialize values in other modules, including networks and time parameters """
-        for mod in self.modules:
+        for mod in self.module_list:
             mod.init_post()
         return
 
     def reset_time_pars(self, force=True):
         """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
-        for mod in self.modules:
+        for mod in self.module_list:
             mod.init_time_pars(force=force)
         return
 
@@ -323,7 +323,7 @@ class Sim(ss.Base):
         # If simulation reached the end, finalize the results
         if self.complete:
             self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-            for mod in self.modules: # May not be needed, but keeps it consistent with the sim
+            for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
                 mod.t.ti -= 1
             self.finalize()
             if check_method_calls:
@@ -345,7 +345,7 @@ class Sim(ss.Base):
         self.results_ready = True # Results are ready to use
 
         # Finalize each module
-        for module in self.modules:
+        for module in self.module_list:
             module.finalize()
 
         # Generate the summary and finish up
@@ -439,14 +439,14 @@ class Sim(ss.Base):
                     dist.shrink()
 
             # Finally, shrink the modules
-            for mod in sim.modules:
+            for mod in sim.module_list:
                 with sc.tryexcept():
                     mod.shrink()
 
             # Check that the module successfully shrunk
             if size_limit:
                 max_size = size_limit*len(sim)/1e3 # Maximum size in MB
-                for mod in sim.modules:
+                for mod in sim.module_list:
                     size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
                     if size > max_size:
                         warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
@@ -494,7 +494,7 @@ class Sim(ss.Base):
                 sc.pp(self._call_required)
 
             missing = []
-            for mod in self.modules:
+            for mod in self.module_list:
                 modmissing = mod.check_method_calls()
                 if modmissing:
                     missing.append([type(mod), modmissing])
