@@ -107,7 +107,7 @@ class Disease(ss.Module):
         """
         pass
 
-    @ss.required()
+    # Ideally would use @ss.required(), but can't since it's not called if no infections occur
     def set_prognoses(self, uids, sources=None):
         """
         Set prognoses upon infection/acquisition

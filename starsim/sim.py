@@ -500,7 +500,8 @@ class Sim(ss.Base):
                     missing.append([type(mod), modmissing])
             if missing:
                 errormsg = 'The following methods are required, but were not called.\n'
-                errormsg += 'Did you mistype a method name or forget a super() call?\n'
+                errormsg += 'Did you mistype a method name, forget a super() call,\n'
+                errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
                 for modtype,modmissing in missing:
                     errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
                 if check == 'die':
