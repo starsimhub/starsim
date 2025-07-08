@@ -598,7 +598,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
     return flat
 
 
-def get_result_plot_label(res, show_module=None, debug=True):
+def get_result_plot_label(res, show_module=None):
     """ Helper function for getting the label to plot for a result; not for the user """
     # Sanitize
     if show_module is None:
@@ -612,6 +612,7 @@ def get_result_plot_label(res, show_module=None, debug=True):
         errormsg = f'"show_module" must be a bool or int, not {show_module}'
         raise TypeError(errormsg)
 
+    # Decide how/if to show the module
     if show_module == -1:
         label = res.full_label.replace(':', '\n')
     elif len(res.full_label) > show_module:
@@ -619,8 +620,6 @@ def get_result_plot_label(res, show_module=None, debug=True):
     else:
         label = res.full_label
 
-    if debug:
-        print(f'\n***\nDebug: {label}\n{res}')
     return label
 
 

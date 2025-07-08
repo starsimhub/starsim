@@ -390,7 +390,7 @@ class Results(ss.ndict):
             warnmsg = f'You are adding a result of type {type(result)} to Results, which is inadvisable; if you intended to add it, use results[key] = value instead'
             ss.warn(warnmsg)
 
-        if result.module != self._module:
+        if result.module != self._module and not self.is_msim:
             result.module = self._module
 
         super().append(result, key=key)
