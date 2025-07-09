@@ -28,7 +28,7 @@ class Measles(ss.SIR):
 
         # SIR are added automatically, here we add E
         self.define_states(
-            ss.State('exposed', label='Exposed'),
+            ss.BoolState('exposed', label='Exposed'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
         )
 
@@ -82,6 +82,6 @@ class Measles(ss.SIR):
     def step_die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'recovered']:
-            self.statesdict[state][uids] = False
+            self.state_dict[state][uids] = False
         return
 

@@ -18,6 +18,7 @@ class dtypes:
     rand_uint = np.uint32
     float = np.float32
     result_float = np.float64
+    int_nan = -999999 # Arbitrary placeholder value
 
 
 # Define simple plotting options -- similar to Matplotlib default

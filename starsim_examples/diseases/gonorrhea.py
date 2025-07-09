@@ -26,7 +26,7 @@ class Gonorrhea(ss.Infection):
         # Additional states dependent on parameter values, e.g. self.p_symp?
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
         self.define_states(
-            ss.State('symptomatic', label='Symptomatic'),
+            ss.BoolState('symptomatic', label='Symptomatic'),
             ss.FloatArr('ti_clearance', label='Time of clearance'),
             ss.FloatArr('p_symp', default=1, label='Probability of symptoms'),
         )

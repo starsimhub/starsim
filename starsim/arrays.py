@@ -9,6 +9,7 @@ import starsim as ss
 ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
+int_nan  = ss.dtypes.int_nan
 type_def = {
     ss_float: ('float', float, np.float64, np.float32),
     ss_int: ('int', int, np.int64, np.int32),
@@ -16,7 +17,7 @@ type_def = {
 }
 type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
-__all__ = ['BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
+__all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -153,12 +154,15 @@ class Arr(BaseArr):
     an `IndexError` (since `sim.people.age[899]` is the last active agent),
     whereas `sim.people.age[ss.uids(999)]` is valid.
 
+    Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
+    (e.g. in `module.define_states()`, whether or not they are BoolStates.
+
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
         dtype (class): The dtype to use for this instance (if None, infer from value)
         default (any): Specify default value for new agents. This can be:
 
-            * A scalar with the same dtype (or castable to the same dtype) as the State;
+            * A scalar with the same dtype (or castable to the same dtype) as the Arr;
             * A callable, with a single argument for the number of values to produce;
             * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
@@ -172,6 +176,7 @@ class Arr(BaseArr):
         self.label = label or name
         self.default = default
         self.nan = nan
+        self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
         self.dtype = dtype
         self.people = people # Used solely for accessing people.auids
 
@@ -306,11 +311,24 @@ class Arr(BaseArr):
 
     @property
     def isnan(self):
-        return self.asnew(self.values == self.nan, cls=BoolArr)
+        """ Return BoolArr for NaN values """
+        out = self.values == self.nan if self.nan_eq else np.isnan(self.values)
+        return self.asnew(out, cls=BoolArr)
 
     @property
     def notnan(self):
-        return self.asnew(self.values != self.nan, cls=BoolArr)
+        """ Return BoolArr for non-NaN values """
+        out = self.values != self.nan if self.nan_eq else ~np.isnan(self.values)
+        return self.asnew(out, cls=BoolArr)
+
+    @property
+    def notnanvals(self):
+        """ Return values that are not-NaN """
+        vals = self.values # Shorten and avoid double indexing
+        if self.nan_eq:
+            return vals[np.nonzero(vals != self.nan)[0]]
+        else:
+            return vals[np.nonzero(~np.isnan(vals))[0]]
 
     def grow(self, new_uids=None, new_vals=None):
         """
@@ -393,32 +411,26 @@ class Arr(BaseArr):
 
 class FloatArr(Arr):
     """
-    Subclass of Arr with defaults for floats and ints.
+    Subclass of `ss.Arr` with defaults for floats and ints.
 
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
-    If you really want an integer array, you can use the default Arr class instead.
     """
     def __init__(self, name=None, nan=np.nan, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=nan, **kwargs)
         return
 
-    @property
-    def isnan(self):
-        """ Return BoolArr for NaN values """
-        return self.asnew(np.isnan(self.values), cls=BoolArr)
 
-    @property
-    def notnan(self):
-        """ Return BoolArr for non-NaN values """
-        return self.asnew(~np.isnan(self.values), cls=BoolArr)
+class IntArr(Arr):
+    """
+    Subclass of Arr with defaults for ints.
 
-    @property
-    def notnanvals(self):
-        """ Return values that are not-NaN """
-        vals = self.values # Shorten and avoid double indexing
-        out = vals[np.nonzero(~np.isnan(vals))[0]]
-        return out
+    Note: Because integer arrays do not handle NaN values natively, users are
+    recommended to use `ss.FloatArr()` in most cases instead.
+    """
+    def __init__(self, name=None, nan=int_nan, **kwargs):
+        super().__init__(name=name, dtype=ss_int, nan=nan, **kwargs)
+        return
 
 
 class BoolArr(Arr):
@@ -453,17 +465,21 @@ class BoolArr(Arr):
         return t_uids, f_uids
 
 
-class State(BoolArr):
+class BoolState(BoolArr):
     """
     A boolean array being used as a state.
 
-    Although functionally identical to BoolArr, a State is handled differently in
+    Although functionally identical to `BoolArr`, a `BoolState` is handled differently in
     terms of automation: specifically, results are automatically generated from a
-    State (but not a BoolArr).
+    `BoolState` (but not a `BoolArr`).
 
-    States are typically used to keep track of externally-facing variables (e.g.
-    disease.susceptible), while BoolArrs can be used to keep track of internal
-    ones (e.g. disease.has_immunity).
+    BoolStates are typically used to keep track of externally-facing variables (e.g.
+    `disease.susceptible`), while BoolArrs can be used to keep track of internal
+    ones (e.g. `disease.has_immunity`). A BoolState named "susceptible" will automatically
+    generate a result named "n_susceptible", for example.
+
+    Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
+    (e.g. in `module.define_states()`, whether or not they are BoolStates.
     """
     pass
 
