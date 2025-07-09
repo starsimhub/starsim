@@ -17,7 +17,7 @@ type_def = {
 }
 type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
-__all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'State', 'IndexArr', 'uids']
+__all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -162,7 +162,7 @@ class Arr(BaseArr):
         dtype (class): The dtype to use for this instance (if None, infer from value)
         default (any): Specify default value for new agents. This can be:
 
-            * A scalar with the same dtype (or castable to the same dtype) as the State;
+            * A scalar with the same dtype (or castable to the same dtype) as the Arr;
             * A callable, with a single argument for the number of values to produce;
             * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
