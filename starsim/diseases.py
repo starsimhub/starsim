@@ -34,22 +34,6 @@ class Disease(ss.Module):
             self.log = InfectionLog()
         return
 
-    @ss.required()
-    def init_results(self):
-        """
-        Initialize results
-
-        By default, diseases all report on counts for any explicitly defined "States", e.g. if
-        a disease contains a boolean state 'susceptible' it will automatically contain a
-        Result for 'n_susceptible'.
-        """
-        super().init_results()
-        results = sc.autolist()
-        for state in self.state_list:
-            results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
-        self.define_results(*results)
-        return
-
     def step_state(self):
         """
         Carry out updates at the start of the timestep (prior to transmission);
@@ -513,6 +497,7 @@ class SIR(Infection):
         )
         self.update_pars(**kwargs)
 
+        # Example of defining all states, redefining those from ss.Infection, using overwrite=True
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
             ss.State('infected', label='Infectious'),
@@ -522,6 +507,7 @@ class SIR(Infection):
             ss.FloatArr('ti_dead', label='Time of death'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+            reset = True, # Remove any existing states (from super().define_states())
         )
         return
 

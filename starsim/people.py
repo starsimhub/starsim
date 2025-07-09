@@ -158,11 +158,11 @@ class People(sc.prettyobj):
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
 
-        if len(module.states):
+        if len(module.state_list):
             module_states = sc.objdict()
             setattr(self, module.name, module_states)
             self._linked_modules.append(module.name)
-            for state in module.states:
+            for state in module.state_list:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name

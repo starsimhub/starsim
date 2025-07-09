@@ -139,6 +139,26 @@ class ndict(sc.objdict):
         return self
 
 
+def nlist_to_dict(nlist, die=True):
+    """ Convert a list of named items (e.g. modules, states) to a dictionary; not for the user """
+    out = sc.objdict()
+    collisions = []
+    for obj in nlist:
+        key = obj.name
+        if key not in out:
+            out[key] = obj
+        else:
+            collisions.append(key)
+    if collisions:
+        errormsg = f'Cannot list modules as a dict since one or more modules have the same name; use the list version instead. Collisions:\n{collisions}'
+        if die:
+            raise ValueError(errormsg)
+        else:
+            ss.warn(errormsg)
+    else:
+        return out
+
+
 def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- shortcut to warnings.warn """
 

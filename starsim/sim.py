@@ -114,16 +114,24 @@ class Sim(ss.Base):
 
         return string
 
+    def products(self):
+        """ List all products across interventions; not an ndict like the other module types """
+        products = []
+        for intv in self.interventions():
+            if intv.has_product:
+                products.append(intv.product)
+        return products
+
     @property
     def module_list(self):
-        """ Return a list of all Module instances (stored in standard places) in the Sim; see module_dict for the dict version """
+        """ Return a list of all Module instances (stored in standard places) in the Sim; see `sim.module_dict` for the dict version """
         out = sc.mergelists(
             self.modules(),
             self.demographics(),
             self.connectors(),
             self.networks(),
             self.interventions(),
-            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
+            self.products(),
             self.diseases(),
             self.analyzers(),
         )
@@ -131,20 +139,8 @@ class Sim(ss.Base):
 
     @property
     def module_dict(self):
-        """ Return a dictionary of all Module instances; see module_list for the list version """
-        out = sc.objdict()
-        collisions = []
-        for mod in self.module_list:
-            key = mod.name
-            if key not in out:
-                out[key] = mod
-            else:
-                collisions.append(key)
-        if collisions:
-            errormsg = f'Cannot list modules as a dict since one or more modules have the same name; use sim.module_list instead. Collisions:\n{collisions}'
-            raise ValueError(errormsg)
-        else:
-            return out
+        """ Return a dictionary of all Module instances; see `sim.module_list` for the list version """
+        return ss.utils.nlist_to_dict(self.module_list)
 
     def init(self, force=False, **kwargs):
         """

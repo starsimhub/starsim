@@ -168,7 +168,9 @@ class Module(Base):
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False
-        self._lock_attrs = True
+        self._lock_attrs = True # Prevent immutable attributes from being overwritten directly
+        self._all_states = [] # Store all "states" (Arr objects)
+        self._auto_states = [] # Store automatic states (State objects)
         return
 
     def __call__(self, *args, **kwargs):
@@ -192,6 +194,12 @@ class Module(Base):
     def setattribute(self, name, value):
         """ Method for setting an attribute that does not perform checking against immutable attributes """
         return super().__setattr__(name, value)
+
+    @property
+    def _debug_name(self):
+        """ The module name and class shown as a string, used in debugging/error messages """
+        out = f'"{self.name}" ({type(self)}'
+        return out
 
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
@@ -249,6 +257,33 @@ class Module(Base):
         self.label = self._reconcile('label', label, self.name)
         return
 
+    @classmethod
+    def create(cls, name, *args, **kwargs):
+        """
+        Create a module instance by name
+
+        Args:
+            name (str): A string with the name of the module class in lower case, e.g. 'sir'
+        """
+        for subcls in ss.all_subclasses(cls):
+            if subcls.__name__.lower() == name:
+                return subcls(*args, **kwargs)
+        else:
+            raise KeyError(f'Module "{name}" did not match any known Starsim modules')
+
+    @classmethod
+    def from_func(cls, func):
+        """ Create an module from a function """
+        def step(mod): # TODO: see if this can be done more simply
+            return mod.func(mod.sim)
+        name = func.__name__
+        mod = cls(name=name)
+        mod.func = func
+        mod.step = ft.partial(step, mod)
+        mod.step.__name__ = name # Manually add these in as for a regular class method
+        mod.step.__self__ = mod
+        return mod
+
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
@@ -280,6 +315,65 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
+    def define_states(self, *args, check=True, reset=False):
+        """
+        Define states of the module with the same attribute name as the state
+
+        In addition to registering the state with the module by attribute, it adds
+        it to `mod._all_states`, which is used by `mod.state_list` and `mod.state_dict`.
+
+        Args:
+            args (states): list of states to add
+            check (bool): whether to check that the object being added is a state
+            reset (bool): whether to reset the list of module states and use only the ones provided
+        """
+        # Optionally reset the states (note: does not remove them from the people object or others if already added)
+        if reset:
+            for state in self._all_states:
+                delattr(self, state.name)
+            self._all_states = []
+
+        # Add the new states
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                state = ss.State(*arg)
+            elif isinstance(arg, dict):
+                state = ss.State(**arg)
+            else:
+                state = arg
+
+            if check:
+                assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
+
+            # Add the state to the module
+            attr = state.name
+            if check and hasattr(self, attr):
+                errormsg = f'Cannot add {attr} to {self._debug_name} since already present in module.\n'
+                errormsg += 'Did you mean to use define_states(reset=True)?\n'
+                errormsg += f'States already in module:\n{[s.name for s in self.state_list]}\n'
+                errormsg += f'New states being added:\n{[s.name for s in args]}\n'
+                raise AttributeError(errormsg)
+            setattr(self, state.name, state)
+            self._all_states.append(state)
+        return
+
+    def define_results(self, *args, check=True):
+        """ Add results to the module """
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                result = ss.Result(*arg)
+            elif isinstance(arg, dict):
+                result = ss.Result(**arg)
+            else:
+                result = arg
+
+            # Update with module information
+            result.update(module=self.name, shape=self.t.npts, timevec=self.t.timevec)
+
+            # Add the result to the dict of results; does automatic checking
+            self.results += result
+        return
+
     @required()
     def init_pre(self, sim, force=False):
         """
@@ -302,14 +396,25 @@ class Module(Base):
 
     @required()
     def init_results(self):
-        """ Initialize any results required; part of init_pre() """
-        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting
+        """
+        Initialize results output; called during `init_pre()`
+
+        By default, modules all report on counts for any explicitly defined "States", e.g. if
+        a disease contains an `ss.State` called 'susceptible' it will automatically contain a
+        Result for 'n_susceptible'. For identical behavior that does not automatically
+        generate results, use `ss.BoolArr` instead of `ss.State`.
+        """
+        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
+        results = sc.autolist()
+        for state in self.auto_state_list:
+            results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+        self.define_results(*results)
         return
 
     @required()
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """
-        for state in self.states:
+        for state in self.state_list:
             if not state.initialized:
                 state.init_vals()
         self.initialized = True
@@ -318,13 +423,35 @@ class Module(Base):
     @property
     def state_list(self):
         """
-        Iterator over true states with boolean type (`ss.State`)
+        Return a flat list of all states
+
+        The base class returns all states that are contained in top-level attributes
+        of the Module. If a Module stores states in a non-standard location (e.g.,
+        within a list of states, or otherwise in some other nested structure - perhaps
+        due to supporting features like multiple genotypes) then the Module should
+        overload this attribute to ensure that all states appear in here.
+        """
+        return self._all_states[:]
+
+    @property
+    def state_dict(self):
+        """
+        Return a flat dictionary (objdict) of all states
+
+        Will raise an exception if multiple states have the same name.
+        """
+        return ss.utils.nlist_to_dict(self.state_list)
+
+    @property
+    def auto_state_list(self):
+        """
+        List of "automatic" states with boolean type (`ss.State`)
 
         For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to store
-        results for.
+        'infectious', 'diagnosed' etc. These variables automatically generate results
+        like n_susceptible, n_infectious, etc.
         """
-        out = [state for state in self.states if isinstance(state, ss.State)]
+        out = [state for state in self.state_list if isinstance(state, ss.State)]
         return out
 
     def match_time_inds(self, inds=None):
@@ -341,7 +468,7 @@ class Module(Base):
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
         if self.finalized:
-            errormsg = f'The module "{self.name}" ({type(self)}) has already been run. Did you mean to copy it before running it?'
+            errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
             raise RuntimeError(errormsg)
         if self.dists is not None: # Will be None if no distributions are defined
             self.dists.jump_dt() # Advance random number generators forward for calls on this step
@@ -349,8 +476,9 @@ class Module(Base):
 
     def step(self):
         """ Define how the module updates over time -- the key part of Starsim!! """
-        errormsg = f'Module "{self.name}" ({type(self)}) does not define a "step" method: use "def step(self): pass" if this is intentional'
-        raise NotImplementedError(errormsg)
+        errormsg = f'The module {self._debug_name} does not define a "step" method. This is usually a bug, but use "def step(self): pass" if this is intentional.'
+        ss.warn(errormsg)
+        return
 
     @required()
     def finish_step(self):
@@ -366,7 +494,7 @@ class Module(Base):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        for state in self.state_list:
+        for state in self.auto_state_list:
             self.results[f'n_{state.name}'][self.ti] = state.sum()
         return
 
@@ -386,95 +514,6 @@ class Module(Base):
                 self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
         return
 
-    def define_states(self, *args, check=True):
-        """
-        Define states of the module with the same attribute name as the state
-
-        Args:
-            args (states): list of states to add
-            check (bool): whether to check that the object being added is a state
-        """
-        for arg in args:
-            if isinstance(arg, (list, tuple)):
-                state = ss.State(*arg)
-            elif isinstance(arg, dict):
-                state = ss.State(**arg)
-            else:
-                state = arg
-
-            if check:
-                assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
-
-            # Add the state to the module
-            setattr(self, state.name, state)
-        return
-
-    def define_results(self, *args, check=True):
-        """ Add results to the module """
-        for arg in args:
-            if isinstance(arg, (list, tuple)):
-                result = ss.Result(*arg)
-            elif isinstance(arg, dict):
-                result = ss.Result(**arg)
-            else:
-                result = arg
-
-            # Update with module information
-            result.update(module=self.name, shape=self.t.npts, timevec=self.t.timevec)
-
-            # Add the result to the dict of results; does automatic checking
-            self.results += result
-        return
-
-    @property
-    def states(self):
-        """
-        Return a flat list of all states
-
-        The base class returns all states that are contained in top-level attributes
-        of the Module. If a Module stores states in a non-standard location (e.g.,
-        within a list of states, or otherwise in some other nested structure - perhaps
-        due to supporting features like multiple genotypes) then the Module should
-        overload this attribute to ensure that all states appear in here.
-        """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)] # TODO: use ndict
-
-    @property
-    def statesdict(self): # TODO: remove
-        """
-        Return a flat dictionary (objdict) of all states
-
-        Note that name collisions may affect the output of this function
-        """
-        return sc.objdict({s.name:s for s in self.states})
-
-    @classmethod
-    def create(cls, name, *args, **kwargs):
-        """
-        Create a module instance by name
-
-        Args:
-            name (str): A string with the name of the module class in lower case, e.g. 'sir'
-        """
-        for subcls in ss.all_subclasses(cls):
-            if subcls.__name__.lower() == name:
-                return subcls(*args, **kwargs)
-        else:
-            raise KeyError(f'Module "{name}" did not match any known Starsim modules')
-
-    @classmethod
-    def from_func(cls, func):
-        """ Create an module from a function """
-        def step(mod): # TODO: see if this can be done more simply
-            return mod.func(mod.sim)
-        name = func.__name__
-        mod = cls(name=name)
-        mod.func = func
-        mod.step = ft.partial(step, mod)
-        mod.step.__name__ = name # Manually add these in as for a regular class method
-        mod.step.__self__ = mod
-        return mod
-
     def to_json(self):
         """ Export to a JSON-compatible format """
         out = sc.objdict()
@@ -489,7 +528,7 @@ class Module(Base):
         shrunk = ss.utils.shrink()
         self.sim = shrunk
         self.dists = shrunk
-        for state in self.states:
+        for state in self.state_list:
             with sc.tryexcept():
                 state.people = shrunk
                 state.raw = shrunk
