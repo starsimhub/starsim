@@ -148,7 +148,7 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
-    _immutable_attrs = ['pars', 't', 'sim', 'dists']
+    _locked_attrs = ['pars', 't', 'sim', 'dists'] # Define key attributes that shouldn't be overwritten by the user
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -168,9 +168,8 @@ class Module(Base):
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False
-        self._lock_attrs = True # Prevent immutable attributes from being overwritten directly
-        self._all_states = [] # Store all "states" (Arr objects)
-        self._auto_states = [] # Store automatic states (State objects)
+        self._lock_attrs = True # Prevent key attributes from being overwritten directly
+        self._auto_states = [] # Store automatic states (State objects) added via define_states()
         return
 
     def __call__(self, *args, **kwargs):
@@ -183,8 +182,8 @@ class Module(Base):
 
     def __setattr__(self, name, value):
         """ Don't allow locked attributes to be overwritten """
-        if getattr(self, '_lock_attrs', False) and name in self._immutable_attrs:
-            errormsg = f'Cannot modify attribute "{name}"; reserved attributes are {sc.strjoin(self._immutable_attrs)}.\n'
+        if getattr(self, '_lock_attrs', False) and name in self._locked_attrs:
+            errormsg = f'Cannot modify attribute "{name}"; reserved attributes are {sc.strjoin(self._locked_attrs)}.\n'
             errormsg += 'If you really mean to do this, use module.setattribute()'
             raise AttributeError(errormsg)
         else:
@@ -329,9 +328,9 @@ class Module(Base):
         """
         # Optionally reset the states (note: does not remove them from the people object or others if already added)
         if reset:
-            for state in self._all_states:
+            for state in self.state_list:
                 delattr(self, state.name)
-            self._all_states = []
+            self._auto_states = []
 
         # Add the new states
         for arg in args:
@@ -354,7 +353,10 @@ class Module(Base):
                 errormsg += f'New states being added:\n{[s.name for s in args]}\n'
                 raise AttributeError(errormsg)
             setattr(self, state.name, state)
-            self._all_states.append(state)
+
+            # Add it to the list of auto states, if needed
+            if isinstance(state, ss.State):
+                self._auto_states.append(state)
         return
 
     def define_results(self, *args, check=True):
@@ -423,7 +425,7 @@ class Module(Base):
     @property
     def state_list(self):
         """
-        Return a flat list of all states
+        Return a flat list of all states (`ss.Arr` objects)
 
         The base class returns all states that are contained in top-level attributes
         of the Module. If a Module stores states in a non-standard location (e.g.,
@@ -431,7 +433,8 @@ class Module(Base):
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
         """
-        return self._all_states[:]
+        out = [val for val in self.__dict__.values() if isinstance(val, ss.Arr)]
+        return out
 
     @property
     def state_dict(self):
@@ -445,14 +448,15 @@ class Module(Base):
     @property
     def auto_state_list(self):
         """
-        List of "automatic" states with boolean type (`ss.State`)
+        List of "automatic" states with boolean type (`ss.BoolState`) that were added
+        via `define_states()`
 
         For diseases, these states typically represent attributes like 'susceptible',
         'infectious', 'diagnosed' etc. These variables automatically generate results
-        like n_susceptible, n_infectious, etc.
+        like n_susceptible, n_infectious, etc. For a list of all states, see
+        `state_list`.
         """
-        out = [state for state in self.state_list if isinstance(state, ss.State)]
-        return out
+        return self._auto_states[:]
 
     def match_time_inds(self, inds=None):
          """ Find the nearest matching sim time indices for the current module """
