@@ -17,16 +17,16 @@ sc.options(interactive=False) # Assume not running interactively
 
 def test_single_defaults(do_plot=do_plot):
     """ Test a single MixingPool using defaults """
-    test_name = sys._getframe().f_code.co_name
-    sc.heading(f'Testing {test_name}...')
+    sc.heading('Testing single mixing pool...')
     mp = ss.MixingPool()
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mp)
     sim.run()
+    res = sim.results.sir
 
     if do_plot: sim.plot()
 
-    assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
+    assert res.cum_infections[-1] > res.cum_infections[0] # There were infections
     return sim
 
 

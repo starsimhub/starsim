@@ -160,8 +160,8 @@ class Infection(Disease):
         if len(initial_cases):
             self.set_prognoses(initial_cases, sources=-1)  # TODO: sentinel value to indicate seeds?
 
-        # Exclude initial cases from results
-        # self.ti_infected[initial_cases] = -1
+        # Store initial cases to exclude them from results on the first timestep
+        self.pars._n_initial_cases = len(initial_cases)
         return initial_cases
 
     def init_results(self):
@@ -304,9 +304,21 @@ class Infection(Disease):
         super().update_results()
         res = self.results
         ti = self.ti
-        res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(self.sim.people.alive)
-        res.new_infections[ti] = np.count_nonzero(np.round(self.ti_infected) == ti)
-        res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1]) # TODO: can compute at end
+        n_infections = np.count_nonzero(np.round(self.ti_infected) == ti)
+
+        # Update new infections to remove initial cases on first timestep
+        if ti == 0:
+            n_initial_cases = self.pars.pop('_n_initial_cases', 0)
+            n_infections -= n_initial_cases
+
+        res.new_infections[ti] = n_infections
+        res.prevalence[ti] = res.n_infected[ti] / len(self.sim.people)
+        return
+
+    def finalize_results(self):
+        res = self.results
+        res.cum_infections[:] = np.cumsum(res.new_infections[:])
+        super().finalize_results() # Called after to scale the results
         return
 
 
