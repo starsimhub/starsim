@@ -28,7 +28,7 @@ class Measles(ss.SIR):
 
         # SIR are added automatically, here we add E
         self.define_states(
-            ss.State('exposed', label='Exposed'),
+            ss.BoolState('exposed', label='Exposed'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
         )
 

@@ -56,15 +56,15 @@ class Syphilis(ss.Infection):
 
         self.define_states(
             # Adult syphilis states
-            ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.State('primary', label='Primary'),  # Primary chancres
-            ss.State('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
-            ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
-            ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
-            ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
-            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
-            ss.State('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
-            ss.State('congenital', label="Congenital"),  # Congenital syphilis states
+            ss.BoolState('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.BoolState('primary', label='Primary'),  # Primary chancres
+            ss.BoolState('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
+            ss.BoolState('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.BoolState('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.BoolState('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.BoolState('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.BoolState('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
+            ss.BoolState('congenital', label="Congenital"),  # Congenital syphilis states
 
             # Timestep of state changes
             ss.FloatArr('ti_exposed', label='Time of exposure'),
