@@ -15,7 +15,7 @@ class Result(ss.BaseArr):
     Array-like container for holding sim results.
 
     Args:
-        module (str): the name of the parent module, e.g. 'hiv'
+        module (Module): the parent module, e.g. ss.SIR
         name (str): the name of this result, e.g. 'new_infections'
         shape (int/tuple): the shape of the result array (usually module.npts)
         scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
@@ -69,6 +69,10 @@ class Result(ss.BaseArr):
         labelstr = f'{self.key}: ' if label else ''
         out = f'{cls_name}({labelstr}{valstr})'
         return out
+
+    def to_str(self, label=True):
+        """ Convert Result object to a string """
+        return self.__str__(label=label)
 
     def disp(self):
         """ Full display of all attributes/methods """
@@ -132,13 +136,7 @@ class Result(ss.BaseArr):
         if self.module == 'sim': # Don't add anything if it's the sim
             full = f'Sim: {reslabel}'
         else:
-            try:
-                mod = ss.find_modules(flat=True)[self.module]
-                modlabel = mod.__name__
-                assert self.module == modlabel.lower(), f'Mismatch: {self.module}, {modlabel}' # Only use the class name if the module name is the default
-            except: # Don't worry if we can't find it, just use the module name
-                modlabel = self.module.title()
-            full = f'{modlabel}: {reslabel}'
+            full = f'{self.module}: {reslabel}'
         return full
 
     def summary_method(self, die=False):
@@ -352,21 +350,21 @@ class Results(ss.ndict):
         string = format_head(f'Results({self._module})') + '\n'
 
         # Loop over the other items
-        for i,k,v in self.enumitems():
-            if k == 'timevec':
-                entry = f'array(start={v[0]}, stop={v[-1]})'
-            elif isinstance(v, Result):
-                entry = v.disp(label=False, output=True)
+        for i,key,res in self.enumitems():
+            if key == 'timevec':
+                entry = f'array(start={res[0]}, stop={res[-1]})'
+            elif isinstance(res, Result):
+                entry = res.to_str(label=False)
             else:
-                entry = f'{v}'
+                entry = f'{res}'
 
             if '\n' in entry: # Check if the string is multi-line
                 lines = entry.splitlines()
-                entry = f'{i}. {format_key(k)}: {lines[0]}\n'
+                entry = f'{i}. {format_key(key)}: {lines[0]}\n'
                 entry += '\n'.join(' '*indent + f'{i}.' + line for line in lines[1:])
                 string += entry + '\n'
             else:
-                string += f'{i}. {format_key(k)}: {entry}\n'
+                string += f'{i}. {format_key(key)}: {entry}\n'
         string = string.rstrip()
         return string
 

@@ -250,9 +250,12 @@ class Module(Base):
                     errormsg = f'Invalid value for {key}: must be str, not {type(val)}: {val}'
                     raise TypeError(errormsg)
 
-        # Set values
-        self.name = self._reconcile('name', name, self.__class__.__name__.lower())
-        self.label = self._reconcile('label', label, self.name)
+        # Set values for name and label
+        cls_name = self.__class__.__name__
+        cls_lower = cls_name.lower()
+        self.name = self._reconcile('name', name, cls_lower)
+        default_label = self.name if self.name != cls_lower else cls_name
+        self.label = self._reconcile('label', label, default_label)
         return
 
     @classmethod
