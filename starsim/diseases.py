@@ -158,10 +158,10 @@ class Infection(Disease):
 
         initial_cases = self.pars.init_prev.filter()
         if len(initial_cases):
-            self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
+            self.set_prognoses(initial_cases, sources=-1)  # TODO: sentinel value to indicate seeds?
 
-        # Exclude initial cases from results -- disabling for now since it disrupts counting of new infections, e.g. test_diseases.py
-        # self.ti_infected[self.ti_infected == self.ti] = -1
+        # Exclude initial cases from results
+        # self.ti_infected[initial_cases] = -1
         return initial_cases
 
     def init_results(self):
@@ -343,6 +343,8 @@ class InfectionLog(nx.MultiDiGraph):
             for target in uids:
                 self.append(np.nan, target, time)
         else:
+            if not np.iterable(sources): # It's a scalar value, convert to an array
+                sources = np.full(uids.shape, sources)
             for target, source in zip(uids, sources):
                 self.append(source, target, time)
         return

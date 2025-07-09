@@ -52,9 +52,9 @@ class Measles(ss.SIR):
             self.sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(uids, source_uids)
+        super().set_prognoses(uids, sources)
         ti = self.ti
 
         self.susceptible[uids] = False

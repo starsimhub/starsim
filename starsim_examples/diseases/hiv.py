@@ -69,15 +69,15 @@ class HIV(ss.Infection):
         self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
-        super().set_prognoses(uids, source_uids)
+    def set_prognoses(self, uids, sources=None):
+        super().set_prognoses(uids, sources)
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = self.ti
         return
 
-    def set_congenital(self, uids, source_uids):
-        return self.set_prognoses(uids, source_uids)
+    def set_congenital(self, uids, sources):
+        return self.set_prognoses(uids, sources)
 
 
 # %% HIV-related interventions
