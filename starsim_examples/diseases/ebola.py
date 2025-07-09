@@ -37,17 +37,14 @@ class Ebola(ss.SIR):
 
         # Boolean states
         self.define_states(
-            # SIR are added automatically, here we add E
+            # SIR states are added automatically, here we add exposed, severe, and buried
             ss.State('exposed', label='Exposed'),
             ss.State('severe', label='Severe'),
-            ss.State('recovered', label='Recovered'),
             ss.State('buried', label='Buried'),
 
             # Timepoint states
             ss.FloatArr('ti_exposed', label='Time of exposure'),
             ss.FloatArr('ti_severe', label='Time of severe symptoms'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
             ss.FloatArr('ti_buried', label='Time of burial'),
         )
         return
@@ -129,5 +126,5 @@ class Ebola(ss.SIR):
     def step_die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
-            self.statesdict[state][uids] = False
+            self.state_dict[state][uids] = False
         return

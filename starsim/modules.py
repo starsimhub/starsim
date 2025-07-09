@@ -323,10 +323,10 @@ class Module(Base):
 
         Args:
             args (states): list of states to add
-            check (bool): whether to check that the object being added is a state
+            check (bool): whether to check that the object being added is a state, and that it's not already present
             reset (bool): whether to reset the list of module states and use only the ones provided
         """
-        # Optionally reset the states (note: does not remove them from the people object or others if already added)
+        # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
         if reset:
             for state in self.state_list:
                 delattr(self, state.name)
@@ -347,7 +347,7 @@ class Module(Base):
             # Add the state to the module
             attr = state.name
             if check and hasattr(self, attr):
-                errormsg = f'Cannot add {attr} to {self._debug_name} since already present in module.\n'
+                errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module.\n'
                 errormsg += 'Did you mean to use define_states(reset=True)?\n'
                 errormsg += f'States already in module:\n{[s.name for s in self.state_list]}\n'
                 errormsg += f'New states being added:\n{[s.name for s in args]}\n'

@@ -173,7 +173,7 @@ class Cholera(ss.Infection):
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
-            self.statesdict[state][uids] = False
+            self.state_dict[state][uids] = False
         return
 
     def update_results(self):
