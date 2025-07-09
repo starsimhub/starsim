@@ -378,7 +378,7 @@ class Module(Base):
                 result = arg
 
             # Update with module information
-            result.update(module=self.name, shape=self.t.npts, timevec=self.t.timevec)
+            result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
             self.results += result

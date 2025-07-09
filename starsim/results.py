@@ -330,9 +330,11 @@ class Result(ss.BaseArr):
 class Results(ss.ndict):
     """ Container for storing results """
     def __init__(self, module, *args, strict=True, **kwargs):
-        if hasattr(module, 'name'):
-            module = module.name
-        self.setattribute('_module', module)
+        modlabel = getattr(module, 'label', None)
+        modname = getattr(module, 'name', None)
+        modcls = module.__class__.__name__
+        modstring = sc.ifelse(modlabel, modname, modcls)
+        self.setattribute('_module', modstring)
         super().__init__(type=Result, strict=strict, *args, **kwargs)
         return
 
@@ -387,9 +389,6 @@ class Results(ss.ndict):
         if not isinstance(result, Result):
             warnmsg = f'You are adding a result of type {type(result)} to Results, which is inadvisable; if you intended to add it, use results[key] = value instead'
             ss.warn(warnmsg)
-
-        if result.module != self._module and not self.is_msim:
-            result.module = self._module
 
         super().append(result, key=key)
         return
