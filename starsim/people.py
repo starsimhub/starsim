@@ -35,10 +35,10 @@ class People(sc.prettyobj):
         """ Initialize """
 
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
-        # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
-        # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
+        # e.g., across modules, but we will never change the size of a state multiple times in the same iteration over
+        # _states. This is a hidden variable because it is internally used to synchronize the size of all states contained
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
-        # a selection of the states e.g., module states could be added in there, while intervention states might not
+        # a selection of the states e.g., module states could be added in there, while intervention states might not.
         self._states = {}
         self.version = ss.__version__  # Store version info
         self.initialized = False
@@ -48,9 +48,9 @@ class People(sc.prettyobj):
         n = int(n_agents)
         uids = ss.uids(np.arange(n))
         self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
-        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
-        self.slot = ss.IndexArr('slot') # A slot is a special state managed internally
-        self.parent = ss.IndexArr('parent', label='UID of parent')  # UID of parent, if any, IndexArray?
+        self.uid    = ss.IndexArr('uid')  # This variable tracks all UIDs
+        self.slot   = ss.IndexArr('slot') # A slot is a special state managed internally to generate random numbers
+        self.parent = ss.IndexArr('parent', label='UID of parent')  # UID of parent, if any (used with pregnancy)
         self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
         self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
@@ -60,8 +60,8 @@ class People(sc.prettyobj):
         # Handle additional states
         extra_states = sc.promotetolist(extra_states)
         states = [
-            ss.State('alive', default=True),  # Time index for death
-            ss.State('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.BoolState('alive', default=True),  # Time index for death
+            ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
             ss.FloatArr('age', default=self.get_age_dist(age_data)), # NaN until conceived
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
@@ -192,11 +192,11 @@ class People(sc.prettyobj):
     def _link_state(self, state, die=True):
         """
         Link a state with the People instance for dynamic resizing; usually called by
-        state.link_people()
+        `state.link_people()`
 
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
-        This operation is normally triggered as part of initializing the state (via `State.init()`)
+        This operation is normally triggered as part of initializing the state (via `Arr.init()`)
         """
         if id(state) not in self._states:
             self._states[id(state)] = state

@@ -320,9 +320,9 @@ class Pregnancy(Demographics):
 
         # Other, e.g. postpartum, on contraception...
         self.define_states(
-            ss.State('fecund', default=True, label='Female of childbearing age'),
-            ss.State('pregnant', label='Pregnant'),  # Currently pregnant
-            ss.State('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.BoolState('fecund', default=True, label='Female of childbearing age'),
+            ss.BoolState('pregnant', label='Pregnant'),  # Currently pregnant
+            ss.BoolState('postpartum', label="Post-partum"),  # Currently post-partum
             ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins

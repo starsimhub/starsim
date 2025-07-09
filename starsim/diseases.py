@@ -116,8 +116,8 @@ class Infection(Disease):
     def __init__(self, **kwargs):
         super().__init__()
         self.define_states(
-            ss.State('susceptible', default=True, label='Susceptible'),
-            ss.State('infected', label='Infected'),
+            ss.BoolState('susceptible', default=True, label='Susceptible'),
+            ss.BoolState('infected', label='Infected'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
@@ -416,8 +416,8 @@ class NCD(Disease):
         self.update_pars(**kwargs)
 
         self.define_states(
-            ss.State('at_risk', label='At risk'),
-            ss.State('affected', label='Affected'),
+            ss.BoolState('at_risk', label='At risk'),
+            ss.BoolState('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),
             ss.FloatArr('ti_dead', label='Time of death'),
         )
@@ -499,9 +499,9 @@ class SIR(Infection):
 
         # Example of defining all states, redefining those from ss.Infection, using overwrite=True
         self.define_states(
-            ss.State('susceptible', default=True, label='Susceptible'),
-            ss.State('infected', label='Infectious'),
-            ss.State('recovered', label='Recovered'),
+            ss.BoolState('susceptible', default=True, label='Susceptible'),
+            ss.BoolState('infected', label='Infectious'),
+            ss.BoolState('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),

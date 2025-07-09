@@ -335,9 +335,9 @@ class Module(Base):
         # Add the new states
         for arg in args:
             if isinstance(arg, (list, tuple)):
-                state = ss.State(*arg)
+                state = ss.BoolState(*arg)
             elif isinstance(arg, dict):
-                state = ss.State(**arg)
+                state = ss.BoolState(**arg)
             else:
                 state = arg
 
@@ -355,7 +355,7 @@ class Module(Base):
             setattr(self, state.name, state)
 
             # Add it to the list of auto states, if needed
-            if isinstance(state, ss.State):
+            if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
         return
 
@@ -402,9 +402,9 @@ class Module(Base):
         Initialize results output; called during `init_pre()`
 
         By default, modules all report on counts for any explicitly defined "States", e.g. if
-        a disease contains an `ss.State` called 'susceptible' it will automatically contain a
+        a disease contains an `ss.BoolState` called 'susceptible' it will automatically contain a
         Result for 'n_susceptible'. For identical behavior that does not automatically
-        generate results, use `ss.BoolArr` instead of `ss.State`.
+        generate results, use `ss.BoolArr` instead of `ss.BoolState`.
         """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()

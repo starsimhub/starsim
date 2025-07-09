@@ -154,6 +154,9 @@ class Arr(BaseArr):
     an `IndexError` (since `sim.people.age[899]` is the last active agent),
     whereas `sim.people.age[ss.uids(999)]` is valid.
 
+    Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
+    (e.g. in `module.define_states()`, whether or not they are BoolStates.
+
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
         dtype (class): The dtype to use for this instance (if None, infer from value)
@@ -408,11 +411,10 @@ class Arr(BaseArr):
 
 class FloatArr(Arr):
     """
-    Subclass of Arr with defaults for floats and ints.
+    Subclass of `ss.Arr` with defaults for floats and ints.
 
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
-    If you really want an integer array, you can use the default Arr class instead.
     """
     def __init__(self, name=None, nan=np.nan, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=nan, **kwargs)
@@ -463,17 +465,21 @@ class BoolArr(Arr):
         return t_uids, f_uids
 
 
-class State(BoolArr):
+class BoolState(BoolArr):
     """
     A boolean array being used as a state.
 
-    Although functionally identical to BoolArr, a State is handled differently in
+    Although functionally identical to `BoolArr`, a `BoolState` is handled differently in
     terms of automation: specifically, results are automatically generated from a
-    State (but not a BoolArr).
+    `BoolState` (but not a `BoolArr`).
 
-    States are typically used to keep track of externally-facing variables (e.g.
-    disease.susceptible), while BoolArrs can be used to keep track of internal
-    ones (e.g. disease.has_immunity).
+    BoolStates are typically used to keep track of externally-facing variables (e.g.
+    `disease.susceptible`), while BoolArrs can be used to keep track of internal
+    ones (e.g. `disease.has_immunity`). A BoolState named "susceptible" will automatically
+    generate a result named "n_susceptible", for example.
+
+    Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
+    (e.g. in `module.define_states()`, whether or not they are BoolStates.
     """
     pass
 
