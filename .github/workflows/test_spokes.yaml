@@ -1,4 +1,16 @@
-name: Starsim downstream tests
+# Run downstream tests on Starsim spokes.
+#
+# Current supported spokes are:
+#   1. STIsim
+#   2. FPsim
+#
+# Coming soon:
+# - HPVsim
+# - TBsim
+# - Typhoidsim
+# - Rotasim
+
+name: Starsim spoke tests
 on:
   workflow_dispatch:
   # For now, only run manually, then once all the spokes are ported, run automatically.
