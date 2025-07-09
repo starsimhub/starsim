@@ -28,10 +28,10 @@ The main simulation loop is orchestrated by `starsim/loop.py`, while parameter m
 cd tests && ./run_tests
 
 # Run specific test file
-pytest test_sim.py
+cd tests && pytest test_sim.py
 
 # Run tests with coverage
-./check_coverage
+cd tests && ./check_coverage
 ```
 
 ### Code Quality
@@ -61,6 +61,10 @@ pip install -e .
 
 # With dev dependencies
 pip install -e .[dev]
+
+# Using uv for faster installs
+uv add starsim
+uv add starsim[dev]  # With dev dependencies
 ```
 
 ## Project Structure
@@ -100,10 +104,28 @@ Pre-implemented disease models including HIV, syphilis, gonorrhea, cholera, Ebol
 - Documentation built with Quarto and executed via Jupyter
 - Random number generation is centralized and uses Numba for performance
 
+## Module Architecture
+
+The framework uses a modular architecture where all components inherit from base classes:
+
+- **Base class hierarchy**: All modules inherit from `ss.Base` → `ss.Module` (defined in `modules.py`)
+- **Module types**: Networks, Demographics, Diseases, Interventions, Analyzers, Connectors
+- **Module registration**: Modules are automatically discovered and registered via the `find_modules()` function
+- **Integration loop**: The `Loop` class (in `loop.py`) orchestrates module execution during simulation
+- **State management**: People and network states are managed through specialized array classes (`arrays.py`)
+
+## Key Dependencies
+
+- **Sciris**: Core utility library for data structures, plotting, and utilities
+- **Numba**: Used for performance-critical code sections and random number generation
+- **NetworkX**: Network analysis and manipulation
+- **Pandas/NumPy**: Data manipulation and numerical operations
+- **Matplotlib/Seaborn**: Plotting and visualization
+
 ## Important Notes
 
 - Follow the style guide here: https://github.com/starsimhub/styleguide/blob/main/README.rst
-- Use built-in Starsim plotting commands if possible, only falling back to Matplotlib if necesary
+- Use built-in Starsim plotting commands if possible, only falling back to Matplotlib if necessary
 - Use Sciris where possible to shorten commands
 - When creating a multiline dictionary, put a space around the equals for arguments (as if it were a class)
 - Set `SCIRIS_BACKEND='agg'` environment variable when running tests to prevent figure display
