@@ -53,7 +53,7 @@ class Sim(ss.Base):
         self.metadata = sc.metadata(version=self.version, pipfreeze=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
-        self.results = ss.Results(module='sim')  # For storing results
+        self.results = ss.Results(module='Sim')  # For storing results
         self.data = data # For storing input data
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running

@@ -245,7 +245,7 @@ class Result(ss.BaseArr):
                 timevec = self.timevec
         return timevec
 
-    def to_df(self, sep='_', col_names='vlh', resample=None, set_date_index=False, **kwargs):
+    def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
@@ -253,8 +253,9 @@ class Result(ss.BaseArr):
             sep (str): separator for the column names
             col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
             set_date_index (bool): if True, use the timevec as the index
+            bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
             resample (str): if provided, resample the data to this frequency
-            kwargs: passed to the resample method
+            kwargs: passed to the resample method if resample=True
         """
         data = dict()
 
@@ -282,12 +283,14 @@ class Result(ss.BaseArr):
             valcol = col_names
             prefix = col_names+sep
 
+        # If high and low exist, include them too
         data[valcol] = self.values
-        for key in ['low', 'high']:
-            val = self[key]
-            valcol = f'{prefix}{key}'
-            if val is not None:
-                data[valcol] = val
+        if bounds:
+            for key in ['low', 'high']:
+                val = self[key]
+                valcol = f'{prefix}{key}'
+                if val is not None:
+                    data[valcol] = val
 
         # Convert to dataframe, optionally with a date index
         if set_date_index:
@@ -330,11 +333,12 @@ class Result(ss.BaseArr):
 class Results(ss.ndict):
     """ Container for storing results """
     def __init__(self, module, *args, strict=True, **kwargs):
-        modlabel = getattr(module, 'label', None)
-        modname = getattr(module, 'name', None)
-        modcls = module.__class__.__name__
-        modstring = sc.ifelse(modlabel, modname, modcls)
-        self.setattribute('_module', modstring)
+        if not isinstance(module, str):
+            modlabel = getattr(module, 'label', None)
+            modname = getattr(module, 'name', None)
+            modcls = module.__class__.__name__
+            module = sc.ifelse(modlabel, modname, modcls)
+        self.setattribute('_module', module)
         super().__init__(type=Result, strict=strict, *args, **kwargs)
         return
 
@@ -434,7 +438,7 @@ class Results(ss.ndict):
         Args:
             sep (str): separator for the column names
             descend (bool): whether to descend into nested results
-            kwargs: passed to the to_df method, can include instructions for summarizing results by time
+            kwargs: passed to the `Result.to_df()` method, can include instructions for summarizing results by time
         """
         if not descend:
             dfs = []

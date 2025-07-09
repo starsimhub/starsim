@@ -161,7 +161,7 @@ class Module(Base):
         # Properties to be added by init_pre()
         self.sim = None
         self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
-        self.results = ss.Results(self.name)
+        self.results = ss.Results(self.label)
 
         # Finish initialization
         self.pre_initialized = False
