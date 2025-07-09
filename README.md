@@ -36,6 +36,16 @@ cd example
 uv add starsim
 ```
 
+To run a Starsim script with uv:
+```sh
+uv run python your_script.py
+```
+
+For development with optional dependencies:
+```sh
+uv add starsim[dev]
+```
+
 Starsim can also be installed locally. To do this, clone first this repository, then run:
 ```sh
 pip install -e .
