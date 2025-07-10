@@ -178,9 +178,9 @@ class Arr(BaseArr):
         self.name = name
         self.label = label or name
         self.default = default
-        self.nan = nan
+        if nan is not None: self.nan = nan
+        if dtype is not None: self.dtype = dtype
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
-        self.dtype = dtype
         self.people = people # Used solely for accessing people.auids
 
         if self.people is None:
@@ -190,7 +190,7 @@ class Arr(BaseArr):
             self.len_used = 0
             self.len_tot = 0
             self.initialized = skip_init
-            self.raw = np.empty(0, dtype=dtype)
+            self.raw = np.empty(0, dtype=self.dtype)
         else:
             # This Arr is a temporary object used for intermediate calculations when we want to index an array
             # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
@@ -258,7 +258,7 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
+    def __gt__(self, other): return (self.values > other).astype(BoolArr)
     def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
     def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
     def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
@@ -405,6 +405,21 @@ class Arr(BaseArr):
                 new.raw = arr.raw
         return new
 
+    def astype(self, cls, copy=False):
+        """ Convert the Arr type """
+        # Create the new object
+        new = object.__new__(cls) # Create a new Arr instance
+        new.__dict__ = self.__dict__.copy() # Copy pointers
+
+        # Reset Arr properties
+        new.dtype = cls.dtype # Set to correct dtype
+        new.nan = cls.nan
+        new.nan_eq = (new.nan == new.nan)
+
+        # Optionally copy the array values (slow), and update the dtype
+        new.raw = np.array(new.raw, dtype=new.dtype, copy=copy)
+        return new
+
     def true(self):
         """ Efficiently convert truthy values to UIDs """
         return self.auids[self.values.astype(bool)]
@@ -434,8 +449,10 @@ class FloatArr(Arr):
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
     """
-    def __init__(self, name=None, nan=np.nan, **kwargs):
-        super().__init__(name=name, dtype=ss_float, nan=nan, **kwargs)
+    dtype = ss_float
+    nan = np.nan
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, dtype=None, nan=None, **kwargs) # Do not allow dtype or nan to be overwritten
         return
 
 
@@ -446,15 +463,19 @@ class IntArr(Arr):
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
     """
-    def __init__(self, name=None, nan=int_nan, **kwargs):
-        super().__init__(name=name, dtype=ss_int, nan=nan, **kwargs)
+    dtype = ss_int
+    nan = int_nan
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, dtype=None, nan=None, **kwargs)
         return
 
 
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    def __init__(self, name=None, nan=False, **kwargs): # No good NaN equivalent for bool arrays
-        super().__init__(name=name, dtype=ss_bool, nan=nan, **kwargs)
+    dtype = ss_bool
+    nan = False
+    def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
+        super().__init__(name=name, dtype=None, nan=None, **kwargs)
         return
 
     def __and__(self, other): return self.asnew(self.values & other)
@@ -478,7 +499,7 @@ class BoolArr(Arr):
 
     def split(self):
         """ Return UIDs of values that are true and false as separate arrays """
-        t_uids = self.true()
+        t_uids = self.true() # Could be made more performant by doing the loop once, but not heavily used
         f_uids = self.false()
         return t_uids, f_uids
 
