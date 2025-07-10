@@ -12,10 +12,10 @@ __all__ = ['module_map', 'find_modules', 'required', 'Base', 'Module']
 module_args = ['name', 'label'] # Define allowable module arguments
 
 
-def module_map(key=None, include_modules=True):
-    """ Define the mapping between module names and types; not for the user """
+def module_map(key=None):
+    """ Define the mapping between module names and types; this is the source of truth about module types and ordering """
     module_map = sc.objdict(
-        modules       = None, # Handled separately as a fallback
+        modules       = None, # Handled separately since otherwise isinstance(module, modtype) will match all
         demographics  = ss.Demographics,
         connectors    = ss.Connector,
         networks      = ss.Network,
@@ -23,9 +23,12 @@ def module_map(key=None, include_modules=True):
         diseases      = ss.Disease,
         analyzers     = ss.Analyzer,
     )
-    if not include_modules:
-        module_map.pop('modules')
     return module_map if key is None else module_map[key]
+
+
+def module_types():
+    """ Return a list of known module types; based on `module_map()` """
+    return list(module_map().keys())
 
 
 def find_modules(key=None, flat=False):

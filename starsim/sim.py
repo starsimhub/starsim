@@ -39,7 +39,7 @@ class Sim(ss.Base):
     """
     def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
-        self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
+        self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
@@ -208,15 +208,27 @@ class Sim(ss.Base):
 
     def init_sim_attrs(self, force=False):
         """ Move initialized modules to the sim """
-        attrs = ['label', 'modules', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
-        for attr in attrs:
+        module_types = ss.utils.module_types()
+        extras = ['label']
+
+        # Handle non-module-list attribute
+        for attr in extras:
+            orig = getattr(self, attr, None)
+            value = self.pars.pop(attr) # Remove from the parameters
+            setattr(self, attr, value)
+
+        for attr in module_types + extras:
             orig = getattr(self, attr, None)
             if not force and orig is not None:
-                if attr != 'label': # Don't worry about overwriting the label
+                if attr not in extras: # Don't worry about overwriting the label
                     warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
                     ss.warn(warnmsg)
             else:
-                setattr(self, attr, self.pars.pop(attr))
+                modlist = self.pars.pop(attr) # Remove from the parameters
+                setattr(self, attr, modlist)
+                if attr not in extras: # Add back module lists
+                    self.pars[attr] = sc.dictobj() # Recreate with just the module parameters
+
         return
 
     def init_mods_pre(self):
