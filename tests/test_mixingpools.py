@@ -57,13 +57,13 @@ def test_single_ncd():
     """ Test a single MixingPool with a ncd """
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
-    mp_pars = {
-        'src': ss.AgeGroup(0, 15),
-        'dst': ss.AgeGroup(15, None),
-        'beta': 1,
-        'n_contacts': ss.poisson(lam=5),
-        'diseases': 'ncd'
-    }
+    mp_pars = dict(
+        src = ss.AgeGroup(0, 15),
+        dst = ss.AgeGroup(15, None),
+        beta = 1,
+        n_contacts = ss.poisson(lam=5),
+        diseases = 'ncd'
+    )
     mp = ss.MixingPool(**mp_pars)
 
     ncd = ss.NCD()
@@ -77,13 +77,13 @@ def test_single_missing_disease():
     """ Test a single MixingPool with a missing disease """
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
-    mp_pars = {
-        'src': ss.AgeGroup(0, 15),
-        'dst': ss.AgeGroup(15, None),
-        'beta': 1.0,
-        'n_contacts': ss.poisson(lam=5),
-        'diseases': 'hiv'
-    }
+    mp_pars = dict(
+        src = ss.AgeGroup(0, 15),
+        dst = ss.AgeGroup(15, None),
+        beta = 1.0,
+        n_contacts = ss.poisson(lam=5),
+        diseases = 'hiv'
+    )
     mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR()
@@ -99,12 +99,12 @@ def test_single_age(do_plot=do_plot):
     # Incidence must decline because 0-15 --> 15+ transmission only
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
-    mp_pars = {
-        'src': ss.AgeGroup(0, 15),
-        'dst': ss.AgeGroup(15, None),
-        'beta': 1.0,
-        'n_contacts': ss.poisson(lam=5),
-    }
+    mp_pars = dict(
+        src = ss.AgeGroup(0, 15),
+        dst = ss.AgeGroup(15, None),
+        beta = 1.0,
+        n_contacts = ss.poisson(lam=5),
+    )
     mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR()
@@ -122,12 +122,12 @@ def test_single_sex(do_plot=do_plot):
     # Incidence must decline because M --> F transmission only
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
-    mp_pars = {
-        'src': lambda sim: sim.people.female, # female to male (only) transmission
-        'dst': lambda sim: sim.people.male,
-        'beta': 1.0,
-        'n_contacts': ss.poisson(lam=4),
-    }
+    mp_pars = dict(
+        src = lambda sim: sim.people.female, # female to male (only) transmission
+        dst = lambda sim: sim.people.male,
+        beta = 1.0,
+        n_contacts = ss.poisson(lam=4),
+    )
     mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR(init_prev=ss.bernoulli(p=lambda self, sim, uids: 0.05*sim.people.female)) # Seed 5% of the female population
