@@ -1,6 +1,7 @@
 """
 Define array-handling classes, including agent states
 """
+import sys
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -44,6 +45,8 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def convert(self, obj):
         """ Check if an object is an array, and convert if so """
+        # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
+        # print('h1', me, caller, type(obj))
         if isinstance(obj, np.ndarray):
             return self.asnew(obj)
         elif isinstance(obj, BaseArr):
@@ -222,7 +225,7 @@ class Arr(BaseArr):
             - ss.uids, integer, or integer array: raw
             - BoolArr, boolean array, or full slice: values
         """
-        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int):
+        if isinstance(key, (uids, int, ss_int, tuple)) or (isinstance(key, np.ndarray) and key.dtype == int):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
@@ -283,13 +286,15 @@ class Arr(BaseArr):
     @property
     def values(self):
         """ Return the values of the active agents """
-        return self.raw
-        # try:
-        #     return self.raw[self.auids]
-        # except:
-        #     warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
-        #     ss.warn(warnmsg)
-        #     return np.array([])
+        if self.raw.size == self.auids.size:
+            return self.raw
+        else:
+            try:
+                return self.raw[self.auids]
+            except:
+                warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
+                ss.warn(warnmsg)
+                return np.array([])
 
     def set(self, uids, new_vals=None):
         """ Set the values for the specified UIDs"""
@@ -374,19 +379,30 @@ class Arr(BaseArr):
         self.initialized = True
         return
 
-    def asnew(self, arr=None, cls=None, name=None):
+    def asnew(self, arr=None, cls=None, name=None, copy=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
+        # print('h2', me, caller, type(arr))
+        # if type(arr) != np.ndarray:
+        #     raise Exception
         if cls is None:
             cls = self.__class__
+        if copy is None:
+            copy = True if arr is None else False
         if arr is None:
             arr = self.values
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        # new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
-        # new.raw[new.auids] = arr
-        new.raw = arr
+        if copy or new.auids.size != new.raw.size:
+            new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
+            new.raw[new.auids] = arr
+        else:
+            if isinstance(arr, np.ndarray):
+                new.raw = arr
+            else:
+                new.raw = arr.raw
         return new
 
     def true(self):
