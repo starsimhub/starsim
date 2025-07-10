@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 import starsim as ss
 import pytest
 
-n_agents = 1_000
+pars = sc.objdict(
+    n_agents = 1_000
+)
 do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
@@ -20,7 +22,7 @@ def test_single_defaults(do_plot=do_plot):
     sc.heading('Testing single mixing pool...')
     mp = ss.MixingPool()
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, networks=mp)
+    sim = ss.Sim(pars, diseases=sir, networks=mp)
     sim.run()
     res = sim.results.sir
 
@@ -35,14 +37,13 @@ def test_single_uids(do_plot=do_plot):
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
 
-    n_agents = 10_000
-    k = n_agents // 2
+    k = pars.n_agents // 2
     mp = ss.MixingPool(
         src = ss.uids(np.arange(k)),
-        dst = ss.uids(np.arange(k,n_agents))
+        dst = ss.uids(np.arange(k, pars.n_agents))
     )
     sir = ss.SIR()
-    sim = ss.Sim(n_agents=n_agents, diseases=sir, networks=mp, label=test_name)
+    sim = ss.Sim(pars, diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -58,14 +59,14 @@ def test_single_ncd():
     mp_pars = {
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
-        'beta': ss.Rate(1),
+        'beta': 1,
         'contacts': ss.poisson(lam=5),
         'diseases': 'ncd'
     }
     mp = ss.MixingPool(**mp_pars)
 
     ncd = ss.NCD()
-    sim = ss.Sim(diseases=ncd, networks=mp, label=test_name)
+    sim = ss.Sim(pars, diseases=ncd, networks=mp, label=test_name)
     with pytest.raises(Exception):
         sim.run()
     return sim
@@ -78,14 +79,14 @@ def test_single_missing_disease():
     mp_pars = {
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
-        'beta': ss.Rate(1),
+        'beta': 1.0,
         'contacts': ss.poisson(lam=5),
         'diseases': 'hiv'
     }
     mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
+    sim = ss.Sim(pars, diseases=sir, networks=mp, label=test_name)
     with pytest.raises(Exception):
         sim.run()
 
@@ -100,13 +101,13 @@ def test_single_age(do_plot=do_plot):
     mp_pars = {
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
-        'beta': ss.Rate(1),
+        'beta': 1.0,
         'contacts': ss.poisson(lam=5),
     }
     mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
+    sim = ss.Sim(pars, diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -123,13 +124,13 @@ def test_single_sex(do_plot=do_plot):
     mp_pars = {
         'src': lambda sim: sim.people.female, # female to male (only) transmission
         'dst': lambda sim: sim.people.male,
-        'beta': ss.Rate(1),
+        'beta': 1.0,
         'contacts': ss.poisson(lam=4),
     }
     mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR(init_prev=ss.bernoulli(p=lambda self, sim, uids: 0.05*sim.people.female)) # Seed 5% of the female population
-    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
+    sim = ss.Sim(pars, diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -145,7 +146,7 @@ def test_multi_defaults(do_plot=do_plot):
     sc.heading(f'Testing {test_name}...')
     mps = ss.MixingPools(src={'all':None}, dst={'all':None}, contacts=[[1]])
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, networks=mps, label=test_name)
+    sim = ss.Sim(pars, diseases=sir, networks=mps, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -166,14 +167,14 @@ def test_multi(do_plot=do_plot):
 
     mps_pars = dict(
         contacts = np.array([[1.4, 0.5], [1.2, 0.7]]),
-        beta = ss.Rate(1),
+        beta = 1.0,
         src = groups,
         dst = groups,
     )
     mps = ss.MixingPools(**mps_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, networks=mps, label=test_name)
+    sim = ss.Sim(pars, diseases=sir, networks=mps, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()

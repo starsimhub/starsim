@@ -1111,7 +1111,7 @@ class MixingPools(Route):
             diseases = None,
             src = None,
             dst = None,
-            beta = ss.Rate(0.2),
+            beta = 1.0,
             contacts = None,
         )
         self.update_pars(**kwargs)
@@ -1232,7 +1232,7 @@ class MixingPool(Route):
             diseases = None,
             src = None,
             dst = None, # Same as src
-            beta = ss.Rate(0.2),
+            beta = 1.0,
             contacts = ss.poisson(1.0),
         )
         self.update_pars(**kwargs)
