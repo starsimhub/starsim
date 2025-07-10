@@ -61,7 +61,7 @@ def test_single_ncd():
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
         'beta': 1,
-        'contacts': ss.poisson(lam=5),
+        'n_contacts': ss.poisson(lam=5),
         'diseases': 'ncd'
     }
     mp = ss.MixingPool(**mp_pars)
@@ -81,7 +81,7 @@ def test_single_missing_disease():
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
         'beta': 1.0,
-        'contacts': ss.poisson(lam=5),
+        'n_contacts': ss.poisson(lam=5),
         'diseases': 'hiv'
     }
     mp = ss.MixingPool(**mp_pars)
@@ -103,7 +103,7 @@ def test_single_age(do_plot=do_plot):
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
         'beta': 1.0,
-        'contacts': ss.poisson(lam=5),
+        'n_contacts': ss.poisson(lam=5),
     }
     mp = ss.MixingPool(**mp_pars)
 
@@ -126,7 +126,7 @@ def test_single_sex(do_plot=do_plot):
         'src': lambda sim: sim.people.female, # female to male (only) transmission
         'dst': lambda sim: sim.people.male,
         'beta': 1.0,
-        'contacts': ss.poisson(lam=4),
+        'n_contacts': ss.poisson(lam=4),
     }
     mp = ss.MixingPool(**mp_pars)
 
@@ -145,7 +145,7 @@ def test_multi_defaults(do_plot=do_plot):
     """ Test MixingPools using defaults """
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
-    mps = ss.MixingPools(src={'all':None}, dst={'all':None}, contacts=[[1]])
+    mps = ss.MixingPools(src={'all':None}, dst={'all':None}, n_contacts=[[1]])
     sir = ss.SIR()
     sim = ss.Sim(pars, diseases=sir, networks=mps, label=test_name)
     sim.run()
@@ -167,7 +167,7 @@ def test_multi(do_plot=do_plot):
     }
 
     mps_pars = dict(
-        contacts = np.array([[1.4, 0.5], [1.2, 0.7]]),
+        n_contacts = np.array([[1.4, 0.5], [1.2, 0.7]]),
         beta = 1.0,
         src = groups,
         dst = groups,
