@@ -37,6 +37,7 @@ def test_single_uids(do_plot=do_plot):
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
 
+    # Note: in this arrangement, src transmits to dst, but can never go the other way, so the epidemic dies out once everyone in src recovers
     k = pars.n_agents // 2
     mp = ss.MixingPool(
         src = ss.uids(np.arange(k)),
