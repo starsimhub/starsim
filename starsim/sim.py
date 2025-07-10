@@ -228,6 +228,14 @@ class Sim(ss.Base):
         try:    return self.pars.label
         except: return None
 
+    @label.setter
+    def label(self, label):
+        """
+        Set the sim label (actually sets `sim.pars.label`)
+        """
+        self.pars['label'] = label
+        return
+
     def init_module_attrs(self, force=False):
         """ Move initialized modules to the sim """
         module_types = ss.modules.module_types()
@@ -452,7 +460,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0):
+    def shrink(self, inplace=True, size_limit=1.0, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -462,6 +470,7 @@ class Sim(ss.Base):
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
             size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
+            die (bool): whether to raise an exception if the shrink failed
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
@@ -475,7 +484,7 @@ class Sim(ss.Base):
         # Shrink the people and loop
         shrunk = ss.utils.shrink()
         sim.people = shrunk
-        with sc.tryexcept():
+        with sc.tryexcept(die=die):
             sim.loop.shrink()
 
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
@@ -485,12 +494,12 @@ class Sim(ss.Base):
             sim.dists.sim = shrunk
             sim.dists.obj = shrunk
             for dist in sim.dists.dists.values():
-                with sc.tryexcept():
+                with sc.tryexcept(die=die):
                     dist.shrink()
 
             # Finally, shrink the modules
             for mod in sim.module_list:
-                with sc.tryexcept():
+                with sc.tryexcept(die=die):
                     mod.shrink()
 
             # Check that the module successfully shrunk
@@ -499,8 +508,11 @@ class Sim(ss.Base):
                 for mod in sim.module_list:
                     size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
                     if size > max_size:
-                        warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
-                        ss.warn(warnmsg)
+                        errormsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
+                        if die:
+                            raise RuntimeError(errormsg)
+                        else:
+                            ss.warn(errormsg)
 
         # Finally, set a flag that the sim has been shrunken
         sim.shrunken = True

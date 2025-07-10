@@ -541,8 +541,8 @@ class Module(Base):
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
         shrunk = ss.utils.shrink()
-        self.sim = shrunk
-        self.dists = shrunk
+        self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
+        self.setattribute('dists', shrunk)
         for state in self.state_list:
             with sc.tryexcept():
                 state.people = shrunk
