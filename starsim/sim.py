@@ -47,7 +47,6 @@ class Sim(ss.Base):
         self.pars.update(input_pars)  # Update the parameters
 
         # Set attributes; see also sim.init() for more
-        self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
         self.metadata = sc.metadata(version=self.version, pipfreeze=False)
@@ -142,14 +141,20 @@ class Sim(ss.Base):
         """ Return a dictionary of all Module instances; see `sim.module_list` for the list version """
         return ss.utils.nlist_to_dict(self.module_list)
 
-    def init(self, force=False, **kwargs):
+    def init(self, force=False, timer=False, **kwargs):
         """
         Perform all initializations for the sim
 
         Args:
             force (bool): whether to overwrite sim attributes even if they already exist
+            timer (bool): if True, count the time required for initialization (otherwise just count run time)
             kwargs (dict): passed to ss.People()
         """
+        # Handle the timer
+        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
+        if timer:
+            self.timer.start()
+
         # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
@@ -161,15 +166,17 @@ class Sim(ss.Base):
         # Final initializations -- this is "post"
         self.init_dists() # Initialize distributions
         self.init_people_vals() # Initialize the values in all the states and networks
-        self.init_mod_vals() # Initialize the module values
+        self.init_modules_post() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
-        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
+
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
 
         # It's initialized
         self.initialized = True
+        if timer:
+            self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         return self
 
     def init_time(self):
@@ -223,7 +230,7 @@ class Sim(ss.Base):
 
     def init_module_attrs(self, force=False):
         """ Move initialized modules to the sim """
-        module_types = ss.utils.module_types()
+        module_types = ss.modules.module_types()
         for attr in module_types:
             orig = getattr(self, attr, None)
             if not force and orig is not None:
@@ -337,7 +344,9 @@ class Sim(ss.Base):
         """
         # Initialization steps
         if not self.initialized: self.init()
-        self.verbose = sc.ifelse(verbose, self.pars.verbose)
+        if verbose is not None:
+            self._orig_verbose = self.verbose
+            self.verbose = verbose
         self.timer.start()
 
         # Check for AlreadyRun errors
@@ -356,9 +365,6 @@ class Sim(ss.Base):
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-            for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
-                mod.t.ti -= 1
             self.finalize()
             if check_method_calls:
                 self.check_method_calls()
@@ -372,6 +378,11 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
+        # Reset the time index
+        self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+        for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
+            mod.t.ti -= 1
+
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
@@ -381,6 +392,11 @@ class Sim(ss.Base):
         # Finalize each module
         for module in self.module_list:
             module.finalize()
+
+        # Resets verbose if needed
+        if hasattr(self, '_orig_verbose'):
+            self.verbose = self._orig_verbose
+            delattr(self, '_orig_verbose')
 
         # Generate the summary and finish up
         self.summarize() # Create summary
