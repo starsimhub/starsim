@@ -155,8 +155,8 @@ class Sim(ss.Base):
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
-        self.init_sim_attrs(force=force)
-        self.init_mods_pre()
+        self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
+        self.init_modules_pre()
 
         # Final initializations -- this is "post"
         self.init_dists() # Initialize distributions
@@ -206,32 +206,39 @@ class Sim(ss.Base):
         self.people.link_sim(self)
         return self.people
 
-    def init_sim_attrs(self, force=False):
+    @property
+    def label(self):
+        """
+        Get the sim label from the parameters, if available.
+
+        Note: for `ss.Sim` objects, the label is stored as `sim.pars.label`,
+        and `sim.label` is an alias to it. Sims do not have names separate from
+        their labels. For `ss.Module` objects, the name and label are both attributes
+        (`mod.name` and `mod.label`), with the difference being that the names
+        are machine-readable (e.g. `'my_sir'`) while the labels are human-readable
+        (e.g. `'My SIR module'`).
+        """
+        try:    return self.pars.label
+        except: return None
+
+    def init_module_attrs(self, force=False):
         """ Move initialized modules to the sim """
         module_types = ss.utils.module_types()
-        extras = ['label']
-
-        # Handle non-module-list attribute
-        for attr in extras:
-            orig = getattr(self, attr, None)
-            value = self.pars.pop(attr) # Remove from the parameters
-            setattr(self, attr, value)
-
-        for attr in module_types + extras:
+        for attr in module_types:
             orig = getattr(self, attr, None)
             if not force and orig is not None:
-                if attr not in extras: # Don't worry about overwriting the label
-                    warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
-                    ss.warn(warnmsg)
+                warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
+                ss.warn(warnmsg)
             else:
-                modlist = self.pars.pop(attr) # Remove from the parameters
-                setattr(self, attr, modlist)
-                if attr not in extras: # Add back module lists
-                    self.pars[attr] = sc.dictobj() # Recreate with just the module parameters
+                modules = self.pars.pop(attr) # Remove module type (e.g. 'diseases') from the parameters
+                setattr(self, attr, modules) # Add the modules ndict to the sim
+                self.pars[attr] = sc.objdict() # Recreate with just the module parameters
+                for key,module in modules.items():
+                    self.pars[attr][key] = module.pars
 
         return
 
-    def init_mods_pre(self):
+    def init_modules_pre(self):
         """ Initialize all the modules with the sim """
         for mod in self.module_list:
             mod.init_pre(self)
@@ -252,8 +259,8 @@ class Sim(ss.Base):
         self.people.init_vals()
         return
 
-    def init_mod_vals(self):
-        """ Initialize values in other modules, including networks and time parameters """
+    def init_modules_post(self):
+        """ Initialize values in other modules, including networks and time parameters, and do any other post-processing """
         for mod in self.module_list:
             mod.init_post()
         return

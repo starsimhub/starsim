@@ -14,7 +14,7 @@ __all__ = ['Pars', 'SimPars']
 atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
 
-class Pars(sc.dictobj):
+class Pars(sc.objdict):
     """
     Dict-like container of parameters
 
@@ -376,7 +376,7 @@ class SimPars(Pars):
         """
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
-        a Sim object.
+        a Sim object
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
