@@ -39,7 +39,7 @@ class Sim(ss.Base):
     """
     def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
-        self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
+        self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
@@ -47,13 +47,12 @@ class Sim(ss.Base):
         self.pars.update(input_pars)  # Update the parameters
 
         # Set attributes; see also sim.init() for more
-        self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
         self.metadata = sc.metadata(version=self.version, pipfreeze=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
-        self.results = ss.Results(module='sim')  # For storing results
+        self.results = ss.Results(module='Sim')  # For storing results
         self.data = data # For storing input data
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
@@ -142,34 +141,42 @@ class Sim(ss.Base):
         """ Return a dictionary of all Module instances; see `sim.module_list` for the list version """
         return ss.utils.nlist_to_dict(self.module_list)
 
-    def init(self, force=False, **kwargs):
+    def init(self, force=False, timer=False, **kwargs):
         """
         Perform all initializations for the sim
 
         Args:
             force (bool): whether to overwrite sim attributes even if they already exist
+            timer (bool): if True, count the time required for initialization (otherwise just count run time)
             kwargs (dict): passed to ss.People()
         """
+        # Handle the timer
+        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
+        if timer:
+            self.timer.start()
+
         # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
-        self.init_sim_attrs(force=force)
-        self.init_mods_pre()
+        self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
+        self.init_modules_pre()
 
         # Final initializations -- this is "post"
         self.init_dists() # Initialize distributions
         self.init_people_vals() # Initialize the values in all the states and networks
-        self.init_mod_vals() # Initialize the module values
+        self.init_modules_post() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
-        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
+
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
 
         # It's initialized
         self.initialized = True
+        if timer:
+            self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         return self
 
     def init_time(self):
@@ -206,20 +213,47 @@ class Sim(ss.Base):
         self.people.link_sim(self)
         return self.people
 
-    def init_sim_attrs(self, force=False):
-        """ Move initialized modules to the sim """
-        attrs = ['label', 'modules', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
-        for attr in attrs:
-            orig = getattr(self, attr, None)
-            if not force and orig is not None:
-                if attr != 'label': # Don't worry about overwriting the label
-                    warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
-                    ss.warn(warnmsg)
-            else:
-                setattr(self, attr, self.pars.pop(attr))
+    @property
+    def label(self):
+        """
+        Get the sim label from the parameters, if available.
+
+        Note: for `ss.Sim` objects, the label is stored as `sim.pars.label`,
+        and `sim.label` is an alias to it. Sims do not have names separate from
+        their labels. For `ss.Module` objects, the name and label are both attributes
+        (`mod.name` and `mod.label`), with the difference being that the names
+        are machine-readable (e.g. `'my_sir'`) while the labels are human-readable
+        (e.g. `'My SIR module'`).
+        """
+        try:    return self.pars.label
+        except: return None
+
+    @label.setter
+    def label(self, label):
+        """
+        Set the sim label (actually sets `sim.pars.label`)
+        """
+        self.pars['label'] = label
         return
 
-    def init_mods_pre(self):
+    def init_module_attrs(self, force=False):
+        """ Move initialized modules to the sim """
+        module_types = ss.modules.module_types()
+        for attr in module_types:
+            orig = getattr(self, attr, None)
+            if not force and orig is not None:
+                warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
+                ss.warn(warnmsg)
+            else:
+                modules = self.pars.pop(attr) # Remove module type (e.g. 'diseases') from the parameters
+                setattr(self, attr, modules) # Add the modules ndict to the sim
+                self.pars[attr] = sc.objdict() # Recreate with just the module parameters
+                for key,module in modules.items():
+                    self.pars[attr][key] = module.pars
+
+        return
+
+    def init_modules_pre(self):
         """ Initialize all the modules with the sim """
         for mod in self.module_list:
             mod.init_pre(self)
@@ -240,8 +274,8 @@ class Sim(ss.Base):
         self.people.init_vals()
         return
 
-    def init_mod_vals(self):
-        """ Initialize values in other modules, including networks and time parameters """
+    def init_modules_post(self):
+        """ Initialize values in other modules, including networks and time parameters, and do any other post-processing """
         for mod in self.module_list:
             mod.init_post()
         return
@@ -254,7 +288,7 @@ class Sim(ss.Base):
 
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        kw = dict(shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
+        kw = dict(module='Sim', shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),
@@ -318,7 +352,9 @@ class Sim(ss.Base):
         """
         # Initialization steps
         if not self.initialized: self.init()
-        self.verbose = sc.ifelse(verbose, self.pars.verbose)
+        if verbose is not None:
+            self._orig_verbose = self.verbose
+            self.verbose = verbose
         self.timer.start()
 
         # Check for AlreadyRun errors
@@ -337,9 +373,6 @@ class Sim(ss.Base):
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-            for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
-                mod.t.ti -= 1
             self.finalize()
             if check_method_calls:
                 self.check_method_calls()
@@ -353,6 +386,11 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
+        # Reset the time index
+        self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+        for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
+            mod.t.ti -= 1
+
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
@@ -362,6 +400,11 @@ class Sim(ss.Base):
         # Finalize each module
         for module in self.module_list:
             module.finalize()
+
+        # Resets verbose if needed
+        if hasattr(self, '_orig_verbose'):
+            self.verbose = self._orig_verbose
+            delattr(self, '_orig_verbose')
 
         # Generate the summary and finish up
         self.summarize() # Create summary
@@ -417,7 +460,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0):
+    def shrink(self, inplace=True, size_limit=1.0, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -427,6 +470,7 @@ class Sim(ss.Base):
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
             size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
+            die (bool): whether to raise an exception if the shrink failed
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
@@ -440,7 +484,7 @@ class Sim(ss.Base):
         # Shrink the people and loop
         shrunk = ss.utils.shrink()
         sim.people = shrunk
-        with sc.tryexcept():
+        with sc.tryexcept(die=die):
             sim.loop.shrink()
 
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
@@ -450,12 +494,12 @@ class Sim(ss.Base):
             sim.dists.sim = shrunk
             sim.dists.obj = shrunk
             for dist in sim.dists.dists.values():
-                with sc.tryexcept():
+                with sc.tryexcept(die=die):
                     dist.shrink()
 
             # Finally, shrink the modules
             for mod in sim.module_list:
-                with sc.tryexcept():
+                with sc.tryexcept(die=die):
                     mod.shrink()
 
             # Check that the module successfully shrunk
@@ -464,8 +508,11 @@ class Sim(ss.Base):
                 for mod in sim.module_list:
                     size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
                     if size > max_size:
-                        warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
-                        ss.warn(warnmsg)
+                        errormsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
+                        if die:
+                            raise RuntimeError(errormsg)
+                        else:
+                            ss.warn(errormsg)
 
         # Finally, set a flag that the sim has been shrunken
         sim.shrunken = True

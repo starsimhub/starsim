@@ -12,10 +12,10 @@ __all__ = ['module_map', 'find_modules', 'required', 'Base', 'Module']
 module_args = ['name', 'label'] # Define allowable module arguments
 
 
-def module_map(key=None, include_modules=True):
-    """ Define the mapping between module names and types; not for the user """
+def module_map(key=None):
+    """ Define the mapping between module names and types; this is the source of truth about module types and ordering """
     module_map = sc.objdict(
-        modules       = None, # Handled separately as a fallback
+        modules       = None, # Handled separately since otherwise isinstance(module, modtype) will match all
         demographics  = ss.Demographics,
         connectors    = ss.Connector,
         networks      = ss.Network,
@@ -23,9 +23,12 @@ def module_map(key=None, include_modules=True):
         diseases      = ss.Disease,
         analyzers     = ss.Analyzer,
     )
-    if not include_modules:
-        module_map.pop('modules')
     return module_map if key is None else module_map[key]
+
+
+def module_types():
+    """ Return a list of known module types; based on `module_map()` """
+    return list(module_map().keys())
 
 
 def find_modules(key=None, flat=False):
@@ -148,10 +151,9 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
-    _locked_attrs = ['pars', 't', 'sim', 'dists'] # Define key attributes that shouldn't be overwritten by the user
-
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
+        self._locked_attrs = ['pars', 't', 'sim', 'dists'] # Define key attributes that shouldn't be overwritten by the user
         self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters
@@ -162,7 +164,7 @@ class Module(Base):
         # Properties to be added by init_pre()
         self.sim = None
         self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
-        self.results = ss.Results(self.name)
+        self.results = ss.Results(self.label)
 
         # Finish initialization
         self.pre_initialized = False
@@ -180,19 +182,19 @@ class Module(Base):
         """ Allow modules to act like dictionaries """
         return getattr(self, key)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, attr, value):
         """ Don't allow locked attributes to be overwritten """
-        if getattr(self, '_lock_attrs', False) and name in self._locked_attrs:
-            errormsg = f'Cannot modify attribute "{name}"; reserved attributes are {sc.strjoin(self._locked_attrs)}.\n'
-            errormsg += 'If you really mean to do this, use module.setattribute()'
+        if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
+            errormsg = f'Cannot modify attribute "{attr}"; locked attributes are {sc.strjoin(self._locked_attrs)}.\n'
+            errormsg += 'If you really mean to do this, use module.setattribute() or set module._lock_attrs = False'
             raise AttributeError(errormsg)
         else:
-            super().__setattr__(name, value)
+            super().__setattr__(attr, value)
         return
 
-    def setattribute(self, name, value):
+    def setattribute(self, attr, value):
         """ Method for setting an attribute that does not perform checking against immutable attributes """
-        return super().__setattr__(name, value)
+        return super().__setattr__(attr, value)
 
     @property
     def _debug_name(self):
@@ -251,9 +253,12 @@ class Module(Base):
                     errormsg = f'Invalid value for {key}: must be str, not {type(val)}: {val}'
                     raise TypeError(errormsg)
 
-        # Set values
-        self.name = self._reconcile('name', name, self.__class__.__name__.lower())
-        self.label = self._reconcile('label', label, self.name)
+        # Set values for name and label
+        cls_name = self.__class__.__name__
+        cls_lower = cls_name.lower()
+        self.name = self._reconcile('name', name, cls_lower)
+        default_label = self.name if self.name != cls_lower else cls_name
+        self.label = self._reconcile('label', label, default_label)
         return
 
     @classmethod
@@ -314,7 +319,7 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
-    def define_states(self, *args, check=True, reset=False):
+    def define_states(self, *args, check=True, reset=False, lock=True):
         """
         Define states of the module with the same attribute name as the state
 
@@ -325,11 +330,15 @@ class Module(Base):
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state, and that it's not already present
             reset (bool): whether to reset the list of module states and use only the ones provided
+            lock (bool): if True, prevent states from being
         """
         # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
         if reset:
             for state in self.state_list:
-                delattr(self, state.name)
+                attr = state.name
+                delattr(self, attr)
+                if attr in self._locked_attrs:
+                    self._locked_attrs.remove(attr)
             self._auto_states = []
 
         # Add the new states
@@ -352,7 +361,9 @@ class Module(Base):
                 errormsg += f'States already in module:\n{[s.name for s in self.state_list]}\n'
                 errormsg += f'New states being added:\n{[s.name for s in args]}\n'
                 raise AttributeError(errormsg)
-            setattr(self, state.name, state)
+            setattr(self, attr, state)
+            if lock:
+                self._locked_attrs.append(attr)
 
             # Add it to the list of auto states, if needed
             if isinstance(state, ss.BoolState):
@@ -370,7 +381,7 @@ class Module(Base):
                 result = arg
 
             # Update with module information
-            result.update(module=self.name, shape=self.t.npts, timevec=self.t.timevec)
+            result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
             self.results += result
@@ -530,8 +541,8 @@ class Module(Base):
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
         shrunk = ss.utils.shrink()
-        self.sim = shrunk
-        self.dists = shrunk
+        self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
+        self.setattribute('dists', shrunk)
         for state in self.state_list:
             with sc.tryexcept():
                 state.people = shrunk

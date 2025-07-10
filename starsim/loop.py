@@ -205,11 +205,12 @@ class Loop:
         # Calculate the sim time index (ti)
         start_step = 'sim.start_step'
         ti = -1
+        ti_vals = []
         for i,label in enumerate(self.plan.label):
             if label == start_step:
                 ti += 1
-            self.plan.loc[i, 'ti'] = ti
-
+            ti_vals.append(ti)
+        self.plan.loc[:, 'ti'] = ti_vals
         return
 
     def store_time(self):

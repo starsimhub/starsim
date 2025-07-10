@@ -8,13 +8,13 @@ import sciris as sc
 import starsim as ss
 import datetime as dt
 
-__all__ = ['Pars', 'SimPars', 'make_pars']
+__all__ = ['Pars', 'SimPars']
 
 # Define classes to not descend into further -- based on sciris.sc_nested
 atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
 
-class Pars(sc.dictobj):
+class Pars(sc.objdict):
     """
     Dict-like container of parameters
 
@@ -376,7 +376,7 @@ class SimPars(Pars):
         """
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
-        a Sim object.
+        a Sim object
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
@@ -443,8 +443,3 @@ class SimPars(Pars):
                         raise TypeError(errormsg)
                     modlist[i] = mod
         return
-
-
-def make_pars(**kwargs):
-    """ Shortcut for making a new instance of SimPars """
-    return SimPars(**kwargs)

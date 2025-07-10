@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""
+Quickly check the baseline
+"""
+import test_baselines
+
+test_baselines.test_baseline()

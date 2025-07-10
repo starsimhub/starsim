@@ -1090,7 +1090,7 @@ class MixingPools(Route):
         src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
         dst (inds): destination agents; as above
         beta (float): overall transmission via these mixing pools
-        contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
+        n_contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
 
     **Example**:
 
@@ -1100,7 +1100,7 @@ class MixingPools(Route):
             beta = 0.1,
             src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
-            contacts = [[2.4, 0.49], [0.91, 0.16]],
+            n_contacts = [[2.4, 0.49], [0.91, 0.16]],
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
@@ -1111,8 +1111,8 @@ class MixingPools(Route):
             diseases = None,
             src = None,
             dst = None,
-            beta = ss.Rate(0.2),
-            contacts = None,
+            beta = 1.0,
+            n_contacts = None,
         )
         self.update_pars(**kwargs)
         self.validate_pars()
@@ -1138,11 +1138,11 @@ class MixingPools(Route):
         p.src = sc.objdict(p.src)
         p.dst = sc.objdict(p.dst)
 
-        # Validate the contacts
-        if p.contacts is None:
-            p.contacts = np.ones((len(p.src), len(p.dst)))
-        p.contacts = np.array(p.contacts)
-        actual = p.contacts.shape
+        # Validate the n_contacts
+        if p.n_contacts is None:
+            p.n_contacts = np.ones((len(p.src), len(p.dst)))
+        p.n_contacts = np.array(p.n_contacts)
+        actual = p.n_contacts.shape
         expected = (len(p.src), len(p.dst))
         if actual != expected:
             errormsg = f'The number of source and destination groups must match the number of rows and columns in the mixing matrix, but {actual} != {expected}.'
@@ -1158,11 +1158,11 @@ class MixingPools(Route):
         self.pools = []
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
-                contacts = p.contacts[i,j]
-                if sc.isnumber(contacts): # If it's a number, convert to a distribution
-                    contacts = ss.poisson(lam=contacts)
+                n_contacts = p.n_contacts[i,j]
+                if sc.isnumber(n_contacts): # If it's a number, convert to a distribution
+                    n_contacts = ss.poisson(lam=n_contacts)
                 name = f'pool:{sk}->{dk}'
-                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst, **time_args)
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, n_contacts=n_contacts, src=src, dst=dst, **time_args)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
         return
@@ -1201,7 +1201,7 @@ class MixingPool(Route):
         src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
         dst (inds): destination agents; as above
         beta (float): overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
-        contacts (Dist): the number of effective contacts of the destination agents
+        n_contacts (Dist): the number of effective contacts of the destination agents
 
     **Example**:
 
@@ -1212,7 +1212,7 @@ class MixingPool(Route):
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
             beta = ss.Rate(0.2),
-            contacts = ss.poisson(lam=4),
+            n_contacts = ss.poisson(lam=4),
         )
 
         # Seed 5% of the male population
@@ -1221,7 +1221,7 @@ class MixingPool(Route):
 
         # Create and run the sim
         sis = ss.SIS(init_prev=p_init)
-        mp = ss.MixingPool(mp_pars)
+        mp = ss.MixingPool(**mp_pars)
         sim = ss.Sim(diseases=sis, networks=mp)
         sim.run()
         sim.plot()
@@ -1232,13 +1232,13 @@ class MixingPool(Route):
             diseases = None,
             src = None,
             dst = None, # Same as src
-            beta = ss.Rate(0.2),
-            contacts = ss.poisson(1.0),
+            beta = 1.0,
+            n_contacts = ss.constant(10),
         )
         self.update_pars(**kwargs)
 
         self.define_states(
-            ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
+            ss.FloatArr('eff_contacts', default=self.pars.n_contacts, label='Effective number of contacts')
         )
 
         self.pars.diseases = sc.tolist(self.pars.diseases)

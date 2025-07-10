@@ -15,11 +15,11 @@ class Result(ss.BaseArr):
     Array-like container for holding sim results.
 
     Args:
-        module (str): the name of the parent module, e.g. 'hiv'
+        module (str): the name or label of the parent module, e.g. 'SIR'
         name (str): the name of this result, e.g. 'new_infections'
-        shape (int/tuple): the shape of the result array (usually module.npts)
+        shape (int/tuple): the shape of the result array (usually `module.npts`)
         scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
-        auto_plot (bool): whether to include automatically in sim.plot() results
+        auto_plot (bool): whether to include automatically in `sim.plot()` results
         label (str): a human-readable label for the result
         values (array): prepopulate the Result with these values
         timevec (array): an array of time points
@@ -69,6 +69,10 @@ class Result(ss.BaseArr):
         labelstr = f'{self.key}: ' if label else ''
         out = f'{cls_name}({labelstr}{valstr})'
         return out
+
+    def to_str(self, label=True):
+        """ Convert Result object to a string """
+        return self.__str__(label=label)
 
     def disp(self):
         """ Full display of all attributes/methods """
@@ -132,13 +136,7 @@ class Result(ss.BaseArr):
         if self.module == 'sim': # Don't add anything if it's the sim
             full = f'Sim: {reslabel}'
         else:
-            try:
-                mod = ss.find_modules(flat=True)[self.module]
-                modlabel = mod.__name__
-                assert self.module == modlabel.lower(), f'Mismatch: {self.module}, {modlabel}' # Only use the class name if the module name is the default
-            except: # Don't worry if we can't find it, just use the module name
-                modlabel = self.module.title()
-            full = f'{modlabel}: {reslabel}'
+            full = f'{self.module}: {reslabel}'
         return full
 
     def summary_method(self, die=False):
@@ -247,7 +245,7 @@ class Result(ss.BaseArr):
                 timevec = self.timevec
         return timevec
 
-    def to_df(self, sep='_', col_names='vlh', resample=None, set_date_index=False, **kwargs):
+    def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
@@ -255,8 +253,9 @@ class Result(ss.BaseArr):
             sep (str): separator for the column names
             col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
             set_date_index (bool): if True, use the timevec as the index
+            bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
             resample (str): if provided, resample the data to this frequency
-            kwargs: passed to the resample method
+            kwargs: passed to the resample method if resample=True
         """
         data = dict()
 
@@ -284,12 +283,14 @@ class Result(ss.BaseArr):
             valcol = col_names
             prefix = col_names+sep
 
+        # If high and low exist, include them too
         data[valcol] = self.values
-        for key in ['low', 'high']:
-            val = self[key]
-            valcol = f'{prefix}{key}'
-            if val is not None:
-                data[valcol] = val
+        if bounds:
+            for key in ['low', 'high']:
+                val = self[key]
+                valcol = f'{prefix}{key}'
+                if val is not None:
+                    data[valcol] = val
 
         # Convert to dataframe, optionally with a date index
         if set_date_index:
@@ -332,8 +333,11 @@ class Result(ss.BaseArr):
 class Results(ss.ndict):
     """ Container for storing results """
     def __init__(self, module, *args, strict=True, **kwargs):
-        if hasattr(module, 'name'):
-            module = module.name
+        if not isinstance(module, str):
+            modlabel = getattr(module, 'label', None)
+            modname = getattr(module, 'name', None)
+            modcls = module.__class__.__name__
+            module = sc.ifelse(modlabel, modname, modcls)
         self.setattribute('_module', module)
         super().__init__(type=Result, strict=strict, *args, **kwargs)
         return
@@ -352,21 +356,21 @@ class Results(ss.ndict):
         string = format_head(f'Results({self._module})') + '\n'
 
         # Loop over the other items
-        for i,k,v in self.enumitems():
-            if k == 'timevec':
-                entry = f'array(start={v[0]}, stop={v[-1]})'
-            elif isinstance(v, Result):
-                entry = v.disp(label=False, output=True)
+        for i,key,res in self.enumitems():
+            if key == 'timevec':
+                entry = f'array(start={res[0]}, stop={res[-1]})'
+            elif isinstance(res, Result):
+                entry = res.to_str(label=False)
             else:
-                entry = f'{v}'
+                entry = f'{res}'
 
             if '\n' in entry: # Check if the string is multi-line
                 lines = entry.splitlines()
-                entry = f'{i}. {format_key(k)}: {lines[0]}\n'
+                entry = f'{i}. {format_key(key)}: {lines[0]}\n'
                 entry += '\n'.join(' '*indent + f'{i}.' + line for line in lines[1:])
                 string += entry + '\n'
             else:
-                string += f'{i}. {format_key(k)}: {entry}\n'
+                string += f'{i}. {format_key(key)}: {entry}\n'
         string = string.rstrip()
         return string
 
@@ -389,9 +393,6 @@ class Results(ss.ndict):
         if not isinstance(result, Result):
             warnmsg = f'You are adding a result of type {type(result)} to Results, which is inadvisable; if you intended to add it, use results[key] = value instead'
             ss.warn(warnmsg)
-
-        if result.module != self._module and not self.is_msim:
-            result.module = self._module
 
         super().append(result, key=key)
         return
@@ -437,7 +438,7 @@ class Results(ss.ndict):
         Args:
             sep (str): separator for the column names
             descend (bool): whether to descend into nested results
-            kwargs: passed to the to_df method, can include instructions for summarizing results by time
+            kwargs: passed to the `Result.to_df()` method, can include instructions for summarizing results by time
         """
         if not descend:
             dfs = []

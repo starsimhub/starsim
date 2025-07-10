@@ -95,11 +95,11 @@ def test_sir_epi():
             v1 = s1.results.cum_deaths[-1]
         else:
             ind = 1 if par == 'init_prev' else -1
-            v0 = s0.results.sir.cum_infections[ind]
-            v1 = s1.results.sir.cum_infections[ind]
+            v0 = s0.results.sir.prevalence[ind]
+            v1 = s1.results.sir.prevalence[ind]
 
         print(f'Checking with varying {par:10s} ... ', end='')
-        assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
+        assert v0 <= v1, f'Expected prevalence to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
         print(f'✓ ({v0} <= {v1})')
 
     return s0, s1

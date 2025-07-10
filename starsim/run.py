@@ -30,10 +30,13 @@ class MultiSim:
                 base_sim = sims
                 sims = None
             elif isinstance(sims, list):
+                if not sims:
+                    errormsg = 'You must supply at least one sim to create a MultiSim'
+                    raise ValueError(errormsg)
                 base_sim = sims[0]
             else:
-                errormsg = (f'If base_sim is not supplied, sims must be either a single sim'
-                            f' (treated as base_sim) or a list of sims, not {type(sims)}')
+                errormsg = 'If base_sim is not supplied, sims must be either a single sim '
+                errormsg += '(treated as base_sim) or a list of sims, not {type(sims)}'
                 raise TypeError(errormsg)
 
         # Set properties

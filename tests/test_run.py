@@ -12,9 +12,6 @@ n_agents = 1_000
 do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
-import warnings
-warnings.simplefilter('error')
-
 
 def make_sim_pars():
     pars = sc.objdict(

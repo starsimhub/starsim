@@ -105,6 +105,10 @@ sim.diseases.sir.plot() # Plot the standard SIR curves
 
 More usage examples are available in the tutorials, as well as the `tests` folder.
 
+## AI integration
+
+Starsim includes a [model context protocol](https://en.wikipedia.org/wiki/Model_Context_Protocol) (MCP) server that ensures your favorite AI-enabled editor/tool is Starsim-aware. For details, see the [Starsim AI](https://github.com/starsimhub/starsim_ai) project.
+
 
 ## Starsim structure
 

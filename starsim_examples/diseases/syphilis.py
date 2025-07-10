@@ -264,8 +264,6 @@ class Syphilis(ss.Infection):
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
                 assigned_outcomes = birth_outcomes.rvs(len(state_uids))
-                time_to_birth = -sim.people.age.raw # TODO: make nicer
-
                 ti_birth = sim.ti-sim.people.age*(ss.years(1)/self.t.dt) # By using ss.years(1) we avoid constructing an array of Dur objects for each age individually
 
                 # Schedule events
@@ -273,9 +271,8 @@ class Syphilis(ss.Infection):
                     o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
-                        vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(ti_birth[o_uids])
-                        setattr(self, ti_outcome, vals)
+                        ti_state = self.state_dict[ti_outcome]
+                        ti_state[o_uids] = sim.ti + rr(ti_birth[o_uids])
 
         return
 

@@ -386,8 +386,6 @@ class People(sc.prettyobj):
         """ Male boolean """
         return ~self.female
 
-
-
     def to_df(self):
         """ Export to dataframe """
         df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)

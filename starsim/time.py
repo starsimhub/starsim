@@ -294,6 +294,19 @@ class date(pd.Timestamp):
             high = high.years if isinstance(high, date) else high
             return cls.from_array(np.arange(low, high, step))
 
+    def to_json(self):
+        """ Returns a JSON representation of the date """
+        out = {'ss.date': str(self)}
+        return out
+
+    @staticmethod
+    def from_json(json):
+        """ Reconstruct a date from a JSON; reverse of `to_json()` """
+        if not (isinstance(json, dict) and len(json) == 1 and list(json.keys())[0] == 'ss.date'):
+            errormsg = f'Expecting a dict with a single key "ss.date", not {json}'
+            raise ValueError(errormsg)
+        return date(json['ss.date'])
+
 
 class Dur():
     # Base class for durations/dts
