@@ -15,11 +15,11 @@ class Result(ss.BaseArr):
     Array-like container for holding sim results.
 
     Args:
-        module (Module): the parent module, e.g. ss.SIR
+        module (str): the name or label of the parent module, e.g. 'SIR'
         name (str): the name of this result, e.g. 'new_infections'
-        shape (int/tuple): the shape of the result array (usually module.npts)
+        shape (int/tuple): the shape of the result array (usually `module.npts`)
         scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
-        auto_plot (bool): whether to include automatically in sim.plot() results
+        auto_plot (bool): whether to include automatically in `sim.plot()` results
         label (str): a human-readable label for the result
         values (array): prepopulate the Result with these values
         timevec (array): an array of time points
