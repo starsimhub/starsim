@@ -1,6 +1,8 @@
 """
 Numerical utilities
 """
+import sys
+import platform
 import warnings
 import numpy as np
 import numba as nb
@@ -13,9 +15,9 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires',
-           'standardize_netkey', 'standardize_data', 'validate_sim_data',
-           'Profile', 'check_version', 'load', 'save', 'plot_args', 'show', 'return_fig']
+__all__ = ['ndict', 'warn', 'find_contacts', 'check_requires', 'standardize_netkey',
+           'standardize_data', 'validate_sim_data', 'Profile', 'check_version',
+           'load', 'save', 'plot_args', 'show', 'return_fig']
 
 
 class ndict(sc.objdict):
@@ -218,35 +220,6 @@ def check_requires(sim, requires, *args):
     if len(errs):
         errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
         raise AttributeError(errormsg)
-    return
-
-
-def set_seed(seed=None):
-    '''
-    Reset the random seed -- complicated because of Numba, which requires special
-    syntax to reset the seed. This function also resets Python's built-in random
-    number generated.
-
-    Args:
-        seed (int): the random seed
-    '''
-
-    @nb.njit(cache=True)
-    def set_seed_numba(seed):
-        return np.random.seed(seed)
-
-    def set_seed_regular(seed):
-        return np.random.seed(seed)
-
-    # Dies if a float is given
-    if seed is not None:
-        seed = int(seed)
-
-    set_seed_regular(seed)  # If None, reinitializes it
-    if seed is None:  # Numba can't accept a None seed, so use our just-reinitialized Numpy stream to generate one
-        seed = np.random.randint(1e9)
-    set_seed_numba(seed)
-
     return
 
 
@@ -492,6 +465,32 @@ def check_version(expected, die=False, warn=True):
             elif warn:
                 ss.warn(string)
     return compare
+
+
+def metadata(comments=None):
+    """ Store metadata; like `sc.metadata()`, but optimized for speed """
+    md = sc.objdict(
+        version = ss.__version__,
+        versiondate = ss.__versiondate__,
+        timestamp = sc.getdate(),
+        user      = sc.getuser(),
+        system = sc.objdict(
+            platform   = platform.platform(),
+            executable = sys.executable,
+            version    = sys.version,
+        ),
+        versions = sc.objdict(
+            python     = platform.python_version(),
+            numpy      = np.__version__,
+            numba      = nb.__version__,
+            pandas     = pd.__version__,
+            sciris     = sc.__version__,
+            matplotlib = mpl.__version__,
+            starsim    = ss.__version__,
+        ),
+        comments = comments,
+    )
+    return md
 
 
 #%% Other helper functions

@@ -283,12 +283,13 @@ class Arr(BaseArr):
     @property
     def values(self):
         """ Return the values of the active agents """
-        try:
-            return self.raw[self.auids]
-        except:
-            warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
-            ss.warn(warnmsg)
-            return np.array([])
+        return self.raw
+        # try:
+        #     return self.raw[self.auids]
+        # except:
+        #     warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
+        #     ss.warn(warnmsg)
+        #     return np.array([])
 
     def set(self, uids, new_vals=None):
         """ Set the values for the specified UIDs"""
@@ -383,8 +384,9 @@ class Arr(BaseArr):
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
-        new.raw[new.auids] = arr
+        # new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
+        # new.raw[new.auids] = arr
+        new.raw = arr
         return new
 
     def true(self):

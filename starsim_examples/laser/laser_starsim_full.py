@@ -107,22 +107,32 @@ class Transmission(ss.Module):
         sir.recovery_timer[newly_infected_indices] = np.random.randint(5, 15, size=newly_infected_indices.size)  # Random recovery time
 
 
-pars = dict(
-    n_agents = 100_000,
-    dur = 160,
-)
-infection_rate = 0.3
+def run_sim(run=True, plot=True):
+    """ Create and run the simulation """
+    pars = dict(
+        n_agents = 100_000*2,
+        dur = 100*10,
+        verbose = 0,
+    )
+    infection_rate = 0.3
 
-intrahost = IntrahostProgression()
-transmission = Transmission(infection_rate)
-sir_model = SIRModel()
+    intrahost = IntrahostProgression()
+    transmission = Transmission(infection_rate)
+    sir_model = SIRModel()
 
-# Initialize the model
-sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model], copy_inputs=False)
+    # Initialize the model
+    sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model], copy_inputs=False)
 
-# Run the simulation
-with sc.timer():
-    sim.run()
+    # Run the simulation
+    if run:
+        with sc.timer():
+            sim.run()
 
-# Plot results
-sir_model.plot_results()
+    # Plot results
+    if plot:
+        sir_model.plot_results()
+    return sim
+
+
+if __name__ == '__main__':
+    sir_model = run_sim()
