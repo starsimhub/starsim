@@ -10,8 +10,8 @@ import sciris as sc
 import matplotlib as mpl
 import starsim as ss
 
-__all__ = ['Profile', 'Debugger', 'check_version', 'metadata', 'mock_time', 'mock_sim',
-           'mock_people', 'mock_module']
+__all__ = ['Profile', 'Debugger', 'check_version', 'check_requires', 'metadata',
+           'mock_time', 'mock_sim', 'mock_people', 'mock_module']
 
 
 class Profile(sc.profile):
