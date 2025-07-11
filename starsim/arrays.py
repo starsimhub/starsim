@@ -452,7 +452,7 @@ class Arr(BaseArr):
         errormsg = f'Can only handle NumPy arrays and Arr objects, not {type(obj)}'
         raise TypeError(errormsg)
 
-    def convert(self, obj, copy=False):
+    def convert(self, obj, copy=None):
         """ Check if an object is an array, and convert if so """
         if isinstance(obj, BaseArr):
             return obj
