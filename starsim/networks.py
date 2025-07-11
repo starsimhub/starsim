@@ -653,7 +653,7 @@ class RandomSafeNet(DynamicNetwork):
             beta = 1.0,
         )
         self.update_pars(**kwargs)
-        self.dist = ss.random(name='RandomSafeNet') # Default RNG
+        self.dist = ss.random(name='RandomSafeNet')
         return
 
     def rep_rand(self, uids, sort=True):
@@ -663,7 +663,6 @@ class RandomSafeNet(DynamicNetwork):
         r_list = []
         for i in range(n_conn):
             r = self.dist.rvs(uids)
-            r = np.random.rand(n_agents)
             r_list.append(r)
         r_arr = np.array(r_list).flatten()
         inds = np.tile(np.arange(n_agents), n_conn)

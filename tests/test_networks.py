@@ -76,7 +76,7 @@ def test_randomsafe():
 
     # Set up a sim with some small number of births and deaths
     pars = sc.objdict(n_agents=small, dur=5, verbose=False)
-    births = ss.Births(birth_rate=5)
+    births = ss.Births(birth_rate=ss.peryear(5))
     simil = sc.objdict()
 
     # Confirm that non-safe networks diverge immediately
@@ -87,8 +87,8 @@ def test_randomsafe():
     n2 = s2.networks[0]
     simil.uid = auid_similarity(s1, s2)
     simil.rand = ss.networks.similarity(n1, n2, verbose=False)
-    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births: {simil.uid:n}')
-    print(f'Similarity for random networks after {pars.dur} timesteps: {simil.rand:n}')
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid:%}')
+    print(f'Similarity for random networks after {pars.dur} timesteps:\n{simil.rand:%}\n')
     assert simil.rand < 0.5, 'Random networks were more similar than expected'
 
     # Confirm that safe networks don't
@@ -99,8 +99,8 @@ def test_randomsafe():
     n4 = s4.networks[0]
     simil.uid2 = auid_similarity(s3, s4)
     simil.safe = ss.networks.similarity(n3, n4, verbose=False)
-    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births: {simil.uid2:n}')
-    print(f'Similarity for random-safe networks after {pars.dur} timesteps: {simil.safe:n}')
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid2:%}')
+    print(f'Similarity for random-safe networks after {pars.dur} timesteps:\n{simil.safe:%}\n')
     assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
 
     o = sc.objdict(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
@@ -267,13 +267,13 @@ if __name__ == '__main__':
     T = sc.timer()
 
     # Run tests
-    # man  = test_manual()
-    # rand = test_random()
+    man  = test_manual()
+    rand = test_random()
     safe = test_randomsafe()
-    # stat = test_static()
-    # erdo = test_erdosrenyi()
-    # disk = test_disk()
-    # null = test_null()
-    # oth  = test_other()
+    stat = test_static()
+    erdo = test_erdosrenyi()
+    disk = test_disk()
+    null = test_null()
+    oth  = test_other()
 
     T.toc()
