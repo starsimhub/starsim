@@ -194,6 +194,7 @@ class Dist:
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
+    valid_pars = None
     def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
@@ -231,9 +232,13 @@ class Dist:
         self.history = [] # Previous states
         self.ready = True
         self.initialized = False
+        if self.valid_pars is not None:
+            self.validate_pars()
 
         # Finalize
         if mock:
+            if mock is True: # Convert from boolean to a reasonable int
+                mock = 100
             strict = False
             self.sim = ss.utils.mock_sim(mock)
             self.module = ss.utils.mock_module()
@@ -501,6 +506,16 @@ class Dist:
         self._slots = slots
         return size, slots
 
+    def validate_pars(self):
+        """ Check if parameters are valid; only used for non-SciPy distributions """
+        valid = set(self.valid_pars)
+        user = set(self.pars.keys())
+        unmatched = user - valid
+        if unmatched:
+            errormsg = f'Mismatch for {type(self)} between valid parameters {valid} and user-provided parameters {user}'
+            raise ValueError(errormsg)
+        return
+
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
         self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
@@ -742,6 +757,7 @@ __all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. s
 
 class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
+    valid_pars = ['dtype']
     def __init__(self, **kwargs):
         super().__init__(distname='random', dtype=ss.dtypes.float, **kwargs)
         return
@@ -758,6 +774,7 @@ class uniform(Dist):
         low (float): the lower bound of the distribution (default 0.0)
         high (float): the upper bound of the distribution (default 1.0)
     """
+    valid_pars = ['low', 'high']
     def __init__(self, low=None, high=None, **kwargs):
         if high is None and low is not None: # One argument, swap
             high = low
@@ -938,6 +955,7 @@ class randint(Dist):
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
         allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
+    valid_pars = ['low', 'high', 'dtype']
     def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
         self.allow_time = allow_time
@@ -978,6 +996,7 @@ class rand_raw(Dist):
     Directly sample raw integers (uint64) from the random number generator.
     Typicaly only used with ss.combine_rands().
     """
+    valid_pars = []
     def make_rvs(self):
         if ss.options.single_rng:
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
@@ -1030,6 +1049,7 @@ class constant(Dist):
     Args:
         v (float): the value to return
     """
+    valid_pars = ['v']
     def __init__(self, v=0.0, **kwargs):
         super().__init__(distname='const', v=v, **kwargs)
         return
@@ -1051,6 +1071,7 @@ class bernoulli(Dist):
     Args:
         p (float): the probability of returning True (default 0.5)
     """
+    valid_pars = ['p']
     def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
@@ -1125,8 +1146,9 @@ class choice(Dist):
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
     """
+    valid_pars = ['a', 'p', 'replace', 'dtype']
     def __init__(self, a=2, p=None, **kwargs):
-        super().__init__(distname='choice', a=a, p=p, **kwargs)
+        super().__init__(distname='choice', a=a, p=p, replace=True, **kwargs)
         self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
         return
 
@@ -1183,6 +1205,7 @@ class histogram(Dist):
         h2 = ss.histogram(data=data, strict=False)
         h2.plot_hist(bins=100)
     """
+    valid_pars = ['values', 'bins', 'density', 'data']
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
         if data is not None:
             if values is not None:
