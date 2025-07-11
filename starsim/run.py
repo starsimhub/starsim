@@ -254,11 +254,26 @@ class MultiSim:
 
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
+        length_mismatches = sc.ddict(int)
         for rkey in rkeys:
-            raw[rkey] = np.zeros((len(rflat[rkey]), len(self.sims)))
+            raw[rkey] = np.full((len(rflat[rkey]), len(self.sims)), np.nan)
             for s, sim in enumerate(self.sims):
                 flat = sim.results.flatten()
-                raw[rkey][:, s] = flat[rkey]
+                this_raw = raw[rkey]
+                this_flat = flat[rkey]
+                l1 = this_raw.shape[0]
+                l2 = this_flat.shape[0]
+                if l1 == l2:
+                    length = l1
+                else:
+                    length_mismatches[sim.label] += 1
+                    length = min(l1, l2)
+                this_raw[:length, s] = this_flat[:length]
+        if length_mismatches:
+            warnmsg = 'Sim results have mismatched lengths; results have been truncated but are not necessarily aligned. Mismatches:\n'
+            for k,v in length_mismatches.items():
+                warnmsg += f'{k}: {v} mismatched results\n'
+            ss.warn(warnmsg)
 
         for rkey in rkeys:
             res = rflat[rkey]
