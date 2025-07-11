@@ -276,6 +276,11 @@ class Network(Route):
         nx.set_edge_attributes(G, self.label, name='layer')
         return G
 
+    def to_edgelist(self):
+        """ Convert the network to a list of edges (paired nodes) """
+        out = list(zip(self.p1, self.p2))
+        return out
+
     def to_dict(self):
         """ Convert to dictionary """
         d = {k: self.edges[k] for k in self.meta_keys()}
@@ -312,12 +317,14 @@ class Network(Route):
             alpha (float): the alpha value of the edges
             kwargs (dict): passed to nx.draw_networkx()
         """
-        G = self.to_graph(max_edges=max_edges, random=random)
-        fig = nx.draw_networkx(G, alpha=alpha, **kwargs)
-        if max_edges:
-            plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
+        kw = ss.plot_args(kwargs)
+        with ss.style(**kw.style):
+            fig,ax = plt.subplots(**kw.fig)
+            G = self.to_graph(max_edges=max_edges, random=random)
+            nx.draw_networkx(G, alpha=alpha, ax=ax, **kwargs)
+            if max_edges:
+                plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
         return ss.return_fig(fig)
-
 
     def find_contacts(self, inds, as_array=True):
         """
@@ -435,7 +442,7 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'ErdosRenyiNet', 'DiskNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
+__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -604,175 +611,7 @@ class RandomNet(DynamicNetwork):
         return
 
 
-class ErdosRenyiNet(DynamicNetwork):
-    """
-    In the Erdos-Renyi network, every possible edge has a probability, p, of
-    being created on each time step.
 
-    The degree of each node will have a binomial distribution, considering each
-    of the N-1 possible edges connection this node to the others will be created
-    with probability p.
-
-    Please be careful with the `dur` parameter. When set to 0, new edges will be
-    created on each time step. If positive, edges will persist for `dur` years.
-    Note that the existence of edges from previous time steps will not prevent
-    or otherwise alter the creation of new edges on each time step, edges will
-    accumulate over time.
-    """
-
-    def __init__(self, key_dict=None, **kwargs):
-        """ Initialize """
-        super().__init__(key_dict=key_dict)
-        self.define_pars(
-            p = 0.1, # Probability of each edge
-            dur = ss.Dur(0), # Duration of zero ensures that new random edges are formed on each time step
-        )
-        self.update_pars(**kwargs)
-        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
-        return
-
-    def add_pairs(self):
-        """ Generate contacts """
-        people = self.sim.people
-        born_uids = (people.age > 0).uids
-
-        # Sample integers
-        ints = self.randint.rvs(born_uids)
-
-        # All possible edges are upper triangle of complete matrix
-        idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
-
-        # Use integers to create random numbers per edge
-        i1 = ints[idx1]
-        i2 = ints[idx2]
-        r = ss.utils.combine_rands(i1, i2) # TODO: use ss.multi_rand()
-        edge = r <= self.pars.p
-
-        p1 = idx1[edge]
-        p2 = idx2[edge]
-        beta = np.ones(len(p1), dtype=ss_float_)
-
-        if isinstance(self.pars.dur, ss.Dist):
-            dur = self.pars.dur.rvs(p1)
-        else:
-            dur = np.ones(len(p1))*self.pars.dur/self.t.dt
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
-        return
-
-
-class DiskNet(Network):
-    """
-    Disk graph in which edges are made between agents located within a user-defined radius.
-
-    Interactions take place within a square with edge length of 1. Agents are
-    initialized to have a random position and orientation within this square. On
-    each time step, agents advance v*dt in the direction they are pointed. When
-    encountering a wall, agents are reflected.
-
-    Edges are formed between two agents if they are within r distance of each other.
-    """
-
-    def __init__(self, key_dict=None, **kwargs):
-        """ Initialize """
-        super().__init__(key_dict=key_dict)
-        self.define_pars(
-            r = 0.1, # Radius
-            v = ss.Rate(0.05), # Velocity
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('x', default=ss.random(), label='X position'),
-            ss.FloatArr('y', default=ss.random(), label='Y position'),
-            ss.FloatArr('theta', default=ss.uniform(high=2*np.pi), label='Heading'),
-        )
-        return
-
-    def step(self):
-        # Motion step
-        vdt = self.pars.v * self.t.dt
-        self.x[:] = self.x + vdt * np.cos(self.theta)
-        self.y[:] = self.y + vdt * np.sin(self.theta)
-
-        # Wall bounce
-
-        ## Right edge
-        inds = (self.x > 1).uids
-        self.x[inds] = 2 - self.x[inds]
-        self.theta[inds] = np.pi - self.theta[inds]
-
-        ## Left edge
-        inds = (self.x < 0).uids
-        self.x[inds] =  -self.x[inds]
-        self.theta[inds] = np.pi - self.theta[inds]
-
-        ## Top edge
-        inds = (self.y > 1).uids
-        self.y[inds] = 2 - self.y[inds]
-        self.theta[inds] = - self.theta[inds]
-
-        ## Bottom edge
-        inds = (self.y < 0).uids
-        self.y[inds] = -self.y[inds]
-        self.theta[inds] = - self.theta[inds]
-
-        self.add_pairs()
-        return
-
-    def add_pairs(self):
-        """ Generate contacts """
-        p1, p2 = np.triu_indices(n=len(self.x), k=1)
-        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
-        edge = d12_sq < self.pars.r**2
-
-        self.edges['p1'] = ss.uids(p1[edge])
-        self.edges['p2'] = ss.uids(p2[edge])
-        self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
-
-        return
-
-
-class NullNet(Network):
-    """
-    A convenience class for a network of size n that only has self-connections with a weight of 0.
-    This network can be useful for debugging purposes or as a placeholder network during development
-    for conditions that require more complex network mechanisms.
-
-    Guarantees there's one (1) contact per agent (themselves), and that their connection weight is zero.
-
-    For an empty network (ie, no edges) use
-    >> import starsim as ss
-    >> import networkx as nx
-    >> empty_net_static = ss.StaticNet(nx.empty_graph)
-    >> empty_net_rand = ss.RandomNet(n_contacts=0)
-
-    """
-
-    def __init__(self, n_people=None, **kwargs):
-        self.n = n_people
-        super().__init__(**kwargs)
-        return
-
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        popsize = sim.pars['n_agents']
-        if self.n is None:
-            self.n = popsize
-        else:
-            if self.n > popsize:
-                errormsg = f'Please ensure the size of the network ({self.n} is less than or equal to the population size ({popsize}).'
-                raise ValueError(errormsg)
-        self.get_edges()
-        return
-
-    def get_edges(self):
-        indices = np.arange(self.n)
-        self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
-        return
-
-    def step(self):
-        """ Not used for NullNet """
-        pass
 
 
 class MFNet(SexualNetwork):
@@ -928,67 +767,7 @@ class MSMNet(SexualNetwork):
         return
 
 
-class EmbeddingNet(MFNet):
-    """
-    Heterosexual age-assortative network based on a one-dimensional embedding.
 
-    Warning: this network is random-number safe, but is very slow compared to
-    RandomNet.
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Create a sexual network from a 1D embedding based on age
-
-        Args:
-            male_shift is the average age that males are older than females in partnerships
-        """
-        super().__init__()
-        self.define_pars(
-            inherit = True, # The MFNet already comes with pars, we want to keep those
-            embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
-            male_shift = 5,
-        )
-        self.update_pars(**kwargs)
-        return
-
-    @staticmethod
-    def embedding_loc(module, sim, uids):
-        loc = sim.people.age[uids]
-        loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
-        return loc
-
-    def add_pairs(self):
-        import scipy.optimize as spo
-        import scipy.spatial as spsp
-
-        people = self.sim.people
-        available_m = self.available(people, 'male')
-        available_f = self.available(people, 'female')
-
-        if not len(available_m) or not len(available_f):
-            if ss.options.verbose > 1:
-                print('No pairs to add')
-            return 0
-
-        available = ss.uids.cat(available_m, available_f)
-        loc = self.pars.embedding_func.rvs(available)
-        loc_f = loc[people.female[available]]
-        loc_m = loc[~people.female[available]]
-
-        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
-        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        n_pairs = len(ind_f)
-
-        # Finalize pairs
-        p1 = available_m[ind_m]
-        p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
-        dur_vals = self.pars.duration.rvs(p1)
-        act_vals = self.pars.acts.rvs(p1)
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
-        return len(beta)
 
 
 class MaternalNet(DynamicNetwork):
@@ -1050,6 +829,8 @@ class PostnatalNet(MaternalNet):
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
+
+#%% Mixing pools
 
 __all__ += ['AgeGroup', 'MixingPools', 'MixingPool']
 
@@ -1314,7 +1095,7 @@ class MixingPool(Route):
         # Determine the mixing pool beta value
         beta = self.pars.beta
         if isinstance(beta, ss.Rate):
-            ss.warn(f'In mixing pools, beta should typically be a float')
+            ss.warn('In mixing pools, beta should typically be a float')
             beta = beta * self.t.dt
         if sc.isnumber(beta) and beta == 0:
             return []
