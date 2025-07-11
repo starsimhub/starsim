@@ -19,8 +19,9 @@ class ErdosRenyiNet(ss.DynamicNetwork):
     Note that the existence of edges from previous time steps will not prevent
     or otherwise alter the creation of new edges on each time step, edges will
     accumulate over time.
-    """
 
+    Warning: this network is quite slow compared to `ss.RandomNet`.
+    """
     def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)

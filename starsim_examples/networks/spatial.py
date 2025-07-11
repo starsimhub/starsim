@@ -16,7 +16,6 @@ class DiskNet(ss.Network):
 
     Edges are formed between two agents if they are within r distance of each other.
     """
-
     def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
