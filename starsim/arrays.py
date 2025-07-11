@@ -19,11 +19,10 @@ int_nan    = ss.dtypes.int_nan
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
-def indexer(arr, inds):
+def np_indexer(arr, inds):
     """ Much faster than Numba for small arrays (<10k elements) """
     return arr[inds]
 
-@staticmethod
 @nb.njit(fastmath=True, parallel=False, cache=True)
 def nb_indexer(arr, inds):
     """ Roughly 30% faster than NumPy for large arrays (>100k elements) """
@@ -210,7 +209,7 @@ class Arr(BaseArr):
             self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
 
         # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
-        self.indexer = indexer
+        self.numba_indexer = False
         return
 
     def __repr__(self):
@@ -258,10 +257,17 @@ class Arr(BaseArr):
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
 
+    def _index(self, arr, inds):
+        """ Index the array using the most efficient method for the current array size """
+        if self.numba_indexer:
+            return nb_indexer(arr, inds)
+        else:
+            return np_indexer(arr, inds)
+
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
             key = self._convert_key(key)
-        return self.indexer(self.raw, key)
+        return self._index(self.raw, key)
 
     def __setitem__(self, key, value):
         if not isinstance(key, uids):
@@ -347,7 +353,7 @@ class Arr(BaseArr):
             return self.raw
         else:
             try:
-                return self.indexer(self.raw, self.auids) # Optimized for speed
+                return self._index(self.raw, self.auids) # Optimized for speed
             except Exception as E:
                 warnmsg = f'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any).\n{E}'
                 ss.warn(warnmsg)
@@ -429,7 +435,7 @@ class Arr(BaseArr):
         # Decide whether to switch to the Numba indexer -- typically faster with more than ~5000 agents
         threshold = 5000
         if len(people) > threshold:
-            self.indexer = nb_indexer
+            self.numba_indexer = True
         return
 
     def init_vals(self):
