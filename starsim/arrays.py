@@ -2,10 +2,12 @@
 Define array-handling classes, including agent states
 """
 # import sys
+import numbers
 import numpy as np
+import numba as nb
 import sciris as sc
 import starsim as ss
-import numba as nb
+
 
 # Shorten these for performance
 ss_float   = ss.dtypes.float
@@ -16,6 +18,13 @@ ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
 
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
+
+
+@staticmethod
+@nb.njit(fastmath=True, parallel=False, cache=True)
+def nb_index(arr, inds):
+    """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
+    return arr[inds]
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -244,16 +253,10 @@ class Arr(BaseArr):
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
 
-    @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
-    def _nb_getitem(raw, inds):
-        """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
-        return raw[inds]
-
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
             key = self._convert_key(key)
-        return self.raw[key]
+        return nb_index(self.raw, key)
 
     def __setitem__(self, key, value):
         if not isinstance(key, uids):
@@ -261,38 +264,57 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
-    def _nb_bool_ops(a, b, inds, both_raw):
-        out = np.empty(a.size, dtype=np.bool_)
-        for i,ind in enumerate(inds):
-            out[ind] = a[ind] > b[ind]
-        return out
+    # @staticmethod
+    # @nb.njit(fastmath=True, parallel=False, cache=True)
+    # def _nb_bool_ops(op, arr1, arr2, inds):
+    #     out = np.empty(arr1.size, dtype=np.bool_)
+    #     for i,ind in enumerate(inds):
+    #         out[ind] = a[ind] > b[ind]
+    #     return out
 
-    def _bool_ops(self, op, other):
+    def _boolmath(self, op, other):
         """ Helper function for performing basic math operations that return a Boolean, e.g. > """
-        self_raw = self.raw
-        if isinstance(other, Arr):
-            other_raw = other.raw
+        self_raw = self.raw # Always size N
+        if isinstance(other, (Arr, numbers.Number)):
+            other_raw = other.raw # Also always size N
+            both_raw = True
         else:
-            other_raw = other
-        both_raw = self_raw.size == other_raw.size
+            raw_size = self_raw.size
+            both_raw = self_raw.size == other_raw.size # It's raw if it's the same size, values otherwise
+
         if both_raw:
-            inds = None
+            a = self_raw
+            b = other_raw
         else:
-            inds = self.people.auids
-        result_raw = self._nb_bool_op(self_raw, op, other_raw, inds)
+            a = self.values
+            b = other
+            inds = self.auids
+
+        # Perform operations, listed in rough order of how frequently used they are
+        if   op == '==':  c = a == b
+        elif op == '>':   c = a > b
+        elif op == '<':   c = a < b
+        elif op == '>=':  c = a >= b
+        elif op == '<=':  c = a <= b
+        elif op == '!=':  c = a != b
+        else:
+            errormsg = f'Unrecognized operator "{op}"'
+            raise ValueError(errormsg)
+
+        if both_raw:
+            result_raw = c
+        else:
+            result_raw = np.empty(raw_size, dtype=np.bool_)
+            result_raw[inds] = c
+
         return self.asnew(result_raw, cls=BoolArr, copy=False)
 
-
-    # def __gt__(self, other): return (self.values > other).astype(BoolArr)
-    # def __gt__(self, other): return self.numba_gt(self.raw, other.raw, self.auids).astype(BoolArr)
-    def __gt__(self, other): return self._math('>', other)
-    def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
-    def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
-    def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
-    def __eq__(self, other): return self.asnew(self.values == other, cls=BoolArr)
-    def __ne__(self, other): return self.asnew(self.values != other, cls=BoolArr)
+    def __gt__(self, other): return self._boolmath('>', other)
+    def __lt__(self, other): return self._boolmath('<', other)
+    def __ge__(self, other): return self._boolmath('>=', other)
+    def __le__(self, other): return self._boolmath('<=', other)
+    def __eq__(self, other): return self._boolmath('==', other)
+    def __ne__(self, other): return self._boolmath('!=', other)
 
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
@@ -312,12 +334,6 @@ class Arr(BaseArr):
     def count(self):
         return np.count_nonzero(self.values)
 
-    @staticmethod
-    @nb.njit((ss_nbfloat[:], ss_nbint[:]), fastmath=True, parallel=False, cache=True)
-    def _nb_get(raw, inds):
-        """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
-        return raw[inds]
-
     @property
     def values(self):
         """ Return the values of the active agents """
@@ -325,9 +341,9 @@ class Arr(BaseArr):
             return self.raw
         else:
             try:
-                return self._nb_get(self.raw, self.auids) # Optimized for speed
-            except:
-                warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
+                return nb_index(self.raw, self.auids) # Optimized for speed
+            except Exception as E:
+                warnmsg = f'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any).\n{E}'
                 ss.warn(warnmsg)
                 return np.array([])
 
