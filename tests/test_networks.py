@@ -64,6 +64,50 @@ def test_random():
     return o
 
 
+def test_randomsafe():
+    sc.heading('Testing the RandomSafe network')
+
+    def auid_similarity(s1, s2):
+        """ Compute similarity between UID lists """
+        auids1 = s1.people.auids
+        auids2 = s2.people.auids
+        similarity = ss.networks.similarity(auids1, auids2, verbose=False)
+        return similarity
+
+    # Set up a sim with some small number of births and deaths
+    pars = sc.objdict(n_agents=small, dur=5, verbose=False)
+    births = ss.Births(birth_rate=5)
+    simil = sc.objdict()
+
+    # Confirm that non-safe networks diverge immediately
+    s1 = ss.Sim(pars, networks='random', label='random-nobirths').run()
+    s2 = ss.Sim(pars, networks='random', label='random-births', demographics=births).run()
+
+    n1 = s1.networks[0]
+    n2 = s2.networks[0]
+    simil.uid = auid_similarity(s1, s2)
+    simil.rand = ss.networks.similarity(n1, n2, verbose=False)
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births: {simil.uid:n}')
+    print(f'Similarity for random networks after {pars.dur} timesteps: {simil.rand:n}')
+    assert simil.rand < 0.5, 'Random networks were more similar than expected'
+
+    # Confirm that safe networks don't
+    s3 = ss.Sim(pars, networks='randomsafe', label='safe-nobirths').run()
+    s4 = ss.Sim(pars, networks='randomsafe', label='safe-births', demographics=births).run()
+
+    n3 = s3.networks[0]
+    n4 = s4.networks[0]
+    simil.uid2 = auid_similarity(s3, s4)
+    simil.safe = ss.networks.similarity(n3, n4, verbose=False)
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births: {simil.uid2:n}')
+    print(f'Similarity for random-safe networks after {pars.dur} timesteps: {simil.safe:n}')
+    assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
+
+    o = sc.objdict(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
+    return o
+
+
+
 def test_erdosrenyi():
     sc.heading('Testing Erdos-Renyi network')
 
@@ -223,12 +267,13 @@ if __name__ == '__main__':
     T = sc.timer()
 
     # Run tests
-    man  = test_manual()
-    rand = test_random()
-    stat = test_static()
-    erdo = test_erdosrenyi()
-    disk = test_disk()
-    null = test_null()
-    oth  = test_other()
+    # man  = test_manual()
+    # rand = test_random()
+    safe = test_randomsafe()
+    # stat = test_static()
+    # erdo = test_erdosrenyi()
+    # disk = test_disk()
+    # null = test_null()
+    # oth  = test_other()
 
     T.toc()
