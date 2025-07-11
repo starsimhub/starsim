@@ -26,12 +26,13 @@ class People(sc.prettyobj):
         pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
         age_data (dataframe): a dataframe of years and population sizes, if available
         extra_states (list): non-default states to initialize
+        mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
 
     **Examples**:
         ppl = ss.People(2000)
     """
 
-    def __init__(self, n_agents, age_data=None, extra_states=None):
+    def __init__(self, n_agents, age_data=None, extra_states=None, mock=False):
         """ Initialize """
 
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
@@ -73,6 +74,9 @@ class People(sc.prettyobj):
             setattr(self, state.name, state)
             state.link_people(self)
         self._linked_modules = []
+
+        if mock:
+            self.init_mock()
 
         return
 
@@ -134,13 +138,13 @@ class People(sc.prettyobj):
 
         return dist
 
-    def link_sim(self, sim):
+    def link_sim(self, sim, init=False):
         """ Initialization """
         if self.initialized:
             errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
-        ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
+        ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
     def add_module(self, module, force=False):
@@ -177,12 +181,24 @@ class People(sc.prettyobj):
         self.initialized = True
         return
 
+    def init_mock(self):
+        """ Initialize with a mock simulation (for debugging purposes only) """
+        sim = ss.utils.mock_sim(n_agents=self.n_agents)
+        self.link_sim(sim, init=True)
+        self.init_vals()
+        return
+
     def __bool__(self):
         """ Ensure that zero-length people are still truthy """
         return True
 
     def __len__(self):
         """ Length of people """
+        return len(self.auids)
+
+    @property
+    def n_agents(self):
+        """ Alias for len(people) """
         return len(self.auids)
 
     @property

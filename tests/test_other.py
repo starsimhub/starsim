@@ -209,6 +209,37 @@ def test_check_requires():
     return s1
 
 
+def test_mock_objects():
+    sc.heading('Testing mock objects')
+    o = sc.objdict()
+
+    μ = 5
+    mock = 100
+    atol = 0.1
+
+    # Initializing Dists
+    o.dist = ss.lognorm_ex(μ, 2, mock=mock)
+    assert np.isclose(o.dist.rvs(1000).mean(), μ, atol=atol), f'Distribution did not have expected mean value of {μ}'
+
+    # Initializing Arrs -- can use it, but cannot grow it since mock slots can't grow
+    o.arr = ss.FloatArr('my_arr', default=o.dist, mock=mock)
+    assert len(o.arr) == mock, 'Arr did not have expected length of {mock}'
+    assert np.isclose(o.arr.mean(), μ, atol=atol), f'Arr did not have expected mean value of {μ}'
+
+    # Initializing People
+    o.ppl = ss.People(n_agents=mock, mock=True)
+    assert o.ppl.age.mean() > 15, 'People did not have the expected age'
+
+    # Initializing Modules
+    o.mod = ss.SIS().init_mock()
+    for i in range(5):
+        o.mod.step()
+        o.mod.set_outcomes(ss.uids([i])) # Manually "infect" people
+        o.mod.update_results()
+
+    return o
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -218,14 +249,15 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl = test_people()
-    sim1 = test_microsim(do_plot)
-    sim2 = test_ppl_construction(do_plot)
-    sims = test_arrs()
-    sims2 = test_deepcopy()
-    sims3 = test_deepcopy_until()
-    sim4 = test_results()
-    sim5 = test_check_requires()
+    # ppl = test_people()
+    # sim1 = test_microsim(do_plot)
+    # sim2 = test_ppl_construction(do_plot)
+    # sims = test_arrs()
+    # sims2 = test_deepcopy()
+    # sims3 = test_deepcopy_until()
+    # sim4 = test_results()
+    # sim5 = test_check_requires()
+    objs = test_mock_objects()
 
     sc.toc(T)
     plt.show()

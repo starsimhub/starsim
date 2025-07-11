@@ -34,7 +34,7 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # 
         dist.link_module(module, overwrite=overwrite)
         if init: # Usually this is false since usually these are initialized centrally by the sim
             dist.init()
-    return
+    return dists
 
 
 def make_dist(pars=None, **kwargs):
@@ -185,6 +185,8 @@ class Dist:
         auto (bool): whether to auto-reset the state after each draw
         sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
         module (Module): usually determined on initialization; the module to use as input to callable parameters
+        mock (int): if provided, then initialize with a mock Sim object (of size `mock`) for debugging purposes
+        debug (bool): print out additional detail
         kwargs (dict): parameters of the distribution
 
     **Examples**:
@@ -193,7 +195,7 @@ class Dist:
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
-                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
+                 strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
             distname = dist
@@ -229,6 +231,13 @@ class Dist:
         self.history = [] # Previous states
         self.ready = True
         self.initialized = False
+
+        # Finalize
+        if mock:
+            strict = False
+            self.sim = ss.utils.mock_sim(mock)
+            self.module = ss.utils.mock_module()
+            self.trace = 'mock_dist'
         if not strict: # Otherwise, wait for a sim
             self.init()
         return

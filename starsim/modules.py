@@ -433,6 +433,20 @@ class Module(Base):
         self.initialized = True
         return
 
+    def init_mock(self, n_agents=100, dur=10):
+        """ Initialize with a mock simulation -- for debugging purposes only """
+        sim = ss.utils.mock_sim(n_agents=n_agents, dur=dur)
+        self.init_pre(sim)
+        for state in self.state_list: # Manually link the people
+            state.people = self.sim.people
+        obj = [self.pars, self.state_list]
+        dists = sc.search(obj, type=ss.Dist)
+        for i,dist in dists.enumvals():
+            dist.trace = f'dist_{i}'
+        ss.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
+        self.init_post()
+        return self
+
     @property
     def state_list(self):
         """

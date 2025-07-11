@@ -376,7 +376,7 @@ def combine_rands(a, b):
     return u
 
 
-#%% Profiling
+#%% Profiling and debugging
 
 class Profile(sc.profile):
     """ Class to profile the performance of a simulation """
@@ -491,6 +491,51 @@ def metadata(comments=None):
         comments = comments,
     )
     return md
+
+
+def mock_time(dur=10):
+    """ Create a minimal mock "Time" object """
+    t = sc.objdict(
+        dt = 1.0,
+        ti = 0,
+        start = 2000,
+        stop = None,
+        dur = 50,
+        is_absolute = True,
+        initialized = True,
+    )
+    return t
+
+def mock_sim(n_agents=100, dur=10):
+    """ Create a minimal mock "Sim" object to initialize objects that require it """
+    sim = sc.objdict(
+        label = 'mock_sim',
+        people = mock_people(n_agents),
+        t = mock_time(dur),
+        pars = mock_time(dur),
+        results = sc.objdict(),
+        networks = sc.objdict(),
+    )
+    return sim
+
+def mock_people(n_agents=100):
+    """ Create a minimal mock "People" object """
+    people = sc.objdict(
+        uid = np.arange(n_agents),
+        auids = np.arange(n_agents),
+        slot = np.arange(n_agents),
+        age = np.random.uniform(0, 70, size=n_agents),
+        add_module = lambda x: None, # Placeholder function
+    )
+    return people
+
+def mock_module(dur=10):
+    """ Create a minimal mock "Time" object """
+    mod = sc.objdict(
+        name = 'mock_module',
+        t = mock_time,
+    )
+    return mod
 
 
 #%% Other helper functions

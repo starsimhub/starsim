@@ -178,10 +178,12 @@ class Arr(BaseArr):
             * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
         label (str): The human-readable name for the state
+        raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people ([`ss.People`](`starsim.people.People`)): Optionally specify an initialized People object, used to construct temporary Arr instances
+        mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
     """
-    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, skip_init=False, people=None):
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
         # Set attributes
         self.name = name
         self.label = label or name
@@ -198,7 +200,10 @@ class Arr(BaseArr):
             self.len_used = 0
             self.len_tot = 0
             self.initialized = skip_init
-            self.raw = np.empty(0, dtype=self.dtype)
+            if raw is None:
+                self.raw = np.empty(0, dtype=self.dtype)
+            else:
+                self.raw = raw # Can't check length since we don't have the People object yet
         else:
             # This Arr is a temporary object used for intermediate calculations when we want to index an array
             # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
@@ -206,7 +211,22 @@ class Arr(BaseArr):
             self.len_used = self.people.uid.len_used
             self.len_tot = self.people.uid.len_tot
             self.initialized = True
-            self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+            if raw is None:
+                self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+            else:
+                if raw.size == self.len_tot:
+                    self.raw = raw # Do not coerce dtype
+                else:
+                    errormsg = f'Cannot populate array of length {self.len_tot} with values of length {raw.size}'
+                    raise ValueError(errormsg)
+
+        # If we have a mock People object, initialize the values
+        if mock:
+            n_agents = len(raw) if raw is not None else mock
+            self.people = ss.utils.mock_people(n_agents)
+            if raw is None:
+                self.init_vals()
+
 
         # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
         self.numba_indexer = False
@@ -249,7 +269,7 @@ class Arr(BaseArr):
                 raise ValueError(errormsg)
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
-        elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
+        elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids so it works from R/reticulate
             return key.astype(int)
         elif isinstance(key, np.ndarray) and key.dtype == bool:
             return self.auids[key]
