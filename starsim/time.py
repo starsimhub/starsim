@@ -979,6 +979,30 @@ class timeprob(Rate):
         rate = -np.log(1-(self.value*v))
         return 1-np.exp(-rate*factor)
 
+    @classmethod
+    def array_to_prob(cls, arr, dur, v=1):
+        arr = sc.promotetoarray(arr)
+
+        if isinstance(dur, np.ndarray):
+            assert arr.shape == dur.shape, 'dur must be either a scalar, or the same size as arr'
+            def to_prob(a, b, _v=v):
+                return a.to_prob(dur=b, v=_v)
+
+            vectorize = np.vectorize(to_prob)
+            return vectorize(arr, dur)
+
+        elif isinstance(arr[0], timeprob):
+            factor = np.array([dur / a.unit for a in arr])
+            scaled_vals = np.array([a.value * v for a in arr])
+            rate = - np.log(1 - scaled_vals)
+            return 1-np.exp(-rate*factor)
+
+        else: # Assume arr is an array of values, that would be the values of a timeprob with unit=ss.years(1)
+            factor = dur / ss.years(1)
+            scaled_vals = arr * v
+            rate = - np.log(1 - scaled_vals)
+            return 1 - np.exp(-rate * factor)
+
     def __truediv__(self, other): raise NotImplementedError()
     def __rtruediv__(self, other): raise NotImplementedError()
 
