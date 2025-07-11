@@ -5,12 +5,15 @@ import sys
 import numpy as np
 import sciris as sc
 import starsim as ss
+import numba as nb
 
 # Shorten these for performance
-ss_float = ss.dtypes.float
-ss_int   = ss.dtypes.int
-ss_bool  = ss.dtypes.bool
-int_nan  = ss.dtypes.int_nan
+ss_float   = ss.dtypes.float
+ss_nbfloat = ss.dtypes.nbfloat
+ss_int     = ss.dtypes.int
+ss_nbint   = ss.dtypes.nbint
+ss_bool    = ss.dtypes.bool
+int_nan    = ss.dtypes.int_nan
 type_def = {
     ss_float: ('float', float, np.float64, np.float32),
     ss_int: ('int', int, np.int64, np.int32),
@@ -258,7 +261,16 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def __gt__(self, other): return (self.values > other).astype(BoolArr)
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True)
+    def numba_gt(a, b, inds):
+        out = np.empty(a.size, dtype=np.bool_)
+        for i,ind in enumerate(inds):
+            out[ind] = a[ind] > b[ind]
+        return out
+
+    # def __gt__(self, other): return (self.values > other).astype(BoolArr)
+    def __gt__(self, other): return self.numba_gt(self.raw, other.raw, self.auids).astype(BoolArr)
     def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
     def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
     def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
@@ -282,6 +294,11 @@ class Arr(BaseArr):
 
     def count(self):
         return np.count_nonzero(self.values)
+
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True)
+    def numba(arr1, inds):
+        return arr1[inds]
 
     @property
     def values(self):
