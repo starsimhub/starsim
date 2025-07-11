@@ -451,7 +451,7 @@ class NCD(Disease):
         super().init_post()
         initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
-        self.ti_affected[initial_risk] = self.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk))
+        self.ti_affected[initial_risk] = self.ti + self.pars['dur_risk'].rvs(initial_risk, round=True)
         return initial_risk
 
     def step_state(self):
@@ -467,8 +467,8 @@ class NCD(Disease):
         ti = self.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True
-        dur_prog = self.pars.prognosis.rvs(new_cases)
-        self.ti_dead[new_cases] = ti + sc.randround(dur_prog)
+        dur_prog = self.pars.prognosis.rvs(new_cases, round=True)
+        self.ti_dead[new_cases] = ti + dur_prog
         super().set_prognoses(new_cases)
         return new_cases
 

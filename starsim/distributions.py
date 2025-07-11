@@ -7,6 +7,7 @@ import numba as nb
 import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as plt
+ss_int_ = ss.dtypes.int
 
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
@@ -631,12 +632,13 @@ class Dist:
             rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
         return rvs
 
-    def rvs(self, n=1, reset=False):
+    def rvs(self, n=1, round=False, reset=False):
         """
         Get random variates -- use this!
 
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
+            round (bool): if True, randomly round up or down based on how close the value is
             reset (bool): whether to automatically reset the random number distribution state after being called
         """
         # Check for readiness
@@ -675,6 +677,10 @@ class Dist:
         # Scale by time if needed
         if self._timepar is not None:
             rvs = self.postprocess_timepar(rvs)
+
+        # Round if needed
+        if round:
+            rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int_) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
 
         # Tidy up
         self.called += 1
