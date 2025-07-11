@@ -107,7 +107,7 @@ class Transmission(ss.Module):
         sir.recovery_timer[newly_infected_indices] = np.random.randint(5, 15, size=newly_infected_indices.size)  # Random recovery time
 
 
-def run_sim(run=True, plot=True):
+def run_sim(run=True, plot=False):
     """ Create and run the simulation """
     pars = dict(
         n_agents = 100_000*2,
@@ -125,8 +125,7 @@ def run_sim(run=True, plot=True):
 
     # Run the simulation
     if run:
-        with sc.timer():
-            sim.run()
+        sim.run()
 
     # Plot results
     if plot:
@@ -135,4 +134,6 @@ def run_sim(run=True, plot=True):
 
 
 if __name__ == '__main__':
-    sir_model = run_sim()
+    with sc.timer():
+        sir_model = run_sim()
+    sir_model.plot_results()
