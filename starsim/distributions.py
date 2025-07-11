@@ -1,6 +1,7 @@
 """
 Define random-number-safe distributions.
 """
+import inspect
 import sciris as sc
 import numpy as np
 import numba as nb
@@ -281,6 +282,8 @@ class Dist:
         if dist:
             self.dist = dist
             self.process_dist()
+
+        self._callable_keys = None # Reset this in case a function was provided and its signature changed (unlikely, but better safe than sorry!)
         if args:
             if kwargs:
                 errormsg = f'You can supply args or kwargs, but not both (args={len(args)}, kwargs={len(kwargs)})'
@@ -289,6 +292,7 @@ class Dist:
                 parkeys = list(self.pars.keys())
                 for i,arg in enumerate(args):
                     kwargs[parkeys[i]] = arg
+
         if kwargs:
             self.pars.update(kwargs)
             if self.initialized:
@@ -551,12 +555,45 @@ class Dist:
                 except:
                     pass
 
-    def convert_callable(self, key, val, size, uids):
+    def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
         size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
-        out = val(self.module, self.sim, size_par)
+        if not getattr(self, '_callable_keys', None): # Inspect isn't that fast, so only do this once
+            keys = list(inspect.signature(func).parameters.keys()) # Get the input arguments  of the function
+            module = self.module
+            mapping = {
+                'sim': self.sim,
+                'self': module,
+                'module': module,
+                'uids': size_par,
+                'size': size_par,
+            }
+            if isinstance(module, ss.Module): # If it's an actual module, we can add a couple more
+                mapping['pars'] = module.pars
+                mapping['states'] = module.state_dict
+            self._callable_keys = keys
+            self._callable_args = mapping
+        else:
+            keys = self._callable_keys
+            mapping = self._callable_args
+
+        # We have to update this every time
+        for key in ['uids', 'size']:
+            mapping[key] = size_par
+
+        # Assemble the arguments
+        args = []
+        for key in keys:
+            try:
+                args.append(mapping[key])
+            except KeyError as e:
+                valid = mapping.keys()
+                errormsg = f'Valid distribution function arguments are 1-3 of {sc.strjoin(valid)}, not "{key}"'
+                raise sc.KeyNotFoundError(errormsg) from e
+
+        out = func(*args) # Actually calculate the function
         val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
-        self._pars[key] = val
+        self._pars[parkey] = val
         return val
 
     def call_par(self, key, val, size, uids):
@@ -738,6 +775,7 @@ class Dist:
         self._n = shrunk
         self._uids = shrunk
         self.history = shrunk
+        self._callable_args = shrunk
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
