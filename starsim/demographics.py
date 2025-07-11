@@ -99,10 +99,16 @@ class Births(Demographics):
             year_ind = sc.findnearest(available_years, sim.t.now('year'))
             nearest_year = available_years[year_ind]
             this_birth_rate = p.birth_rate.loc[nearest_year]
+            scaled_birth_prob = ss.timeprob.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
         else:
             this_birth_rate = p.birth_rate
+            if isinstance(this_birth_rate, ss.Rate):
+                this_birth_rate = ss.timeprob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(dur=ss.years(1))
+            else: # number
+                this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_death
 
-        scaled_birth_prob = ss.timeprob.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
+            scaled_birth_prob = ss.timeprob.array_to_prob(np.array([this_birth_rate]), self.t.dt, v=p.rate_units * p.rel_birth)[0]
+
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
         return n_new
