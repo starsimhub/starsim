@@ -20,8 +20,8 @@ int_nan    = ss.dtypes.int_nan
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
-@staticmethod
-@nb.njit(fastmath=True, parallel=False, cache=True)
+# @staticmethod
+# @nb.njit(fastmath=True, parallel=False, cache=True)
 def nb_index(arr, inds):
     """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
     return arr[inds]
@@ -264,23 +264,15 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    # @staticmethod
-    # @nb.njit(fastmath=True, parallel=False, cache=True)
-    # def _nb_bool_ops(op, arr1, arr2, inds):
-    #     out = np.empty(arr1.size, dtype=np.bool_)
-    #     for i,ind in enumerate(inds):
-    #         out[ind] = a[ind] > b[ind]
-    #     return out
-
-    def _boolmath(self, op, other):
+    def _boolmath(self, op, other=None):
         """ Helper function for performing basic math operations that return a Boolean, e.g. > """
         self_raw = self.raw # Always size N
-        if isinstance(other, (Arr, numbers.Number)):
+        if isinstance(other, (Arr, numbers.Number, type(None))):
             other_raw = other.raw # Also always size N
             both_raw = True
         else:
             raw_size = self_raw.size
-            both_raw = self_raw.size == other_raw.size # It's raw if it's the same size, values otherwise
+            both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
 
         if both_raw:
             a = self_raw
@@ -290,13 +282,17 @@ class Arr(BaseArr):
             b = other
             inds = self.auids
 
-        # Perform operations, listed in rough order of how frequently used they are
-        if   op == '==':  c = a == b
-        elif op == '>':   c = a > b
-        elif op == '<':   c = a < b
-        elif op == '>=':  c = a >= b
-        elif op == '<=':  c = a <= b
-        elif op == '!=':  c = a != b
+        # Perform operations, listed in rough order of how frequently used they are; Numba doesn't make these operations faster
+        if   op == '==': c = a == b
+        elif op == '>':  c = a > b
+        elif op == '<':  c = a < b
+        elif op == '>=': c = a >= b
+        elif op == '<=': c = a <= b
+        elif op == '!=': c = a != b
+        elif op == '&':  c = a & b
+        elif op == '|':  c = a | b
+        elif op == '^':  c = a ^ b
+        elif op == '~':  c = ~a
         else:
             errormsg = f'Unrecognized operator "{op}"'
             raise ValueError(errormsg)
@@ -566,10 +562,10 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=None, nan=None, **kwargs)
         return
 
-    def __and__(self, other): return self.asnew(self.values & other)
-    def __or__(self, other):  return self.asnew(self.values | other)
-    def __xor__(self, other): return self.asnew(self.values ^ other)
-    def __invert__(self):     return self.asnew(~self.values)
+    def __and__(self, other): return self._boolmath('&', other)
+    def __or__(self, other):  return self._boolmath('|', other)
+    def __xor__(self, other): return self._boolmath('^', other)
+    def __invert__(self):     return self._boolmath('~')
 
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
