@@ -18,6 +18,7 @@ int_nan    = ss.dtypes.int_nan
 
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
+_numba_threshold = 5000
 
 def np_indexer(arr, inds):
     """ Much faster than Numba for small arrays (<10k elements) """
@@ -229,7 +230,7 @@ class Arr(BaseArr):
 
 
         # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
-        self.numba_indexer = False
+        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
         return
 
     def __repr__(self):
@@ -277,12 +278,17 @@ class Arr(BaseArr):
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
 
+    def _np_index(self, arr, inds):
+        """ Index the array using the most efficient method for the current array size """
+        return np_indexer(arr, inds)
+
+    def _nb_index(self, arr, inds):
+        """ Index the array using the most efficient method for the current array size """
+        return nb_indexer(arr, inds)
+
     def _index(self, arr, inds):
         """ Index the array using the most efficient method for the current array size """
-        if self.numba_indexer:
-            return nb_indexer(arr, inds)
-        else:
-            return np_indexer(arr, inds)
+        return self._indexer(arr, inds)
 
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
@@ -445,6 +451,7 @@ class Arr(BaseArr):
 
         # Set new values, and NaN if needed
         self.set(new_uids, new_vals=new_vals) # Assign new default values to those agents
+        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
         return
 
     def link_people(self, people):
@@ -453,9 +460,7 @@ class Arr(BaseArr):
         people._link_state(self) # Ensure the state is linked to the People object as well
 
         # Decide whether to switch to the Numba indexer -- typically faster with more than ~5000 agents
-        threshold = 5000
-        if len(people) > threshold:
-            self.numba_indexer = True
+        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
         return
 
     def init_vals(self):
