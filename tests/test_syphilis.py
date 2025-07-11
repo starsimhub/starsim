@@ -25,7 +25,6 @@ def make_syph_sim(dt=1, n_agents=500):
     death = ss.Deaths(death_rate=pd.read_csv(datadir/'nigeria_deaths.csv'), rate_units=1)
 
     # Make people and networks
-    ss.set_seed(1)
     ppl = ss.People(n_agents, age_data=datadir/'nigeria_age.csv')
 
     # Marital

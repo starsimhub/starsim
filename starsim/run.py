@@ -462,7 +462,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     if reseed:
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
-        ss.set_seed() # Note: may not be needed
 
     # Handle additional arguments
     for key, val in sim_args.items():
@@ -470,8 +469,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')
             sim.pars[key] = val
-            if key == 'rand_seed':
-                ss.set_seed() # Note: may not be needed
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 

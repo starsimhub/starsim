@@ -170,7 +170,6 @@ def test_complex_api():
 def test_simple_vax(do_plot=do_plot):
     """ Create and run a sim with vaccination """
     sc.heading('Testing simple vaccination...')
-    ss.set_seed(1)
     pars = make_sim_pars()
     sim_base = ss.Sim(pars=pars)
     sim_base.run()
