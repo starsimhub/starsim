@@ -2,6 +2,7 @@
 Utilities to help with debugging Starsim runs
 """
 import sys
+import types
 import platform
 import numpy as np
 import numba as nb
@@ -76,27 +77,64 @@ class Debugger:
     Args:
         args (list): the sim or sims to step through
         func (func/str): the function to run on the sims (or can use a built-in one, e.g. 'equal')
+        skip (list): if provided, additional object names/types to skip (not check)
         verbose (bool): whether to print progress during the run
-        die (bool): whether to raise an exception if the condition is met
+        die (bool): whether to raise an exception if the condition is met; alternatively 'pause' will pause execution, and False will just print
         run (bool): whether to run immediately
 
-    **Example**:
+    **Examples**:
 
+        ## Example 1: Identical sims are identical
+        import starsim as ss
 
+        s1 = ss.Sim(pars=dict(diseases='sis', networks='random'), n_agents=250)
+        s2 = s1.copy()
+        s3 = s1.copy()
+        db = ss.Debugger(s1, s2, s3, func='equal')
+        db.run()
+
+        ## Example 2: Pause when sim results diverge
+        import sciris as sc
+        import starsim as ss
+
+        # Set up the sims
+        pars = dict(networks='random', n_agents=1000, verbose=0)
+        sis1 = ss.SIS(beta=0.050)
+        sis2 = ss.SIS(beta=0.051) # Very slightly more
+        s1 = ss.Sim(pars, diseases=sis1)
+        s2 = ss.Sim(pars, diseases=sis2)
+
+        # Run the debugger
+        db = ss.Debugger(s1, s2, func='equal_results', die='pause')
+        db.run()
+
+        # Show non-matching results
+        sc.heading('Differing results')
+        df = db.results[-1].df
+        df = df[~df['equal']]
+        df.disp()
     """
-    def __init__(self, *args, func, verbose=True, die=True, run=False):
+    def __init__(self, *args, func, skip=None, verbose=True, die=True, run=False):
+        default_skip = [
+            ss.Sim, ss.Module, ss.Dist, '_states',
+            types.FunctionType, types.MethodType,
+            types.BuiltinFunctionType, types.BuiltinMethodType,
+            types.WrapperDescriptorType, types.MethodDescriptorType,
+            staticmethod, classmethod
+        ]
         self.sims = args
         for sim in self.sims:
             if not sim.initialized:
-                sim.initialize()
+                sim.init()
         self.verbose = verbose
         self.die = die
         self.process_func(func)
-        self.until = self.sims[0].npts
+        self.until = self.sims[0].t.npts
         self.ti = self.sims[0].ti
         self.results = sc.objdict()
-        self.skip = [ss.Sim, ss.Module, ss.Dist]
+        self.skip = sc.mergelists(skip, default_skip)
         self.kw = dict(skip=self.skip, detailed=True, leaf=True)
+        self.pause = False
         if run:
             self.run()
         return
@@ -114,39 +152,57 @@ class Debugger:
             errormsg = f'Unrecognized function type "{type(func)}"'
             raise ValueError(errormsg)
 
+    def equal_check(self, e, which):
+        """ Check if equality is false, and print a message or die """
+        if not e.eq:
+            msg = f'Found a difference in {which} on ti={self.ti}:\n'
+            msg += f'{e.df}'
+            if self.die == True:
+                raise RuntimeError(msg)
+            elif self.die == 'pause':
+                self.pause = True
+            print(msg)
+        else:
+            msg = f'No differences in {which}'
+        return msg
+
     def equal_dists(self, *sims):
-        msg = f'Found a difference in dists on ti={self.ti}'
+
         dstates = []
         for sim in sims:
             ds = {d.trace:d.show_state(output=True) for d in sim.dists.dists.values()}
             dstates.append(ds)
         e = sc.Equal(*dstates, **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        self.equal_check(e, 'dists')
         return e
 
-    def equal_pars(self, *sims):
-        msg = f'Found a difference in pars on ti={self.ti}'
-        e = sc.Equal(*[s.pars for s in sims], **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+    def equal_pars(self, *sims, skip='label'):
+        """ Check if SimPars are equal """
+        skip = sc.tolist(skip)
+        parslist = [s.pars.copy() for s in sims]
+        for key in skip: # Do not need to do on every step, but so fast it doesn't matter
+            for pars in parslist:
+                pars.pop(key, None)
+
+        e = sc.Equal(*parslist, **self.kw)
+        self.equal_check(e, 'pars')
         return e
 
     def equal_people(self, *sims):
-        msg = f'Found a difference in people on ti={self.ti}'
+        """ Check if people are equal """
         e = sc.Equal(*[s.people.states for s in sims], **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        self.equal_check(e, 'people')
         return e
 
     def equal_networks(self, *sims):
-        msg = f'Found a difference in network contacts on ti={self.ti}'
-        ncs = [[n.contacts for n in s.networks.values()] for s in sims]
+        ncs = [[n.edges for n in s.networks.values()] for s in sims]
         e = sc.Equal(*ncs, **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        self.equal_check(e, 'network edges')
         return e
 
     def equal_results(self, *sims):
-        msg = f'Found a difference in results on ti={self.ti}'
         e = sc.Equal(*[s.results for s in sims], **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        self.equal_check(e, 'results')
         return e
 
     def equal(self, *sims):
@@ -169,22 +225,28 @@ class Debugger:
         self.results[f'{self.ti}'] = self.func(*self.sims)
         return
 
-    def step(self):
+    def step(self, reseed=True):
         self.ti += 1
         if self.verbose: sc.heading(f'Working on step ti={self.ti}')
         for sim in self.sims:
-            sim.step()
+            if reseed:
+                np.random.seed(sim.pars.rand_seed + self.ti) # Reset the random seed, in case anything is not CRN-safe
+            sim.run_one_step()
         self.check()
         return
 
-    def run(self):
+    def run(self, reseed=True):
+        self.pause = False # Reset so we can run
         self.check()
         while self.ti < self.until:
-            self.step()
-        for sim in self.sims:
-            sim.finalize()
-        if len(self.sims) > 1:
-            self.df = ss.diff_sims(self.sims[0], self.sims[1], full=True, output=True)
+            self.step(reseed=reseed)
+            if self.pause: # If we hit a checkpoint, pause and break the loop
+                break
+        if not self.pause:
+            for sim in self.sims:
+                sim.finalize()
+            if len(self.sims) > 1:
+                self.df = ss.diff_sims(self.sims[0], self.sims[1], full=True, output=True)
         return
 
 

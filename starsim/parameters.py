@@ -192,7 +192,7 @@ class SimPars(Pars):
         analyzers (str/list/Module): As above
         verbose (float): How much detail to print (1 = every timestep, 0.1 = every 10 timesteps, etc.)
     """
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, create=True, **kwargs):
 
         # General parameters
         self.label   = '' # The label of the simulation
@@ -226,7 +226,7 @@ class SimPars(Pars):
         self.analyzers     = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
-        self.update(kwargs)
+        self.update(pars, create=create, **kwargs)
         return
 
     def is_default(self, key):
