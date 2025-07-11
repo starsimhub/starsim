@@ -210,7 +210,7 @@ class Arr(BaseArr):
             self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
 
         # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
-        self._indexer = indexer
+        self.indexer = indexer
         return
 
     def __repr__(self):
@@ -272,13 +272,18 @@ class Arr(BaseArr):
     def _boolmath(self, op, other=None):
         """ Helper function for performing basic math operations that return a Boolean, e.g. > """
         self_raw = self.raw # Always size N
-        if isinstance(other, (Arr, numbers.Number, type(None))):
+        both_raw = True # Assume this by default
+        if isinstance(other, Arr):
             other_raw = other.raw # Also always size N
-            both_raw = True
-        else:
+        elif isinstance(other, (numbers.Number, type(None))):
+            other_raw = other # If its' a scalar, we don't have to worry about array size
+        elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
             raw_size = self_raw.size
             both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
+        else:
+            self._type_error(other)
 
+        # Figure out the two arrays to operate on
         if both_raw:
             a = self_raw
             b = other_raw
