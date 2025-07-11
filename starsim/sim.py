@@ -49,7 +49,7 @@ class Sim(ss.Base):
         # Set attributes; see also sim.init() for more
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
-        self.metadata = ss.utils.metadata()
+        self.metadata = ss.metadata()
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='Sim')  # For storing results
