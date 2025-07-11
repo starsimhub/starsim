@@ -1147,8 +1147,8 @@ class choice(Dist):
     to use ss.bernoulli() instead.
     """
     valid_pars = ['a', 'p', 'replace', 'dtype']
-    def __init__(self, a=2, p=None, **kwargs):
-        super().__init__(distname='choice', a=a, p=p, replace=True, **kwargs)
+    def __init__(self, a=2, p=None, replace=True, **kwargs):
+        super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
         self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
         return
 
