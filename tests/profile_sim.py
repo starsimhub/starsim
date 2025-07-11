@@ -9,7 +9,7 @@ def make_sim():
 to_run = [
     'profile',
     'cprofile',
-    'time'
+    'time',
     'plot_cpu',
 ]
 
@@ -17,13 +17,13 @@ if 'profile' in to_run:
     sim = make_sim()
     prf = sc.profile(run=sim.run, follow=[sim.run])
 
-elif 'cprofile' in to_run:
+if 'cprofile' in to_run:
     sim = make_sim()
     cprf = sc.cprofile(sort='selfpct', mintime=1e-3, maxitems=None, maxfunclen=None, maxpathlen=None)
     with cprf:
         sim.run()
 
-elif 'time' in to_run:
+if 'time' in to_run:
     sim = make_sim()
     with sc.timer() as T:
         sim.run()

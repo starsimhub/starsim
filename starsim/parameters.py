@@ -325,12 +325,13 @@ class SimPars(Pars):
     def validate_demographics(self):
         """ Validate demographics-related input parameters"""
         # Allow shortcut for default demographics
-        if self.demographics == True:
+        if self.demographics in [True, False, 1, 0]: # Allow turning it on or off
             self.demographics = sc.autolist()
-            if self.birth_rate is None:
-                self.demographics += ss.Births()
-            if self.death_rate is None:
-                self.demographics += ss.Deaths()
+            if self.demographics: # ...turn it on
+                if self.birth_rate is None:
+                    self.demographics += ss.Births()
+                if self.death_rate is None:
+                    self.demographics += ss.Deaths()
 
         # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         valid = isinstance(self.demographics, ss.ndict) and not len(self.demographics)
