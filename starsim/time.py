@@ -674,15 +674,13 @@ class DateDur(Dur):
         else:
             raise TypeError()
 
+        if all([isinstance(val, int) for val in d.values()]):
+            if isinstance(vals, pd.DateOffset): return vals  # pd.DateOffset is immutable so this should be OK
+            return pd.DateOffset(**d)
+
         for i in range(len(cls.ratios)-1):
-            if d[i] < 0:
-                d[i], remainder = divmod(d[i], 1)
-                if remainder:
-                    d[i]+=1
-                    remainder -=1
-            else:
-                d[i], remainder = divmod(d[i], 1)
-            d[i] = int(d[i])
+            remainder, div = np.modf(d[i])
+            d[i] = int(div)
             d[i+1] += remainder * cls.ratios[i+1]
         d[-1] = int(d[-1])
 
