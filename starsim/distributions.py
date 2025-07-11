@@ -4,7 +4,7 @@ Define random-number-safe distributions.
 import sciris as sc
 import numpy as np
 import numba as nb
-import scipy.stats as sps
+# import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as plt
 
@@ -453,16 +453,16 @@ class Dist:
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
 
-            # Pull out parameters of an already-frozen distribution
-            if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
-                if not self.initialized: # Don't do this more than once
-                    self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
+            # # Pull out parameters of an already-frozen distribution
+            # if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
+            #     if not self.initialized: # Don't do this more than once
+            #         self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
 
-            # Convert to a frozen distribution
-            if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
-                spars = self.process_pars(call=False)
-                spars.pop('dtype', None) # Not a valid arg for SciPy distributions
-                self.dist = self.dist(**spars)
+            # # Convert to a frozen distribution
+            # if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
+            #     spars = self.process_pars(call=False)
+            #     spars.pop('dtype', None) # Not a valid arg for SciPy distributions
+            #     self.dist = self.dist(**spars)
 
             # Override the default random state with the correct one
             self.dist.random_state = self.rng
@@ -790,7 +790,7 @@ class normal(Dist):
 
     """
     def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='normal', loc=loc, scale=scale, **kwargs)
         return
 
 
@@ -811,7 +811,7 @@ class lognorm_im(Dist):
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        super().__init__(distname='lognormal', mean=mean, sigma=sigma, **kwargs)
         return
 
     def convert_timepars(self):
@@ -850,7 +850,7 @@ class lognorm_ex(Dist):
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
+        super().__init__(distname='lognormal', mean=mean, std=std, **kwargs)
         return
 
     def convert_ex_to_im(self):
@@ -892,7 +892,7 @@ class expon(Dist):
 
     """
     def __init__(self, scale=1.0, **kwargs):
-        super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
+        super().__init__(distname='exponential', scale=scale, **kwargs)
         return
 
 
@@ -904,7 +904,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         lam (float): the scale of the distribution (default 1.0)
     """
     def __init__(self, lam=1.0, **kwargs):
-        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        super().__init__(distname='poisson', lam=lam, **kwargs)
         return
 
     def sync_pars(self):
@@ -924,7 +924,7 @@ class nbinom(Dist):
 
     """
     def __init__(self, n=1, p=0.5, **kwargs):
-        super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
+        super().__init__(distname='negative_binomial', n=n, p=p, **kwargs)
         return
 
 
@@ -994,8 +994,10 @@ class weibull(Dist):
         scale (float): the scale parameter, sometimes called λ (default 1.0)
     """
     def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
+        # super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='weibull', **kwargs)
         return
+
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
@@ -1013,7 +1015,8 @@ class gamma(Dist):
         scale (float): the scale parameter, sometimes called θ (default 1.0)
     """
     def __init__(self, a=1.0, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='gamma', dist=sps.gamma, a=a, loc=loc, scale=scale, **kwargs)
+        # super().__init__(distname='gamma', dist=sps.gamma, a=a, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='gamma', shape=a, scale=scale, **kwargs)
         return
 
     def make_rvs(self):
