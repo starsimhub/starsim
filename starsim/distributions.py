@@ -241,8 +241,8 @@ class Dist:
             if mock is True: # Convert from boolean to a reasonable int
                 mock = 100
             strict = False
-            self.sim = ss.utils.mock_sim(mock)
-            self.module = ss.utils.mock_module()
+            self.sim = ss.mock_sim(mock)
+            self.module = ss.mock_module()
             self.trace = 'mock_dist'
         if not strict: # Otherwise, wait for a sim
             self.init()

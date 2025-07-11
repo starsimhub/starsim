@@ -225,7 +225,7 @@ class Arr(BaseArr):
         # If we have a mock People object, initialize the values
         if mock:
             n_agents = len(raw) if raw is not None else mock
-            self.people = ss.utils.mock_people(n_agents)
+            self.people = ss.mock_people(n_agents)
             if raw is None:
                 self.init_vals()
 

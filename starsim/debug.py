@@ -10,7 +10,8 @@ import sciris as sc
 import matplotlib as mpl
 import starsim as ss
 
-__all__ = ['Profile', 'check_requires', 'check_version', 'metadata', 'sim_debugger']
+__all__ = ['Profile', 'Debugger', 'check_version', 'metadata', 'mock_time', 'mock_sim',
+           'mock_people', 'mock_module']
 
 
 class Profile(sc.profile):
@@ -65,6 +66,115 @@ class Profile(sc.profile):
     def plot_cpu(self):
         """ Shortcut to sim.loop.plot_cpu() """
         self.sim.loop.plot_cpu()
+        return
+
+class Debugger:
+    """
+    Step through one or more sims and pause or raise an exception when a condition is met
+    """
+    def __init__(self, *args, func, verbose=True, die=True, run=True):
+        self.sims = args
+        for sim in self.sims:
+            if not sim.initialized:
+                sim.initialize()
+        self.verbose = verbose
+        self.die = die
+        self.process_func(func)
+        self.until = self.sims[0].npts
+        self.ti = self.sims[0].ti
+        self.results = sc.objdict()
+        self.skip = [ss.Sim, ss.Module, ss.Dist]
+        self.kw = dict(skip=self.skip, detailed=True, leaf=True)
+        if run:
+            self.run()
+        return
+
+    def process_func(self, func):
+        if callable(func):
+            self.func = func
+        elif isinstance(func, str):
+            if hasattr(self, func):
+                self.func = getattr(self, func)
+            else:
+                errormsg = f'Unrecognized function "{func}"'
+                raise ValueError(errormsg)
+        else:
+            errormsg = f'Unrecognized function type "{type(func)}"'
+            raise ValueError(errormsg)
+
+    def equal_dists(self, *sims):
+        msg = f'Found a difference in dists on ti={self.ti}'
+        dstates = []
+        for sim in sims:
+            ds = {d.trace:d.show_state(output=True) for d in sim.dists.dists.values()}
+            dstates.append(ds)
+        e = sc.Equal(*dstates, **self.kw)
+        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        return e
+
+    def equal_pars(self, *sims):
+        msg = f'Found a difference in pars on ti={self.ti}'
+        e = sc.Equal(*[s.pars for s in sims], **self.kw)
+        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        return e
+
+    def equal_people(self, *sims):
+        msg = f'Found a difference in people on ti={self.ti}'
+        e = sc.Equal(*[s.people.states for s in sims], **self.kw)
+        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        return e
+
+    def equal_networks(self, *sims):
+        msg = f'Found a difference in network contacts on ti={self.ti}'
+        ncs = [[n.contacts for n in s.networks.values()] for s in sims]
+        e = sc.Equal(*ncs, **self.kw)
+        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        return e
+
+    def equal_results(self, *sims):
+        msg = f'Found a difference in results on ti={self.ti}'
+        e = sc.Equal(*[s.results for s in sims], **self.kw)
+        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
+        return e
+
+    def equal(self, *sims):
+        """ Run all other tests """
+        out = sc.objdict()
+        out.dists    = self.equal_dists(*sims)
+        out.pars     = self.equal_pars(*sims)
+        out.people   = self.equal_people(*sims)
+        out.networks = self.equal_networks(*sims)
+        out.results  = self.equal_results(*sims)
+        if self.verbose:
+            for k,e in out.items():
+                sc.printgreen('—'*80)
+                sc.printgreen(f'{k}:')
+                e.df.disp()
+                print()
+        return out
+
+    def check(self):
+        self.results[f'{self.ti}'] = self.func(*self.sims)
+        return
+
+    def step(self):
+        self.ti += 1
+        if self.verbose: sc.heading(f'Working on step ti={self.ti}')
+        for sim in self.sims:
+            ss.set_seed(self.sims[0].pars.rand_seed + 1)
+            sim.step()
+        self.check()
+        return
+
+    def run(self):
+        ss.set_seed(self.sims[0].pars.rand_seed + 1)
+        self.check()
+        while self.ti < self.until:
+            self.step()
+        for sim in self.sims:
+            sim.finalize()
+        if len(self.sims) > 1:
+            self.df = ss.diff_sims(self.sims[0], self.sims[1], full=True, output=True)
         return
 
 
@@ -185,116 +295,6 @@ def mock_module(dur=10):
         t = mock_time,
     )
     return mod
-
-
-class sim_debugger:
-    """
-    Step through one or more sims and pause or raise an exception when a condition is met
-    """
-    def __init__(self, *args, func, verbose=True, die=True, run=True):
-        self.sims = args
-        for sim in self.sims:
-            if not sim.initialized:
-                sim.initialize()
-        self.verbose = verbose
-        self.die = die
-        self.process_func(func)
-        self.until = self.sims[0].npts
-        self.ti = self.sims[0].ti
-        self.results = sc.objdict()
-        self.skip = [ss.Sim, ss.Module, ss.Dist]
-        self.kw = dict(skip=self.skip, detailed=True, leaf=True)
-        if run:
-            self.run()
-        return
-
-    def process_func(self, func):
-        if callable(func):
-            self.func = func
-        elif isinstance(func, str):
-            if hasattr(self, func):
-                self.func = getattr(self, func)
-            else:
-                errormsg = f'Unrecognized function "{func}"'
-                raise ValueError(errormsg)
-        else:
-            errormsg = f'Unrecognized function type "{type(func)}"'
-            raise ValueError(errormsg)
-
-    def equal_dists(self, *sims):
-        msg = f'Found a difference in dists on ti={self.ti}'
-        dstates = []
-        for sim in sims:
-            ds = {d.trace:d.show_state(output=True) for d in sim.dists.dists.values()}
-            dstates.append(ds)
-        e = sc.Equal(*dstates, **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
-        return e
-
-    def equal_pars(self, *sims):
-        msg = f'Found a difference in pars on ti={self.ti}'
-        e = sc.Equal(*[s.pars for s in sims], **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
-        return e
-
-    def equal_people(self, *sims):
-        msg = f'Found a difference in people on ti={self.ti}'
-        e = sc.Equal(*[s.people.states for s in sims], **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
-        return e
-
-    def equal_networks(self, *sims):
-        msg = f'Found a difference in network contacts on ti={self.ti}'
-        ncs = [[n.contacts for n in s.networks.values()] for s in sims]
-        e = sc.Equal(*ncs, **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
-        return e
-
-    def equal_results(self, *sims):
-        msg = f'Found a difference in results on ti={self.ti}'
-        e = sc.Equal(*[s.results for s in sims], **self.kw)
-        if not e.eq: raise RuntimeError(msg) if self.die else print(msg)
-        return e
-
-    def equal(self, *sims):
-        """ Run all other tests """
-        out = sc.objdict()
-        out.dists    = self.equal_dists(*sims)
-        out.pars     = self.equal_pars(*sims)
-        out.people   = self.equal_people(*sims)
-        out.networks = self.equal_networks(*sims)
-        out.results  = self.equal_results(*sims)
-        if self.verbose:
-            for k,e in out.items():
-                sc.printgreen('—'*80)
-                sc.printgreen(f'{k}:')
-                e.df.disp()
-                print()
-        return out
-
-    def check(self):
-        self.results[f'{self.ti}'] = self.func(*self.sims)
-        return
-
-    def step(self):
-        self.ti += 1
-        if self.verbose: sc.heading(f'Working on step ti={self.ti}')
-        for sim in self.sims:
-            ss.set_seed(self.sims[0].pars.rand_seed + 1)
-            sim.step()
-        self.check()
-        return
-
-    def run(self):
-        ss.set_seed(self.sims[0].pars.rand_seed + 1)
-        self.check()
-        while self.ti < self.until:
-            self.step()
-        for sim in self.sims:
-            sim.finalize()
-        if len(self.sims) > 1:
-            self.df = ss.diff_sims(self.sims[0], self.sims[1], full=True, output=True)
-        return
 
 
 # s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=250, label='s1')

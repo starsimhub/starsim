@@ -502,7 +502,7 @@ class Module(Base):
 
     def init_mock(self, n_agents=100, dur=10):
         """ Initialize with a mock simulation -- for debugging purposes only """
-        sim = ss.utils.mock_sim(n_agents=n_agents, dur=dur)
+        sim = ss.mock_sim(n_agents=n_agents, dur=dur)
         self.init_pre(sim)
         for state in self.state_list: # Manually link the people
             state.people = self.sim.people

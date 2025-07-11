@@ -183,7 +183,7 @@ class People(sc.prettyobj):
 
     def init_mock(self):
         """ Initialize with a mock simulation (for debugging purposes only) """
-        sim = ss.utils.mock_sim(n_agents=self.n_agents)
+        sim = ss.mock_sim(n_agents=self.n_agents)
         self.link_sim(sim, init=True)
         self.init_vals()
         return
