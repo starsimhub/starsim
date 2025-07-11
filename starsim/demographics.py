@@ -218,8 +218,11 @@ class Deaths(Demographics):
         if sc.isnumber(drd):
             death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a timeprob with unit=ss.years(1) by ss.timeprob.array_to_prob
         elif isinstance(drd, ss.Rate):
-            # Convert from prob per drd.unit to prob per year, ss.timeprob.array_to_prob will convert to prob per timestep later
-            death_rate = np.array([ss.timeprob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(dur=ss.years(1))])
+            if drd.unit == 1: # drd is already in years so don't need to translate
+                death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
+            else:
+                # Convert from prob per drd.unit to prob per year, ss.timeprob.array_to_prob will convert to prob per timestep later
+                death_rate = np.array([ss.timeprob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(dur=ss.years(1))])
 
         # Process data
         else:
