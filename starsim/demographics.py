@@ -107,7 +107,7 @@ class Births(Demographics):
             else: # number
                 this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_death
 
-            scaled_birth_prob = ss.timeprob.array_to_prob(np.array([this_birth_rate]), self.t.dt, v=p.rate_units * p.rel_birth)[0]
+            scaled_birth_prob = ss.timeprob.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
 
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
