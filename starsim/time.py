@@ -1225,6 +1225,7 @@ class Time:
 
         if sc.isnumber(self.dur):
             self.dur = Dur(self.dur)
+        assert self.dur is None or isinstance(self.dur, Dur), 'Time.dur must be a number, a Dur object or None'
 
         match (self.start, self.stop, self.dur):
             case (None, None, None):
@@ -1233,7 +1234,12 @@ class Time:
                 stop = start+dur
 
             case (start, None, None):
-                start = date(start)
+                if isinstance(start, Dur):
+                    pass  # Already a Dur which is fine
+                elif sc.isnumber(start) and start < 1900:
+                    start = Dur(start)
+                else:
+                    start = date(start)
                 dur = self.default_dur
                 stop = start+dur
 
@@ -1253,14 +1259,22 @@ class Time:
                 stop = start+dur
 
             case (start, None, dur):
-                start = date(start)
+                if isinstance(start, Dur):
+                    pass
+                elif sc.isnumber(start) and start < 1900:
+                    start = Dur(start)
+                else:
+                    start = date(start)
                 stop = start+dur
 
             case (None, stop, dur):
-                if sc.isnumber(stop) and stop < 1900:
+                if isinstance(stop, Dur):
+                    pass
+                elif sc.isnumber(stop) and stop < 1900:
                     stop = Dur(stop)
                 else:
                     stop = date(stop)
+                start = stop-dur
 
             case (start, stop, dur):
                 # Note that this block will run if dur is None and if it is not None, which is fine because
