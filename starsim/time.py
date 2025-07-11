@@ -335,7 +335,7 @@ class Dur():
                 elif isinstance(args[0], YearDur):
                     return super().__new__(YearDur)
                 else:
-                    assert len(args) == 1
+                    assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
                     return super().__new__(YearDur)
             else:
                 return super().__new__(DateDur)
@@ -565,8 +565,8 @@ class DateDur(Dur):
             kwargs:
         """
         if args:
-            assert not kwargs
-            assert len(args) == 1
+            assert not kwargs, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
+            assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
             if isinstance(args[0], pd.DateOffset):
                 self.unit = self._round_duration(args[0])
             elif isinstance(args[0], DateDur):
