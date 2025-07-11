@@ -121,7 +121,7 @@ def test_arrs():
 
 def test_deepcopy():
     sc.heading('Testing deepcopy')
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
+    s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
     s1.init()
 
     s2 = sc.dcp(s1)

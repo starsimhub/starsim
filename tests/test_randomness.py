@@ -200,10 +200,7 @@ def test_worlds(do_plot=False):
             dur_inf = 20,
             p_death = 0, # Here since analyzer can't handle variable numbers of people
         ),
-        networks = dict(
-            type = 'embedding',
-            duration = 5, # Must be shorter than dur_inf for SIR transmission to occur
-        ),
+        networks = sse.EmbeddingNet(duration=5)  # Must be shorter than dur_inf for SIR transmission to occur
     )
     s1 = ss.Sim(pars=pars, interventions=CountInf())
     s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])

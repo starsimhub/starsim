@@ -6,6 +6,7 @@ Test networks
 import sciris as sc
 import numpy as np
 import starsim as ss
+import starsim_examples as sse
 import scipy.stats as sps
 
 sc.options(interactive=False) # Assume not running interactively
@@ -101,11 +102,12 @@ def test_erdosrenyi():
 
     # Manual creation
     p = 0.1
-    nw1 = ss.ErdosRenyiNet(p=p)
+    nw1 = sse.ErdosRenyiNet(p=p)
     ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
+    ss.register_modules(sse)
     s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
     nw2 = s2.networks[0]
 
@@ -128,7 +130,7 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    nw1 = ss.DiskNet()
+    nw1 = sse.DiskNet()
     s1 = ss.Sim(n_agents=5, dur=ss.years(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
@@ -149,7 +151,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = ss.DiskNet(r=0.15, v=ss.Rate(0.05))
+    nw2 = sse.DiskNet(r=0.15, v=ss.Rate(0.05))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -187,7 +189,7 @@ def test_static():
 def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
-    network = ss.NullNet()
+    network = sse.NullNet()
     sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
