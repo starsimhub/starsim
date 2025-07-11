@@ -335,7 +335,7 @@ class Dur():
                 elif isinstance(args[0], YearDur):
                     return super().__new__(YearDur)
                 else:
-                    assert len(args) == 1
+                    assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
                     return super().__new__(YearDur)
             else:
                 return super().__new__(DateDur)
@@ -565,8 +565,8 @@ class DateDur(Dur):
             kwargs:
         """
         if args:
-            assert not kwargs
-            assert len(args) == 1
+            assert not kwargs, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
+            assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
             if isinstance(args[0], pd.DateOffset):
                 self.unit = self._round_duration(args[0])
             elif isinstance(args[0], DateDur):
@@ -674,15 +674,13 @@ class DateDur(Dur):
         else:
             raise TypeError()
 
+        if all([isinstance(val, int) for val in d.values()]):
+            if isinstance(vals, pd.DateOffset): return vals  # pd.DateOffset is immutable so this should be OK
+            return pd.DateOffset(**d)
+
         for i in range(len(cls.ratios)-1):
-            if d[i] < 0:
-                d[i], remainder = divmod(d[i], 1)
-                if remainder:
-                    d[i]+=1
-                    remainder -=1
-            else:
-                d[i], remainder = divmod(d[i], 1)
-            d[i] = int(d[i])
+            remainder, div = np.modf(d[i])
+            d[i] = int(div)
             d[i+1] += remainder * cls.ratios[i+1]
         d[-1] = int(d[-1])
 
@@ -1225,6 +1223,7 @@ class Time:
 
         if sc.isnumber(self.dur):
             self.dur = Dur(self.dur)
+        assert self.dur is None or isinstance(self.dur, Dur), 'Time.dur must be a number, a Dur object or None'
 
         match (self.start, self.stop, self.dur):
             case (None, None, None):
@@ -1233,7 +1232,12 @@ class Time:
                 stop = start+dur
 
             case (start, None, None):
-                start = date(start)
+                if isinstance(start, Dur):
+                    pass  # Already a Dur which is fine
+                elif sc.isnumber(start) and start < 1900:
+                    start = Dur(start)
+                else:
+                    start = date(start)
                 dur = self.default_dur
                 stop = start+dur
 
@@ -1253,14 +1257,22 @@ class Time:
                 stop = start+dur
 
             case (start, None, dur):
-                start = date(start)
+                if isinstance(start, Dur):
+                    pass
+                elif sc.isnumber(start) and start < 1900:
+                    start = Dur(start)
+                else:
+                    start = date(start)
                 stop = start+dur
 
             case (None, stop, dur):
-                if sc.isnumber(stop) and stop < 1900:
+                if isinstance(stop, Dur):
+                    pass
+                elif sc.isnumber(stop) and stop < 1900:
                     stop = Dur(stop)
                 else:
                     stop = date(stop)
+                start = stop-dur
 
             case (start, stop, dur):
                 # Note that this block will run if dur is None and if it is not None, which is fine because

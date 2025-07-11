@@ -184,10 +184,10 @@ def test_mixed_timesteps():
 def test_time_class():
     sc.heading('Test different instances of ss.Time')
 
-    def sim(start, stop, dt):
+    def sim(start, stop, dt, **kwargs):
         """ Generate a fake sim """
         sim = sc.prettyobj()
-        sim.t = ss.Time(start=start, stop=stop, dt=dt)
+        sim.t = ss.Time(start=start, stop=stop, dt=dt, **kwargs)
         sim.pars = ss.SimPars()
         sim.t.init(None)
         return sim
@@ -231,6 +231,18 @@ def test_time_class():
     assert s4.t.datevec[0] == ss.Dur(0)
     assert s4.t.datevec[-1] == ss.Dur(months=10)
     assert len(s4.t) == 11
+
+    print('Testing numeric 1')
+    s5 = sim(start=None, stop=30, dt=None)
+    assert s5.t.datevec[0] == ss.Dur(0)
+    assert s5.t.datevec[-1] == ss.Dur(years=30)
+    assert len(s5.t) == 31
+
+    print('Testing numeric 2')
+    s6 = sim(start=2, stop=None, dt=None)  # Will default to start=Dur(2), dur=Dur(50), end=start+dur
+    assert s6.t.datevec[0] == ss.Dur(2)
+    assert s6.t.datevec[-1] == ss.Dur(years=52)
+    assert len(s6.t) == 51
 
     return [s1, t1, s2, t2]
 
