@@ -1,11 +1,8 @@
 """
-Numerical utilities
+Numerical utilities and other helper functions
 """
-import sys
-import platform
 import warnings
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
 import matplotlib as mpl
@@ -15,10 +12,8 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'Profile', 'check_version',
-           'load', 'save', 'plot_args', 'show', 'return_fig']
-
+__all__ = ['ndict', 'warn', 'find_contacts', 'standardize_netkey', 'standardize_data',
+           'validate_sim_data', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 class ndict(sc.objdict):
     """
@@ -209,20 +204,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-def check_requires(sim, requires, *args):
-    """ Check that the module's requirements (of other modules) are met """
-    errs = sc.autolist()
-    all_classes = [m.__class__ for m in sim.module_list]
-    all_names = [m.name for m in sim.module_list]
-    for req in sc.mergelists(requires, *args):
-        if req not in all_classes + all_names:
-            errs += req
-    if len(errs):
-        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
-        raise AttributeError(errormsg)
-    return
-
-
 # %% Data cleaning and processing
 
 def standardize_netkey(key):
@@ -374,168 +355,6 @@ def combine_rands(a, b):
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
-
-
-#%% Profiling and debugging
-
-class Profile(sc.profile):
-    """ Class to profile the performance of a simulation """
-
-    def __init__(self, sim, do_run=True, plot=True, verbose=False, **kwargs):
-        assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
-        super().__init__(run=None, do_run=False, verbose=verbose, **kwargs)
-        self.orig_sim = sim
-
-        # Optionally run
-        if do_run:
-            self.init_and_run()
-            if plot:
-                self.plot_cpu()
-        return
-
-    def init_and_run(self):
-        """ Profile the performance of the simulation """
-
-        # Initialize: copy the sim and time initialization
-        sim = self.orig_sim.copy() # Copy so the sim can be reused
-        self.sim = sim
-        self.run_func = sim.run
-
-        # Handle sim init -- both run it and profile it
-        init_prof = None
-        if not sim.initialized:
-            if self.follow:
-                sim.init()
-            else:
-                init_prof = sc.profile(sim.init, verbose=False)
-
-        # Get the functions from the initialized sim
-        if self.follow is None:
-            loop_funcs = [e['func'] for e in sim.loop.funcs]
-            self.follow = [sim.run] + loop_funcs
-
-        # Run the profiling on the sim run
-        self.run()
-
-        # Add initialization to the other timings
-        if init_prof:
-            self += init_prof
-
-        return self
-
-    def disp(self, bytime=1, maxentries=10, skiprun=True):
-        """ Same as sc.profile.disp(), but skip the run function by default """
-        return super().disp(bytime=bytime, maxentries=maxentries, skiprun=skiprun)
-
-    def plot_cpu(self):
-        """ Shortcut to sim.loop.plot_cpu() """
-        self.sim.loop.plot_cpu()
-        return
-
-
-def check_version(expected, die=False, warn=True):
-    """
-    Check the expected Starsim version with the one actually installed. The expected
-    version string may optionally start with '>=' or '<=' (== is implied otherwise),
-    but other operators (e.g. ~=) are not supported. Note that '>' and '<' are interpreted
-    to mean '>=' and '<='; '>' and '<' are not supported.
-
-    Args:
-        expected (str): expected version information
-        die (bool): whether or not to raise an exception if the check fails
-        warn (bool): whether to raise a warning if the check fails
-
-    **Example**:
-
-        ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
-    """
-    if   expected.startswith('>'): valid = [0,1]
-    elif expected.startswith('<'): valid = [0,-1]
-    elif expected.startswith('!'): valid = [1,-1]
-    else: valid = [0] # Assume == is the only valid comparison
-    expected = expected.lstrip('<=>') # Remove comparator information
-    version = ss.__version__
-    compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
-    relation = ['older', '', 'newer'][compare+1] # Picks the right string
-    if relation: # Versions mismatch, print warning or raise error
-        string = f'Starsim is {relation} than expected ({version} vs. {expected})'
-        if compare not in valid:
-            if die:
-                raise ValueError(string)
-            elif warn:
-                ss.warn(string)
-    return compare
-
-
-def metadata(comments=None):
-    """ Store metadata; like `sc.metadata()`, but optimized for speed """
-    md = sc.objdict(
-        version = ss.__version__,
-        versiondate = ss.__versiondate__,
-        timestamp = sc.getdate(),
-        user      = sc.getuser(),
-        system = sc.objdict(
-            platform   = platform.platform(),
-            executable = sys.executable,
-            version    = sys.version,
-        ),
-        versions = sc.objdict(
-            python     = platform.python_version(),
-            numpy      = np.__version__,
-            numba      = nb.__version__,
-            pandas     = pd.__version__,
-            sciris     = sc.__version__,
-            matplotlib = mpl.__version__,
-            starsim    = ss.__version__,
-        ),
-        comments = comments,
-    )
-    return md
-
-
-def mock_time(dur=10):
-    """ Create a minimal mock "Time" object """
-    t = sc.objdict(
-        dt = 1.0,
-        ti = 0,
-        start = 2000,
-        stop = None,
-        dur = 50,
-        is_absolute = True,
-        initialized = True,
-    )
-    return t
-
-def mock_sim(n_agents=100, dur=10):
-    """ Create a minimal mock "Sim" object to initialize objects that require it """
-    sim = sc.objdict(
-        label = 'mock_sim',
-        people = mock_people(n_agents),
-        t = mock_time(dur),
-        pars = mock_time(dur),
-        results = sc.objdict(),
-        networks = sc.objdict(),
-    )
-    return sim
-
-def mock_people(n_agents=100):
-    """ Create a minimal mock "People" object """
-    people = sc.objdict(
-        uid = np.arange(n_agents),
-        auids = np.arange(n_agents),
-        slot = np.arange(n_agents),
-        age = np.random.uniform(0, 70, size=n_agents),
-        add_module = lambda x: None, # Placeholder function
-    )
-    return people
-
-def mock_module(dur=10):
-    """ Create a minimal mock "Time" object """
-    mod = sc.objdict(
-        name = 'mock_module',
-        t = mock_time,
-    )
-    return mod
 
 
 #%% Other helper functions
