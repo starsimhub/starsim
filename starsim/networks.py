@@ -611,7 +611,117 @@ class RandomNet(DynamicNetwork):
         return
 
 
+class RandomSafeNet(ss.DynamicNetwork):
+    """ Demonstrate CRN-safe, O(N) network pairs """
 
+    def __init__(self, key_dict=None, **kwargs):
+        super().__init__(key_dict=key_dict)
+        self.define_pars(
+            n_contacts = 10,
+            dur = 0, # Note; network edge durations are required to have the same unit as the network
+            beta = 1.0,
+        )
+        self.update_pars(**kwargs)
+        self.dist = ss.random(name='RandomSafeNet') # Default RNG
+        return
+
+    def rep_rand(self, uids, sort=True):
+        """ Reproducible repeated random numbers """
+        n_agents = len(uids)
+        nc = self.pars.n_contacts
+        r_list = []
+        for i in range(nc):
+            r = self.dist.rvs(uids)
+            r = np.random.rand(n_agents)
+            r_list.append(r)
+        r_arr = np.array(r_list).flatten()
+        inds = np.tile(np.arange(n_agents), nc)
+        rr = np.array([inds, r_arr]).T
+        if sort:
+            order = np.argsort(r_arr)
+            rr = rr[order,:]
+        self.rr = rr
+        return rr
+
+    def form_pairs(self, debug=False):
+        """ From a 2N input array, return 2N-2 nearest-neighbor pairs """
+        rr = self.rr
+        out = []
+        agent = rr[:,0].astype(int)
+        v     = rr[:,1]
+        center = v[1:-1]
+        p1_dist = abs(center - v[:-2])
+        p2_dist = abs(center - v[2:])
+        use_p1 = sc.findinds(p1_dist < p2_dist)
+        use_p2 = sc.findinds(p1_dist > p2_dist) # Can refactor
+        source = agent[1:-1]
+        target = np.zeros(len(source), dtype=int)
+        target[use_p1] = agent[:-2][use_p1]
+        target[use_p2] = agent[2:][use_p2]
+
+        # Store additional information for debugging
+        if debug:
+            dist = np.zeros(len(source))
+            dist[use_p1] = p1_dist[use_p1]
+            dist[use_p2] = p2_dist[use_p2]
+            out = sc.objdict()
+            out.pairs = sorted(list(zip(source, target)))
+            out.src = source
+            out.trg = target
+            out.dist = dist
+            out.p1dist = p1_dist
+            out.p2dist = p2_dist
+            self.pairs = out
+        return source,target
+
+    def add_pairs(self):
+        """ Generate edges """
+        people = self.sim.people
+        born = people.alive & (people.age > 0)
+
+        # Get the random numbers
+        self.rep_rand(born.uids)
+
+        # Form the pairs
+        p1, p2 = self.form_pairs()
+        beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
+
+        if isinstance(self.pars.dur, ss.Dist):
+            dur = self.pars.dur.rvs(p1)
+        elif self.pars.dur == 0:
+            dur = np.zeros(len(p1))
+        else:
+            dur = np.ones(len(p1))*self.pars.dur/self.t.dt # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+    def plot_matrix(self, **kwargs):
+        """ Plot the distance matrix used for forming pairs: only ±1 from the diagonal is used """
+        kw = ss.plot_args(kwargs)
+        v = self.rr[:,1]
+        dm = abs(v[:, np.newaxis] - v)**2
+        with ss.style(**kw.style):
+            fig = plt.figure(**kw.fig)
+            plt.imshow(dm)
+        return ss.return_fig(fig)
+
+    def similarity(self, other, max_pairs=100):
+        """ Compute the similarity between the pairs of two RandomSafe networks """
+        pairs1 = set(self.to_edgelist())
+        pairs2 = set(other.to_edgelist())
+        p1_only = pairs1 - pairs2
+        p2_only = pairs2 - pairs1
+        both = pairs1 & pairs2
+        similarity = len(both)/max(len(pairs2), len(pairs2))
+        sc.heading(f'Similarity of p1={len(pairs1)} and p2={len(pairs2)}')
+        string = f'Similarity: {similarity*100:n}%\n'
+        if len(pairs1) + len(pairs2) < max_pairs:
+            string += f'Shared pairs: {len(both)} ({both})\n'
+            string += f'p1 only: {len(p1_only)} ({p1_only})\n'
+            string += f'p2 only: {len(p2_only)} ({p2_only})\n'
+        print(string)
+        return similarity
 
 
 class MFNet(SexualNetwork):
