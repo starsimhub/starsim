@@ -612,8 +612,14 @@ class RandomNet(DynamicNetwork):
 
 
 class RandomSafeNet(ss.DynamicNetwork):
-    """ Demonstrate CRN-safe, O(N) network pairs """
+    """
+    Create a CRN-safe, O(N) random network
 
+    This network is similar to `ss.RandomNet()`, but is random-number safe
+    (i.e., the addition of a single new agent will not perturb the entire rest
+    of the network). However, it is somewhat slowever than `ss.RandomNet()`,
+    so should be used where CRN safety is important (e.g., scenario analysis).
+    """
     def __init__(self, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
@@ -628,14 +634,14 @@ class RandomSafeNet(ss.DynamicNetwork):
     def rep_rand(self, uids, sort=True):
         """ Reproducible repeated random numbers """
         n_agents = len(uids)
-        nc = self.pars.n_contacts
+        n_conn = self.pars.n_contacts
         r_list = []
-        for i in range(nc):
+        for i in range(n_conn):
             r = self.dist.rvs(uids)
             r = np.random.rand(n_agents)
             r_list.append(r)
         r_arr = np.array(r_list).flatten()
-        inds = np.tile(np.arange(n_agents), nc)
+        inds = np.tile(np.arange(n_agents), n_conn)
         rr = np.array([inds, r_arr]).T
         if sort:
             order = np.argsort(r_arr)
