@@ -7,9 +7,11 @@ import functools as ft
 import sciris as sc
 import starsim as ss
 
-__all__ = ['module_map', 'find_modules', 'required', 'Base', 'Module']
+__all__ = ['module_map', 'module_types', 'register_modules', 'find_modules', 'required', 'Base', 'Module']
 
 module_args = ['name', 'label'] # Define allowable module arguments
+
+custom_modules = [] # Allow the user to register custom modules
 
 
 def module_map(key=None):
@@ -31,24 +33,89 @@ def module_types():
     return list(module_map().keys())
 
 
-def find_modules(key=None, flat=False):
+def is_module(obj):
+    """ Check whether something is a Starsim module """
+    return isinstance(obj, type) and issubclass(obj, ss.Module)
+
+
+def register_modules(*args):
+    """
+    Register custom modules with Starsim so they can be referred to by string.
+
+    Note: "modules" here refers to Starsim modules. But this function registers
+    Starsim "modules" (e.g. `ss.SIR`) that are found within Python "modules"
+    (e.g. `starsim`).
+
+    Args:
+        args (list): the additional modules to register; can be either a module or a list of objects
+
+    **Examples**:
+
+        # Standard use case, register modules automatically
+        import my_custom_disease_model as mcdm
+        ss.register_modules(mcdm)
+        ss.Sim(diseases='mydisease', networks='random').run() # This will work if mcdm.MyDisease() is defined
+
+        # Manual usage
+        my_modules = [mcdm.MyDisease, mcdm.MyNetwork]
+        ss.register_modules(my_modules)
+        ss.Sim(diseases='mydisease', networks='mynetwork').run()
+    """
+    for arg in args:
+        custom_modules.append(arg)
+    return
+
+
+def find_modules(key=None, flat=False, verbose=False):
     """ Find all subclasses of Module present in Starsim, divided by type """
     modules = sc.objdict()
     modmap = module_map()
-    attrs = dir(ss) # Find all attributes in Starsim (note: does not parse user code)
-    for modkey, modtype in modmap.items(): # Loop over each module type
+    attr_lists = [[ss, dir(ss)]] # Find all attributes in Starsim (note: does not parse user code; use register_modules() for that)
+    for custom in custom_modules:
+        if verbose: print(f'Loading {custom}...')
+        if sc.ismodule(custom):
+            attr_lists.append([custom, dir(custom)])
+        else:
+            attr_lists.append([None, sc.tolist(custom)])
+
+    # Initialize dict
+    for modkey in modmap.keys():
         modules[modkey] = sc.objdict()
+
+    # Loop over all attributes
+    for pymodule,attrs in attr_lists:
+        if verbose: sc.heading(f'Processing {pymodule} ...')
         for attr in attrs: # Loop over each attribute (inefficient, but doesn't need to be optimized)
-            item = getattr(ss, attr)
-            low_attr = attr.lower()
-            try:
-                assert issubclass(item, modtype) # Check that it's a class, and instance of this module
-                modules[modkey][low_attr] = item # It passes, so assign it to the dict
-                if modkey == 'networks' and low_attr.endswith('net'): # Also allow networks without 'net' suffix
-                    modules[modkey][low_attr.removesuffix('net')] = item
-            except:
-                if isinstance(item, type) and issubclass(item, ss.Module): # For any other modules, add them to the "modules" list
+            if verbose: print(f'  Checking {attr}')
+
+            # Handle modules or a list of objects being provided
+            if pymodule is not None: # Main use case: pymodule=ss, attr='HIV'
+                item = getattr(pymodule, attr)
+                low_attr = attr.lower()
+            else: # Alternate use case: pymodule=None, attr=HIV
+                if is_module(attr): # It's a module, proceed
+                    item = attr
+                    low_attr = item.__name__.lower()
+                else: # It's not a module, skip
+                    item = None
+
+            # Check whether it's a module
+            ismodule = is_module(item)
+            if ismodule:
+                assigned = False
+                for modkey, modtype in modmap.items(): # Loop over each module type
+                    if modtype is not None and issubclass(item, modtype):
+                        modules[modkey][low_attr] = item # It passes, so assign it to the dict
+                        if modkey == 'networks' and low_attr.endswith('net'): # Also allow networks without 'net' suffix
+                            altname = low_attr.removesuffix('net')
+                            modules[modkey][altname] = item
+                        assigned = True
+                        if verbose: print(f'     Module {modkey}.{low_attr} added')
+                        break # Exit the innermost loop
+                if not assigned:
                     modules['modules'][low_attr] = item
+                    if verbose: print(f'     Module modules.{low_attr} added')
+
     if flat:
         modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]

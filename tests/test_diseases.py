@@ -151,9 +151,10 @@ def test_ncd():
 
 def test_gavi():
     sc.heading('Testing GAVI diseases')
+    ss.register_modules(sse) # So we can use strings for these
 
     sims = sc.autolist()
-    for disease in [sse.Cholera(), sse.Measles(), sse.Ebola()]:
+    for disease in ['cholera', 'measles', 'ebola']:
         pars = dict(
             diseases = disease,
             n_agents = n_agents,

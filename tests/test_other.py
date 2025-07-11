@@ -240,6 +240,26 @@ def test_mock_objects():
     return o
 
 
+def test_custom_imports():
+    sc.heading('Testing custom imports')
+    o = sc.objdict()
+
+    class MyDisease(ss.SIS):
+        pass
+
+    class MyNetwork(ss.RandomNet):
+        pass
+
+    my_modules = [MyDisease, MyNetwork]
+
+    # Make both starsim_examples and custom modules searchable
+    ss.register_modules(sse, my_modules)
+    sim = ss.Sim(n_agents=1000, diseases=['hiv', 'mydisease'], networks='mynetwork')
+    sim.run()
+
+    return o
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -258,6 +278,7 @@ if __name__ == '__main__':
     sim4 = test_results()
     sim5 = test_check_requires()
     objs = test_mock_objects()
+    mods = test_custom_imports()
 
     sc.toc(T)
     plt.show()
