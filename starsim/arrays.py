@@ -1,7 +1,7 @@
 """
 Define array-handling classes, including agent states
 """
-import sys
+# import sys
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -14,12 +14,6 @@ ss_int     = ss.dtypes.int
 ss_nbint   = ss.dtypes.nbint
 ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
-type_def = {
-    ss_float: ('float', float, np.float64, np.float32),
-    ss_int: ('int', int, np.int64, np.int32),
-    ss_bool: ('bool', bool, np.bool_),
-}
-type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
@@ -250,6 +244,12 @@ class Arr(BaseArr):
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
 
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True)
+    def _nb_getitem(raw, inds):
+        """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
+        return raw[inds]
+
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
             key = self._convert_key(key)
@@ -263,14 +263,31 @@ class Arr(BaseArr):
 
     @staticmethod
     @nb.njit(fastmath=True, parallel=False, cache=True)
-    def numba_gt(a, b, inds):
+    def _nb_bool_ops(a, b, inds, both_raw):
         out = np.empty(a.size, dtype=np.bool_)
         for i,ind in enumerate(inds):
             out[ind] = a[ind] > b[ind]
         return out
 
+    def _bool_ops(self, op, other):
+        """ Helper function for performing basic math operations that return a Boolean, e.g. > """
+        self_raw = self.raw
+        if isinstance(other, Arr):
+            other_raw = other.raw
+        else:
+            other_raw = other
+        both_raw = self_raw.size == other_raw.size
+        if both_raw:
+            inds = None
+        else:
+            inds = self.people.auids
+        result_raw = self._nb_bool_op(self_raw, op, other_raw, inds)
+        return self.asnew(result_raw, cls=BoolArr, copy=False)
+
+
     # def __gt__(self, other): return (self.values > other).astype(BoolArr)
-    def __gt__(self, other): return self.numba_gt(self.raw, other.raw, self.auids).astype(BoolArr)
+    # def __gt__(self, other): return self.numba_gt(self.raw, other.raw, self.auids).astype(BoolArr)
+    def __gt__(self, other): return self._math('>', other)
     def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
     def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
     def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
@@ -296,9 +313,10 @@ class Arr(BaseArr):
         return np.count_nonzero(self.values)
 
     @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
-    def numba(arr1, inds):
-        return arr1[inds]
+    @nb.njit((ss_nbfloat[:], ss_nbint[:]), fastmath=True, parallel=False, cache=True)
+    def _nb_get(raw, inds):
+        """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
+        return raw[inds]
 
     @property
     def values(self):
@@ -307,7 +325,7 @@ class Arr(BaseArr):
             return self.raw
         else:
             try:
-                return self.raw[self.auids]
+                return self._nb_get(self.raw, self.auids) # Optimized for speed
             except:
                 warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
                 ss.warn(warnmsg)
@@ -396,6 +414,41 @@ class Arr(BaseArr):
         self.initialized = True
         return
 
+    @staticmethod
+    def _type_error(obj):
+        errormsg = f'Can only handle NumPy arrays and Arr objects, not {type(obj)}'
+        raise TypeError(errormsg)
+
+    def convert(self, obj, copy=False):
+        """ Check if an object is an array, and convert if so """
+        if isinstance(obj, BaseArr):
+            return obj
+        elif isinstance(obj, np.ndarray):
+            return self.asnew(obj, copy=copy)
+        else:
+            self._type_error()
+        return obj
+
+    def _to_raw(self, obj):
+        """ Convert an Arr object to raw values, leaving NumPy arrays unchanged (for argument normalization) """
+        if isinstance(obj, np.ndarray):
+            return obj
+        elif isinstance(obj, Arr):
+            return obj.raw
+        else:
+            self._type_error()
+        return obj
+
+    def _to_values(self, obj):
+        """ Convert an Arr object to indexed values, leaving NumPy arrays unchanged (for argument normalization) """
+        if isinstance(obj, np.ndarray):
+            return obj
+        elif isinstance(obj, Arr):
+            return obj.values
+        else:
+            self._type_error(obj)
+        return obj
+
     def asnew(self, arr=None, cls=None, name=None, copy=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
         # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
@@ -405,21 +458,23 @@ class Arr(BaseArr):
         if cls is None:
             cls = self.__class__
         if copy is None:
-            copy = True if arr is None else False
+            copy = True if (arr is None) or (arr.size != self.raw.size) else False
         if arr is None:
             arr = self.values
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        if copy or new.auids.size != new.raw.size:
+        if copy:
             new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
             new.raw[new.auids] = arr
         else:
             if isinstance(arr, np.ndarray):
                 new.raw = arr
-            else:
+            elif isinstance(arr, Arr):
                 new.raw = arr.raw
+            else:
+                self._type_error(arr)
         return new
 
     def astype(self, cls, copy=False):
