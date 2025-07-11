@@ -8,7 +8,6 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 
-
 # Shorten these for performance
 ss_float   = ss.dtypes.float
 ss_nbfloat = ss.dtypes.nbfloat
@@ -20,10 +19,14 @@ int_nan    = ss.dtypes.int_nan
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
-# @staticmethod
-# @nb.njit(fastmath=True, parallel=False, cache=True)
-def nb_index(arr, inds):
-    """ Roughly 30% faster than NumPy; although type specification isn't required, it reduces initial compile time """
+def indexer(arr, inds):
+    """ Much faster than Numba for small arrays (<10k elements) """
+    return arr[inds]
+
+@staticmethod
+@nb.njit(fastmath=True, parallel=False, cache=True)
+def nb_indexer(arr, inds):
+    """ Roughly 30% faster than NumPy for large arrays (>100k elements) """
     return arr[inds]
 
 
@@ -206,6 +209,8 @@ class Arr(BaseArr):
             self.initialized = True
             self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
 
+        # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
+        self._indexer = indexer
         return
 
     def __repr__(self):
@@ -256,7 +261,7 @@ class Arr(BaseArr):
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
             key = self._convert_key(key)
-        return nb_index(self.raw, key)
+        return self.indexer(self.raw, key)
 
     def __setitem__(self, key, value):
         if not isinstance(key, uids):
@@ -337,7 +342,7 @@ class Arr(BaseArr):
             return self.raw
         else:
             try:
-                return nb_index(self.raw, self.auids) # Optimized for speed
+                return self.indexer(self.raw, self.auids) # Optimized for speed
             except Exception as E:
                 warnmsg = f'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any).\n{E}'
                 ss.warn(warnmsg)
@@ -415,6 +420,11 @@ class Arr(BaseArr):
         """ Link a People object to this state, for access auids """
         self.people = people # Link the people object to this state
         people._link_state(self) # Ensure the state is linked to the People object as well
+
+        # Decide whether to switch to the Numba indexer -- typically faster with more than ~5000 agents
+        threshold = 5000
+        if len(people) > threshold:
+            self.indexer = nb_indexer
         return
 
     def init_vals(self):
