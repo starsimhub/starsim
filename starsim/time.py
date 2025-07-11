@@ -828,7 +828,7 @@ class Rate():
         if isinstance(other, np.ndarray):
             return other*self
         elif isinstance(other, Dur):
-            return self.value*other/self.unit
+            return self.value*(other/self.unit)
         else:
             return self.__class__(self.value*other, self.unit)
 
