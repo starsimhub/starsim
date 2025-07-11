@@ -245,7 +245,8 @@ class Dist:
     def __repr__(self):
         """ Custom display to show state of object """
         j = sc.dictobj(self.to_json())
-        string = f'ss.{j.classname}({j.tracestr}, {j.diststr}pars={j.pars})'
+        parstr = [f'{k}={v}' for k,v in j.pars.items()]
+        string = f'ss.{j.classname}({j.diststr}{sc.strjoin(parstr)})'
         return string
 
     def disp(self):
