@@ -68,11 +68,23 @@ class Profile(sc.profile):
         self.sim.loop.plot_cpu()
         return
 
+
 class Debugger:
     """
     Step through one or more sims and pause or raise an exception when a condition is met
+
+    Args:
+        args (list): the sim or sims to step through
+        func (func/str): the function to run on the sims (or can use a built-in one, e.g. 'equal')
+        verbose (bool): whether to print progress during the run
+        die (bool): whether to raise an exception if the condition is met
+        run (bool): whether to run immediately
+
+    **Example**:
+
+
     """
-    def __init__(self, *args, func, verbose=True, die=True, run=True):
+    def __init__(self, *args, func, verbose=True, die=True, run=False):
         self.sims = args
         for sim in self.sims:
             if not sim.initialized:
@@ -161,13 +173,11 @@ class Debugger:
         self.ti += 1
         if self.verbose: sc.heading(f'Working on step ti={self.ti}')
         for sim in self.sims:
-            ss.set_seed(self.sims[0].pars.rand_seed + 1)
             sim.step()
         self.check()
         return
 
     def run(self):
-        ss.set_seed(self.sims[0].pars.rand_seed + 1)
         self.check()
         while self.ti < self.until:
             self.step()
@@ -252,30 +262,38 @@ def metadata(comments=None):
     return md
 
 
-def mock_time(dur=10):
+def mock_time(dt=1.0, dur=10, start=2000):
     """ Create a minimal mock "Time" object """
     t = sc.objdict(
-        dt = 1.0,
+        dt = dt,
         ti = 0,
-        start = 2000,
+        start = start,
         stop = None,
-        dur = 50,
+        dur = dur,
         is_absolute = True,
         initialized = True,
     )
     return t
 
-def mock_sim(n_agents=100, dur=10):
-    """ Create a minimal mock "Sim" object to initialize objects that require it """
+
+def mock_sim(n_agents=100, **kwargs):
+    """
+    Create a minimal mock "Sim" object to initialize objects that require it
+
+    Args:
+        n_agents (int): the number of agents to create
+        **kwargs (dict): passed to `ss.mock_time()`
+    """
     sim = sc.objdict(
         label = 'mock_sim',
         people = mock_people(n_agents),
-        t = mock_time(dur),
-        pars = mock_time(dur),
+        t = mock_time(**kwargs),
+        pars = mock_time(**kwargs),
         results = sc.objdict(),
         networks = sc.objdict(),
     )
     return sim
+
 
 def mock_people(n_agents=100):
     """ Create a minimal mock "People" object """
@@ -288,20 +306,11 @@ def mock_people(n_agents=100):
     )
     return people
 
-def mock_module(dur=10):
-    """ Create a minimal mock "Time" object """
+
+def mock_module(dur=10, **kwargs):
+    """ Create a minimal mock "Module" object """
     mod = sc.objdict(
         name = 'mock_module',
-        t = mock_time,
+        t = mock_time(**kwargs),
     )
     return mod
-
-
-# s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=250, label='s1')
-# s1.initialize()
-# s2 = sc.dcp(s1)
-# s2.label = 's2'
-# s3 = sc.dcp(s1)
-# s3.label = 's3'
-
-# step = SimStepper(s1, s2, s3, func='equal')
