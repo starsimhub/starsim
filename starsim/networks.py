@@ -87,34 +87,26 @@ class Network(Route):
         self_conn = p1 == p2
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
-
-    def __init__(self, key_dict=None, prenatal=False, postnatal=False, name=None, label=None, **kwargs):
+    def __init__(self, name=None, label=None, **kwargs):
         # Initialize as a module
         super().__init__(name=name, label=label)
 
-        # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
-        default_keys = sc.objdict(
+        # Each relationship is characterized by these default set of keys
+        self.meta = sc.objdict(
             p1 = ss_int_,
             p2 = ss_int_,
             beta = ss_float_,
         )
-        self.meta = sc.mergedicts(default_keys, key_dict)
-        self.prenatal = prenatal  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
-        self.postnatal = postnatal  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
+        self.prenatal = False  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
+        self.postnatal = False  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
         self.edges = sc.objdict()
-        for key, dtype in self.meta.items():
-            self.edges[key] = np.empty((0,), dtype=dtype)
+        self.participant = ss.BoolArr('participant')
 
         # Set data, if provided
         for key, value in kwargs.items():
             self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
-            self.initialized = True
-
-        # Define states using placeholder values
-        self.participant = ss.BoolArr('participant')
-        self.validate_uids()
         return
 
     @property
@@ -138,6 +130,19 @@ class Network(Route):
         self.define_results(
             ss.Result('n_edges', dtype=int, scale=True, label='Number of edges', auto_plot=False)
         )
+        return
+
+    def init_pre(self, sim):
+        """ Initialize with the sim, initialize the edges, and validate p1 and p2 """
+        super().init_pre(sim)
+
+        # Define states using placeholder values
+        for key, dtype in self.meta.items():
+            if key not in self.edges:
+                self.edges[key] = np.empty((0,), dtype=dtype)
+
+        # Check that p1 and p2 are ss.uids()
+        self.validate_uids()
         return
 
     def init_post(self, add_pairs=True):
@@ -415,9 +420,9 @@ class Network(Route):
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
-    def __init__(self, key_dict=None, **kwargs):
-        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
-        super().__init__(key_dict=key_dict, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.meta.dur = ss_float_ # Add duration to the meta keys for dynamic networks
         return
 
     def step(self):
@@ -438,9 +443,9 @@ class DynamicNetwork(Network):
 
 class SexualNetwork(DynamicNetwork):
     """ Base class for all sexual networks """
-    def __init__(self, key_dict=None, **kwargs):
-        key_dict = sc.mergedicts({'acts': ss_int_}, key_dict)
-        super().__init__(key_dict=key_dict, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.meta.acts = ss_int_ # Add acts to the meta keys for sexual networks
         self.debut = ss.FloatArr('debut', default=0)
         return
 
@@ -564,9 +569,9 @@ class RandomNet(DynamicNetwork):
     per agent is actually 10. Consider 3 agents with 3 edges between them (a triangle):
     each agent is connected to 2 other agents.
     """
-    def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
+    def __init__(self, n_contacts=_, dur=_, beta=_, **kwargs):
         """ Initialize """
-        super().__init__(key_dict=key_dict)
+        super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
@@ -664,8 +669,8 @@ class RandomSafeNet(DynamicNetwork):
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
     """
-    def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
-        super().__init__(key_dict=key_dict)
+    def __init__(self, n_contacts=_, dur=_, beta=_, **kwargs):
+        super().__init__()
         self.define_pars(
             n_contacts = 10,
             dur = 0, # Note; network edge durations are required to have the same unit as the network
@@ -864,8 +869,8 @@ class MSMNet(SexualNetwork):
         acts (`ss.Dist`): Number of acts per year
         participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
     """
-    def __init__(self, duration=_, debut=_, acts=_, participation=_, key_dict=None, **kwargs):
-        super().__init__(key_dict=key_dict)
+    def __init__(self, duration=_, debut=_, acts=_, participation=_, **kwargs):
+        super().__init__()
         self.define_pars(
             duration = ss.lognorm_ex(mean=2, std=1),
             debut = ss.normal(loc=16, scale=2),
@@ -926,12 +931,15 @@ class MaternalNet(DynamicNetwork):
     Base class for maternal transmission
     Use PrenatalNet and PostnatalNet to capture transmission in different phases
     """
-    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts(dict(dur=ss_float_, start=ss_int_, end=ss_int_), key_dict)
-        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        super().__init__(**kwargs)
+        self.meta.start = ss_int_ # Add maternal-specific keys to meta
+        self.meta.end = ss_int_
+        self.prenatal = True
+        self.postnatal = False
         return
 
     def step(self):
@@ -970,14 +978,18 @@ class MaternalNet(DynamicNetwork):
 
 class PrenatalNet(MaternalNet):
     """ Prenatal transmission network """
-    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
-        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.prenatal = True
+        self.postnatal = False
         return
 
 class PostnatalNet(MaternalNet):
     """ Postnatal transmission network """
-    def __init__(self, key_dict=None, prenatal=False, postnatal=True, **kwargs):
-        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.prenatal = False
+        self.postnatal = True
         return
 
 
