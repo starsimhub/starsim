@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 # This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
+_ = None
 
 
 # Specify all externally visible functions this file defines; see also more definitions below
@@ -558,8 +559,7 @@ class RandomNet(DynamicNetwork):
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
     """
-
-    def __init__(self, key_dict=None, **kwargs):
+    def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
@@ -644,8 +644,13 @@ class RandomSafeNet(DynamicNetwork):
     (i.e., the addition of a single new agent will not perturb the entire rest
     of the network). However, it is somewhat slowever than `ss.RandomNet()`,
     so should be used where CRN safety is important (e.g., scenario analysis).
+
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
     """
-    def __init__(self, key_dict=None, **kwargs):
+    def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = 10,
@@ -741,14 +746,21 @@ class MFNet(SexualNetwork):
     """
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
+
+    Args:
+        duration (`ss.Dist`): Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+        debut (`ss.Dist`): Age of debut can vary by using callable parameter values
+        acts (`ss.Dist`): Number of acts per year
+        participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+        rel_part_rates (float): Relative participation in the network
     """
-    def __init__(self, **kwargs):
+    def __init__(self, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, **kwargs):
         super().__init__()
         self.define_pars(
             duration = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
             acts = ss.poisson(lam=ss.peryear(80)),
+            participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             rel_part_rates = 1.0,
         )
         self.update_pars(**kwargs)
@@ -831,9 +843,14 @@ class MFNet(SexualNetwork):
 class MSMNet(SexualNetwork):
     """
     A network that randomly pairs males
-    """
 
-    def __init__(self, key_dict=None, **kwargs):
+    Args:
+        duration (`ss.Dist`): Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+        debut (`ss.Dist`): Age of debut can vary by using callable parameter values
+        acts (`ss.Dist`): Number of acts per year
+        participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+    """
+    def __init__(self, duration=_, debut=_, acts=_, participation=_, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             duration = ss.lognorm_ex(mean=2, std=1),
@@ -888,9 +905,6 @@ class MSMNet(SexualNetwork):
         self.set_network_states()
         self.add_pairs()
         return
-
-
-
 
 
 class MaternalNet(DynamicNetwork):
@@ -1009,7 +1023,7 @@ class MixingPools(Route):
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
     """
-    def __init__(self, **kwargs):
+    def __init__(self, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1130,7 +1144,7 @@ class MixingPool(Route):
         sim.run()
         sim.plot()
     """
-    def __init__(self, **kwargs):
+    def __init__(self, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,

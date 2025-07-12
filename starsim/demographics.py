@@ -8,6 +8,7 @@ import pandas as pd
 
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
+_ = None
 
 __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
@@ -22,7 +23,7 @@ class Demographics(ss.Module):
 
 
 class Births(Demographics):
-    def __init__(self, metadata=None, **kwargs):
+    def __init__(self, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
         """
         Create births based on rates, rather than based on pregnancy.
 
@@ -139,7 +140,7 @@ class Births(Demographics):
 
 
 class Deaths(Demographics):
-    def __init__(self, metadata=None, **kwargs):
+    def __init__(self, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -275,7 +276,9 @@ class Deaths(Demographics):
 
 
 class Pregnancy(Demographics):
-    def __init__(self, metadata=None, **kwargs):
+    def __init__(self, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
+                 p_maternal_death=_, p_neonatal_death=_, sex_ratio=_, min_age=_, max_age=_,
+                 rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
         """
         Create births via pregnancies for each agent.
 

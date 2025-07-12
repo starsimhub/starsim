@@ -369,6 +369,7 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
+    # Warning: do not try to use a decorator with this function, that will break argument passing!
     def update_pars(self, **pars):
         """
         Pull out recognized parameters, returning the rest
