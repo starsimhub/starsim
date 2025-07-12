@@ -308,7 +308,11 @@ class date(pd.Timestamp):
         return date(json['ss.date'])
 
 
-class Dur():
+class TimePar:
+    pass
+
+
+class Dur(TimePar):
     # Base class for durations/dts
     # Subclasses for date-durations and fixed-durations
 
@@ -803,7 +807,7 @@ class DateDur(Dur):
         raise NotImplementedError('The absolute value of a DateDur instance is undefined as components (e.g., months, days) may have different signs.')
 
 
-class Rate():
+class Rate(TimePar):
     """
     Store a value per unit time e.g., 2 per day
     - self.value - the numerator (e.g., 2) - a scalar float
