@@ -1,23 +1,34 @@
 """
 Define array-handling classes, including agent states
 """
+# import sys
+import numbers
 import numpy as np
+import numba as nb
 import sciris as sc
 import starsim as ss
 
 # Shorten these for performance
-ss_float = ss.dtypes.float
-ss_int   = ss.dtypes.int
-ss_bool  = ss.dtypes.bool
-int_nan  = ss.dtypes.int_nan
-type_def = {
-    ss_float: ('float', float, np.float64, np.float32),
-    ss_int: ('int', int, np.int64, np.int32),
-    ss_bool: ('bool', bool, np.bool_),
-}
-type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
+ss_float   = ss.dtypes.float
+ss_nbfloat = ss.dtypes.nbfloat
+ss_int     = ss.dtypes.int
+ss_nbint   = ss.dtypes.nbint
+ss_bool    = ss.dtypes.bool
+int_nan    = ss.dtypes.int_nan
 
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
+
+# Control the threshold for the number of array elements that switch from NumPy to Numba based indexing
+_numba_threshold = 5000
+
+def np_indexer(arr, inds):
+    """ Much faster than Numba for small arrays (<5k elements) """
+    return arr[inds]
+
+@nb.njit(fastmath=True, parallel=False, cache=True)
+def nb_indexer(arr, inds):
+    """ Roughly 30% faster than NumPy for large arrays (>100k elements) """
+    return arr[inds]
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -44,6 +55,8 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def convert(self, obj):
         """ Check if an object is an array, and convert if so """
+        # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
+        # print('h1', me, caller, type(obj))
         if isinstance(obj, np.ndarray):
             return self.asnew(obj)
         elif isinstance(obj, BaseArr):
@@ -167,17 +180,19 @@ class Arr(BaseArr):
             * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
         label (str): The human-readable name for the state
+        raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people ([`ss.People`](`starsim.people.People`)): Optionally specify an initialized People object, used to construct temporary Arr instances
+        mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
     """
-    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, skip_init=False, people=None):
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
         # Set attributes
         self.name = name
         self.label = label or name
         self.default = default
-        self.nan = nan
+        if nan is not None: self.nan = nan
+        if dtype is not None: self.dtype = dtype
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
-        self.dtype = dtype
         self.people = people # Used solely for accessing people.auids
 
         if self.people is None:
@@ -187,7 +202,10 @@ class Arr(BaseArr):
             self.len_used = 0
             self.len_tot = 0
             self.initialized = skip_init
-            self.raw = np.empty(0, dtype=dtype)
+            if raw is None:
+                self.raw = np.empty(0, dtype=self.dtype)
+            else:
+                self.raw = raw # Can't check length since we don't have the People object yet
         else:
             # This Arr is a temporary object used for intermediate calculations when we want to index an array
             # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
@@ -195,8 +213,25 @@ class Arr(BaseArr):
             self.len_used = self.people.uid.len_used
             self.len_tot = self.people.uid.len_tot
             self.initialized = True
-            self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+            if raw is None:
+                self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+            else:
+                if raw.size == self.len_tot:
+                    self.raw = raw # Do not coerce dtype
+                else:
+                    errormsg = f'Cannot populate array of length {self.len_tot} with values of length {raw.size}'
+                    raise ValueError(errormsg)
 
+        # If we have a mock People object, initialize the values
+        if mock:
+            n_agents = len(raw) if raw is not None else mock
+            self.people = ss.mock_people(n_agents)
+            if raw is None:
+                self.init_vals()
+
+
+        # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
+        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
         return
 
     def __repr__(self):
@@ -222,7 +257,7 @@ class Arr(BaseArr):
             - ss.uids, integer, or integer array: raw
             - BoolArr, boolean array, or full slice: values
         """
-        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int):
+        if isinstance(key, (uids, int, ss_int, tuple)) or (isinstance(key, np.ndarray) and key.dtype == int):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
@@ -236,7 +271,7 @@ class Arr(BaseArr):
                 raise ValueError(errormsg)
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
-        elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
+        elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids so it works from R/reticulate
             return key.astype(int)
         elif isinstance(key, np.ndarray) and key.dtype == bool:
             return self.auids[key]
@@ -244,10 +279,27 @@ class Arr(BaseArr):
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
 
+    def _np_index(self, arr, inds):
+        """ Alias to the NumPy indexer (not for the user) """
+        return np_indexer(arr, inds)
+
+    def _nb_index(self, arr, inds):
+        """ Alias to the Numba indexer (not for the user) """
+        return nb_indexer(arr, inds)
+
+    def _index(self, arr, inds):
+        """ Index the array using the most efficient method for the current array size """
+        return self._indexer(arr, inds)
+
+    def _set_indexer(self):
+        """ Choose which indexer to use based on the array size (small = NumPy, large = Numba) """
+        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
+        return
+
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
             key = self._convert_key(key)
-        return self.raw[key]
+        return self._index(self.raw, key)
 
     def __setitem__(self, key, value):
         if not isinstance(key, uids):
@@ -255,12 +307,58 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
-    def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
-    def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
-    def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
-    def __eq__(self, other): return self.asnew(self.values == other, cls=BoolArr)
-    def __ne__(self, other): return self.asnew(self.values != other, cls=BoolArr)
+    def _boolmath(self, op, other=None):
+        """ Helper function for performing basic math operations that return a Boolean, e.g. > """
+        self_raw = self.raw # Always size N
+        both_raw = True # Assume this by default
+        if isinstance(other, Arr):
+            other_raw = other.raw # Also always size N
+        elif isinstance(other, (numbers.Number, type(None))):
+            other_raw = other # If its' a scalar, we don't have to worry about array size
+        elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
+            raw_size = self_raw.size
+            both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
+        else:
+            self._type_error(other)
+
+        # Figure out the two arrays to operate on
+        if both_raw:
+            a = self_raw
+            b = other_raw
+        else:
+            a = self.values
+            b = other
+            inds = self.auids
+
+        # Perform operations, listed in rough order of how frequently used they are; Numba doesn't make these operations faster
+        if   op == '==': c = a == b
+        elif op == '>':  c = a > b
+        elif op == '<':  c = a < b
+        elif op == '>=': c = a >= b
+        elif op == '<=': c = a <= b
+        elif op == '!=': c = a != b
+        elif op == '&':  c = a & b
+        elif op == '|':  c = a | b
+        elif op == '^':  c = a ^ b
+        elif op == '~':  c = ~a
+        else:
+            errormsg = f'Unrecognized operator "{op}"'
+            raise ValueError(errormsg)
+
+        if both_raw:
+            result_raw = c
+        else:
+            result_raw = np.empty(raw_size, dtype=np.bool_)
+            result_raw[inds] = c
+
+        return self.asnew(result_raw, cls=BoolArr, copy=False)
+
+    def __gt__(self, other): return self._boolmath('>', other)
+    def __lt__(self, other): return self._boolmath('<', other)
+    def __ge__(self, other): return self._boolmath('>=', other)
+    def __le__(self, other): return self._boolmath('<=', other)
+    def __eq__(self, other): return self._boolmath('==', other)
+    def __ne__(self, other): return self._boolmath('!=', other)
 
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
@@ -283,12 +381,15 @@ class Arr(BaseArr):
     @property
     def values(self):
         """ Return the values of the active agents """
-        try:
-            return self.raw[self.auids]
-        except:
-            warnmsg = 'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any)'
-            ss.warn(warnmsg)
-            return np.array([])
+        if self.raw.size == self.auids.size:
+            return self.raw
+        else:
+            try:
+                return self._index(self.raw, self.auids) # Optimized for speed
+            except Exception as E:
+                warnmsg = f'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any).\n{E}'
+                ss.warn(warnmsg)
+                return np.array([])
 
     def set(self, uids, new_vals=None):
         """ Set the values for the specified UIDs"""
@@ -356,12 +457,14 @@ class Arr(BaseArr):
 
         # Set new values, and NaN if needed
         self.set(new_uids, new_vals=new_vals) # Assign new default values to those agents
+        self._set_indexer() # See if we need to switch index method
         return
 
     def link_people(self, people):
         """ Link a People object to this state, for access auids """
         self.people = people # Link the people object to this state
         people._link_state(self) # Ensure the state is linked to the People object as well
+        self._set_indexer() # See if we need to switch index method (if People is "large")
         return
 
     def init_vals(self):
@@ -373,18 +476,82 @@ class Arr(BaseArr):
         self.initialized = True
         return
 
-    def asnew(self, arr=None, cls=None, name=None):
+    @staticmethod
+    def _type_error(obj):
+        errormsg = f'Can only handle NumPy arrays and Arr objects, not {type(obj)}'
+        raise TypeError(errormsg)
+
+    def convert(self, obj, copy=None):
+        """ Check if an object is an array, and convert if so """
+        if isinstance(obj, BaseArr):
+            return obj
+        elif isinstance(obj, np.ndarray):
+            return self.asnew(obj, copy=copy)
+        else:
+            self._type_error()
+        return obj
+
+    def _to_raw(self, obj):
+        """ Convert an Arr object to raw values, leaving NumPy arrays unchanged (for argument normalization) """
+        if isinstance(obj, np.ndarray):
+            return obj
+        elif isinstance(obj, Arr):
+            return obj.raw
+        else:
+            self._type_error()
+        return obj
+
+    def _to_values(self, obj):
+        """ Convert an Arr object to indexed values, leaving NumPy arrays unchanged (for argument normalization) """
+        if isinstance(obj, np.ndarray):
+            return obj
+        elif isinstance(obj, Arr):
+            return obj.values
+        else:
+            self._type_error(obj)
+        return obj
+
+    def asnew(self, arr=None, cls=None, name=None, copy=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
+        # print('h2', me, caller, type(arr))
+        # if type(arr) != np.ndarray:
+        #     raise Exception
         if cls is None:
             cls = self.__class__
+        if copy is None:
+            copy = True if (arr is None) or (arr.size != self.raw.size) else False
         if arr is None:
             arr = self.values
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
-        new.raw[new.auids] = arr
+        if copy:
+            new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
+            new.raw[new.auids] = arr
+        else:
+            if isinstance(arr, np.ndarray):
+                new.raw = arr
+            elif isinstance(arr, Arr):
+                new.raw = arr.raw
+            else:
+                self._type_error(arr)
+        return new
+
+    def astype(self, cls, copy=False):
+        """ Convert the Arr type """
+        # Create the new object
+        new = object.__new__(cls) # Create a new Arr instance
+        new.__dict__ = self.__dict__.copy() # Copy pointers
+
+        # Reset Arr properties
+        new.dtype = cls.dtype # Set to correct dtype
+        new.nan = cls.nan
+        new.nan_eq = (new.nan == new.nan)
+
+        # Optionally copy the array values (slow), and update the dtype
+        new.raw = np.array(new.raw, dtype=new.dtype, copy=copy)
         return new
 
     def true(self):
@@ -416,8 +583,10 @@ class FloatArr(Arr):
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
     """
-    def __init__(self, name=None, nan=np.nan, **kwargs):
-        super().__init__(name=name, dtype=ss_float, nan=nan, **kwargs)
+    dtype = ss_float
+    nan = np.nan
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, dtype=None, nan=None, **kwargs) # Do not allow dtype or nan to be overwritten
         return
 
 
@@ -428,21 +597,25 @@ class IntArr(Arr):
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
     """
-    def __init__(self, name=None, nan=int_nan, **kwargs):
-        super().__init__(name=name, dtype=ss_int, nan=nan, **kwargs)
+    dtype = ss_int
+    nan = int_nan
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, dtype=None, nan=None, **kwargs)
         return
 
 
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    def __init__(self, name=None, nan=False, **kwargs): # No good NaN equivalent for bool arrays
-        super().__init__(name=name, dtype=ss_bool, nan=nan, **kwargs)
+    dtype = ss_bool
+    nan = False
+    def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
+        super().__init__(name=name, dtype=None, nan=None, **kwargs)
         return
 
-    def __and__(self, other): return self.asnew(self.values & other)
-    def __or__(self, other):  return self.asnew(self.values | other)
-    def __xor__(self, other): return self.asnew(self.values ^ other)
-    def __invert__(self):     return self.asnew(~self.values)
+    def __and__(self, other): return self._boolmath('&', other)
+    def __or__(self, other):  return self._boolmath('|', other)
+    def __xor__(self, other): return self._boolmath('^', other)
+    def __invert__(self):     return self._boolmath('~')
 
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
@@ -460,7 +633,7 @@ class BoolArr(Arr):
 
     def split(self):
         """ Return UIDs of values that are true and false as separate arrays """
-        t_uids = self.true()
+        t_uids = self.true() # Could be made more performant by doing the loop once, but not heavily used
         f_uids = self.false()
         return t_uids, f_uids
 

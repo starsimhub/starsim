@@ -121,7 +121,7 @@ def test_arrs():
 
 def test_deepcopy():
     sc.heading('Testing deepcopy')
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
+    s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
     s1.init()
 
     s2 = sc.dcp(s1)
@@ -209,6 +209,57 @@ def test_check_requires():
     return s1
 
 
+def test_mock_objects():
+    sc.heading('Testing mock objects')
+    o = sc.objdict()
+
+    μ = 5
+    mock = 100
+    atol = 0.1
+
+    # Initializing Dists
+    o.dist = ss.lognorm_ex(μ, 2, mock=mock)
+    assert np.isclose(o.dist.rvs(1000).mean(), μ, atol=atol), f'Distribution did not have expected mean value of {μ}'
+
+    # Initializing Arrs -- can use it, but cannot grow it since mock slots can't grow
+    o.arr = ss.FloatArr('my_arr', default=o.dist, mock=mock)
+    assert len(o.arr) == mock, 'Arr did not have expected length of {mock}'
+    assert np.isclose(o.arr.mean(), μ, atol=atol), f'Arr did not have expected mean value of {μ}'
+
+    # Initializing People
+    o.ppl = ss.People(n_agents=mock, mock=True)
+    assert o.ppl.age.mean() > 15, 'People did not have the expected age'
+
+    # Initializing Modules
+    o.mod = ss.SIS().init_mock()
+    for i in range(5):
+        o.mod.step()
+        o.mod.set_outcomes(ss.uids([i])) # Manually "infect" people
+        o.mod.update_results()
+
+    return o
+
+
+def test_custom_imports():
+    sc.heading('Testing custom imports')
+    o = sc.objdict()
+
+    class MyDisease(ss.SIS):
+        pass
+
+    class MyNetwork(ss.RandomNet):
+        pass
+
+    my_modules = [MyDisease, MyNetwork]
+
+    # Make both starsim_examples and custom modules searchable
+    ss.register_modules(sse, my_modules)
+    sim = ss.Sim(n_agents=1000, diseases=['hiv', 'mydisease'], networks='mynetwork')
+    sim.run()
+
+    return o
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -226,6 +277,8 @@ if __name__ == '__main__':
     sims3 = test_deepcopy_until()
     sim4 = test_results()
     sim5 = test_check_requires()
+    objs = test_mock_objects()
+    mods = test_custom_imports()
 
     sc.toc(T)
     plt.show()

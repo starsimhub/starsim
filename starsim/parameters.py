@@ -192,7 +192,7 @@ class SimPars(Pars):
         analyzers (str/list/Module): As above
         verbose (float): How much detail to print (1 = every timestep, 0.1 = every 10 timesteps, etc.)
     """
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, create=True, **kwargs):
 
         # General parameters
         self.label   = '' # The label of the simulation
@@ -226,7 +226,7 @@ class SimPars(Pars):
         self.analyzers     = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
-        self.update(kwargs)
+        self.update(pars, create=create, **kwargs)
         return
 
     def is_default(self, key):
@@ -325,12 +325,14 @@ class SimPars(Pars):
     def validate_demographics(self):
         """ Validate demographics-related input parameters"""
         # Allow shortcut for default demographics
-        if self.demographics == True:
+        demog = self.demographics
+        if demog in [True, False, 1, 0]: # Allow turning it on or off
             self.demographics = sc.autolist()
-            if self.birth_rate is None:
-                self.demographics += ss.Births()
-            if self.death_rate is None:
-                self.demographics += ss.Deaths()
+            if demog: # ...turn it on with True or 1
+                if self.birth_rate is None:
+                    self.demographics += ss.Births()
+                if self.death_rate is None:
+                    self.demographics += ss.Deaths()
 
         # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         valid = isinstance(self.demographics, ss.ndict) and not len(self.demographics)

@@ -6,6 +6,7 @@ Test networks
 import sciris as sc
 import numpy as np
 import starsim as ss
+import starsim_examples as sse
 import scipy.stats as sps
 
 sc.options(interactive=False) # Assume not running interactively
@@ -63,6 +64,50 @@ def test_random():
     return o
 
 
+def test_randomsafe():
+    sc.heading('Testing the RandomSafe network')
+
+    def auid_similarity(s1, s2):
+        """ Compute similarity between UID lists """
+        auids1 = s1.people.auids
+        auids2 = s2.people.auids
+        similarity = ss.networks.similarity(auids1, auids2, verbose=False)
+        return similarity
+
+    # Set up a sim with some small number of births and deaths
+    pars = sc.objdict(n_agents=small, dur=5, verbose=False)
+    births = ss.Births(birth_rate=ss.peryear(5))
+    simil = sc.objdict()
+
+    # Confirm that non-safe networks diverge immediately
+    s1 = ss.Sim(pars, networks='random', label='random-nobirths').run()
+    s2 = ss.Sim(pars, networks='random', label='random-births', demographics=births).run()
+
+    n1 = s1.networks[0]
+    n2 = s2.networks[0]
+    simil.uid = auid_similarity(s1, s2)
+    simil.rand = ss.networks.similarity(n1, n2, verbose=False)
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid:%}')
+    print(f'Similarity for random networks after {pars.dur} timesteps:\n{simil.rand:%}\n')
+    assert simil.rand < 0.5, 'Random networks were more similar than expected'
+
+    # Confirm that safe networks don't
+    s3 = ss.Sim(pars, networks='randomsafe', label='safe-nobirths').run()
+    s4 = ss.Sim(pars, networks='randomsafe', label='safe-births', demographics=births).run()
+
+    n3 = s3.networks[0]
+    n4 = s4.networks[0]
+    simil.uid2 = auid_similarity(s3, s4)
+    simil.safe = ss.networks.similarity(n3, n4, verbose=False)
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid2:%}')
+    print(f'Similarity for random-safe networks after {pars.dur} timesteps:\n{simil.safe:%}\n')
+    assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
+
+    o = sc.objdict(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
+    return o
+
+
+
 def test_erdosrenyi():
     sc.heading('Testing Erdos-Renyi network')
 
@@ -101,11 +146,12 @@ def test_erdosrenyi():
 
     # Manual creation
     p = 0.1
-    nw1 = ss.ErdosRenyiNet(p=p)
+    nw1 = sse.ErdosRenyiNet(p=p)
     ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
+    ss.register_modules(sse)
     s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
     nw2 = s2.networks[0]
 
@@ -128,7 +174,7 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    nw1 = ss.DiskNet()
+    nw1 = sse.DiskNet()
     s1 = ss.Sim(n_agents=5, dur=ss.years(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
@@ -149,7 +195,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = ss.DiskNet(r=0.15, v=ss.Rate(0.05))
+    nw2 = sse.DiskNet(r=0.15, v=ss.Rate(0.05))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -187,7 +233,7 @@ def test_static():
 def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
-    network = ss.NullNet()
+    network = sse.NullNet()
     sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
@@ -223,6 +269,7 @@ if __name__ == '__main__':
     # Run tests
     man  = test_manual()
     rand = test_random()
+    safe = test_randomsafe()
     stat = test_static()
     erdo = test_erdosrenyi()
     disk = test_disk()

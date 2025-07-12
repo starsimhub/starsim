@@ -254,11 +254,26 @@ class MultiSim:
 
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
+        length_mismatches = sc.ddict(int)
         for rkey in rkeys:
-            raw[rkey] = np.zeros((len(rflat[rkey]), len(self.sims)))
+            raw[rkey] = np.full((len(rflat[rkey]), len(self.sims)), np.nan)
             for s, sim in enumerate(self.sims):
                 flat = sim.results.flatten()
-                raw[rkey][:, s] = flat[rkey]
+                this_raw = raw[rkey]
+                this_flat = flat[rkey]
+                l1 = this_raw.shape[0]
+                l2 = this_flat.shape[0]
+                if l1 == l2:
+                    length = l1
+                else:
+                    length_mismatches[sim.label] += 1
+                    length = min(l1, l2)
+                this_raw[:length, s] = this_flat[:length]
+        if length_mismatches:
+            warnmsg = 'Sim results have mismatched lengths; results have been truncated but are not necessarily aligned. Mismatches:\n'
+            for k,v in length_mismatches.items():
+                warnmsg += f'{k}: {v} mismatched results\n'
+            ss.warn(warnmsg)
 
         for rkey in rkeys:
             res = rflat[rkey]
@@ -462,7 +477,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     if reseed:
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
-        ss.set_seed() # Note: may not be needed
 
     # Handle additional arguments
     for key, val in sim_args.items():
@@ -470,8 +484,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')
             sim.pars[key] = val
-            if key == 'rand_seed':
-                ss.set_seed() # Note: may not be needed
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 

@@ -5,6 +5,7 @@ All options should be set using set() or directly, e.g.:
     ss.options(verbose=False)
 """
 import numpy as np
+import numba as nb
 import sciris as sc
 import matplotlib.font_manager as fm
 
@@ -13,10 +14,12 @@ __all__ = ['dtypes', 'options', 'style']
 # Define Starsim-default data types
 class dtypes:
     bool = bool
-    int = np.int64
+    int = np.int64 # np.int32 is actually much slower for indexing arrays
+    nbint = nb.int64
     rand_int = np.int32
     rand_uint = np.uint32
     float = np.float32
+    nbfloat = nb.float32
     result_float = np.float64
     int_nan = -999999 # Arbitrary placeholder value
 

@@ -11,10 +11,35 @@ import matplotlib.pyplot as plt
 # This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
+_ = None
 
 
 # Specify all externally visible functions this file defines; see also more definitions below
 __all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork']
+
+def similarity(set1, set2, max_pairs=200, verbose=True, output=False):
+    """ Compute the similarity of edges between two networks (can also be used for any two lists) """
+    if isinstance(set1, ss.Network):
+        set1 = set1.to_edgelist()
+    if isinstance(set2, ss.Network):
+        set2 = set2.to_edgelist()
+    set1 = set(set1)
+    set2 = set(set2)
+    s1_only = set1 - set2
+    s2_only = set2 - set1
+    both = set1 & set2
+    similarity = len(both)/max(len(set2), len(set2))
+    if verbose:
+        sc.heading(f'Similarity of set 1 (n={len(set1)}) and set 2 (n={len(set2)})')
+        string = f'Similarity: {similarity*100:n}%\n'
+        if len(set1) + len(set2) < max_pairs:
+            string += f'Shared pairs: {len(both)} ({both})\n'
+            string += f'p1 only: {len(s1_only)} ({s1_only})\n'
+            string += f'p2 only: {len(s2_only)} ({s2_only})\n'
+        else:
+            string += f'({len(set1)} pairs not shown since {max_pairs=}'
+        print(string)
+    return similarity
 
 # %% General network classes
 
@@ -276,6 +301,11 @@ class Network(Route):
         nx.set_edge_attributes(G, self.label, name='layer')
         return G
 
+    def to_edgelist(self):
+        """ Convert the network to a list of edges (paired nodes) """
+        out = list(zip(self.p1, self.p2))
+        return out
+
     def to_dict(self):
         """ Convert to dictionary """
         d = {k: self.edges[k] for k in self.meta_keys()}
@@ -312,12 +342,14 @@ class Network(Route):
             alpha (float): the alpha value of the edges
             kwargs (dict): passed to nx.draw_networkx()
         """
-        G = self.to_graph(max_edges=max_edges, random=random)
-        fig = nx.draw_networkx(G, alpha=alpha, **kwargs)
-        if max_edges:
-            plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
+        kw = ss.plot_args(kwargs)
+        with ss.style(**kw.style):
+            fig,ax = plt.subplots(**kw.fig)
+            G = self.to_graph(max_edges=max_edges, random=random)
+            nx.draw_networkx(G, alpha=alpha, ax=ax, **kwargs)
+            if max_edges:
+                plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
         return ss.return_fig(fig)
-
 
     def find_contacts(self, inds, as_array=True):
         """
@@ -435,7 +467,8 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'ErdosRenyiNet', 'DiskNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
+__all__ += ['StaticNet', 'RandomNet', 'RandomSafeNet', 'MFNet', 'MSMNet',
+            'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -522,17 +555,21 @@ class RandomNet(DynamicNetwork):
     Random connectivity between agents
 
     Args:
-        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
-    """
 
-    def __init__(self, key_dict=None, **kwargs):
+    Note: n_contacts = 10 will create *5* edges per agent. Since disease transmission
+    usually occurs bidirectionally, this means that the effective number of contacts
+    per agent is actually 10. Consider 3 agents with 3 edges between them (a triangle):
+    each agent is connected to 2 other agents.
+    """
+    def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
-            dur = 0, # Note; network edge durations are required to have the same unit as the network
+            dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
         )
         self.update_pars(**kwargs)
@@ -543,9 +580,9 @@ class RandomNet(DynamicNetwork):
     @nb.njit(fastmath=True, parallel=False, cache=True)
     def get_source(inds, n_contacts):
         """ Optimized helper function for getting contacts """
-        total_number_of_half_edges = np.sum(n_contacts)
+        n_half_edges = np.sum(n_contacts)
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        source = np.zeros((n_half_edges,), dtype=ss_int_)
         for i, person_id in enumerate(inds):
             n = n_contacts[i]
             source[count: count + n] = person_id
@@ -558,21 +595,20 @@ class RandomNet(DynamicNetwork):
 
         Note that because of the shuffling operation, each person is assigned 2N contacts
         (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
-        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
+        times in the 'target' array). Therefore, the `n_contacts` argument to this
         function should be HALF of the total contacts a person is expected to have, if both
         the source and target array outputs are used (e.g. for social contacts)
 
-        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(ss.dtype.int)
+        adjusted_number_of_contacts = np.round(n_contacts / 2).astype(ss.dtype.int)
 
         Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
 
         Args:
-            inds: List/array of person indices
-            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
-            contacts to assign to each person. Therefore, a person will have on average TWICE this number
-            of random contacts.
+            inds (list/array): person indices
+            n_contacts (list/array): the same length as `inds` with the number of bidirectional contacts to assign to each person
 
-        Returns: Two arrays, for source and target
+        Returns:
+            Two arrays, for source and target
         """
         source = self.get_source(inds, n_contacts)
         target = self.dist.rng.permutation(source)
@@ -581,16 +617,122 @@ class RandomNet(DynamicNetwork):
 
     def add_pairs(self):
         """ Generate edges """
+        p = self.pars
         people = self.sim.people
         born = people.alive & (people.age > 0)
-        if isinstance(self.pars.n_contacts, ss.Dist):
-            number_of_contacts = self.pars.n_contacts.rvs(born.uids)  # or people.uid?
+        uids = born.uids
+        if isinstance(p.n_contacts, ss.Dist):
+            n_conn = p.n_contacts.rvs(uids)
         else:
-            number_of_contacts = np.ones(len(people))*self.pars.n_contacts
+            n_conn = np.full(len(people), p.n_contacts)
 
-        number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
+        # See how many new edges we need
+        orig = n_conn.sum()
+        target = orig / 2 # Divide by 2 since bi-directional
+        current = len(self)
+        needed = target - current
+        if needed > 0:
+            n_conn = n_conn*needed/orig
+            n_conn = p.n_contacts.randround(n_conn) # CRN-safe stochastic integer rounding
 
-        p1, p2 = self.get_edges(born.uids, number_of_contacts)
+            # Get the new edges -- the key step
+            p1, p2 = self.get_edges(uids, n_conn)
+            beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
+
+            if isinstance(p.dur, ss.Dist):
+                dur = p.dur.rvs(p1)
+            elif p.dur == 0:
+                dur = np.zeros(len(p1))
+            else:
+                dur = np.ones(len(p1))*(p.dur/self.t.dt) # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+
+            self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
+class RandomSafeNet(DynamicNetwork):
+    """
+    Create a CRN-safe, O(N) random network
+
+    This network is similar to `ss.RandomNet()`, but is random-number safe
+    (i.e., the addition of a single new agent will not perturb the entire rest
+    of the network). However, it is somewhat slowever than `ss.RandomNet()`,
+    so should be used where CRN safety is important (e.g., scenario analysis).
+
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+    """
+    def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
+        super().__init__(key_dict=key_dict)
+        self.define_pars(
+            n_contacts = 10,
+            dur = 0, # Note; network edge durations are required to have the same unit as the network
+            beta = 1.0,
+        )
+        self.update_pars(**kwargs)
+        self.dist = ss.random(name='RandomSafeNet')
+        return
+
+    def rep_rand(self, uids, sort=True):
+        """ Reproducible repeated random numbers """
+        n_agents = len(uids)
+        n_conn = self.pars.n_contacts
+        r_list = []
+        for i in range(n_conn):
+            r = self.dist.rvs(uids)
+            r_list.append(r)
+        r_arr = np.array(r_list).flatten()
+        inds = np.tile(np.arange(n_agents), n_conn)
+        rr = np.array([inds, r_arr]).T
+        if sort:
+            order = np.argsort(r_arr)
+            rr = rr[order,:]
+        self.rr = rr
+        return rr
+
+    def form_pairs(self, debug=False):
+        """ From a 2N input array, return 2N-2 nearest-neighbor pairs """
+        rr = self.rr
+        out = []
+        agent = rr[:,0].astype(int)
+        v     = rr[:,1]
+        center = v[1:-1]
+        p1_dist = abs(center - v[:-2])
+        p2_dist = abs(center - v[2:])
+        use_p1 = sc.findinds(p1_dist < p2_dist)
+        use_p2 = sc.findinds(p1_dist > p2_dist) # Can refactor
+        source = agent[1:-1]
+        target = np.zeros(len(source), dtype=int)
+        target[use_p1] = agent[:-2][use_p1]
+        target[use_p2] = agent[2:][use_p2]
+
+        # Store additional information for debugging
+        if debug:
+            dist = np.zeros(len(source))
+            dist[use_p1] = p1_dist[use_p1]
+            dist[use_p2] = p2_dist[use_p2]
+            out = sc.objdict()
+            out.pairs = sorted(list(zip(source, target)))
+            out.src = source
+            out.trg = target
+            out.dist = dist
+            out.p1dist = p1_dist
+            out.p2dist = p2_dist
+            self.pairs = out
+        return source,target
+
+    def add_pairs(self):
+        """ Generate edges """
+        people = self.sim.people
+        born = people.alive & (people.age > 0)
+
+        # Get the random numbers
+        self.rep_rand(born.uids)
+
+        # Form the pairs
+        p1, p2 = self.form_pairs()
         beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
@@ -603,190 +745,36 @@ class RandomNet(DynamicNetwork):
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
-
-class ErdosRenyiNet(DynamicNetwork):
-    """
-    In the Erdos-Renyi network, every possible edge has a probability, p, of
-    being created on each time step.
-
-    The degree of each node will have a binomial distribution, considering each
-    of the N-1 possible edges connection this node to the others will be created
-    with probability p.
-
-    Please be careful with the `dur` parameter. When set to 0, new edges will be
-    created on each time step. If positive, edges will persist for `dur` years.
-    Note that the existence of edges from previous time steps will not prevent
-    or otherwise alter the creation of new edges on each time step, edges will
-    accumulate over time.
-    """
-
-    def __init__(self, key_dict=None, **kwargs):
-        """ Initialize """
-        super().__init__(key_dict=key_dict)
-        self.define_pars(
-            p = 0.1, # Probability of each edge
-            dur = ss.Dur(0), # Duration of zero ensures that new random edges are formed on each time step
-        )
-        self.update_pars(**kwargs)
-        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
-        return
-
-    def add_pairs(self):
-        """ Generate contacts """
-        people = self.sim.people
-        born_uids = (people.age > 0).uids
-
-        # Sample integers
-        ints = self.randint.rvs(born_uids)
-
-        # All possible edges are upper triangle of complete matrix
-        idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
-
-        # Use integers to create random numbers per edge
-        i1 = ints[idx1]
-        i2 = ints[idx2]
-        r = ss.utils.combine_rands(i1, i2) # TODO: use ss.multi_rand()
-        edge = r <= self.pars.p
-
-        p1 = idx1[edge]
-        p2 = idx2[edge]
-        beta = np.ones(len(p1), dtype=ss_float_)
-
-        if isinstance(self.pars.dur, ss.Dist):
-            dur = self.pars.dur.rvs(p1)
-        else:
-            dur = np.ones(len(p1))*self.pars.dur/self.t.dt
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
-        return
-
-
-class DiskNet(Network):
-    """
-    Disk graph in which edges are made between agents located within a user-defined radius.
-
-    Interactions take place within a square with edge length of 1. Agents are
-    initialized to have a random position and orientation within this square. On
-    each time step, agents advance v*dt in the direction they are pointed. When
-    encountering a wall, agents are reflected.
-
-    Edges are formed between two agents if they are within r distance of each other.
-    """
-
-    def __init__(self, key_dict=None, **kwargs):
-        """ Initialize """
-        super().__init__(key_dict=key_dict)
-        self.define_pars(
-            r = 0.1, # Radius
-            v = ss.Rate(0.05), # Velocity
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('x', default=ss.random(), label='X position'),
-            ss.FloatArr('y', default=ss.random(), label='Y position'),
-            ss.FloatArr('theta', default=ss.uniform(high=2*np.pi), label='Heading'),
-        )
-        return
-
-    def step(self):
-        # Motion step
-        vdt = self.pars.v * self.t.dt
-        self.x[:] = self.x + vdt * np.cos(self.theta)
-        self.y[:] = self.y + vdt * np.sin(self.theta)
-
-        # Wall bounce
-
-        ## Right edge
-        inds = (self.x > 1).uids
-        self.x[inds] = 2 - self.x[inds]
-        self.theta[inds] = np.pi - self.theta[inds]
-
-        ## Left edge
-        inds = (self.x < 0).uids
-        self.x[inds] =  -self.x[inds]
-        self.theta[inds] = np.pi - self.theta[inds]
-
-        ## Top edge
-        inds = (self.y > 1).uids
-        self.y[inds] = 2 - self.y[inds]
-        self.theta[inds] = - self.theta[inds]
-
-        ## Bottom edge
-        inds = (self.y < 0).uids
-        self.y[inds] = -self.y[inds]
-        self.theta[inds] = - self.theta[inds]
-
-        self.add_pairs()
-        return
-
-    def add_pairs(self):
-        """ Generate contacts """
-        p1, p2 = np.triu_indices(n=len(self.x), k=1)
-        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
-        edge = d12_sq < self.pars.r**2
-
-        self.edges['p1'] = ss.uids(p1[edge])
-        self.edges['p2'] = ss.uids(p2[edge])
-        self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
-
-        return
-
-
-class NullNet(Network):
-    """
-    A convenience class for a network of size n that only has self-connections with a weight of 0.
-    This network can be useful for debugging purposes or as a placeholder network during development
-    for conditions that require more complex network mechanisms.
-
-    Guarantees there's one (1) contact per agent (themselves), and that their connection weight is zero.
-
-    For an empty network (ie, no edges) use
-    >> import starsim as ss
-    >> import networkx as nx
-    >> empty_net_static = ss.StaticNet(nx.empty_graph)
-    >> empty_net_rand = ss.RandomNet(n_contacts=0)
-
-    """
-
-    def __init__(self, n_people=None, **kwargs):
-        self.n = n_people
-        super().__init__(**kwargs)
-        return
-
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        popsize = sim.pars['n_agents']
-        if self.n is None:
-            self.n = popsize
-        else:
-            if self.n > popsize:
-                errormsg = f'Please ensure the size of the network ({self.n} is less than or equal to the population size ({popsize}).'
-                raise ValueError(errormsg)
-        self.get_edges()
-        return
-
-    def get_edges(self):
-        indices = np.arange(self.n)
-        self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
-        return
-
-    def step(self):
-        """ Not used for NullNet """
-        pass
+    def plot_matrix(self, **kwargs):
+        """ Plot the distance matrix used for forming pairs: only ±1 from the diagonal is used """
+        kw = ss.plot_args(kwargs)
+        v = self.rr[:,1]
+        dm = abs(v[:, np.newaxis] - v)**2
+        with ss.style(**kw.style):
+            fig = plt.figure(**kw.fig)
+            plt.imshow(dm)
+        return ss.return_fig(fig)
 
 
 class MFNet(SexualNetwork):
     """
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
+
+    Args:
+        duration (`ss.Dist`): Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+        debut (`ss.Dist`): Age of debut can vary by using callable parameter values
+        acts (`ss.Dist`): Number of acts per year
+        participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+        rel_part_rates (float): Relative participation in the network
     """
-    def __init__(self, **kwargs):
+    def __init__(self, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, **kwargs):
         super().__init__()
         self.define_pars(
             duration = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
             acts = ss.poisson(lam=ss.peryear(80)),
+            participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             rel_part_rates = 1.0,
         )
         self.update_pars(**kwargs)
@@ -869,9 +857,14 @@ class MFNet(SexualNetwork):
 class MSMNet(SexualNetwork):
     """
     A network that randomly pairs males
-    """
 
-    def __init__(self, key_dict=None, **kwargs):
+    Args:
+        duration (`ss.Dist`): Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+        debut (`ss.Dist`): Age of debut can vary by using callable parameter values
+        acts (`ss.Dist`): Number of acts per year
+        participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+    """
+    def __init__(self, duration=_, debut=_, acts=_, participation=_, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             duration = ss.lognorm_ex(mean=2, std=1),
@@ -926,69 +919,6 @@ class MSMNet(SexualNetwork):
         self.set_network_states()
         self.add_pairs()
         return
-
-
-class EmbeddingNet(MFNet):
-    """
-    Heterosexual age-assortative network based on a one-dimensional embedding.
-
-    Warning: this network is random-number safe, but is very slow compared to
-    RandomNet.
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Create a sexual network from a 1D embedding based on age
-
-        Args:
-            male_shift is the average age that males are older than females in partnerships
-        """
-        super().__init__()
-        self.define_pars(
-            inherit = True, # The MFNet already comes with pars, we want to keep those
-            embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
-            male_shift = 5,
-        )
-        self.update_pars(**kwargs)
-        return
-
-    @staticmethod
-    def embedding_loc(module, sim, uids):
-        loc = sim.people.age[uids]
-        loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
-        return loc
-
-    def add_pairs(self):
-        import scipy.optimize as spo
-        import scipy.spatial as spsp
-
-        people = self.sim.people
-        available_m = self.available(people, 'male')
-        available_f = self.available(people, 'female')
-
-        if not len(available_m) or not len(available_f):
-            if ss.options.verbose > 1:
-                print('No pairs to add')
-            return 0
-
-        available = ss.uids.cat(available_m, available_f)
-        loc = self.pars.embedding_func.rvs(available)
-        loc_f = loc[people.female[available]]
-        loc_m = loc[~people.female[available]]
-
-        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
-        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        n_pairs = len(ind_f)
-
-        # Finalize pairs
-        p1 = available_m[ind_m]
-        p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
-        dur_vals = self.pars.duration.rvs(p1)
-        act_vals = self.pars.acts.rvs(p1)
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
-        return len(beta)
 
 
 class MaternalNet(DynamicNetwork):
@@ -1051,6 +981,8 @@ class PostnatalNet(MaternalNet):
         return
 
 
+#%% Mixing pools
+
 __all__ += ['AgeGroup', 'MixingPools', 'MixingPool']
 
 class AgeGroup(sc.prettyobj):
@@ -1105,7 +1037,7 @@ class MixingPools(Route):
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
     """
-    def __init__(self, **kwargs):
+    def __init__(self, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1226,7 +1158,7 @@ class MixingPool(Route):
         sim.run()
         sim.plot()
     """
-    def __init__(self, **kwargs):
+    def __init__(self, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1314,7 +1246,7 @@ class MixingPool(Route):
         # Determine the mixing pool beta value
         beta = self.pars.beta
         if isinstance(beta, ss.Rate):
-            ss.warn(f'In mixing pools, beta should typically be a float')
+            ss.warn('In mixing pools, beta should typically be a float')
             beta = beta * self.t.dt
         if sc.isnumber(beta) and beta == 0:
             return []

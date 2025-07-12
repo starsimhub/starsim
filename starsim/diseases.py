@@ -11,8 +11,10 @@ import matplotlib.pyplot as plt
 
 ss_int_ = ss.dtypes.int
 ss_float_ = ss.dtypes.float
+_ = None # For function signatures
 
 __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
+
 
 
 class Disease(ss.Module):
@@ -419,8 +421,13 @@ class NCD(Disease):
     This class implements a basic NCD model with risk of developing a condition
     (e.g., hypertension, diabetes), a state for having the condition, and associated
     mortality.
+
+    Args:
+        initial_risk (float/`ss.bernoulli`): initial prevalence of risk factors
+        dur_risk (float/`ss.dur`/`ss.Dist`): how long a person is at risk for
+        prognosis (float/`ss.dur`/`ss.Dist`): time in years between first becoming affected and death
     """
-    def __init__(self, **kwargs):
+    def __init__(self, initial_risk=_, dur_risk=_, prognosis=_, **kwargs):
         super().__init__()
         self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
@@ -451,7 +458,7 @@ class NCD(Disease):
         super().init_post()
         initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
-        self.ti_affected[initial_risk] = self.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk))
+        self.ti_affected[initial_risk] = self.ti + self.pars['dur_risk'].rvs(initial_risk, round=True)
         return initial_risk
 
     def step_state(self):
@@ -467,8 +474,8 @@ class NCD(Disease):
         ti = self.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True
-        dur_prog = self.pars.prognosis.rvs(new_cases)
-        self.ti_dead[new_cases] = ti + sc.randround(dur_prog)
+        dur_prog = self.pars.prognosis.rvs(new_cases, round=True)
+        self.ti_dead[new_cases] = ti + dur_prog
         super().set_prognoses(new_cases)
         return new_cases
 
@@ -500,8 +507,14 @@ class SIR(Infection):
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
+
+    Args:
+        beta (float/`ss.timeprob`): the infectiousness
+        init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
+        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
+        p_death (float/`ss.bernoulli`): the probability of death from infection
     """
-    def __init__(self, **kwargs):
+    def __init__(self, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.1),
@@ -590,8 +603,15 @@ class SIS(Infection):
     This class implements a basic SIS model with states for susceptible,
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
+
+    Args:
+        beta (float/`ss.timeprob`): the infectiousness
+        init_prev (float/`ss.bernoulli`): the fraction of people to start of being infected
+        dur_inf (float/`ss.du`r/`ss.Dist`): how long (in years) people are infected for
+        waning (float/`ss.rate`): how quickly immunity wanes
+        imm_boost (float): how much an infection boosts immunity
     """
-    def __init__(self, **kwargs):
+    def __init__(self, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.05),

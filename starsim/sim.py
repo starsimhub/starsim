@@ -49,7 +49,7 @@ class Sim(ss.Base):
         # Set attributes; see also sim.init() for more
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
-        self.metadata = sc.metadata(version=self.version, pipfreeze=False)
+        self.metadata = ss.metadata()
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='Sim')  # For storing results
@@ -156,7 +156,7 @@ class Sim(ss.Base):
             self.timer.start()
 
         # Validation and initialization -- this is "pre"
-        ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
@@ -701,7 +701,7 @@ class Sim(ss.Base):
         self.check_results_ready('Please run the sim before plotting')
 
         # Figure out the flat structure of results to plot
-        flat = ss.utils.match_result_keys(self.results, key, show_skipped=show_skipped)
+        flat = ss.utils.match_result_keys(self.results, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
 
         # Set figure defaults
         n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes

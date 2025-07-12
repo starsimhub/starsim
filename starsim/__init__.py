@@ -15,13 +15,15 @@ import sciris as sc
 root = sc.thispath(__file__).parent
 
 # Double-check key requirements -- should match pyproject.toml
-reqs = ['sciris>=3.2.2', 'pandas>=2.0.0']
-msg = f'The following dependencies for Starsim {__version__} were not met: <MISSING>.'
+reqs = ['sciris>=3.2.3', 'pandas>=2.0.0']
+msg = f'\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\n\n'
+msg += 'You can update with:\n  pip install <MISSING> --upgrade'
 sc.require(reqs, message=msg)
 del sc, reqs, msg # Don't keep this in the module
 
 # Finish imports
 from .utils            import *
+from .debug            import *
 from .arrays           import *
 from .time             import *
 from .parameters       import *

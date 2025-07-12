@@ -1,9 +1,8 @@
 """
-Numerical utilities
+Numerical utilities and other helper functions
 """
 import warnings
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
 import matplotlib as mpl
@@ -13,10 +12,8 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires',
-           'standardize_netkey', 'standardize_data', 'validate_sim_data',
-           'Profile', 'check_version', 'load', 'save', 'plot_args', 'show', 'return_fig']
-
+__all__ = ['ndict', 'warn', 'find_contacts', 'standardize_netkey', 'standardize_data',
+           'validate_sim_data', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 class ndict(sc.objdict):
     """
@@ -207,49 +204,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-def check_requires(sim, requires, *args):
-    """ Check that the module's requirements (of other modules) are met """
-    errs = sc.autolist()
-    all_classes = [m.__class__ for m in sim.module_list]
-    all_names = [m.name for m in sim.module_list]
-    for req in sc.mergelists(requires, *args):
-        if req not in all_classes + all_names:
-            errs += req
-    if len(errs):
-        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
-        raise AttributeError(errormsg)
-    return
-
-
-def set_seed(seed=None):
-    '''
-    Reset the random seed -- complicated because of Numba, which requires special
-    syntax to reset the seed. This function also resets Python's built-in random
-    number generated.
-
-    Args:
-        seed (int): the random seed
-    '''
-
-    @nb.njit(cache=True)
-    def set_seed_numba(seed):
-        return np.random.seed(seed)
-
-    def set_seed_regular(seed):
-        return np.random.seed(seed)
-
-    # Dies if a float is given
-    if seed is not None:
-        seed = int(seed)
-
-    set_seed_regular(seed)  # If None, reinitializes it
-    if seed is None:  # Numba can't accept a None seed, so use our just-reinitialized Numpy stream to generate one
-        seed = np.random.randint(1e9)
-    set_seed_numba(seed)
-
-    return
-
-
 # %% Data cleaning and processing
 
 def standardize_netkey(key):
@@ -401,97 +355,6 @@ def combine_rands(a, b):
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
-
-
-#%% Profiling
-
-class Profile(sc.profile):
-    """ Class to profile the performance of a simulation """
-
-    def __init__(self, sim, do_run=True, plot=True, verbose=False, **kwargs):
-        assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
-        super().__init__(run=None, do_run=False, verbose=verbose, **kwargs)
-        self.orig_sim = sim
-
-        # Optionally run
-        if do_run:
-            self.init_and_run()
-            if plot:
-                self.plot_cpu()
-        return
-
-    def init_and_run(self):
-        """ Profile the performance of the simulation """
-
-        # Initialize: copy the sim and time initialization
-        sim = self.orig_sim.copy() # Copy so the sim can be reused
-        self.sim = sim
-        self.run_func = sim.run
-
-        # Handle sim init -- both run it and profile it
-        init_prof = None
-        if not sim.initialized:
-            if self.follow:
-                sim.init()
-            else:
-                init_prof = sc.profile(sim.init, verbose=False)
-
-        # Get the functions from the initialized sim
-        if self.follow is None:
-            loop_funcs = [e['func'] for e in sim.loop.funcs]
-            self.follow = [sim.run] + loop_funcs
-
-        # Run the profiling on the sim run
-        self.run()
-
-        # Add initialization to the other timings
-        if init_prof:
-            self += init_prof
-
-        return self
-
-    def disp(self, bytime=1, maxentries=10, skiprun=True):
-        """ Same as sc.profile.disp(), but skip the run function by default """
-        return super().disp(bytime=bytime, maxentries=maxentries, skiprun=skiprun)
-
-    def plot_cpu(self):
-        """ Shortcut to sim.loop.plot_cpu() """
-        self.sim.loop.plot_cpu()
-        return
-
-
-def check_version(expected, die=False, warn=True):
-    """
-    Check the expected Starsim version with the one actually installed. The expected
-    version string may optionally start with '>=' or '<=' (== is implied otherwise),
-    but other operators (e.g. ~=) are not supported. Note that '>' and '<' are interpreted
-    to mean '>=' and '<='; '>' and '<' are not supported.
-
-    Args:
-        expected (str): expected version information
-        die (bool): whether or not to raise an exception if the check fails
-        warn (bool): whether to raise a warning if the check fails
-
-    **Example**:
-
-        ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
-    """
-    if   expected.startswith('>'): valid = [0,1]
-    elif expected.startswith('<'): valid = [0,-1]
-    elif expected.startswith('!'): valid = [1,-1]
-    else: valid = [0] # Assume == is the only valid comparison
-    expected = expected.lstrip('<=>') # Remove comparator information
-    version = ss.__version__
-    compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
-    relation = ['older', '', 'newer'][compare+1] # Picks the right string
-    if relation: # Versions mismatch, print warning or raise error
-        string = f'Starsim is {relation} than expected ({version} vs. {expected})'
-        if compare not in valid:
-            if die:
-                raise ValueError(string)
-            elif warn:
-                ss.warn(string)
-    return compare
 
 
 #%% Other helper functions

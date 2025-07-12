@@ -1,12 +1,14 @@
 """
 Define random-number-safe distributions.
 """
+import inspect
 import sciris as sc
 import numpy as np
 import numba as nb
 import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as plt
+ss_int_ = ss.dtypes.int
 
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
@@ -34,7 +36,7 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # 
         dist.link_module(module, overwrite=overwrite)
         if init: # Usually this is false since usually these are initialized centrally by the sim
             dist.init()
-    return
+    return dists
 
 
 def make_dist(pars=None, **kwargs):
@@ -185,6 +187,8 @@ class Dist:
         auto (bool): whether to auto-reset the state after each draw
         sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
         module (Module): usually determined on initialization; the module to use as input to callable parameters
+        mock (int): if provided, then initialize with a mock Sim object (of size `mock`) for debugging purposes
+        debug (bool): print out additional detail
         kwargs (dict): parameters of the distribution
 
     **Examples**:
@@ -192,8 +196,9 @@ class Dist:
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
+    valid_pars = None
     def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
-                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
+                 strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
             distname = dist
@@ -229,6 +234,17 @@ class Dist:
         self.history = [] # Previous states
         self.ready = True
         self.initialized = False
+        if self.valid_pars is not None:
+            self.validate_pars()
+
+        # Finalize
+        if mock:
+            if mock is True: # Convert from boolean to a reasonable int
+                mock = 100
+            strict = False
+            self.sim = ss.mock_sim(mock)
+            self.module = ss.mock_module()
+            self.trace = 'mock_dist'
         if not strict: # Otherwise, wait for a sim
             self.init()
         return
@@ -236,7 +252,8 @@ class Dist:
     def __repr__(self):
         """ Custom display to show state of object """
         j = sc.dictobj(self.to_json())
-        string = f'ss.{j.classname}({j.tracestr}, {j.diststr}pars={j.pars})'
+        parstr = [f'{k}={v}' for k,v in j.pars.items()]
+        string = f'ss.{j.classname}({j.diststr}{sc.strjoin(parstr)})'
         return string
 
     def disp(self):
@@ -265,6 +282,8 @@ class Dist:
         if dist:
             self.dist = dist
             self.process_dist()
+
+        self._callable_keys = None # Reset this in case a function was provided and its signature changed (unlikely, but better safe than sorry!)
         if args:
             if kwargs:
                 errormsg = f'You can supply args or kwargs, but not both (args={len(args)}, kwargs={len(kwargs)})'
@@ -273,6 +292,7 @@ class Dist:
                 parkeys = list(self.pars.keys())
                 for i,arg in enumerate(args):
                     kwargs[parkeys[i]] = arg
+
         if kwargs:
             self.pars.update(kwargs)
             if self.initialized:
@@ -491,6 +511,16 @@ class Dist:
         self._slots = slots
         return size, slots
 
+    def validate_pars(self):
+        """ Check if parameters are valid; only used for non-SciPy distributions """
+        valid = set(self.valid_pars)
+        user = set(self.pars.keys())
+        unmatched = user - valid
+        if unmatched:
+            errormsg = f'Mismatch for {type(self)} between valid parameters {valid} and user-provided parameters {user}'
+            raise ValueError(errormsg)
+        return
+
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
         self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
@@ -525,12 +555,45 @@ class Dist:
                 except:
                     pass
 
-    def convert_callable(self, key, val, size, uids):
+    def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
         size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
-        out = val(self.module, self.sim, size_par)
+        if not getattr(self, '_callable_keys', None): # Inspect isn't that fast, so only do this once
+            keys = list(inspect.signature(func).parameters.keys()) # Get the input arguments  of the function
+            module = self.module
+            mapping = {
+                'sim': self.sim,
+                'self': module,
+                'module': module,
+                'uids': size_par,
+                'size': size_par,
+            }
+            if isinstance(module, ss.Module): # If it's an actual module, we can add a couple more
+                mapping['pars'] = module.pars
+                mapping['states'] = module.state_dict
+            self._callable_keys = keys
+            self._callable_args = mapping
+        else:
+            keys = self._callable_keys
+            mapping = self._callable_args
+
+        # We have to update this every time
+        for key in ['uids', 'size']:
+            mapping[key] = size_par
+
+        # Assemble the arguments
+        args = []
+        for key in keys:
+            try:
+                args.append(mapping[key])
+            except KeyError as e:
+                valid = mapping.keys()
+                errormsg = f'Valid distribution function arguments are 1-3 of {sc.strjoin(valid)}, not "{key}"'
+                raise sc.KeyNotFoundError(errormsg) from e
+
+        out = func(*args) # Actually calculate the function
         val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
-        self._pars[key] = val
+        self._pars[parkey] = val
         return val
 
     def call_par(self, key, val, size, uids):
@@ -606,12 +669,13 @@ class Dist:
             rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
         return rvs
 
-    def rvs(self, n=1, reset=False):
+    def rvs(self, n=1, round=False, reset=False):
         """
         Get random variates -- use this!
 
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
+            round (bool): if True, randomly round up or down based on how close the value is
             reset (bool): whether to automatically reset the random number distribution state after being called
         """
         # Check for readiness
@@ -651,6 +715,10 @@ class Dist:
         if self._timepar is not None:
             rvs = self.postprocess_timepar(rvs)
 
+        # Round if needed
+        if round:
+            rvs = self.randround(rvs)
+
         # Tidy up
         self.called += 1
         if reset:
@@ -670,6 +738,11 @@ class Dist:
             print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
 
+        return rvs
+
+    def randround(self, rvs):
+        """ Round the values up or down to an integer stochastically; usually called via `dist.rvs(round=True)` """
+        rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int_) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
         return rvs
 
     def to_json(self):
@@ -707,6 +780,7 @@ class Dist:
         self._n = shrunk
         self._uids = shrunk
         self.history = shrunk
+        self._callable_args = shrunk
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
@@ -732,6 +806,7 @@ __all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. s
 
 class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
+    valid_pars = ['dtype']
     def __init__(self, **kwargs):
         super().__init__(distname='random', dtype=ss.dtypes.float, **kwargs)
         return
@@ -748,6 +823,7 @@ class uniform(Dist):
         low (float): the lower bound of the distribution (default 0.0)
         high (float): the upper bound of the distribution (default 1.0)
     """
+    valid_pars = ['low', 'high']
     def __init__(self, low=None, high=None, **kwargs):
         if high is None and low is not None: # One argument, swap
             high = low
@@ -928,6 +1004,7 @@ class randint(Dist):
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
         allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
+    valid_pars = ['low', 'high', 'dtype']
     def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
         self.allow_time = allow_time
@@ -968,6 +1045,7 @@ class rand_raw(Dist):
     Directly sample raw integers (uint64) from the random number generator.
     Typicaly only used with ss.combine_rands().
     """
+    valid_pars = []
     def make_rvs(self):
         if ss.options.single_rng:
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
@@ -1020,6 +1098,7 @@ class constant(Dist):
     Args:
         v (float): the value to return
     """
+    valid_pars = ['v']
     def __init__(self, v=0.0, **kwargs):
         super().__init__(distname='const', v=v, **kwargs)
         return
@@ -1041,6 +1120,7 @@ class bernoulli(Dist):
     Args:
         p (float): the probability of returning True (default 0.5)
     """
+    valid_pars = ['p']
     def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
@@ -1115,8 +1195,9 @@ class choice(Dist):
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
     """
-    def __init__(self, a=2, p=None, **kwargs):
-        super().__init__(distname='choice', a=a, p=p, **kwargs)
+    valid_pars = ['a', 'p', 'replace', 'dtype']
+    def __init__(self, a=2, p=None, replace=True, **kwargs):
+        super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
         self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
         return
 
@@ -1173,6 +1254,7 @@ class histogram(Dist):
         h2 = ss.histogram(data=data, strict=False)
         h2.plot_hist(bins=100)
     """
+    valid_pars = ['values', 'bins', 'density', 'data']
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
         if data is not None:
             if values is not None:

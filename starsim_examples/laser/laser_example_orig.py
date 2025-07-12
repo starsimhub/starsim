@@ -117,22 +117,32 @@ class Transmission:
         self.population.recovery_timer[newly_infected_indices] = np.random.randint(5, 15, size=newly_infected_indices.size)  # Random recovery time
 
 
-params = PropertySet({
-    "population_size": 100_000,
-    "infection_rate": 0.3,
-    "timesteps": 160
-})
+def run_sim(run=True, plot=False):
+    """ Create and run the simulation """
+    params = PropertySet({
+        "population_size": 100_000*2,
+        "infection_rate": 0.3,
+        "timesteps": 100*10
+    })
 
-# Initialize the model
-sir_model = SIRModel(params)
+    # Initialize the model
+    sir_model = SIRModel(params)
 
-# Initialize and add components
-sir_model.add_component(IntrahostProgression(sir_model))
-sir_model.add_component(Transmission(sir_model))
+    # Initialize and add components
+    sir_model.add_component(IntrahostProgression(sir_model))
+    sir_model.add_component(Transmission(sir_model))
 
-# Run the simulation
-with sc.timer():
-    sir_model.run()
+    # Run the simulation
+    if run:
+        sir_model.run()
 
-# Plot results
-sir_model.plot_results()
+    # Plot results
+    if plot:
+        sir_model.plot_results()
+    return sir_model
+
+
+if __name__ == '__main__':
+    with sc.timer():
+        sir_model = run_sim()
+    sir_model.plot_results()
