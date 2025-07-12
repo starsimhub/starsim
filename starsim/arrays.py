@@ -19,7 +19,7 @@ int_nan    = ss.dtypes.int_nan
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 # Control the threshold for the number of array elements that switch from NumPy to Numba based indexing
-_numba_threshold = 5000
+_numba_threshold = 5_000
 
 def np_indexer(arr, inds):
     """ Much faster than Numba for small arrays (<5k elements) """
@@ -231,7 +231,7 @@ class Arr(BaseArr):
 
 
         # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
-        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
+        self._set_indexer()
         return
 
     def __repr__(self):
@@ -293,7 +293,10 @@ class Arr(BaseArr):
 
     def _set_indexer(self):
         """ Choose which indexer to use based on the array size (small = NumPy, large = Numba) """
-        self._indexer = self._np_index if self.len_used < _numba_threshold else self._nb_index
+        if self.len_used > _numba_threshold and ss.options.numba_indexing:
+            self._indexer = self._nb_index
+        else:
+            self._indexer = self._np_index
         return
 
     def __getitem__(self, key):

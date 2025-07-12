@@ -583,9 +583,9 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
-    def profile(self, do_run=True, plot=True, follow=None, **kwargs):
+    def profile(self, line=True, do_run=True, plot=True, follow=None, **kwargs):
         """
-        Profile the performance of the simulation
+        Profile the performance of the simulation using a line profiler (`sc.profile()`)
 
         Args:
             do_run (bool): whether to immediately run the sim
@@ -604,6 +604,29 @@ class Sim(ss.Base):
         """
         prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
         return prof
+
+    def cprofile(self, sort='cumtime', mintime=1e-3, **kwargs):
+        """
+        Profile the performance of the simulation using a function profiler (`sc.cprofile()`)
+
+        Args:
+            sort (str): default sort column; common choices are 'cumtime' (total time spent in a function, includin subfunctions) and 'selftime' (excluding subfunctions)
+            mintime (float): exclude function calls less than this time in seconds
+            **kwargs (dict): passed to `sc.cprofile()`
+
+        **Example**:
+
+            import starsim as ss
+
+            net = ss.RandomNet()
+            sis = ss.SIS()
+            sim = ss.Sim(networks=net, diseases=sis)
+            prof = sim.cprofile()
+        """
+        cprof = sc.cprofile(sort=sort, mintime=mintime, **kwargs)
+        with cprof:
+            self.run()
+        return cprof
 
     def save(self, filename=None, shrink=None, **kwargs):
         """

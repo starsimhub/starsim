@@ -1,3 +1,7 @@
+"""
+Detailed sim profiling
+"""
+
 import sciris as sc
 import starsim as ss
 
@@ -7,21 +11,19 @@ def make_sim():
     return sim
 
 to_run = [
-    'profile',
-    'cprofile',
-    'time',
-    'plot_cpu',
+    'profile', # Run the built-in line profiler
+    'cprofile', # Run the built-in function profiler
+    'time', # Simply time how long the sim takes to run
+    'plot_cpu', # Plot the CPU time ()
 ]
 
 if 'profile' in to_run:
     sim = make_sim()
-    prf = sc.profile(run=sim.run, follow=[sim.run])
+    prf = sim.profile()
 
 if 'cprofile' in to_run:
     sim = make_sim()
-    cprf = sc.cprofile(sort='selfpct', mintime=1e-3, maxitems=None, maxfunclen=None, maxpathlen=None)
-    with cprf:
-        sim.run()
+    cprf = sim.cprofile()
 
 if 'time' in to_run:
     sim = make_sim()
