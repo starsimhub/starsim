@@ -28,13 +28,23 @@ class Profile(sc.profile):
         plot (bool): whether to plot time spent per module step
         **kwargs (dict): passed to `sc.profile()`
 
-    """
+    **Example**:
 
-    def __init__(self, sim, follow=None, do_run=True, plot=True, verbose=False, **kwargs):
+        import starsim as ss
+
+        net = ss.RandomNet()
+        sis = ss.SIS()
+        sim = ss.Sim(networks=net, diseases=sis)
+        prof = sim.profile(follow=[net.add_pairs, sis.infect])
+        prof.disp()
+    """
+    def __init__(self, sim, follow=None, do_run=True, plot=True, verbose=True, **kwargs):
         assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
+        if 'skipzero' not in kwargs:
+            kwargs['skipzero'] = True # Since provide the same follow to both sim.init() and sim.run(), so expect zero entries
         super().__init__(run=None, do_run=False, verbose=verbose, **kwargs)
         self.orig_sim = sim
-        self.ss_follow = follow
+        self.ss_follow = follow # Keep a copy to know if we should overwrite this
 
         # Initialize: copy the sim and time initialization
         sim = self.orig_sim.copy() # Copy so the sim can be reused
@@ -53,7 +63,7 @@ class Profile(sc.profile):
     def profile_init(self):
         """ Handle sim init -- both run it and profile it """
         if not self.sim.initialized:
-            self.init_prof = sc.profile(self.sim.init, follow=self.ss_follow, verbose=False)
+            self.init_prof = sc.profile(self.sim.init, follow=self.ss_follow, verbose=False, skipzero=True)
         else:
             errormsg = 'Cannot profile initialization of already initialized sim'
             raise RuntimeError(errormsg)
@@ -66,10 +76,11 @@ class Profile(sc.profile):
             self.sim.init() # Don't profile
 
         # Get the functions from the initialized sim
-        if self.follow is None:
+        if self.ss_follow is None:
             loop_funcs = [e['func'] for e in sim.loop.funcs]
-            loop_funcs = [f.__wrapped__ for f in loop_funcs if hasattr(f, '__wrapped__')] # Due to @required() wrapping some methods
             self.follow = [sim.run] + loop_funcs
+        else:
+            self.follow = self.ss_follow
 
         # Run the profiling on the sim run
         super().run()

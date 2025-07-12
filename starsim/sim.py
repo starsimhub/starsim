@@ -595,10 +595,14 @@ class Sim(ss.Base):
 
         **Example**:
 
+            import starsim as ss
 
-
+            net = ss.RandomNet()
+            sis = ss.SIS()
+            sim = ss.Sim(networks=net, diseases=sis)
+            prof = sim.profile(follow=[net.add_pairs, sis.infect])
         """
-        prof = ss.Profile(self, do_run=do_run, plot=plot, **kwargs)
+        prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
         return prof
 
     def save(self, filename=None, shrink=None, **kwargs):
