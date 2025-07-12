@@ -249,7 +249,7 @@ def test_save():
     # Run the methods
     sim.save(filename=f.sim)
     sim.to_json(filename=f.json)
-    json = sim.to_json()
+    json = sim.to_json(strkeys=True) # To match the loaded file, which converts keys to strings
 
     # Run methods
     s2 = sc.load(f.sim)
@@ -271,15 +271,15 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    # sim0 = test_demo(do_plot=do_plot)
-    # sim1 = test_default(do_plot=do_plot)
-    # sim2 = test_simple(do_plot=do_plot)
-    # sim3 = test_api()
-    # sim4 = test_complex_api()
+    sim0 = test_demo(do_plot=do_plot)
+    sim1 = test_default(do_plot=do_plot)
+    sim2 = test_simple(do_plot=do_plot)
+    sim3 = test_api()
+    sim4 = test_complex_api()
     sim5b, sim5i = test_simple_vax(do_plot=do_plot)
-    # sim6 = test_shared_product(do_plot=do_plot)
-    # sim7 = test_components(do_plot=do_plot)
-    # sim8 = test_save()
+    sim6 = test_shared_product(do_plot=do_plot)
+    sim7 = test_components(do_plot=do_plot)
+    sim8 = test_save()
 
     T.toc()
 

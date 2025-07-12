@@ -667,7 +667,7 @@ class Sim(ss.Base):
             filename (str): if None, return string; else, write to file
             keys (str/list): attributes to write to json (choices: 'pars', 'summary', and/or 'results')
             verbose (bool): detail to print
-            kwargs (dict): passed to `sc.jsonify()`
+            **kwargs (dict): passed to `sc.jsonify()`
 
         Returns:
             A dictionary representation of the parameters and/or summary results
@@ -702,9 +702,9 @@ class Sim(ss.Base):
                 ss.warn(warnmsg)
 
         # Final conversion
+        d = sc.jsonify(d, **kwargs)
         if filename is not None:
-            sc.savejson(filename=filename, obj=d, **kwargs)
-        d = sc.jsonify(d)
+            sc.savejson(filename=filename, obj=d)
         return d
 
     def to_yaml(self, filename=None, sort_keys=False, **kwargs):
