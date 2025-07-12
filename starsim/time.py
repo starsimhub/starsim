@@ -312,38 +312,40 @@ ratios = sc.objdict(
 
     # Round numbers with a year denominator
     year = sc.objdict(
-        years   = 1,
-        months  = 12,
-        weeks   = 52,
-        days    = 365,
-        hours   = 365*24,
-        minutes = 365*24*60,
-        seconds = 365*24*60*60,
+        years   = 1.0,
+        months  = 12.0,
+        weeks   = 52.0,
+        days    = 365.0,
     ),
 
     # Round numbers with a day denominator
     day = sc.objdict(
-        years   = 1/365,
-        months  = 1/30,
-        weeks   = 1/7,
-        days    = 1,
-        hours   = 24,
-        minutes = 24*60,
-        seconds = 24*60*60,
+        years   = 1.0/365,
+        months  = 1.0/30,
+        weeks   = 1.0/7,
+        days    = 1.0,
     ),
 )
 
 # Month ratios are exactly 12 times more than a year
 ratios.month = ratios.year.copy()
-ratios.month[:] *= 12
+ratios.month[:] /= 12.0
 
 # Week ratios are exactly 7 times less than a day
 ratios.week = ratios.day.copy()
-ratios.week[:] /= 7
+ratios.week[:] *= 7.0
 
 # Add additional time entries
-# for key,val in ratios.items():
-
+extras = sc.objdict(
+    hours = 24.0,
+    minutes = 60.0,
+    seconds = 60.0,
+    milliseconds = 1000.0,
+    nanoseconds = 1000.0,
+)
+for rkey,rdict in ratios.items():
+    for exkey,exval in extras.items():
+        rdict[exkey] = rdict[-1]*exval
 
 
 class TimePar:
@@ -799,7 +801,6 @@ class DateDur(Dur):
             vals = self._as_array(self.value).astype(float)
 
             time_portion = vals[4:]
-            time_portion[-1] = int(time_portion[-1]*100)/100
             time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
 
             return '<DateDur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
