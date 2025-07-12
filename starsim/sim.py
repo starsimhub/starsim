@@ -701,7 +701,7 @@ class Sim(ss.Base):
         self.check_results_ready('Please run the sim before plotting')
 
         # Figure out the flat structure of results to plot
-        flat = ss.utils.match_result_keys(self.results, key, show_skipped=show_skipped)
+        flat = ss.utils.match_result_keys(self.results, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
 
         # Set figure defaults
         n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes

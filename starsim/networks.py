@@ -555,16 +555,21 @@ class RandomNet(DynamicNetwork):
     Random connectivity between agents
 
     Args:
-        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
+
+    Note: n_contacts = 10 will create *5* edges per agent. Since disease transmission
+    usually occurs bidirectionally, this means that the effective number of contacts
+    per agent is actually 10. Consider 3 agents with 3 edges between them (a triangle):
+    each agent is connected to 2 other agents.
     """
     def __init__(self, n_contacts=_, dur=_, beta=_, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
-            dur = 0, # Note; network edge durations are required to have the same unit as the network
+            dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
         )
         self.update_pars(**kwargs)
@@ -575,9 +580,9 @@ class RandomNet(DynamicNetwork):
     @nb.njit(fastmath=True, parallel=False, cache=True)
     def get_source(inds, n_contacts):
         """ Optimized helper function for getting contacts """
-        total_number_of_half_edges = np.sum(n_contacts)
+        n_half_edges = np.sum(n_contacts)
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        source = np.zeros((n_half_edges,), dtype=ss_int_)
         for i, person_id in enumerate(inds):
             n = n_contacts[i]
             source[count: count + n] = person_id
@@ -590,21 +595,20 @@ class RandomNet(DynamicNetwork):
 
         Note that because of the shuffling operation, each person is assigned 2N contacts
         (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
-        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
+        times in the 'target' array). Therefore, the `n_contacts` argument to this
         function should be HALF of the total contacts a person is expected to have, if both
         the source and target array outputs are used (e.g. for social contacts)
 
-        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(ss.dtype.int)
+        adjusted_number_of_contacts = np.round(n_contacts / 2).astype(ss.dtype.int)
 
         Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
 
         Args:
-            inds: List/array of person indices
-            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
-            contacts to assign to each person. Therefore, a person will have on average TWICE this number
-            of random contacts.
+            inds (list/array): person indices
+            n_contacts (list/array): the same length as `inds` with the number of bidirectional contacts to assign to each person
 
-        Returns: Two arrays, for source and target
+        Returns:
+            Two arrays, for source and target
         """
         source = self.get_source(inds, n_contacts)
         target = self.dist.rng.permutation(source)
@@ -613,26 +617,36 @@ class RandomNet(DynamicNetwork):
 
     def add_pairs(self):
         """ Generate edges """
+        p = self.pars
         people = self.sim.people
         born = people.alive & (people.age > 0)
-        if isinstance(self.pars.n_contacts, ss.Dist):
-            number_of_contacts = self.pars.n_contacts.rvs(born.uids)  # or people.uid?
+        uids = born.uids
+        if isinstance(p.n_contacts, ss.Dist):
+            n_conn = p.n_contacts.rvs(uids)
         else:
-            number_of_contacts = np.ones(len(people))*self.pars.n_contacts
+            n_conn = np.full(len(people), p.n_contacts)
 
-        number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
+        # See how many new edges we need
+        orig = n_conn.sum()
+        target = orig / 2 # Divide by 2 since bi-directional
+        current = len(self)
+        needed = target - current
+        if needed > 0:
+            n_conn = n_conn*needed/orig
+            n_conn = p.n_contacts.randround(n_conn) # CRN-safe stochastic integer rounding
 
-        p1, p2 = self.get_edges(born.uids, number_of_contacts)
-        beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
+            # Get the new edges -- the key step
+            p1, p2 = self.get_edges(uids, n_conn)
+            beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
 
-        if isinstance(self.pars.dur, ss.Dist):
-            dur = self.pars.dur.rvs(p1)
-        elif self.pars.dur == 0:
-            dur = np.zeros(len(p1))
-        else:
-            dur = np.ones(len(p1))*self.pars.dur/self.t.dt # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+            if isinstance(p.dur, ss.Dist):
+                dur = p.dur.rvs(p1)
+            elif p.dur == 0:
+                dur = np.zeros(len(p1))
+            else:
+                dur = np.ones(len(p1))*(p.dur/self.t.dt) # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
 
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+            self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
 

@@ -717,7 +717,7 @@ class Dist:
 
         # Round if needed
         if round:
-            rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int_) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
+            rvs = self.randround(rvs)
 
         # Tidy up
         self.called += 1
@@ -738,6 +738,11 @@ class Dist:
             print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
 
+        return rvs
+
+    def randround(self, rvs):
+        """ Round the values up or down to an integer stochastically; usually called via `dist.rvs(round=True)` """
+        rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int_) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
         return rvs
 
     def to_json(self):
