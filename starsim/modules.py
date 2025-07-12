@@ -214,10 +214,40 @@ class Module(Base):
     """
     The main base class for all Starsim modules: diseases, networks, interventions, etc.
 
+    By convention, keyword arguments to modules are assigned to "_", which is an
+    alias for None. These are then populated with defaults by `mod.define_pars()`,
+    which are then updated with `mod.update_pars()`, which inspects the `__init__`
+    function to get these arguments.
+
+    Note that there is no *functional* difference between specifying arguments
+    this way rather than simply via `**kwargs`, but having the arguments shown in the
+    function signature can make it easier to read, and "_" is a convetion to indicate
+    that the default is specified below.
+
+    It is also of course OK to specify the actual values rather than "_"; however
+    module arguments are often complex objects (e.g. `ss.bernoulli`) that can't
+    be easily specified in the function signature.
+
+    Finally, note that you can (and should) call `super().__init__()` with no arguments:
+    the name, label, and time arguments get correctly updated via `self.update_pars()`.
+
     Args:
         name (str): a short, key-like name for the module (e.g. "randomnet")
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to `ss.TimeVec()` (e.g. start, stop, unit, dt)
+
+    **Example**:
+
+        class SIR(ss.Module):
+            def __init__(self, pars=_, beta=_, init_prev=_, p_death=_, **kwargs):
+                super().__init__() # Call this first with no arguments
+                self.define_pars( # Then define the parameters, including their default value
+                    beta = ss.peryear(0.1),
+                    init_prev = ss.bernoulli(p=0.01),
+                    p_death = ss.bernoulli(p=0.3),
+                )
+                self.update_pars(pars, **kwargs) # Update with any user-supplied parameters, and raise an exception if trying to set a parameter that wasn't defined in define_pars()
+                return
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
