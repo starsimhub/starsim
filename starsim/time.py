@@ -155,9 +155,9 @@ class date(pd.Timestamp):
             return np.vectorize(self.__add__)(other)
 
         if isinstance(other, DateDur):
-            return self._timestamp_add(other.unit)
+            return self._timestamp_add(other.value)
         elif isinstance(other, YearDur):
-            return date(self.to_year() + other.unit)
+            return date(self.to_year() + other.value)
         elif isinstance(other, pd.DateOffset):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
@@ -173,9 +173,9 @@ class date(pd.Timestamp):
             return np.vectorize(self.__sub__)(other)
 
         if isinstance(other, DateDur):
-            return date(self.to_pandas() - other.unit)
+            return date(self.to_pandas() - other.value)
         elif isinstance(other, YearDur):
-            return date(self.to_year() - other.unit)
+            return date(self.to_year() - other.value)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() - other)
         elif isinstance(other, date):

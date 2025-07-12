@@ -20,7 +20,7 @@ def test_ratio():
     assert ss.Dur(0.5) / ss.Dur(5) == 0.1
 
     assert ss.Dur(years=1) / ss.Dur(days=1) == 365
-    assert ss.Dur(years=1) / ss.Dur(weeks=1) * 7 == 52*7 == 364
+    assert np.isclose(ss.Dur(years=1) / ss.Dur(weeks=1) * 7, 365)
     assert ss.Dur(years=1) / ss.Dur(months=1) == 12
 
     return
