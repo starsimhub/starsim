@@ -341,6 +341,10 @@ ratios.month[:] *= 12
 ratios.week = ratios.day.copy()
 ratios.week[:] /= 7
 
+# Add additional time entries
+# for key,val in ratios.items():
+
+
 
 class TimePar:
     pass
@@ -721,7 +725,7 @@ class DateDur(Dur):
         for i in range(len(cls.ratios)-1):
             remainder, div = np.modf(d[i])
             d[i] = int(div)
-            d[i+1] += remainder * cls.ratios[i+1]
+            d[i+1] += remainder * cls.ratios[i+1]/cls.ratios[i]
         d[-1] = int(d[-1])
 
         return pd.DateOffset(**d)
