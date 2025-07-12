@@ -7,10 +7,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-baseline_filename  = sc.thisdir(__file__, 'baseline.json')
-multisim_filename  = sc.thisdir(__file__, 'baseline_multisim.json')
-benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
-parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
+baseline_filename  = sc.thisdir(__file__, 'baseline.yaml')
+benchmark_filename = sc.thisdir(__file__, 'benchmark.yaml')
 sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
@@ -41,7 +39,7 @@ def make_sim(run=False, **kwargs):
     return sim
 
 
-def save_baseline(save_pars=False):
+def save_baseline():
     """
     Refresh the baseline results. This function is not called during standard testing,
     but instead is called by the update_baseline script.
@@ -53,38 +51,10 @@ def save_baseline(save_pars=False):
     sim.run()
 
     # Export results
-    sim.to_json(filename=baseline_filename, keys='summary')
-
-    # Optionally save parameters
-    if save_pars:
-        sim.to_json(filename=parameters_filename, keys='pars') # If not different from previous version, can safely delete
+    json = sim.to_json(keys='summary')['summary']
+    sc.saveyaml(baseline_filename, json)
 
     print('Done.')
-    return
-
-
-def multisim_baseline(save=False, n_runs=10, **kwargs):
-    """
-    Check or update the multisim baseline results; not part of the integration tests
-    """
-    word = 'Saving' if save else 'Checking'
-    sc.heading(f'{word} MultiSim baseline...')
-
-    # Make and run sims
-    kwargs.setdefault('verbose', ss.options.verbose/n_runs*2)
-    sim = make_sim(**kwargs)
-    msim = ss.MultiSim(base_sim=sim)
-    msim.run(n_runs)
-    summary = msim.summarize()
-
-    # Export results
-    if save:
-        sc.savejson(multisim_filename, summary)
-        print('Done.')
-    else:
-        baseline = sc.loadjson(multisim_filename)
-        ss.diff_sims(baseline, summary, die=False)
-
     return
 
 
@@ -92,8 +62,7 @@ def test_baseline():
     """ Compare the current default sim against the saved baseline """
 
     # Load existing baseline
-    baseline = sc.loadjson(baseline_filename)
-    old = baseline['summary']
+    old = sc.loadyaml(baseline_filename)
 
     # Calculate new baseline
     new = make_sim()
@@ -110,7 +79,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
     if verbose: print('Running benchmark...')
     try:
-        previous = sc.loadjson(benchmark_filename)
+        previous = sc.loadyaml(benchmark_filename)
     except FileNotFoundError:
         previous = None
 
@@ -193,7 +162,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
         sc.pp(brief)
 
     if do_save:
-        sc.savejson(filename=benchmark_filename, obj=json, indent=2)
+        sc.saveyaml(filename=benchmark_filename, obj=json)
 
     if verbose:
         print('Done.')

@@ -625,9 +625,9 @@ class Sim(ss.Base):
 
         Args:
             filename (str): if None, return string; else, write to file
-            keys (str/list): attributes to write to json (choices: 'pars' and/or 'summary')
+            keys (str/list): attributes to write to json (choices: 'pars', 'summary', and/or 'results')
             verbose (bool): detail to print
-            kwargs (dict): passed to sc.jsonify()
+            kwargs (dict): passed to `sc.jsonify()`
 
         Returns:
             A dictionary representation of the parameters and/or summary results
@@ -635,13 +635,13 @@ class Sim(ss.Base):
 
         **Examples**:
 
-            json = sim.to_json()
-            sim.to_json('results.json')
-            sim.to_json('summary.json', keys='summary')
+            json = sim.to_json() # Convert to a dict
+            sim.to_json('sim.json') # Write everything
+            sim.to_json('summary.json', keys='summary') # Just write the summary
         """
         # Handle keys
         if keys is None:
-            keys = ['pars', 'summary']
+            keys = ['pars', 'summary', 'results']
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
@@ -655,15 +655,38 @@ class Sim(ss.Base):
                     d.summary = dict(sc.dcp(self.summary))
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
+            elif key == 'results':
+                d.results = self.to_df().to_dict()
             else:  # pragma: no cover
-                errormsg = f'Could not convert "{key}" to JSON; continuing...'
-                print(errormsg)
+                warnmsg = f'Could not convert "{key}" to JSON; continuing...'
+                ss.warn(warnmsg)
 
         # Final conversion
         if filename is not None:
             sc.savejson(filename=filename, obj=d, **kwargs)
         d = sc.jsonify(d)
         return d
+
+    def to_yaml(self, filename=None, sort_keys=False, **kwargs):
+        """
+        Export results and parameters as YAML.
+
+        Args:
+            filename (str): the name of the file to write to (default `{sim.label}.yaml`)
+            kwargs (dict): passed to `sim.to_json()`
+
+        **Example**:
+
+            sim = ss.Sim(diseases='sis', networks='random').run()
+            sim.to_yaml('results.yaml', keys='results')
+        """
+        if filename is None:
+            if self.label:
+                filename = f'{self.label}.yaml'
+            else:
+                filename = 'sim.yaml'
+        json = self.to_json(filename=None, **kwargs)
+        return sc.saveyaml(filename=filename, obj=json, sort_keys=sort_keys)
 
     def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
              show_label=False, n_ticks=None, **kwargs):
