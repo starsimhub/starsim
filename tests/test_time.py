@@ -271,7 +271,7 @@ def test_syntax():
 
     assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
 
-    Time(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
+    TimeVec(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
     assert np.isclose(Dur(weeks=1)/Dur(days=1), 7) # CKTODO: would be nice if this were exact
 
