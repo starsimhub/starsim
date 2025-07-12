@@ -554,7 +554,14 @@ class People(sc.prettyobj):
 
 
 class Person(sc.objdict):
-    """ A simple class to hold all attributes of a person """
+    """
+    A simple class to hold all attributes of a person
+
+    **Example**:
+
+        sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
+        print(sim.people.person(5)) # The 5th agent in the simulation
+    """
     def to_df(self):
         """ Convert to a dataframe """
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
