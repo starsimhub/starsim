@@ -314,7 +314,7 @@ ratios = sc.objdict(
     year = sc.objdict(
         years   = 1.0,
         months  = 12.0,
-        weeks   = 52.0,
+        weeks   = 365.0/7, # If 52, then day/week conversion is incorrect
         days    = 365.0,
     ),
 
@@ -341,6 +341,7 @@ extras = sc.objdict(
     minutes = 60.0,
     seconds = 60.0,
     milliseconds = 1000.0,
+    microseconds = 1000.0,
     nanoseconds = 1000.0,
 )
 for rkey,rdict in ratios.items():
@@ -680,7 +681,7 @@ class DateDur(Dur):
         """
         years = 0
         for k, v in self.ratios.items():
-            years += self.value.kwds.get(k, 0)*v
+            years += self.value.kwds.get(k, 0)/v
         return years
 
     @property
