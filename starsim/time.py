@@ -340,9 +340,9 @@ extras = sc.objdict(
     hours = 24.0,
     minutes = 60.0,
     seconds = 60.0,
-    milliseconds = 1000.0,
-    microseconds = 1000.0,
-    nanoseconds = 1000.0,
+    # milliseconds = 1000.0,
+    # microseconds = 1000.0,
+    # nanoseconds = 1000.0,
 )
 for rkey,rdict in ratios.items():
     for exkey,exval in extras.items():
@@ -629,6 +629,9 @@ class DateDur(Dur):
         else:
             self.value = self._round_duration(kwargs)
 
+    def __float__(self):
+        return float(self.years)
+
     @classmethod
     def _as_array(cls, dateoffset: pd.DateOffset):
         """
@@ -729,7 +732,7 @@ class DateDur(Dur):
             remainder, div = np.modf(d[i])
             d[i] = int(div)
             d[i+1] += remainder * cls.ratios[i+1]/cls.ratios[i]
-        d[-1] = int(d[-1])
+        d[-1] = round(d[-1])
 
         return pd.DateOffset(**d)
 

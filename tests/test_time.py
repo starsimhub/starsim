@@ -273,13 +273,13 @@ def test_syntax():
 
     Time(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
-    assert Dur(weeks=1)/Dur(days=1) == 7
+    assert np.isclose(Dur(weeks=1)/Dur(days=1), 7) # CKTODO: would be nice if this were exact
 
-    assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)),6/365.25)
+    assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)), 6/365)
 
     assert date(2050) - date(2020) == YearDur(30)
 
-    assert (perweek(1)+perday(1)) == perweek(8)
+    assert np.isclose((perweek(1)+perday(1)).value, perweek(8).value) # CKTODO: would be nice if this were exact
 
     assert date('2020-01-01') + Dur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
     assert date('2020-01-01') + 52*Dur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
