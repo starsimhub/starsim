@@ -1097,7 +1097,7 @@ class MixingPools(Route):
     def init_pre(self, sim):
         super().init_pre(sim)
         p = self.pars
-        time_args = {k:p.get(k) for k in ss.Time.time_args} # get() allows None
+        time_args = {k:p.get(k) for k in ss.TimeVec.time_args} # get() allows None
 
         self.pools = []
         for i,sk,src in p.src.enumitems():

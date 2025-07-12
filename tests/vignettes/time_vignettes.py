@@ -1,6 +1,6 @@
 import sciris as sc
 import numpy as np
-from starsim.time import Dur, YearDur, DateDur, date, Time, timeprob, Rate, perday   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
+from starsim.time import Dur, YearDur, DateDur, date, TimeVec, timeprob, Rate, perday   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
 import starsim as ss
 
 def loc(module, sim, uids):
@@ -55,23 +55,23 @@ x = date('2020-01-01')
 s = pickle.dumps(x)
 pickle.loads(s)
 
-t = Time(date('2020-01-01'), date('2020-06-01'), Dur(days=1))
-t = Time(date('2020-01-01'), date('2020-06-01'), Dur(months=1)) # Allowed
+t = TimeVec(date('2020-01-01'), date('2020-06-01'), Dur(days=1))
+t = TimeVec(date('2020-01-01'), date('2020-06-01'), Dur(months=1)) # Allowed
 
-t = Time(Dur(days=0), Dur(days=30), Dur(days=1))
-t = Time(Dur(days=0), Dur(months=1), Dur(days=30))
-t = Time(Dur(days=0), Dur(years=1), Dur(weeks=1))
-t = Time(Dur(days=0), Dur(years=1), Dur(months=1)) # Not allowed
-t = Time(Dur(days=0), Dur(years=1), Dur(months=1)) # Not allowed
+t = TimeVec(Dur(days=0), Dur(days=30), Dur(days=1))
+t = TimeVec(Dur(days=0), Dur(months=1), Dur(days=30))
+t = TimeVec(Dur(days=0), Dur(years=1), Dur(weeks=1))
+t = TimeVec(Dur(days=0), Dur(years=1), Dur(months=1)) # Not allowed
+t = TimeVec(Dur(days=0), Dur(years=1), Dur(months=1)) # Not allowed
 
 
-t = Time(Dur(0), Dur(1), Dur(1/12)).init()
+t = TimeVec(Dur(0), Dur(1), Dur(1/12)).init()
 t.tvec+date(2020)
 
 # date('2020-01-01')+50*Dur(days=1)
-t = Time(date('2020-01-01'), date('2030-06-01'), Dur(days=1))
+t = TimeVec(date('2020-01-01'), date('2030-06-01'), Dur(days=1))
 
-t = Time(date(2020), date(2030.5), Dur(0.1)).init()
+t = TimeVec(date(2020), date(2030.5), Dur(0.1)).init()
 t.tvec + YearDur(1)
 
 print(1/YearDur(1))

@@ -7,7 +7,7 @@ import pandas as pd
 import starsim as ss
 
 __all__ = ['date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'rateprob',
-           'Time', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
+           'TimeVec', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
 
@@ -1101,7 +1101,7 @@ class rateprob(Rate):
 
 #%% Simulation time vectors
 
-class Time:
+class TimeVec:
     """
     Handle time vectors for both simulations and modules.
 
@@ -1115,12 +1115,12 @@ class Time:
         stop : ss.date if start is an ss.date, or an ss.Dur if start is an ss.Dur
         dt (ss.Dur): Simulation step size
         pars (dict): if provided, populate parameter values from this dictionary
-        parent (obj): if provided, populate missing parameter values from a 'parent" `Time` instance
-        name (str): if provided, name the `Time` object
-        init (bool): whether or not to immediately initialize the Time object
-        sim (bool/Sim): if True, initializes as a sim-specific `Time` instance; if a Sim instance, initialize the absolute time vector
+        parent (obj): if provided, populate missing parameter values from a 'parent" `TimeVec` instance
+        name (str): if provided, name the `TimeVec` object
+        init (bool): whether or not to immediately initialize the TimeVec object
+        sim (bool/Sim): if True, initializes as a sim-specific `TimeVec` instance; if a Sim instance, initialize the absolute time vector
 
-    The `Time` object, after initialization, has the following attributes:
+    The `TimeVec` object, after initialization, has the following attributes:
 
     - `ti` (int): the current timestep
     - `npts` (int): the number of timesteps
@@ -1129,8 +1129,8 @@ class Time:
 
     **Examples**:
 
-        t1 = ss.Time(start=2000, stop=2020, dt=1.0)
-        t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
+        t1 = ss.TimeVec(start=2000, stop=2020, dt=1.0)
+        t2 = ss.TimeVec(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
     """
 
     # Allowable time arguments
@@ -1156,22 +1156,22 @@ class Time:
     @property
     def tvec(self):
         if self._tvec is None:
-            raise Exception('Time object has not yet been not initialized - call `init()` before using the object')
+            raise Exception('TimeVec object has not yet been not initialized - call `init()` before using the object')
         else:
             return self._tvec
 
     @property
     def yearvec(self):
         if self._yearvec is None:
-            raise Exception('Time object has not yet been not initialized - call `init()` before using the object')
+            raise Exception('TimeVec object has not yet been not initialized - call `init()` before using the object')
         else:
             return self._yearvec
 
     def __repr__(self):
         if self.initialized:
-            return f'<Time t={self.tvec[self.ti]}, ti={self.ti}, {self.start}-{self.stop} dt={self.dt}>'
+            return f'<TimeVec t={self.tvec[self.ti]}, ti={self.ti}, {self.start}-{self.stop} dt={self.dt}>'
         else:
-            return '<Time (uninitialized)>'
+            return '<TimeVec (uninitialized)>'
 
     def disp(self):
         return sc.pr(self)
@@ -1236,7 +1236,7 @@ class Time:
 
             # Special handling for dt: don't inherit dt if the units are different
             if key == 'dt':
-                if isinstance(parent, Time):
+                if isinstance(parent, TimeVec):
                     if parent.unit != self.unit:
                         parent_val = 1.0
 
@@ -1269,7 +1269,7 @@ class Time:
 
         if sc.isnumber(self.dur):
             self.dur = Dur(self.dur)
-        assert self.dur is None or isinstance(self.dur, Dur), 'Time.dur must be a number, a Dur object or None'
+        assert self.dur is None or isinstance(self.dur, Dur), 'TimeVec.dur must be a number, a Dur object or None'
 
         match (self.start, self.stop, self.dur):
             case (None, None, None):
@@ -1403,7 +1403,7 @@ class Time:
 
         **Examples**:
 
-            t = ss.Time(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
+            t = ss.TimeVec(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
             t.ti = 25
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>

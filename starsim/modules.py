@@ -217,7 +217,7 @@ class Module(Base):
     Args:
         name (str): a short, key-like name for the module (e.g. "randomnet")
         label (str): the full, human-readable name for the module (e.g. "Random network")
-        kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
+        kwargs (dict): passed to `ss.TimeVec()` (e.g. start, stop, unit, dt)
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -227,7 +227,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Time(**kwargs, name=self.name)
+        self.t = ss.TimeVec(**kwargs, name=self.name)
 
         # Properties to be added by init_pre()
         self.sim = None
@@ -391,12 +391,12 @@ class Module(Base):
 
         # Update module attributes
         metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
-        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Time.time_args}
+        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.TimeVec.time_args}
         self.set_metadata(**metadata)
         self.t.update(**timepars)
 
         # Should be no remaining pars
-        remaining = set(pars.keys()) - set(module_args) - set(ss.Time.time_args)
+        remaining = set(pars.keys()) - set(module_args) - set(ss.TimeVec.time_args)
         if len(remaining):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
             raise ValueError(errormsg)

@@ -181,19 +181,19 @@ def test_mixed_timesteps():
 
 
 def test_time_class():
-    sc.heading('Test different instances of ss.Time')
+    sc.heading('Test different instances of ss.TimeVec')
 
     def sim(start, stop, dt, **kwargs):
         """ Generate a fake sim """
         sim = sc.prettyobj()
-        sim.t = ss.Time(start=start, stop=stop, dt=dt, **kwargs)
+        sim.t = ss.TimeVec(start=start, stop=stop, dt=dt, **kwargs)
         sim.pars = ss.SimPars()
         sim.t.init(None)
         return sim
 
     print('Testing dates vs. numeric')
     s1 = sim(start=2000, stop=2002, dt=0.1)
-    t1 = ss.Time(start='2001-01-01', stop='2001-06-30', dt=ss.days(2))
+    t1 = ss.TimeVec(start='2001-01-01', stop='2001-06-30', dt=ss.days(2))
     t1.init(sim=s1)
     # assert np.array_equal(s1.t.timevec, s1.t.yearvec)
     assert len(s1.t.timevec) == 21
@@ -205,7 +205,7 @@ def test_time_class():
 
     print('Testing weeks vs. days')
     s2 = sim(start='2000-06-01', stop='2001-05-01', dt=ss.days(1))
-    t2 = ss.Time(start='2000-06-01', stop='2001-05-01', dt=ss.weeks(1))
+    t2 = ss.TimeVec(start='2000-06-01', stop='2001-05-01', dt=ss.weeks(1))
     t2.init(sim=s2)
     assert np.array_equal(s2.t.timevec, s2.t.datevec)
     assert isinstance(s2.t.start, ss.date)
@@ -213,7 +213,7 @@ def test_time_class():
 
     print('Testing different units and dt')
     s3 = sim(start=2001, stop=2003, dt=ss.years(0.1))
-    t3 = ss.Time(start='2001-01-01', stop='2003-01-01',dt=ss.days(2))
+    t3 = ss.TimeVec(start='2001-01-01', stop='2003-01-01',dt=ss.days(2))
     t3.init(sim=s3)
     assert np.array_equal(s3.t.timevec, s3.t.datevec)
     assert s3.t.datevec[-1] == ss.date('2003-01-01')
@@ -264,7 +264,7 @@ def test_pickling():
 
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
-    from starsim import date, Time, Dur, DateDur, YearDur, perday, perweek, Rate, timeprob, rateprob
+    from starsim import date, TimeVec, Dur, DateDur, YearDur, perday, perweek, Rate, timeprob, rateprob
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
@@ -287,15 +287,15 @@ def test_syntax():
     assert date('2020-01-01') + Dur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
     # These should all work - confirm the sizes
-    assert len(Time(date('2020-01-01'), date('2020-06-01'), Dur(days=1)).init()) == 153
-    assert len(Time(date('2020-01-01'), date('2020-06-01'), Dur(months=1)).init()) == 6
-    assert len(Time(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
-    assert len(Time(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
-    assert len(Time(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
-    assert len(Time(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
-    assert len(Time(Dur(0), Dur(1), Dur(1/12)).init()) == 13
-    assert len(Time(date('2020-01-01'), date('2030-06-01'), Dur(days=1)).init()) == 3805
-    assert len(Time(date(2020), date(2030.5), Dur(0.1)).init()) == 106
+    assert len(TimeVec(date('2020-01-01'), date('2020-06-01'), Dur(days=1)).init()) == 153
+    assert len(TimeVec(date('2020-01-01'), date('2020-06-01'), Dur(months=1)).init()) == 6
+    assert len(TimeVec(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
+    assert len(TimeVec(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
+    assert len(TimeVec(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
+    assert len(TimeVec(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
+    assert len(TimeVec(Dur(0), Dur(1), Dur(1/12)).init()) == 13
+    assert len(TimeVec(date('2020-01-01'), date('2030-06-01'), Dur(days=1)).init()) == 3805
+    assert len(TimeVec(date(2020), date(2030.5), Dur(0.1)).init()) == 106
 
     # Operations on date vectors
     date.arange(2020,2030)+YearDur(1) # add YearDur to date array
