@@ -2,6 +2,7 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
+import sys
 import inspect
 import functools as ft
 import sciris as sc
@@ -356,7 +357,12 @@ class Module(Base):
         return mod
 
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
-        """ Create or merge Pars objects """
+        """
+        Create or merge Pars objects
+
+        Note: this method also automatically pulls in keyword arguments from the
+        calling function (which is almost always a module's `__init__()` method)
+        """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
         else: # Or overwrite
@@ -364,7 +370,16 @@ class Module(Base):
         return self.pars
 
     def update_pars(self, **pars):
-        """ Pull out recognized parameters, returning the rest """
+        """
+        Pull out recognized parameters, returning the rest
+        """
+        # Inspect the parent frame and pull out any arguments
+        frame = sys._getframe(1)  # Go back 1 frame (to __init__, most likely)
+        if frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this
+            _, _, _, kw = inspect.getargvalues(frame) # Get the values provided
+            for k,v in kw.items():
+                if k in self.pars and v is not None:
+                    pars[k] = v
 
         # Update matching module parameters
         matches = {}

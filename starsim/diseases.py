@@ -11,8 +11,10 @@ import matplotlib.pyplot as plt
 
 ss_int_ = ss.dtypes.int
 ss_float_ = ss.dtypes.float
+_ = None # For function signatures
 
 __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
+
 
 
 class Disease(ss.Module):
@@ -591,7 +593,7 @@ class SIS(Infection):
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.05),
