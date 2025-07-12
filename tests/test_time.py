@@ -5,7 +5,6 @@ Test different time units and timesteps
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.time import *
 
 small = 100
 medium = 1000
@@ -20,8 +19,8 @@ def test_ratio():
     assert ss.Dur(1) / ss.Dur(0.1) == 10
     assert ss.Dur(0.5) / ss.Dur(5) == 0.1
 
-    assert ss.Dur(years=1) / ss.Dur(days=1) == 365.25
-    assert ss.Dur(years=1) / ss.Dur(weeks=1) * 7 == 365.25
+    assert ss.Dur(years=1) / ss.Dur(days=1) == 365
+    assert ss.Dur(years=1) / ss.Dur(weeks=1) * 7 == 52*7 == 364
     assert ss.Dur(years=1) / ss.Dur(months=1) == 12
 
     return
@@ -54,9 +53,9 @@ def test_classes():
 
     # Test duration units
     d5 = ss.Dur(years=2)
-    d6 = ss.Dur(days=3)
-    assert d5 + d6 == 2 + 3/365.25
-    assert (d5 + d6)/ss.Dur(days=1) == 365.25*2+3
+    d6 = ss.Dur(days=5)
+    assert d5 + d6 == 2 + 5/365
+    assert (d5 + d6)/ss.Dur(days=1) == 365*2+5
 
     # Test rate units
     rval = 0.7
@@ -246,6 +245,7 @@ def test_time_class():
 
     return [s1, t1, s2, t2]
 
+
 def test_callable_dists():
     def loc(module, sim, uids):
         return np.array([ss.Dur(x) for x in range(uids)])
@@ -254,21 +254,24 @@ def test_callable_dists():
     d.init()
     d.rvs(10)
 
+
 def test_pickling():
     import pickle
     x = ss.date('2020-01-01')
     s = pickle.dumps(x)
     pickle.loads(s)
 
+
 def test_syntax():
-    # Verify that a range of supported operations run without raising an error
+    """ Verify that a range of supported operations run without raising an error """
+    from starsim import date, Time, Dur, DateDur, YearDur, perday, perweek, Rate, timeprob, rateprob
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
 
     assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
 
-    t = Time(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
+    Time(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
     assert Dur(weeks=1)/Dur(days=1) == 7
 
