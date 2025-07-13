@@ -6,8 +6,8 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
-ss_float_ = ss.dtypes.float
-ss_int_ = ss.dtypes.int
+ss_float = ss.dtypes.float
+ss_int = ss.dtypes.int
 _ = None
 
 __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
@@ -224,7 +224,7 @@ class Deaths(Demographics):
             year_ind = sc.findnearest(available_years, sim.t.now('year')) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
-            death_rate = np.empty(uids.shape, dtype=ss_float_)
+            death_rate = np.empty(uids.shape, dtype=ss_float)
 
             if 'sex' in drd.index.names:
                 s = drd.loc[nearest_year, 'f']
@@ -357,7 +357,7 @@ class Pregnancy(Demographics):
         if sc.isnumber(frd):
             raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
 
-        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
+        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = self.fertility_rate_data * self.t.dt # Rate per timestep

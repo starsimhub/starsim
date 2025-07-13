@@ -9,8 +9,8 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 # This has a significant impact on runtime, surprisingly
-ss_float_ = ss.dtypes.float
-ss_int_ = ss.dtypes.int
+ss_float = ss.dtypes.float
+ss_int = ss.dtypes.int
 _ = None
 
 # Specify all externally visible functions this file defines; see also more definitions below
@@ -69,9 +69,9 @@ class Network(Route):
 
         # Each relationship is characterized by these default set of keys
         self.meta = sc.objdict(
-            p1 = ss_int_,
-            p2 = ss_int_,
-            beta = ss_float_,
+            p1 = ss_int,
+            p2 = ss_int,
+            beta = ss_float,
         )
         self.prenatal = False  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
         self.postnatal = False  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
@@ -367,7 +367,7 @@ class Network(Route):
         # Find the edges
         contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss_int_)
+            contact_inds = np.fromiter(contact_inds, dtype=ss_int)
             contact_inds.sort()
 
         return contact_inds
@@ -398,7 +398,7 @@ class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.meta.dur = ss_float_ # Add duration to the meta keys for dynamic networks
+        self.meta.dur = ss_float # Add duration to the meta keys for dynamic networks
         return
 
     def step(self):
@@ -421,7 +421,7 @@ class SexualNetwork(DynamicNetwork):
     """ Base class for all sexual networks """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.meta.acts = ss_int_ # Add acts to the meta keys for sexual networks
+        self.meta.acts = ss_int # Add acts to the meta keys for sexual networks
         self.debut = ss.FloatArr('debut', default=0)
         return
 
@@ -563,7 +563,7 @@ class RandomNet(DynamicNetwork):
         """ Optimized helper function for getting contacts """
         n_half_edges = np.sum(n_contacts)
         count = 0
-        source = np.zeros((n_half_edges,), dtype=ss_int_)
+        source = np.zeros((n_half_edges,), dtype=ss_int)
         for i, person_id in enumerate(inds):
             n = n_contacts[i]
             source[count: count + n] = person_id
@@ -618,7 +618,7 @@ class RandomNet(DynamicNetwork):
 
             # Get the new edges -- the key step
             p1, p2 = self.get_edges(uids, n_conn)
-            beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
+            beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
 
             if isinstance(p.dur, ss.Dist):
                 dur = p.dur.rvs(p1)
@@ -714,7 +714,7 @@ class RandomSafeNet(DynamicNetwork):
 
         # Form the pairs
         p1, p2 = self.form_pairs()
-        beta = np.full(len(p1), self.pars.beta, dtype=ss_float_)
+        beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
@@ -912,8 +912,8 @@ class MaternalNet(DynamicNetwork):
         Initialized empty and filled with pregnancies throughout the simulation
         """
         super().__init__(**kwargs)
-        self.meta.start = ss_int_ # Add maternal-specific keys to meta
-        self.meta.end = ss_int_
+        self.meta.start = ss_int # Add maternal-specific keys to meta
+        self.meta.end = ss_int
         self.prenatal = True
         self.postnatal = False
         return

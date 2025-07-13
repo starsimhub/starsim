@@ -8,26 +8,25 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 
-# Shorten these for performance
+# Shorten these for performance -- reset with ss.options.refresh_references(), which is called automatically
 ss_float   = ss.dtypes.float
 ss_nbfloat = ss.dtypes.nbfloat
 ss_int     = ss.dtypes.int
 ss_nbint   = ss.dtypes.nbint
 ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
+numba_indexing = ss.options.numba_indexing
 
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
-# Control the threshold for the number of array elements that switch from NumPy to Numba based indexing
-_numba_threshold = 5_000
 
 def np_indexer(arr, inds):
-    """ Much faster than Numba for small arrays (<5k elements) """
+    """ Much faster than Numba for small numbers of indices (<1k) """
     return arr[inds]
 
 @nb.njit(fastmath=True, parallel=False, cache=True)
 def nb_indexer(arr, inds):
-    """ Roughly 30% faster than NumPy for large arrays (>100k elements) """
+    """ Roughly 30% faster than NumPy for large numbers of indices (>10k) """
     return arr[inds]
 
 
@@ -228,10 +227,6 @@ class Arr(BaseArr):
             self.people = ss.mock_people(n_agents)
             if raw is None:
                 self.init_vals()
-
-
-        # Set the indexing function: NumPy by default, but switch to Numba for large population sizes
-        self._set_indexer()
         return
 
     def __repr__(self):
@@ -271,33 +266,20 @@ class Arr(BaseArr):
                 raise ValueError(errormsg)
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
+        elif isinstance(key, np.ndarray) and key.dtype == bool: # Not commonly used since would usually use BoolArr, which is handled separately
+            return self.auids[key]
         elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids so it works from R/reticulate
             return key.astype(int)
-        elif isinstance(key, np.ndarray) and key.dtype == bool:
-            return self.auids[key]
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
 
-    def _np_index(self, arr, inds):
-        """ Alias to the NumPy indexer (not for the user) """
-        return np_indexer(arr, inds)
-
-    def _nb_index(self, arr, inds):
-        """ Alias to the Numba indexer (not for the user) """
-        return nb_indexer(arr, inds)
-
     def _index(self, arr, inds):
         """ Index the array using the most efficient method for the current array size """
-        return self._indexer(arr, inds)
-
-    def _set_indexer(self):
-        """ Choose which indexer to use based on the array size (small = NumPy, large = Numba) """
-        if self.len_used > _numba_threshold and ss.options.numba_indexing:
-            self._indexer = self._nb_index
+        if inds.size >= numba_indexing:
+            return nb_indexer(arr, inds)
         else:
-            self._indexer = self._np_index
-        return
+            return np_indexer(arr, inds)
 
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
@@ -460,14 +442,12 @@ class Arr(BaseArr):
 
         # Set new values, and NaN if needed
         self.set(new_uids, new_vals=new_vals) # Assign new default values to those agents
-        self._set_indexer() # See if we need to switch index method
         return
 
     def link_people(self, people):
         """ Link a People object to this state, for access auids """
         self.people = people # Link the people object to this state
         people._link_state(self) # Ensure the state is linked to the People object as well
-        self._set_indexer() # See if we need to switch index method (if People is "large")
         return
 
     def init_vals(self):
@@ -586,10 +566,8 @@ class FloatArr(Arr):
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
     """
-    dtype = ss_float
-    nan = np.nan
     def __init__(self, name=None, **kwargs):
-        super().__init__(name=name, dtype=None, nan=None, **kwargs) # Do not allow dtype or nan to be overwritten
+        super().__init__(name=name, dtype=ss_float, nan=np.nan, **kwargs) # Do not allow dtype or nan to be overwritten
         return
 
 
@@ -600,19 +578,15 @@ class IntArr(Arr):
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
     """
-    dtype = ss_int
-    nan = int_nan
     def __init__(self, name=None, **kwargs):
-        super().__init__(name=name, dtype=None, nan=None, **kwargs)
+        super().__init__(name=name, dtype=ss_int, nan=int_nan, **kwargs)
         return
 
 
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    dtype = ss_bool
-    nan = False
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
-        super().__init__(name=name, dtype=None, nan=None, **kwargs)
+        super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
 
     def __and__(self, other): return self._boolmath('&', other)

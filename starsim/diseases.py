@@ -9,8 +9,8 @@ import networkx as nx
 from operator import itemgetter
 import matplotlib.pyplot as plt
 
-ss_int_ = ss.dtypes.int
-ss_float_ = ss.dtypes.float
+ss_int = ss.dtypes.int
+ss_float = ss.dtypes.float
 _ = None # For function signatures
 
 __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
@@ -262,7 +262,7 @@ class Infection(Disease):
                             target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                             new_cases.append(target_uids)
                             sources.append(source_uids)
-                            networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                            networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
 
             # Handle everything else: mixing pools, environmental transmission, etc.
             elif isinstance(route, ss.Route):
@@ -270,8 +270,8 @@ class Infection(Disease):
                 disease_beta = betamap[nk][0]*self.t.dt if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
                 target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta)
                 new_cases.append(target_uids)
-                sources.append(np.full(len(target_uids), dtype=ss_float_, fill_value=np.nan))
-                networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
+                networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
             else:
                 errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
                 raise TypeError(errormsg)
@@ -285,7 +285,7 @@ class Infection(Disease):
         else:
             new_cases = ss.uids()
             sources = ss.uids()
-            networks = np.empty(0, dtype=ss_int_)
+            networks = np.empty(0, dtype=ss_int)
 
         return new_cases, sources, networks
 
