@@ -181,7 +181,7 @@ class Sim(ss.Base):
 
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.t = ss.TimeVec(name='sim')
+        self.t = ss.Timeline(name='sim')
         self.t.init(self)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
