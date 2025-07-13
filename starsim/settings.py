@@ -123,7 +123,7 @@ class Options(sc.objdict):
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
 
         optdesc.numba_indexing = 'Wheher to use Numba (rather than NumPy) for indexing large arrays'
-        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', True, bool)
+        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', False, bool)
 
         optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only.'
         options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)

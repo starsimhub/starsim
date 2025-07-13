@@ -386,10 +386,8 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        # Reset the time index
+        # Reset the time index (done in the modules as well in mod.finalize())
         self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-        for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
-            mod.t.ti -= 1
 
         # Scale the results
         for reskey, res in self.results.items():

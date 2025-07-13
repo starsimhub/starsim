@@ -354,6 +354,7 @@ def test_syntax():
 
     return tv
 
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True

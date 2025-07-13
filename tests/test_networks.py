@@ -16,6 +16,7 @@ medium = 1000
 
 # %% Define the tests
 
+@sc.timer()
 def test_manual():
     sc.heading('Testing manual networks')
 
@@ -39,6 +40,7 @@ def test_manual():
     return o
 
 
+@sc.timer()
 def test_random():
     sc.heading('Testing random networks')
 
@@ -64,6 +66,7 @@ def test_random():
     return o
 
 
+@sc.timer()
 def test_randomsafe():
     sc.heading('Testing the RandomSafe network')
 
@@ -108,6 +111,7 @@ def test_randomsafe():
 
 
 
+@sc.timer()
 def test_erdosrenyi():
     sc.heading('Testing Erdos-Renyi network')
 
@@ -170,6 +174,7 @@ def test_erdosrenyi():
     return o
 
 
+@sc.timer()
 def test_disk():
     sc.heading('Testing Disk network')
 
@@ -206,6 +211,7 @@ def test_disk():
     return s1, s2
 
 
+@sc.timer()
 def test_static():
     sc.heading('Testing static networks')
 
@@ -230,6 +236,7 @@ def test_static():
     return o
 
 
+@sc.timer()
 def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
@@ -240,6 +247,7 @@ def test_null():
     return sim
 
 
+@sc.timer()
 def test_other():
     sc.heading('Other network tests...')
 

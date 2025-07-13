@@ -80,6 +80,7 @@ class check_states(ss.Analyzer):
         return
 
 
+@sc.timer()
 def test_syph(dt=1, n_agents=500, do_plot=False):
 
     sim_kwargs = make_syph_sim(dt=dt, n_agents=n_agents)
@@ -121,6 +122,7 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
 
     # Interventions

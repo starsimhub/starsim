@@ -15,6 +15,7 @@ medium = 1000
 
 # %% Define the tests
 
+@sc.timer()
 def test_people():
     sc.heading('Testing people object')
 
@@ -37,6 +38,7 @@ def test_people():
     return ppl
 
 
+@sc.timer()
 def test_microsim(do_plot=False):
     sc.heading('Test small HIV simulation')
 
@@ -65,6 +67,7 @@ def test_microsim(do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_ppl_construction(do_plot=False):
     sc.heading('Test making people and providing them to a sim')
 
@@ -92,6 +95,7 @@ def test_ppl_construction(do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_arrs():
     sc.heading('Testing Arr objects')
     o = sc.objdict()
@@ -119,6 +123,7 @@ def test_arrs():
     return o
 
 
+@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
@@ -137,6 +142,7 @@ def test_deepcopy():
     return s1, s2
 
 
+@sc.timer()
 def test_deepcopy_until():
     sc.heading('Testing deepcopy with until')
     s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small)
@@ -156,6 +162,7 @@ def test_deepcopy_until():
     return s1, s2
 
 
+@sc.timer()
 def test_results():
     sc.heading('Testing results export and plotting')
 
@@ -199,6 +206,7 @@ def test_results():
     return sim
 
 
+@sc.timer()
 def test_check_requires():
     sc.heading('Testing check_requires')
     s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
@@ -209,6 +217,7 @@ def test_check_requires():
     return s1
 
 
+@sc.timer()
 def test_mock_objects():
     sc.heading('Testing mock objects')
     o = sc.objdict()
@@ -240,6 +249,7 @@ def test_mock_objects():
     return o
 
 
+@sc.timer()
 def test_custom_imports():
     sc.heading('Testing custom imports')
     o = sc.objdict()

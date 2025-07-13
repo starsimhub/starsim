@@ -646,6 +646,9 @@ class Module(Base):
     @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
+        # Update the time index (since otherwise pointing to a timepoint that doesn't exist)
+        self.t.ti -= 1
+
         self.finalize_results()
         self.finalized = True
         return

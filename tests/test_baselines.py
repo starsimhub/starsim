@@ -58,6 +58,7 @@ def save_baseline():
     return
 
 
+@sc.timer()
 def test_baseline():
     """ Compare the current default sim against the saved baseline """
 
@@ -74,6 +75,7 @@ def test_baseline():
     return new
 
 
+@sc.timer()
 def test_benchmark(do_save=False, repeats=1, verbose=True):
     """ Compare benchmark performance """
 

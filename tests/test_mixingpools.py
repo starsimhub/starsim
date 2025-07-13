@@ -17,6 +17,7 @@ do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
 
+@sc.timer()
 def test_single_defaults(do_plot=do_plot):
     """ Test a single MixingPool using defaults """
     sc.heading('Testing single mixing pool...')
@@ -32,6 +33,7 @@ def test_single_defaults(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_single_uids(do_plot=do_plot):
     """ Test a single MixingPool by UIDS, pre-initialization configuration """
     test_name = sys._getframe().f_code.co_name
@@ -53,6 +55,7 @@ def test_single_uids(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_single_ncd():
     """ Test a single MixingPool with a ncd """
     test_name = sys._getframe().f_code.co_name
@@ -73,6 +76,7 @@ def test_single_ncd():
     return sim
 
 
+@sc.timer()
 def test_single_missing_disease():
     """ Test a single MixingPool with a missing disease """
     test_name = sys._getframe().f_code.co_name
@@ -94,6 +98,7 @@ def test_single_missing_disease():
     return sim
 
 
+@sc.timer()
 def test_single_age(do_plot=do_plot):
     """ Test a single MixingPool by age """
     # Incidence must decline because 0-15 --> 15+ transmission only
@@ -117,6 +122,7 @@ def test_single_age(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_single_sex(do_plot=do_plot):
     """ Test a single MixingPool by sex """
     # Incidence must decline because M --> F transmission only
@@ -141,6 +147,7 @@ def test_single_sex(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_multi_defaults(do_plot=do_plot):
     """ Test MixingPools using defaults """
     test_name = sys._getframe().f_code.co_name
@@ -156,6 +163,7 @@ def test_multi_defaults(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_multi(do_plot=do_plot):
     """ Test MixingPools """
     test_name = sys._getframe().f_code.co_name

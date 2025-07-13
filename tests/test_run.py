@@ -23,6 +23,7 @@ def make_sim_pars():
     return pars
 
 
+@sc.timer()
 def test_parallel():
     """ Test running two identical sims in parallel """
     sc.heading('Testing parallel...')
@@ -45,6 +46,7 @@ def test_parallel():
     return s1, s2
 
 
+@sc.timer()
 def test_multisim():
     """ Check MultiSim methods """
     sc.heading('Testing MultiSim')
@@ -76,6 +78,7 @@ def test_multisim():
     return msim
 
 
+@sc.timer()
 def test_other():
     """ Check other run options """
     sc.heading('Testing other run options')

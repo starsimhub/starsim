@@ -14,6 +14,7 @@ do_plot = True
 sc.options(interactive=do_plot) # Assume not running interactively
 
 
+@sc.timer()
 def test_sir():
     sc.heading('Testing SIR dynamics')
 
@@ -55,6 +56,7 @@ def test_sir():
     return sim
 
 
+@sc.timer()
 def test_sir_epi():
     sc.heading('Test basic epi dynamics')
 
@@ -105,6 +107,7 @@ def test_sir_epi():
     return s0, s1
 
 
+@sc.timer()
 def test_sis(do_plot=do_plot):
     sc.heading('Testing SIS dynamics')
 
@@ -121,6 +124,7 @@ def test_sis(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_ncd():
     sc.heading('Testing NCDs')
 
@@ -149,6 +153,7 @@ def test_ncd():
     return sim
 
 
+@sc.timer()
 def test_gavi():
     sc.heading('Testing GAVI diseases')
     ss.register_modules(sse) # So we can use strings for these
@@ -167,6 +172,7 @@ def test_gavi():
     return sims
 
 
+@sc.timer()
 def test_multidisease():
     sc.heading('Testing simulating multiple diseases')
 
@@ -183,6 +189,7 @@ def test_multidisease():
     return sim
 
 
+@sc.timer()
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)

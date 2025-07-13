@@ -90,9 +90,11 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_sir_vaccine_leaky(do_plot=False):
     return run_sir_vaccine(0.3, False, do_plot=do_plot)
 
+@sc.timer()
 def test_sir_vaccine_all_or_nothing(do_plot=False):
     return run_sir_vaccine(0.3, True, do_plot=do_plot)
 

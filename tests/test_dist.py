@@ -35,6 +35,7 @@ def make_sim():
 
 
 # %% Define the tests
+@sc.timer()
 def test_dist(m=m):
     """ Test the Dist class """
     sc.heading('Testing the basic Dist call')
@@ -50,6 +51,7 @@ def test_dist(m=m):
     return rvs
 
 
+@sc.timer()
 def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
@@ -77,6 +79,7 @@ def test_custom_dists(n=n, do_plot=False):
     return o
 
 
+@sc.timer()
 def test_dists(n=n, do_plot=False):
     """ Test the Dists container """
     sc.heading('Testing Dists container')
@@ -114,6 +117,7 @@ def test_dists(n=n, do_plot=False):
     return dists
 
 
+@sc.timer()
 def test_scipy(m=m):
     """ Test that SciPy distributions also work """
     sc.heading('Testing SciPy distributions')
@@ -131,6 +135,7 @@ def test_scipy(m=m):
     return dist1, dist2
 
 
+@sc.timer()
 def test_exceptions(m=m):
     """ Check that exceptions are being appropriately raised """
     sc.heading('Testing exceptions and strict')
@@ -161,6 +166,7 @@ def test_exceptions(m=m):
     return dist, dist2
 
 
+@sc.timer()
 def test_reset(m=m):
     """ Check that reset works as expected """
     sc.heading('Testing reset')
@@ -198,6 +204,7 @@ def make_fake_sim(n=10):
     return sim
 
 
+@sc.timer()
 def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
@@ -226,6 +233,7 @@ def test_callable(n=n):
     return d1
 
 
+@sc.timer()
 def test_array(n=n):
     """ Test array parameters """
     sc.heading('Testing uniform with a array parameters')
@@ -244,6 +252,7 @@ def test_array(n=n):
     return draws
 
 
+@sc.timer()
 def test_repeat_slot():
     """ Test behavior of repeated slots """
     sc.heading('Test behavior of repeated slots')
@@ -272,6 +281,7 @@ def test_repeat_slot():
     return draws
 
 
+@sc.timer()
 def test_timepar_dists():
     """ Test interaction of distributions and timepars """
     sc.heading('Test interaction of distributions and timepars')
@@ -372,6 +382,7 @@ def test_timepar_dists():
     return ber2
 
 
+@sc.timer()
 def test_timepar_callable():
     sc.heading('Test that timepars work with (some) callable functions')
 

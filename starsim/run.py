@@ -505,6 +505,10 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
     rather than a single sim, exactly these will be run and most other arguments
     will be ignored.
 
+    Note: `n_cpus=1` is *not* the same thing as setting `parallel=False`. The former
+    still uses the parallelization methods (just on a single core), while the latter
+    simply runs in a loop.
+
     Args:
         sim         (Sim/list): the sim instance to be run, or a list of sims.
         n_runs      (int)   : the number of parallel runs
@@ -516,7 +520,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         par_args    (dict)  : arguments passed to sc.parallelize()
         do_run      (bool)  : whether to actually run the sim (if not, just initialize it)
         parallel    (bool)  : whether to run in parallel using multiprocessing (else, just run in a loop)
-        n_cpus      (int)   : the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args)
+        n_cpus      (int)   : the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args, and use all cores)
         verbose     (int)   : detail to print
         kwargs      (dict)  : also passed to the sim
 

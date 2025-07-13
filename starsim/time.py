@@ -1180,12 +1180,21 @@ class TimeVec:
         return not any([getattr(self, k) is None for k in self.time_args])
 
     @property
+    def finished(self):
+        """
+        Check if the simulation is finished, i.e. we're at the last time point
+        (note, this does not distinguish whether we are at the beginning or end
+        of the last time point, so use with caution!)
+        """
+        return self.ti == self.npts-1
+
+    @property
     def is_absolute(self):
         """
         Check whether the fundamental simulation unit is absolute
 
         A time vector is absolute if the start is a date rather than a Dur
-        A relative time vector can be made absolute by adding a date to it
+        A relative time vector can be made absolute by adding a date to it.
         """
         try:
             return isinstance(self.start, date)
