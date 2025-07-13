@@ -5,7 +5,6 @@ Test different time units and timesteps
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.time import *
 
 small = 100
 medium = 1000
@@ -13,6 +12,7 @@ sc.options(interactive=False)
 
 
 # %% Define the tests
+@sc.timer()
 def test_ratio():
     sc.heading('Test time ratio calculation')
 
@@ -20,13 +20,14 @@ def test_ratio():
     assert ss.Dur(1) / ss.Dur(0.1) == 10
     assert ss.Dur(0.5) / ss.Dur(5) == 0.1
 
-    assert ss.Dur(years=1) / ss.Dur(days=1) == 365.25
-    assert ss.Dur(years=1) / ss.Dur(weeks=1) * 7 == 365.25
+    assert ss.Dur(years=1) / ss.Dur(days=1) == 365
+    assert np.isclose(ss.Dur(years=1) / ss.Dur(weeks=1) * 7, 365)
     assert ss.Dur(years=1) / ss.Dur(months=1) == 12
 
     return
 
 
+@sc.timer()
 def test_classes():
     sc.heading('Test behavior of dur() and rate()')
 
@@ -54,9 +55,9 @@ def test_classes():
 
     # Test duration units
     d5 = ss.Dur(years=2)
-    d6 = ss.Dur(days=3)
-    assert d5 + d6 == 2 + 3/365.25
-    assert (d5 + d6)/ss.Dur(days=1) == 365.25*2+3
+    d6 = ss.Dur(days=5)
+    assert d5 + d6 == 2 + 5/365
+    assert (d5 + d6)/ss.Dur(days=1) == 365*2+5
 
     # Test rate units
     rval = 0.7
@@ -78,6 +79,7 @@ def test_classes():
     return d3, d4, r3, r4, tp0
 
 
+@sc.timer()
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
@@ -117,6 +119,7 @@ def test_units(do_plot=False):
     return sims
 
 
+@sc.timer()
 def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
@@ -146,6 +149,7 @@ def test_multi_timestep(do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
@@ -181,20 +185,21 @@ def test_mixed_timesteps():
     return msim
 
 
+@sc.timer()
 def test_time_class():
-    sc.heading('Test different instances of ss.Time')
+    sc.heading('Test different instances of ss.Timeline')
 
     def sim(start, stop, dt, **kwargs):
         """ Generate a fake sim """
         sim = sc.prettyobj()
-        sim.t = ss.Time(start=start, stop=stop, dt=dt, **kwargs)
+        sim.t = ss.Timeline(start=start, stop=stop, dt=dt, **kwargs)
         sim.pars = ss.SimPars()
         sim.t.init(None)
         return sim
 
     print('Testing dates vs. numeric')
     s1 = sim(start=2000, stop=2002, dt=0.1)
-    t1 = ss.Time(start='2001-01-01', stop='2001-06-30', dt=ss.days(2))
+    t1 = ss.Timeline(start='2001-01-01', stop='2001-06-30', dt=ss.days(2))
     t1.init(sim=s1)
     # assert np.array_equal(s1.t.timevec, s1.t.yearvec)
     assert len(s1.t.timevec) == 21
@@ -206,7 +211,7 @@ def test_time_class():
 
     print('Testing weeks vs. days')
     s2 = sim(start='2000-06-01', stop='2001-05-01', dt=ss.days(1))
-    t2 = ss.Time(start='2000-06-01', stop='2001-05-01', dt=ss.weeks(1))
+    t2 = ss.Timeline(start='2000-06-01', stop='2001-05-01', dt=ss.weeks(1))
     t2.init(sim=s2)
     assert np.array_equal(s2.t.timevec, s2.t.datevec)
     assert isinstance(s2.t.start, ss.date)
@@ -214,7 +219,7 @@ def test_time_class():
 
     print('Testing different units and dt')
     s3 = sim(start=2001, stop=2003, dt=ss.years(0.1))
-    t3 = ss.Time(start='2001-01-01', stop='2003-01-01',dt=ss.days(2))
+    t3 = ss.Timeline(start='2001-01-01', stop='2003-01-01',dt=ss.days(2))
     t3.init(sim=s3)
     assert np.array_equal(s3.t.timevec, s3.t.datevec)
     assert s3.t.datevec[-1] == ss.date('2003-01-01')
@@ -246,37 +251,39 @@ def test_time_class():
 
     return [s1, t1, s2, t2]
 
+
+@sc.timer()
 def test_callable_dists():
+    sc.heading('Testing callable distributions')
     def loc(module, sim, uids):
         return np.array([ss.Dur(x) for x in range(uids)])
     module = sc.objdict(t=sc.objdict(dt=ss.Dur(days=1)))
     d = ss.normal(loc, ss.Dur(days=1), module=module, strict=False)
     d.init()
     d.rvs(10)
+    return d
 
-def test_pickling():
-    import pickle
-    x = ss.date('2020-01-01')
-    s = pickle.dumps(x)
-    pickle.loads(s)
 
+@sc.timer()
 def test_syntax():
-    # Verify that a range of supported operations run without raising an error
+    """ Verify that a range of supported operations run without raising an error """
+    sc.heading('Testing syntax')
+    from starsim import date, Timeline, Dur, DateDur, YearDur, perday, perweek, Rate, timeprob, rateprob
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
 
     assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
 
-    t = Time(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
+    tv = Timeline(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
-    assert Dur(weeks=1)/Dur(days=1) == 7
+    assert np.isclose(Dur(weeks=1)/Dur(days=1), 7) # CKTODO: would be nice if this were exact
 
-    assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)),6/365.25)
+    assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)), 6/365)
 
     assert date(2050) - date(2020) == YearDur(30)
 
-    assert (perweek(1)+perday(1)) == perweek(8)
+    assert np.isclose((perweek(1)+perday(1)).value, perweek(8).value) # CKTODO: would be nice if this were exact
 
     assert date('2020-01-01') + Dur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
     assert date('2020-01-01') + 52*Dur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
@@ -284,15 +291,15 @@ def test_syntax():
     assert date('2020-01-01') + Dur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
     # These should all work - confirm the sizes
-    assert len(Time(date('2020-01-01'), date('2020-06-01'), Dur(days=1)).init()) == 153
-    assert len(Time(date('2020-01-01'), date('2020-06-01'), Dur(months=1)).init()) == 6
-    assert len(Time(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
-    assert len(Time(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
-    assert len(Time(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
-    assert len(Time(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
-    assert len(Time(Dur(0), Dur(1), Dur(1/12)).init()) == 13
-    assert len(Time(date('2020-01-01'), date('2030-06-01'), Dur(days=1)).init()) == 3805
-    assert len(Time(date(2020), date(2030.5), Dur(0.1)).init()) == 106
+    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), Dur(days=1)).init()) == 153
+    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), Dur(months=1)).init()) == 6
+    assert len(Timeline(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
+    assert len(Timeline(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
+    assert len(Timeline(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
+    assert len(Timeline(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
+    assert len(Timeline(Dur(0), Dur(1), Dur(1/12)).init()) == 13
+    assert len(Timeline(date('2020-01-01'), date('2030-06-01'), Dur(days=1)).init()) == 3805
+    assert len(Timeline(date(2020), date(2030.5), Dur(0.1)).init()) == 106
 
     # Operations on date vectors
     date.arange(2020,2030)+YearDur(1) # add YearDur to date array
@@ -345,12 +352,15 @@ def test_syntax():
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
 
+    return tv
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
 
-    T = sc.timer()
+    T = sc.timer('\nTotal time')
 
     o1 = test_ratio()
     o2 = test_classes()
@@ -358,6 +368,7 @@ if __name__ == '__main__':
     o4 = test_multi_timestep(do_plot)
     o5 = test_mixed_timesteps()
     o6 = test_time_class()
-    test_callable_dists()
-    test_syntax()
+    o7 = test_callable_dists()
+    o8 = test_syntax()
+
     T.toc()

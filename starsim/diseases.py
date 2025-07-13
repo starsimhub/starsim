@@ -9,8 +9,8 @@ import networkx as nx
 from operator import itemgetter
 import matplotlib.pyplot as plt
 
-ss_int_ = ss.dtypes.int
-ss_float_ = ss.dtypes.float
+ss_int = ss.dtypes.int
+ss_float = ss.dtypes.float
 _ = None # For function signatures
 
 __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
@@ -20,12 +20,12 @@ __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
             log = False,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         return
 
     @ss.required()
@@ -115,7 +115,7 @@ class Infection(Disease):
     operate on to capture co-infection
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
@@ -128,7 +128,7 @@ class Infection(Disease):
         self.define_pars(
             init_prev = None, # Replace None with a ss.bernoulli to seed infections
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
@@ -262,7 +262,7 @@ class Infection(Disease):
                             target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                             new_cases.append(target_uids)
                             sources.append(source_uids)
-                            networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                            networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
 
             # Handle everything else: mixing pools, environmental transmission, etc.
             elif isinstance(route, ss.Route):
@@ -270,8 +270,8 @@ class Infection(Disease):
                 disease_beta = betamap[nk][0]*self.t.dt if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
                 target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta)
                 new_cases.append(target_uids)
-                sources.append(np.full(len(target_uids), dtype=ss_float_, fill_value=np.nan))
-                networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
+                networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
             else:
                 errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
                 raise TypeError(errormsg)
@@ -285,7 +285,7 @@ class Infection(Disease):
         else:
             new_cases = ss.uids()
             sources = ss.uids()
-            networks = np.empty(0, dtype=ss_int_)
+            networks = np.empty(0, dtype=ss_int)
 
         return new_cases, sources, networks
 
@@ -427,14 +427,14 @@ class NCD(Disease):
         dur_risk (float/`ss.dur`/`ss.Dist`): how long a person is at risk for
         prognosis (float/`ss.dur`/`ss.Dist`): time in years between first becoming affected and death
     """
-    def __init__(self, initial_risk=_, dur_risk=_, prognosis=_, **kwargs):
+    def __init__(self, pars=None, initial_risk=_, dur_risk=_, prognosis=_, **kwargs):
         super().__init__()
         self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             dur_risk = ss.expon(scale=ss.years(10)),
             prognosis = ss.weibull(c=ss.years(2), scale=5), # Time in years between first becoming affected and death
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.define_states(
             ss.BoolState('at_risk', label='At risk'),
@@ -514,7 +514,7 @@ class SIR(Infection):
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
-    def __init__(self, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
+    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.1),
@@ -522,7 +522,7 @@ class SIR(Infection):
             dur_inf = ss.lognorm_ex(mean=ss.years(6)),
             p_death = ss.bernoulli(p=0.01),
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # Example of defining all states, redefining those from ss.Infection, using overwrite=True
         self.define_states(
@@ -611,7 +611,7 @@ class SIS(Infection):
         waning (float/`ss.rate`): how quickly immunity wanes
         imm_boost (float): how much an infection boosts immunity
     """
-    def __init__(self, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
+    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.05),
@@ -620,7 +620,7 @@ class SIS(Infection):
             waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.define_states(
             ss.FloatArr('ti_recovered'),

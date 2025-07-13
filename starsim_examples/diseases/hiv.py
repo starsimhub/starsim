@@ -11,7 +11,7 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(ss.Infection):
 
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(1.0), # Placeholder value
@@ -24,7 +24,7 @@ class HIV(ss.Infection):
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
             p_death = ss.rateprob(0.05), # NB: this is death per unit time, not death per infection
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # States
         self.define_states(
@@ -92,7 +92,7 @@ class ART(ss.Intervention):
         self.define_pars(
             art_delay = ss.constant(v=ss.years(1.0)) # Value in years
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         prob_art = lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage)
         self.prob_art_at_infection = ss.bernoulli(p=prob_art)

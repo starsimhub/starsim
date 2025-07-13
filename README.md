@@ -51,7 +51,10 @@ Starsim can also be installed locally. To do this, clone first this repository, 
 pip install -e .
 ```
 
-(Don't forget the dot at the end!)
+Don't forget the dot at the end!
+
+(Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here[(https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
+
 
 ### R
 

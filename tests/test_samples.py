@@ -1,7 +1,7 @@
 """
 Test the Samples class
 """
-
+import sciris as sc
 import starsim as ss
 
 testdir = ss.root/'tests'
@@ -25,6 +25,7 @@ def get_outputs(p_death):
         outputs.append((df, summary))
     return outputs
 
+@sc.timer()
 def test_samples_no_identifier():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
@@ -32,6 +33,7 @@ def test_samples_no_identifier():
     s = ss.Samples.new(resultsdir, outputs)
     return s
 
+@sc.timer()
 def test_samples():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
@@ -39,6 +41,7 @@ def test_samples():
     s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
     return s
 
+@sc.timer()
 def test_dataset():
     resultsdir = tempdir / 'dataset_results'
     resultsdir.mkdir(exist_ok=True)
@@ -48,6 +51,7 @@ def test_dataset():
     results = ss.Dataset(resultsdir)
     return results
 
+@sc.timer()
 def test_verbose():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
@@ -55,6 +59,7 @@ def test_verbose():
     s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"], verbose=False)
     return s
 
+@sc.timer()
 def test_seed_result():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'

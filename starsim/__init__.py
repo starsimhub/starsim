@@ -15,37 +15,36 @@ import sciris as sc
 root = sc.thispath(__file__).parent
 
 # Double-check key requirements -- should match pyproject.toml
-reqs = ['sciris>=3.2.3', 'pandas>=2.0.0']
+reqs = ['sciris>=3.2.4', 'pandas>=2.0.0']
 msg = f'\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\n\n'
 msg += 'You can update with:\n  pip install <MISSING> --upgrade'
 sc.require(reqs, message=msg)
 del sc, reqs, msg # Don't keep this in the module
 
 # Finish imports
-from .utils            import *
-from .debug            import *
-from .arrays           import *
-from .time             import *
-from .parameters       import *
-from .distributions    import *
-from .people           import *
-from .modules          import *
-from .networks         import *
-from .results          import *
-from .demographics     import *
-from .products         import *
-from .interventions    import *
-from .analyzers        import *
-from .connectors       import *
-from .demographics     import *
-from .diseases         import *
-from .diseases         import *
-from .loop             import *
-from .sim              import *
-from .run              import *
-from .calibration      import *
-from .calib_components import *
-from .samples          import *
+from .utils         import *
+from .debugtools    import *
+from .arrays        import *
+from .time          import *
+from .parameters    import *
+from .distributions import *
+from .people        import *
+from .modules       import *
+from .networks      import *
+from .results       import *
+from .demographics  import *
+from .products      import *
+from .interventions import *
+from .analyzers     import *
+from .connectors    import *
+from .demographics  import *
+from .diseases      import *
+from .diseases      import *
+from .loop          import *
+from .sim           import *
+from .run           import *
+from .calibration   import *
+from .samples       import *
 
 # Load fonts
 def _load_fonts(debug=False):

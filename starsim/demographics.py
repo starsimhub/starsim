@@ -6,8 +6,8 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
-ss_float_ = ss.dtypes.float
-ss_int_ = ss.dtypes.int
+ss_float = ss.dtypes.float
+ss_int = ss.dtypes.int
 _ = None
 
 __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
@@ -23,7 +23,7 @@ class Demographics(ss.Module):
 
 
 class Births(Demographics):
-    def __init__(self, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
+    def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
         """
         Create births based on rates, rather than based on pregnancy.
 
@@ -43,7 +43,7 @@ class Births(Demographics):
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
@@ -140,7 +140,7 @@ class Births(Demographics):
 
 
 class Deaths(Demographics):
-    def __init__(self, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
+    def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -174,7 +174,7 @@ class Deaths(Demographics):
             death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
@@ -224,7 +224,7 @@ class Deaths(Demographics):
             year_ind = sc.findnearest(available_years, sim.t.now('year')) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
-            death_rate = np.empty(uids.shape, dtype=ss_float_)
+            death_rate = np.empty(uids.shape, dtype=ss_float)
 
             if 'sex' in drd.index.names:
                 s = drd.loc[nearest_year, 'f']
@@ -276,7 +276,7 @@ class Deaths(Demographics):
 
 
 class Pregnancy(Demographics):
-    def __init__(self, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
+    def __init__(self, pars=None, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
                  p_maternal_death=_, p_neonatal_death=_, sex_ratio=_, min_age=_, max_age=_,
                  rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
         """
@@ -317,7 +317,7 @@ class Pregnancy(Demographics):
             slot_scale = 5, # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
             min_slots  = 100, # Minimum number of slots, useful if the population size is very small
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
 
@@ -357,7 +357,7 @@ class Pregnancy(Demographics):
         if sc.isnumber(frd):
             raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
 
-        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
+        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = self.fertility_rate_data * self.t.dt # Rate per timestep

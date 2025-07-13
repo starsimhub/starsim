@@ -12,6 +12,7 @@ sc.options(interactive=False) # Assume not running interactively
 datadir = ss.root / 'tests/test_data'
 
 
+@sc.timer()
 def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     """
     Make a Nigeria sim with demographic modules
@@ -123,6 +124,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
@@ -137,6 +139,7 @@ def test_constant_pop(do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_module_adding():
     """ Test that modules can't be added twice """
     sc.heading('Testing module duplication')
@@ -148,6 +151,7 @@ def test_module_adding():
     return demographics
 
 
+@sc.timer()
 def test_aging():
     """ Test that aging is configured properly """
     sc.heading('Testing aging')

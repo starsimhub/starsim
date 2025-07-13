@@ -22,14 +22,14 @@ class ErdosRenyiNet(ss.DynamicNetwork):
 
     Warning: this network is quite slow compared to `ss.RandomNet`.
     """
-    def __init__(self, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, pars=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             p = 0.1, # Probability of each edge
             dur = ss.Dur(0), # Duration of zero ensures that new random edges are formed on each time step
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
         return
 

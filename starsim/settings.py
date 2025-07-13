@@ -8,21 +8,22 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import matplotlib.font_manager as fm
+import starsim as ss # Only used to set references
 
 __all__ = ['dtypes', 'options', 'style']
 
 # Define Starsim-default data types
-class dtypes:
-    bool = bool
-    int = np.int64 # np.int32 is actually much slower for indexing arrays
-    nbint = nb.int64
-    rand_int = np.int32
-    rand_uint = np.uint32
-    float = np.float32
-    nbfloat = nb.float32
-    result_float = np.float64
-    int_nan = -999999 # Arbitrary placeholder value
-
+dtypes = sc.dictobj(
+    bool = bool,
+    int = np.int64, # np.int32 is actually much slower for indexing arrays
+    nbint = nb.int64,
+    rand_int = np.int32,
+    rand_uint = np.uint32,
+    float = np.float32,
+    nbfloat = nb.float32,
+    result_float = np.float64,
+    int_nan = -999999, # Arbitrary placeholder value
+)
 
 # Define simple plotting options -- similar to Matplotlib default
 rc_starsim = {
@@ -70,6 +71,7 @@ class Options(sc.objdict):
         self.update(options)  # Update this object with them
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
+        self.setattribute('_locked', True)
         return
 
     @staticmethod
@@ -122,6 +124,9 @@ class Options(sc.objdict):
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
 
+        optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
+        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 5000, int) # See https://github.com/starsimhub/starsim/issues/1005 for details
+
         optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only.'
         options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
 
@@ -130,6 +135,18 @@ class Options(sc.objdict):
     def __call__(self, *args, **kwargs):
         """Allow `ss.options(dpi=150)` instead of `ss.options.set(dpi=150)` """
         return self.set(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        """ Do not allow accidental modifications """
+        try:
+            assert self.getattribute('_locked') # This handles False, not present, etc.
+            if key in self:
+                self.set(key=key, value=value)
+            else:
+                errormsg = f'Cannot set option {key}; valid options are:\n{sc.strjoin(self.keys())}\nSee ss.options.disp() for details.'
+                raise sc.KeyNotFoundError(errormsg)
+        except:
+            return super().__setitem__(self, key, value)
 
     def to_dict(self):
         ''' Pull out only the settings from the options object '''
@@ -172,6 +189,59 @@ class Options(sc.objdict):
         print(output)
         return
 
+    def help(self, detailed=False, output=False):
+        """
+        Print information about options.
+
+        Args:
+            detailed (bool): whether to print out full help
+            output (bool): whether to return a list of the options
+
+        **Example**:
+
+            ss.options.help(detailed=True)
+        """
+        # If not detailed, just print the docstring for sc.options
+        if not detailed:
+            print(self.__doc__)
+            return
+
+        n = 15 # Size of indent
+        optdict = sc.objdict()
+        for key in self.orig_options.keys():
+            entry = sc.objdict()
+            entry.key = key
+            entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
+            entry.default = sc.indent(n=n, width=None, text=sc.pp(self.orig_options[key], output=True)).rstrip()
+            entry.variable = f'STARSIM_{key.upper()}' # NB, hard-coded above!
+            entry.desc = sc.indent(n=n, text=self.optdesc[key])
+            optdict[key] = entry
+
+        # Convert to a dataframe for nice printing
+        print('Starsim global options ("Environment" = name of corresponding environment variable):')
+        for k, key, entry in optdict.enumitems():
+            sc.heading(f'{k}. {key}', spaces=0, spacesafter=0)
+            changestr = '' if entry.current == entry.default else ' (modified)'
+            print(f'          Key: {key}')
+            print(f'      Current: {entry.current}{changestr}')
+            print(f'      Default: {entry.default}')
+            print(f'  Environment: {entry.variable}')
+            print(f'  Description: {entry.desc}')
+
+        sc.heading('Methods:', spacesafter=0)
+        print("""
+    ss.options(key=value) -- set key to value
+    ss.options[key] -- get or set key
+    ss.options.set() -- set option(s)
+    ss.options.get_default() -- get default setting(s)
+    ss.options.set_style() -- change the style for plotting (can also use ss.style() in a context block)
+""")
+
+        if output:
+            return optdict
+        else:
+            return
+
     def set(self, key=None, value=None, use=False, **kwargs):
         """
         Actually change the style. See `ss.options.help()` for more information.
@@ -204,11 +274,13 @@ class Options(sc.objdict):
             else:
                 if value in [None, 'default']:
                     value = self.orig_options[key]
-                self[key] = value
+                super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases
                 if key == 'precision':
                     self.set_precision()
+                elif key == 'numba_indexing':
+                    self.refresh_references()
                 elif key == 'style':
                     self.set_style()
 
@@ -255,22 +327,52 @@ class Options(sc.objdict):
     def set_precision(self):
         """ Change the arithmetic precision used by Starsim/NumPy """
         if self.precision == 32:
-            dtypes.int = np.int32
-            dtypes.float = np.float32
+            dtypes.update(dict(
+                int       = np.int64, # Never set this or result_float to 32-bit since messed up array indexing
+                rand_int  = np.int32,
+                rand_uint = np.uint32,
+                float     = np.float32,
+                nbfloat   = nb.float32,
+            ))
         elif self.precision == 64:
-            dtypes.int = np.int64
-            dtypes.float = np.float64
+            dtypes.update(dict(
+                int       = np.int64,
+                rand_int  = np.int64,
+                rand_uint = np.uint64,
+                float     = np.float64,
+                nbfloat   = nb.float64,
+            ))
         else:
             errormsg = f'Precision {self.precision} not recognized; must be 32 or 64'
             raise ValueError(errormsg)
+        self.refresh_references()
+        return
+
+    def refresh_references(self):
+        """ Many modules copy settings into them for speed; here we refresh those """
+        files = ['arrays', 'demographics', 'diseases', 'distributions', 'networks']
+
+        # Update Numba threshold
+        ss.arrays.numba_indexing = self.numba_indexing
+
+        # Update precision
+        for file in files:
+            ss_file = getattr(ss, file) # e.g. ss.arrays
+            for key,value in dtypes.items():
+                ss_key = f'ss_{key}' # e.g. int -> ss_int
+                if hasattr(ss_file, ss_key): # e.g. ss.arrays.ss_int
+                    setattr(ss_file, ss_key, value)
         return
 
     def set_style(self):
         """ Change the plotting style """
         if self.style == 'starsim':
-            self._style = sc.dcp(rc_starsim)
+            style = sc.dcp(rc_starsim)
         else:
-            self._style = self.style
+            style = self.style
+
+        # Since Options is locked
+        self.setattribute('_style', style)
         return
 
 

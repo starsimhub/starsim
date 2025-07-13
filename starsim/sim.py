@@ -181,7 +181,7 @@ class Sim(ss.Base):
 
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.t = ss.Time(name='sim')
+        self.t = ss.Timeline(name='sim')
         self.t.init(self)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
@@ -386,10 +386,8 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        # Reset the time index
+        # Reset the time index (done in the modules as well in mod.finalize())
         self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-        for mod in self.module_list: # May not be needed, but keeps it consistent with the sim
-            mod.t.ti -= 1
 
         # Scale the results
         for reskey, res in self.results.items():
@@ -583,10 +581,50 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
-    def profile(self, do_run=True, plot=True, **kwargs):
-        """ Profile the performance of the simulation """
-        prof = ss.Profile(self, do_run=do_run, plot=plot, **kwargs)
+    def profile(self, line=True, do_run=True, plot=True, follow=None, **kwargs):
+        """
+        Profile the performance of the simulation using a line profiler (`sc.profile()`)
+
+        Args:
+            do_run (bool): whether to immediately run the sim
+            plot (bool): whether to plot time spent per module step
+            follow (func/list): a list of functions/methods to follow in detail
+            **kwargs (dict): passed to `sc.profile()`
+
+        **Example**:
+
+            import starsim as ss
+
+            net = ss.RandomNet()
+            sis = ss.SIS()
+            sim = ss.Sim(networks=net, diseases=sis)
+            prof = sim.profile(follow=[net.add_pairs, sis.infect])
+        """
+        prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
         return prof
+
+    def cprofile(self, sort='cumtime', mintime=1e-3, **kwargs):
+        """
+        Profile the performance of the simulation using a function profiler (`sc.cprofile()`)
+
+        Args:
+            sort (str): default sort column; common choices are 'cumtime' (total time spent in a function, includin subfunctions) and 'selftime' (excluding subfunctions)
+            mintime (float): exclude function calls less than this time in seconds
+            **kwargs (dict): passed to `sc.cprofile()`
+
+        **Example**:
+
+            import starsim as ss
+
+            net = ss.RandomNet()
+            sis = ss.SIS()
+            sim = ss.Sim(networks=net, diseases=sis)
+            prof = sim.cprofile()
+        """
+        cprof = sc.cprofile(sort=sort, mintime=mintime, **kwargs)
+        with cprof:
+            self.run()
+        return cprof
 
     def save(self, filename=None, shrink=None, **kwargs):
         """
@@ -625,9 +663,9 @@ class Sim(ss.Base):
 
         Args:
             filename (str): if None, return string; else, write to file
-            keys (str/list): attributes to write to json (choices: 'pars' and/or 'summary')
+            keys (str/list): attributes to write to json (choices: 'pars', 'summary', and/or 'results')
             verbose (bool): detail to print
-            kwargs (dict): passed to sc.jsonify()
+            **kwargs (dict): passed to `sc.jsonify()`
 
         Returns:
             A dictionary representation of the parameters and/or summary results
@@ -635,13 +673,13 @@ class Sim(ss.Base):
 
         **Examples**:
 
-            json = sim.to_json()
-            sim.to_json('results.json')
-            sim.to_json('summary.json', keys='summary')
+            json = sim.to_json() # Convert to a dict
+            sim.to_json('sim.json') # Write everything
+            sim.to_json('summary.json', keys='summary') # Just write the summary
         """
         # Handle keys
         if keys is None:
-            keys = ['pars', 'summary']
+            keys = ['pars', 'summary', 'results']
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
@@ -655,15 +693,38 @@ class Sim(ss.Base):
                     d.summary = dict(sc.dcp(self.summary))
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
+            elif key == 'results':
+                d.results = self.to_df().to_dict()
             else:  # pragma: no cover
-                errormsg = f'Could not convert "{key}" to JSON; continuing...'
-                print(errormsg)
+                warnmsg = f'Could not convert "{key}" to JSON; continuing...'
+                ss.warn(warnmsg)
 
         # Final conversion
+        d = sc.jsonify(d, **kwargs)
         if filename is not None:
-            sc.savejson(filename=filename, obj=d, **kwargs)
-        d = sc.jsonify(d)
+            sc.savejson(filename=filename, obj=d)
         return d
+
+    def to_yaml(self, filename=None, sort_keys=False, **kwargs):
+        """
+        Export results and parameters as YAML.
+
+        Args:
+            filename (str): the name of the file to write to (default `{sim.label}.yaml`)
+            kwargs (dict): passed to `sim.to_json()`
+
+        **Example**:
+
+            sim = ss.Sim(diseases='sis', networks='random').run()
+            sim.to_yaml('results.yaml', keys='results')
+        """
+        if filename is None:
+            if self.label:
+                filename = f'{self.label}.yaml'
+            else:
+                filename = 'sim.yaml'
+        json = self.to_json(filename=None, **kwargs)
+        return sc.saveyaml(filename=filename, obj=json, sort_keys=sort_keys)
 
     def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
              show_label=False, n_ticks=None, **kwargs):

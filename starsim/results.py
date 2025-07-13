@@ -443,7 +443,7 @@ class Results(ss.ndict):
         if not descend:
             dfs = []
             for rname, res in self.all_results_dict.items():
-                col_names = rname if self.is_msim else None
+                col_names = rname
                 res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
                 dfs.append(res_df)
             if len(dfs):

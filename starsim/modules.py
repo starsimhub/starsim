@@ -214,10 +214,40 @@ class Module(Base):
     """
     The main base class for all Starsim modules: diseases, networks, interventions, etc.
 
+    By convention, keyword arguments to modules are assigned to "_", which is an
+    alias for None. These are then populated with defaults by `mod.define_pars()`,
+    which are then updated with `mod.update_pars()`, which inspects the `__init__`
+    function to get these arguments.
+
+    Note that there is no *functional* difference between specifying arguments
+    this way rather than simply via `**kwargs`, but having the arguments shown in the
+    function signature can make it easier to read, and "_" is a convetion to indicate
+    that the default is specified below.
+
+    It is also of course OK to specify the actual values rather than "_"; however
+    module arguments are often complex objects (e.g. `ss.bernoulli`) that can't
+    be easily specified in the function signature.
+
+    Finally, note that you can (and should) call `super().__init__()` with no arguments:
+    the name, label, and time arguments get correctly updated via `self.update_pars()`.
+
     Args:
         name (str): a short, key-like name for the module (e.g. "randomnet")
         label (str): the full, human-readable name for the module (e.g. "Random network")
-        kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
+        kwargs (dict): passed to `ss.Timeline()` (e.g. start, stop, unit, dt)
+
+    **Example**:
+
+        class SIR(ss.Module):
+            def __init__(self, pars=_, beta=_, init_prev=_, p_death=_, **kwargs):
+                super().__init__() # Call this first with no arguments
+                self.define_pars( # Then define the parameters, including their default value
+                    beta = ss.peryear(0.1),
+                    init_prev = ss.bernoulli(p=0.01),
+                    p_death = ss.bernoulli(p=0.3),
+                )
+                self.update_pars(pars, **kwargs) # Update with any user-supplied parameters, and raise an exception if trying to set a parameter that wasn't defined in define_pars()
+                return
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -227,7 +257,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Time(**kwargs, name=self.name)
+        self.t = ss.Timeline(**kwargs, name=self.name)
 
         # Properties to be added by init_pre()
         self.sim = None
@@ -370,10 +400,13 @@ class Module(Base):
         return self.pars
 
     # Warning: do not try to use a decorator with this function, that will break argument passing!
-    def update_pars(self, **pars):
+    def update_pars(self, pars=None, **kwargs):
         """
         Pull out recognized parameters, returning the rest
         """
+        # Merge pars and kwargs
+        pars = sc.mergedicts(pars, kwargs)
+
         # Inspect the parent frame and pull out any arguments
         frame = sys._getframe(1)  # Go back 1 frame (to __init__, most likely)
         if frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this
@@ -391,12 +424,12 @@ class Module(Base):
 
         # Update module attributes
         metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
-        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Time.time_args}
+        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Timeline.time_args}
         self.set_metadata(**metadata)
         self.t.update(**timepars)
 
         # Should be no remaining pars
-        remaining = set(pars.keys()) - set(module_args) - set(ss.Time.time_args)
+        remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
         if len(remaining):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
             raise ValueError(errormsg)
@@ -613,6 +646,9 @@ class Module(Base):
     @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
+        # Update the time index (since otherwise pointing to a timepoint that doesn't exist)
+        self.t.ti -= 1
+
         self.finalize_results()
         self.finalized = True
         return

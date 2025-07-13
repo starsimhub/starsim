@@ -10,7 +10,7 @@ __all__ = ['Gonorrhea']
 
 class Gonorrhea(ss.Infection):
 
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         # Parameters
         super().__init__()
         self.define_pars(
@@ -20,7 +20,7 @@ class Gonorrhea(ss.Infection):
             p_clear   = ss.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             init_prev = ss.bernoulli(p=0.1),
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # States additional to the default disease states (see base class)
         # Additional states dependent on parameter values, e.g. self.p_symp?

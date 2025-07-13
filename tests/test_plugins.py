@@ -88,6 +88,7 @@ def make_args():
     return args
 
 
+@sc.timer()
 def test_connectors(do_plot=False):
     """ Test connector example """
     sc.heading('Testing connectors')

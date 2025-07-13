@@ -16,47 +16,78 @@ __all__ = ['Profile', 'Debugger', 'check_version', 'check_requires', 'metadata',
 
 
 class Profile(sc.profile):
-    """ Class to profile the performance of a simulation """
+    """
+    Class to profile the performance of a simulation
 
-    def __init__(self, sim, do_run=True, plot=True, verbose=False, **kwargs):
+    Typically invoked via `sim.profile()`.
+
+    Args:
+        sim (`ss.Sim`): the sim to profile
+        follow (func/list): a list of functions/methods to follow in detail
+        do_run (bool): whether to immediately run the sim
+        plot (bool): whether to plot time spent per module step
+        **kwargs (dict): passed to `sc.profile()`
+
+    **Example**:
+
+        import starsim as ss
+
+        net = ss.RandomNet()
+        sis = ss.SIS()
+        sim = ss.Sim(networks=net, diseases=sis)
+        prof = sim.profile(follow=[net.add_pairs, sis.infect])
+        prof.disp()
+    """
+    def __init__(self, sim, follow=None, do_run=True, plot=True, verbose=True, **kwargs):
         assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
+        if 'skipzero' not in kwargs:
+            kwargs['skipzero'] = True # Since provide the same follow to both sim.init() and sim.run(), so expect zero entries
         super().__init__(run=None, do_run=False, verbose=verbose, **kwargs)
         self.orig_sim = sim
-
-        # Optionally run
-        if do_run:
-            self.init_and_run()
-            if plot:
-                self.plot_cpu()
-        return
-
-    def init_and_run(self):
-        """ Profile the performance of the simulation """
+        self.ss_follow = follow # Keep a copy to know if we should overwrite this
 
         # Initialize: copy the sim and time initialization
         sim = self.orig_sim.copy() # Copy so the sim can be reused
         self.sim = sim
-        self.run_func = sim.run
+        self.run_func = sim.run # This is used internally by sc.profile.run()
+        self.init_prof = None # Profiling the initialization
 
-        # Handle sim init -- both run it and profile it
-        init_prof = None
-        if not sim.initialized:
-            if self.follow:
-                sim.init()
-            else:
-                init_prof = sc.profile(sim.init, verbose=False)
+        # Optionally run
+        if do_run:
+            self.profile_init()
+            self.run()
+            if plot:
+                self.plot_cpu()
+        return
+
+    def profile_init(self):
+        """ Handle sim init -- both run it and profile it """
+        if not self.sim.initialized:
+            self.init_prof = sc.profile(self.sim.init, follow=self.ss_follow, verbose=False, skipzero=True)
+        else:
+            errormsg = 'Cannot profile initialization of already initialized sim'
+            raise RuntimeError(errormsg)
+        return self.init_prof
+
+    def run(self):
+        """ Profile the performance of the simulation """
+        sim = self.sim
+        if not self.sim.initialized:
+            self.sim.init() # Don't profile
 
         # Get the functions from the initialized sim
-        if self.follow is None:
+        if self.ss_follow is None:
             loop_funcs = [e['func'] for e in sim.loop.funcs]
             self.follow = [sim.run] + loop_funcs
+        else:
+            self.follow = self.ss_follow
 
         # Run the profiling on the sim run
-        self.run()
+        super().run()
 
         # Add initialization to the other timings
-        if init_prof:
-            self += init_prof
+        if self.init_prof:
+            self.merge(self.init_prof, inplace=True, swap=True)
 
         return self
 

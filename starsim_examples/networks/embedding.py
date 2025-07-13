@@ -12,7 +12,7 @@ class EmbeddingNet(ss.MFNet):
     RandomNet.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         """
         Create a sexual network from a 1D embedding based on age
 
@@ -25,7 +25,7 @@ class EmbeddingNet(ss.MFNet):
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         return
 
     @staticmethod
