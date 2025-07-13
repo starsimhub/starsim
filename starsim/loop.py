@@ -548,13 +548,13 @@ class Loop:
         cls = self.__class__
         new = cls.__new__(cls)
         memo[id(self)] = new
-        for k, v in self.__dict__.items():
+        for k, v in vars(self).items():
             if k == 'plan' and isinstance(v, sc.dataframe):
                 origdict = v.to_dict() # Convert to a dictionary
-                newdict = sc.dcp(origdict, memo=memo) # Copy the dict
+                newdict = sc.dcp(origdict, memo=memo, die=False) # Copy the dict
                 newdf = sc.dataframe(newdict)
                 setattr(new, k, newdf)
             else:
-                setattr(new, k, sc.dcp(v, memo=memo)) # Regular deepcopy
+                setattr(new, k, sc.dcp(v, memo=memo, die=False)) # Regular deepcopy
         return new
 
