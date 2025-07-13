@@ -307,46 +307,18 @@ class date(pd.Timestamp):
         return date(json['ss.date'])
 
 
-# Conversion ratios from date-based durations to fixed durations
-ratios = sc.objdict(
-
-    # Round numbers with a year denominator
-    year = sc.objdict(
-        years   = 1.0,
-        months  = 12.0,
-        weeks   = 365.0/7, # If 52, then day/week conversion is incorrect
-        days    = 365.0,
-    ),
-
-    # Round numbers with a day denominator
-    day = sc.objdict(
-        years   = 1.0/365,
-        months  = 1.0/30,
-        weeks   = 1.0/7,
-        days    = 1.0,
-    ),
+# Define time units and values
+time_units = sc.dictobj( # Use dictobj since slightly faster than objdict
+    years   = 1.0,
+    months  = 12.0,
+    weeks   = 365.0/7, # If 52, then day/week conversion is incorrect
+    days    = 365.0,
+    hours   = 365.0*24,
+    minutes = 365.0*24*60,
+    seconds = 365.0*24*60*60,
 )
-
-# Month ratios are exactly 12 times more than a year
-ratios.month = ratios.year.copy()
-ratios.month[:] /= 12.0
-
-# Week ratios are exactly 7 times less than a day
-ratios.week = ratios.day.copy()
-ratios.week[:] *= 7.0
-
-# Add additional time entries
-extras = sc.objdict(
-    hours = 24.0,
-    minutes = 60.0,
-    seconds = 60.0,
-    # milliseconds = 1000.0,
-    # microseconds = 1000.0,
-    # nanoseconds = 1000.0,
-)
-for rkey,rdict in ratios.items():
-    for exkey,exval in extras.items():
-        rdict[exkey] = rdict[-1]*exval
+unit_vals = np.array(list(time_units.values())) # For computational efficiency
+unit_keys = list(time_units.keys())
 
 
 class TimePar:
@@ -359,8 +331,6 @@ class Dur(TimePar):
 
     Subclasses for date-durations and fixed-durations
     """
-    ratios = ratios.year
-
     def __new__(cls, *args, **kwargs):
         # Return
         if cls is Dur:
@@ -504,7 +474,6 @@ class Dur(TimePar):
 
 class YearDur(Dur): # CKTODO: rename ss.years
     """ Year based duration e.g., if requiring 52 weeks per year """
-    ratios = ratios.year
     base = 'year'
 
     def __init__(self, years=0):
@@ -603,9 +572,9 @@ class DateDur(Dur):
                 - A pd.DateOffset
                 - A Dur instance
             - Keyword arguments
-                - Argument names that match time periods in `Dur.ratios` e.g., 'years', 'months'
+                - Argument names that match time periods in `ss.time.time_units` e.g., 'years', 'months'
                   supporting floating point values. If the value is not an integer, the values
-                  will be cascaded to smaller units using `Dur.ratios`
+                  will be cascaded to smaller units using `ss.time.time_units`
 
         If no arguments are specified, a DateDur with zero duration will be produced
 
@@ -638,15 +607,15 @@ class DateDur(Dur):
         Return array representation of a pd.DateOffset
 
         In the array representation, each element corresponds to one of the time units
-        in self.ratios e.g., a 1 year, 2 week duration would be [1, 0, 2, 0, 0, 0, 0, 0]
+        in `ss.time.time_units` e.g., a 1 year, 2 week duration would be [1, 0, 2, 0, 0, 0, 0, 0]
 
         Args:
             dateoffset: A pd.DateOffset object
 
         Returns:
-            A numpy array with as many elements as `DateDur.ratios`
+            A numpy array with as many elements as `ss.time.time_units`
         """
-        return np.array([dateoffset.kwds.get(k, 0) for k in cls.ratios.keys()])
+        return np.array([dateoffset.kwds.get(k, 0) for k in unit_keys])
 
     @classmethod
     def _as_args(cls, x):
@@ -654,18 +623,18 @@ class DateDur(Dur):
         Return a dictionary representation of a DateOffset or DateOffset array
 
         This function takes in either a pd.DateOffset, or the result of `_as_array`, and returns
-        a dictionary with the same keys as `DateDur.ratios` and the values from the input. The
+        a dictionary with the same keys as `ss.time.time_units` and the values from the input. The
         output of this function can be passed to the `Dur()` constructor to create a new DateDur object.
 
         Args:
-            x: A pd.DateOffset or an array with the same number of elements as `DateDur.ratios`
+            x: A pd.DateOffset or an array with the same number of elements as `ss.time.time_units`
 
         Returns:
-            Dictionary with keys from `DateDur.ratios` and values from the input
+            Dictionary with keys from `ss.time.time_units` and values from the input
         """
         if isinstance(x, pd.DateOffset):
             x = cls._as_array(x)
-        return {k: v for k, v in zip(cls.ratios.keys(), x)}
+        return {k: v for k, v in zip(unit_keys, x)}
 
     @property
     def years(self):
@@ -676,14 +645,14 @@ class DateDur(Dur):
         occur if module parameters have been entered with `DateDur` durations, but the simulation
         timestep is in `YearDur` units).
 
-        The conversion is based on `DateDur.ratios` which defines the conversion from each time unit
+        The conversion is based on `ss.time.time_units` which defines the conversion from each time unit
         to the next
 
         Returns:
             A float representing the duration in years
         """
         years = 0
-        for k, v in self.ratios.items():
+        for k, v in time_units.items():
             years += self.value.kwds.get(k, 0)/v
         return years
 
@@ -695,17 +664,17 @@ class DateDur(Dur):
             return False
 
     @classmethod
-    def _round_duration(cls, vals) -> pd.DateOffset:
+    def _round_duration(cls, vals):
         """
         Round a dictionary of duration values by overflowing remainders
 
         The input can be
-            - A numpy array of length `cls.ratios` containing values in key order
+            - A numpy array of length `ss.time.time_units` containing values in key order
             - A pd.DateOffset instance
-            - A dictionary with keys from `cls.ratios`
+            - A dictionary with keys from `ss.time.time_units`
 
         The output will be a pd.DateOffset with integer values, where non-integer values
-        have been handled by overflow using the ratios in `cls.ratios`. For example, 2.5 weeks
+        have been handled by overflow using the factors in `ss.time.time_units`. For example, 2.5 weeks
         would first become 2 weeks and 0.5*7 = 3.5 days, and then become 3 days + 0.5*24 = 12 hours.
 
         Negative values are supported - -1.5 weeks for example will become (-1w, -3d, -12h)
@@ -714,12 +683,12 @@ class DateDur(Dur):
             A pd.DateOffset
         """
         if isinstance(vals, np.ndarray):
-            d = sc.objdict({k:v for k,v in zip(cls.ratios, vals)})
+            d = sc.objdict({k:v for k,v in zip(unit_keys, vals)})
         elif isinstance(vals, pd.DateOffset):
-            d = sc.objdict.fromkeys(cls.ratios.keys(),0)
+            d = sc.objdict.fromkeys(unit_keys, 0)
             d.update(vals.kwds)
         elif isinstance(vals, dict):
-            d = sc.objdict.fromkeys(cls.ratios.keys(),0)
+            d = sc.objdict.fromkeys(unit_keys, 0)
             d.update(vals)
         else:
             raise TypeError()
@@ -728,10 +697,10 @@ class DateDur(Dur):
             if isinstance(vals, pd.DateOffset): return vals  # pd.DateOffset is immutable so this should be OK
             return pd.DateOffset(**d)
 
-        for i in range(len(cls.ratios)-1):
+        for i in range(len(time_units)-1):
             remainder, div = np.modf(d[i])
             d[i] = int(div)
-            d[i+1] += remainder * cls.ratios[i+1]/cls.ratios[i]
+            d[i+1] += remainder * unit_vals[i+1]/unit_vals[i]
         d[-1] = round(d[-1])
 
         return pd.DateOffset(**d)
@@ -741,7 +710,7 @@ class DateDur(Dur):
         """
         Scale a pd.DateOffset by a factor
 
-        This function will automatically cascade remainders to finer units using `DateDur.ratios` so for
+        This function will automatically cascade remainders to finer units using `ss.time.time_units` so for
         example 2.5 weeks would first become 2 weeks and 0.5*7 = 3.5 days,
         and then become 3 days + 0.5*24 = 12 hours.
 
@@ -785,7 +754,7 @@ class DateDur(Dur):
             unit = np.argmax((self_array != 0) | (other_array != 0))
             a = 0
             b = 0
-            for i, v in enumerate(self.ratios.values()):
+            for i, v in enumerate(time_units.values()):
                 if i < unit:
                     continue
                 a += self_array[i] / v
@@ -801,7 +770,7 @@ class DateDur(Dur):
         if self.years == 0:
             return '<DateDur: 0>'
         else:
-            labels = self.ratios.keys()
+            labels = unit_keys
             vals = self._as_array(self.value).astype(float)
 
             time_portion = vals[4:]
@@ -815,11 +784,11 @@ class DateDur(Dur):
 
         # If we have only one nonzero value, return 'year', 'month', etc.
         if np.count_nonzero(vals == 1) == 1:
-            for unit, val in zip(self.ratios, vals):
+            for unit, val in zip(unit_keys, vals):
                 if val == 1:
                     return unit[:-1]
 
-        strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(self.ratios, vals) if v != 0]
+        strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(unit_keys, vals) if v != 0]
         return ', '.join(strs)
 
 
@@ -831,7 +800,7 @@ class DateDur(Dur):
         elif isinstance(other, pd.DateOffset):
             return self.__class__(**self._as_args(self._as_array(self.value) + self._as_array(other)))
         elif isinstance(other, YearDur):
-            kwargs = {k: v for k, v in zip(self.ratios, self._as_array(self.value))}
+            kwargs = {k: v for k, v in zip(unit_keys, self._as_array(self.value))}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
         else:

@@ -12,6 +12,7 @@ sc.options(interactive=False)
 
 
 # %% Define the tests
+@sc.timer()
 def test_ratio():
     sc.heading('Test time ratio calculation')
 
@@ -26,6 +27,7 @@ def test_ratio():
     return
 
 
+@sc.timer()
 def test_classes():
     sc.heading('Test behavior of dur() and rate()')
 
@@ -77,6 +79,7 @@ def test_classes():
     return d3, d4, r3, r4, tp0
 
 
+@sc.timer()
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
@@ -116,6 +119,7 @@ def test_units(do_plot=False):
     return sims
 
 
+@sc.timer()
 def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
@@ -145,6 +149,7 @@ def test_multi_timestep(do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
@@ -180,6 +185,7 @@ def test_mixed_timesteps():
     return msim
 
 
+@sc.timer()
 def test_time_class():
     sc.heading('Test different instances of ss.TimeVec')
 
@@ -246,24 +252,22 @@ def test_time_class():
     return [s1, t1, s2, t2]
 
 
+@sc.timer()
 def test_callable_dists():
+    sc.heading('Testing callable distributions')
     def loc(module, sim, uids):
         return np.array([ss.Dur(x) for x in range(uids)])
     module = sc.objdict(t=sc.objdict(dt=ss.Dur(days=1)))
     d = ss.normal(loc, ss.Dur(days=1), module=module, strict=False)
     d.init()
     d.rvs(10)
+    return d
 
 
-def test_pickling():
-    import pickle
-    x = ss.date('2020-01-01')
-    s = pickle.dumps(x)
-    pickle.loads(s)
-
-
+@sc.timer()
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
+    sc.heading('Testing syntax')
     from starsim import date, TimeVec, Dur, DateDur, YearDur, perday, perweek, Rate, timeprob, rateprob
 
     assert float(date(1500))==1500
@@ -271,7 +275,7 @@ def test_syntax():
 
     assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
 
-    TimeVec(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
+    tv = TimeVec(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
     assert np.isclose(Dur(weeks=1)/Dur(days=1), 7) # CKTODO: would be nice if this were exact
 
@@ -348,12 +352,14 @@ def test_syntax():
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
 
+    return tv
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
 
-    T = sc.timer()
+    T = sc.timer('\nTotal time')
 
     o1 = test_ratio()
     o2 = test_classes()
@@ -361,6 +367,7 @@ if __name__ == '__main__':
     o4 = test_multi_timestep(do_plot)
     o5 = test_mixed_timesteps()
     o6 = test_time_class()
-    test_callable_dists()
-    test_syntax()
+    o7 = test_callable_dists()
+    o8 = test_syntax()
+
     T.toc()
