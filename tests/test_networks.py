@@ -71,7 +71,7 @@ def test_randomsafe():
         """ Compute similarity between UID lists """
         auids1 = s1.people.auids
         auids2 = s2.people.auids
-        similarity = ss.networks.similarity(auids1, auids2, verbose=False)
+        similarity = sc.similarity(auids1, auids2)
         return similarity
 
     # Set up a sim with some small number of births and deaths
@@ -83,10 +83,10 @@ def test_randomsafe():
     s1 = ss.Sim(pars, networks='random', label='random-nobirths').run()
     s2 = ss.Sim(pars, networks='random', label='random-births', demographics=births).run()
 
-    n1 = s1.networks[0]
-    n2 = s2.networks[0]
+    n1 = s1.networks[0].to_edgelist()
+    n2 = s2.networks[0].to_edgelist()
     simil.uid = auid_similarity(s1, s2)
-    simil.rand = ss.networks.similarity(n1, n2, verbose=False)
+    simil.rand = sc.similarity(n1, n2)
     print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid:%}')
     print(f'Similarity for random networks after {pars.dur} timesteps:\n{simil.rand:%}\n')
     assert simil.rand < 0.5, 'Random networks were more similar than expected'
@@ -95,10 +95,10 @@ def test_randomsafe():
     s3 = ss.Sim(pars, networks='randomsafe', label='safe-nobirths').run()
     s4 = ss.Sim(pars, networks='randomsafe', label='safe-births', demographics=births).run()
 
-    n3 = s3.networks[0]
-    n4 = s4.networks[0]
+    n3 = s3.networks[0].to_edgelist()
+    n4 = s4.networks[0].to_edgelist()
     simil.uid2 = auid_similarity(s3, s4)
-    simil.safe = ss.networks.similarity(n3, n4, verbose=False)
+    simil.safe = sc.similarity(n3, n4)
     print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid2:%}')
     print(f'Similarity for random-safe networks after {pars.dur} timesteps:\n{simil.safe:%}\n')
     assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'

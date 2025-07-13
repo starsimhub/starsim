@@ -13,33 +13,9 @@ ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 _ = None
 
-
 # Specify all externally visible functions this file defines; see also more definitions below
 __all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork']
 
-def similarity(set1, set2, max_pairs=200, verbose=True, output=False):
-    """ Compute the similarity of edges between two networks (can also be used for any two lists) """
-    if isinstance(set1, ss.Network):
-        set1 = set1.to_edgelist()
-    if isinstance(set2, ss.Network):
-        set2 = set2.to_edgelist()
-    set1 = set(set1)
-    set2 = set(set2)
-    s1_only = set1 - set2
-    s2_only = set2 - set1
-    both = set1 & set2
-    similarity = len(both)/max(len(set2), len(set2))
-    if verbose:
-        sc.heading(f'Similarity of set 1 (n={len(set1)}) and set 2 (n={len(set2)})')
-        string = f'Similarity: {similarity*100:n}%\n'
-        if len(set1) + len(set2) < max_pairs:
-            string += f'Shared pairs: {len(both)} ({both})\n'
-            string += f'p1 only: {len(s1_only)} ({s1_only})\n'
-            string += f'p2 only: {len(s2_only)} ({s2_only})\n'
-        else:
-            string += f'({len(set1)} pairs not shown since {max_pairs=}'
-        print(string)
-    return similarity
 
 # %% General network classes
 
