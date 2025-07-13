@@ -85,29 +85,10 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
     t_inits = []
     t_runs  = []
-
-    def normalize_performance():
-        """ Normalize performance across CPUs """
-        t_bls = []
-        bl_repeats = 3
-        n_outer = 10
-        n_inner = 1e6
-        for r in range(bl_repeats):
-            t0 = sc.tic()
-            for i in range(n_outer):
-                a = np.random.random(int(n_inner))
-                b = np.random.random(int(n_inner))
-                a*b
-            t_bl = sc.toc(t0, output=True)
-            t_bls.append(t_bl)
-        t_bl = min(t_bls)
-        reference = 0.07 # Benchmarked on an Intel i7-12700H CPU @ 2.90GHz
-        ratio = reference/t_bl
-        return ratio
-
+    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') for scaling performance
 
     # Test CPU performance before the run
-    r1 = normalize_performance()
+    r1 = sc.benchmark(which='numpy')
 
     # Do the actual benchmarking
     for r in range(repeats):
@@ -130,8 +111,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
         t_runs.append(t_run)
 
     # Test CPU performance after the run
-    r2 = normalize_performance()
-    ratio = (r1+r2)/2
+    r2 = sc.benchmark(which='numpy')
+    ratio = (r1+r2)/2/ref
     t_init = ratio*min(t_inits)
     t_run  = ratio*min(t_runs)
 
