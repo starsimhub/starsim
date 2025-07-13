@@ -18,7 +18,7 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.1),
@@ -26,7 +26,7 @@ class SIR(ss.Infection):
             dur_inf = ss.lognorm_ex(mean=ss.years(6)),
             p_death = ss.bernoulli(p=0.01),
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
@@ -106,7 +106,7 @@ class SIS(ss.Infection):
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.timeprob(0.05),
@@ -115,7 +115,7 @@ class SIS(ss.Infection):
             waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.define_states(
             ss.FloatArr('ti_recovered'),

@@ -11,7 +11,7 @@ __all__ = ['Measles']
 
 class Measles(ss.SIR):
 
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(
@@ -24,7 +24,7 @@ class Measles(ss.SIR):
             dur_inf = ss.normal(loc=ss.days(11)),       # (days) - source: US CDC
             p_death = ss.bernoulli(p=0.005), # Probability of death
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # SIR are added automatically, here we add E
         self.define_states(

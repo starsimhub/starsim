@@ -477,7 +477,7 @@ class StaticNet(Network):
         super().__init__()
         self.graph = graph
         self.define_pars(seed=True, p=None, n_contacts=10)
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
 
@@ -545,7 +545,7 @@ class RandomNet(DynamicNetwork):
     per agent is actually 10. Consider 3 agents with 3 edges between them (a triangle):
     each agent is connected to 2 other agents.
     """
-    def __init__(self, n_contacts=_, dur=_, beta=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, **kwargs):
         """ Initialize """
         super().__init__()
         self.define_pars(
@@ -553,7 +553,7 @@ class RandomNet(DynamicNetwork):
             dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
@@ -645,14 +645,14 @@ class RandomSafeNet(DynamicNetwork):
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
     """
-    def __init__(self, n_contacts=_, dur=_, beta=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, **kwargs):
         super().__init__()
         self.define_pars(
             n_contacts = 10,
             dur = 0, # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         self.dist = ss.random(name='RandomSafeNet')
         return
 
@@ -749,7 +749,7 @@ class MFNet(SexualNetwork):
         participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
         rel_part_rates (float): Relative participation in the network
     """
-    def __init__(self, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, **kwargs):
+    def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, **kwargs):
         super().__init__()
         self.define_pars(
             duration = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
@@ -758,7 +758,7 @@ class MFNet(SexualNetwork):
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             rel_part_rates = 1.0,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         # Finish initialization
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
@@ -845,7 +845,7 @@ class MSMNet(SexualNetwork):
         acts (`ss.Dist`): Number of acts per year
         participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
     """
-    def __init__(self, duration=_, debut=_, acts=_, participation=_, **kwargs):
+    def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, **kwargs):
         super().__init__()
         self.define_pars(
             duration = ss.lognorm_ex(mean=2, std=1),
@@ -853,7 +853,7 @@ class MSMNet(SexualNetwork):
             acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         return
 
     def init_post(self):
@@ -1025,7 +1025,7 @@ class MixingPools(Route):
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
     """
-    def __init__(self, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
+    def __init__(self, pars=None, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1034,7 +1034,7 @@ class MixingPools(Route):
             beta = 1.0,
             n_contacts = None,
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
         self.prenatal = False # Does not make sense for mixing pools
@@ -1146,7 +1146,7 @@ class MixingPool(Route):
         sim.run()
         sim.plot()
     """
-    def __init__(self, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
+    def __init__(self, pars=None, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1155,7 +1155,7 @@ class MixingPool(Route):
             beta = 1.0,
             n_contacts = ss.constant(10),
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.define_states(
             ss.FloatArr('eff_contacts', default=self.pars.n_contacts, label='Effective number of contacts')

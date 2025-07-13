@@ -400,10 +400,13 @@ class Module(Base):
         return self.pars
 
     # Warning: do not try to use a decorator with this function, that will break argument passing!
-    def update_pars(self, **pars):
+    def update_pars(self, pars=None, **kwargs):
         """
         Pull out recognized parameters, returning the rest
         """
+        # Merge pars and kwargs
+        pars = sc.mergedicts(pars, kwargs)
+
         # Inspect the parent frame and pull out any arguments
         frame = sys._getframe(1)  # Go back 1 frame (to __init__, most likely)
         if frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this

@@ -16,14 +16,14 @@ class DiskNet(ss.Network):
 
     Edges are formed between two agents if they are within r distance of each other.
     """
-    def __init__(self, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, pars=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             r = 0.1, # Radius
             v = ss.Rate(0.05), # Velocity
         )
-        self.update_pars(**kwargs)
+        self.update_pars(pars, **kwargs)
         self.define_states(
             ss.FloatArr('x', default=ss.random(), label='X position'),
             ss.FloatArr('y', default=ss.random(), label='Y position'),
