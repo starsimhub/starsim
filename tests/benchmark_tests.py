@@ -2,7 +2,7 @@
 """
 Benchmark test times and save to YAML.
 
-Can be run as a script:
+For best results (avoiding thread locking), run from a terminal:
     ./benchmark_tests.py # compares by default
     ./benchmark_tests.py save # saves instead
 """
@@ -16,22 +16,27 @@ filename = sc.thisdir(__file__, 'benchmark_tests.yaml')
 
 def run_pytest():
     """ Run  all the tests via pytest """
+    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
+    r1 = sc.benchmark(which='numpy')
+
     # Get files and construct the pytest command
     files = sc.getfilelist('.', 'test_*.py', aspath=False)
     args = ['-n', 'auto', '--durations=0'] + files
-    # args = ['--durations=0'] + files
 
     # Run the tests and capture the oupttus
     print(f'Benchmarking {len(files)} files:\n{sc.newlinejoin(files)}\n')
-    print('Please be patient, takes 1-3 min ... (capturing output, though you may see some stderr output)')
+    print('Please be patient ... (capturing output, though you may see some stderr output)')
     with sc.timer():
         with sc.capture() as txt:
             pytest.main(args)
 
-    return txt
+    # Test after and compute the performance ratio
+    r2 = sc.benchmark(which='numpy')
+    perf_ratio = (r1+r2)/2/ref
+    return txt, perf_ratio
 
 
-def parse_pytest(txt):
+def parse_pytest(txt, perf_ratio):
     """ Parses pytest output with duration and test name """
     # With ChatGPT -- define the regex
     duration_row = re.compile(
@@ -59,9 +64,21 @@ def parse_pytest(txt):
             if m:
                 data[m["name"]] = float(m["dur"])
 
+    # Assemble data
     data = sc.objdict(data)
     data.sort('values', reverse=True)
-    return data
+    data[:] *= perf_ratio # Scale results by the performance ratio
+    for k,v in data.items():
+        data[k] = round(v, 3) # To ms
+    total = data[:].sum()
+
+    # Tidy up
+    out = sc.objdict()
+    out.cpu_performance = round(perf_ratio, 3)
+    out.scaled_time = round(total, 3)
+    out.actual_time = round(total/perf_ratio, 3)
+    out.tests = data
+    return out
 
 
 def compare_pytest(df1):
@@ -72,7 +89,7 @@ def compare_pytest(df1):
         errormsg = f'Cannot find "{filename}", do you need to run with save=True first?'
         raise FileNotFoundError(errormsg) from e
 
-    df2 = sc.dataframe(name=old.keys(), previous=old.values()) # Convert to a dataframe
+    df2 = sc.dataframe(name=old['tests'].keys(), previous=old['tests'].values()) # Convert to a dataframe
     df1.set_index('name', drop=False, inplace=True)
     df2.set_index('name', drop=True, inplace=True)
     df = df1.merge(df2, left_index=True, right_index=True) # Merge the two dataframes
@@ -82,19 +99,18 @@ def compare_pytest(df1):
     return df
 
 
-scale by performance
-
 def benchmark_tests(save=False, compare=True):
     """ Run the test suite and save the results to YAML. """
-    txt = run_pytest() # Run the tests
-    data = parse_pytest(txt) # Parse output
-    df = sc.dataframe(name=data.keys(), dur=data.values())
+    txt, perf_ratio = run_pytest() # Run the tests
+    out = parse_pytest(txt, perf_ratio) # Parse output
+    df = sc.dataframe(name=out.tests.keys(), dur=out.tests.values())
 
     if compare:
         df = compare_pytest(df)
 
     if save:
-        sc.saveyaml(filename, data, sort_keys=False)
+        print('Saving ...')
+        sc.saveyaml(filename, out, sort_keys=False)
 
     return df
 

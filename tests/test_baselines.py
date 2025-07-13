@@ -85,7 +85,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
     t_inits = []
     t_runs  = []
-    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') for scaling performance
+    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
 
     # Test CPU performance before the run
     r1 = sc.benchmark(which='numpy')
