@@ -383,7 +383,7 @@ class Dur(TimePar):
                     assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
                     return super().__new__(YearDur)
             else:
-                return super().__new__(YearDur)
+                return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
         return super().__new__(cls)
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal

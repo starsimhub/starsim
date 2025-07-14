@@ -414,12 +414,9 @@ def test_timepar_callable():
         out = ss.Rate(np.zeros(len(uids)))
         out[young] = p_young
         out[old]   = p_old
-        print('hiii', len(uids))
         assert out.value.sum() > 0
         return out
 
-
-    # ber1 = ss.bernoulli(0.1, module=mock_mods.year, strict=False).init(sim=sim)
     ber1 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
     ber1.rvs(uids)
 
