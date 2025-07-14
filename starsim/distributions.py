@@ -505,6 +505,9 @@ class Dist:
                 slots = np.array([])
                 size = 0
 
+        print(f'wtf {n}, {type(n)}, {uids}, {slots}, {size}')
+        if np.isscalar(n) and n == 500:
+            import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
         self._n = n
         self._size = size
         self._uids = uids

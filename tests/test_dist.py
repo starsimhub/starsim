@@ -414,10 +414,12 @@ def test_timepar_callable():
         out = ss.Rate(np.zeros(len(uids)))
         out[young] = p_young
         out[old]   = p_old
-        print('hi', len(uids))
+        print('hiii', len(uids))
         assert out.value.sum() > 0
         return out
 
+
+    # ber1 = ss.bernoulli(0.1, module=mock_mods.year, strict=False).init(sim=sim)
     ber1 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
     ber1.rvs(uids)
 
@@ -430,7 +432,7 @@ def test_timepar_callable():
         return out
 
     sim = ss.mock_sim(n_agents=100_000)
-    uids = np.random.choice(sim.n, size=sim.n//2, replace=False)
+    uids = np.random.choice(n, size=n//2, replace=False)
     age = sim.people.age[uids]
     mean = age.mean()
     young = sc.findinds(age<=mean)
