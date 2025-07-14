@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 
-__all__ = ['date', 'TimePar', 'Dur', 'years', 'DateDur', 'Rate', 'TimeProb', 'rateprob',
+__all__ = ['date', 'TimePar', 'Dur', 'years', 'DateDur', 'Rate', 'TimeProb', 'InstProb',
            'Timeline', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
@@ -1073,7 +1073,7 @@ class TimeProb(Rate):
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use `rateprob` instead if `TimeProb` if you would prefer to directly
+    Use `InstProb` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
 
@@ -1134,21 +1134,21 @@ class TimeProb(Rate):
     def __rtruediv__(self, other): raise NotImplementedError()
 
 
-class rateprob(Rate):
+class InstProb(Rate):
     """
-    A `rateprob` represents an instantaneous rate of an event occurring. Rates
+    A `InstProb` represents an instantaneous rate of an event occurring. Rates
     must be non-negative, but need not be less than 1.
 
     Through multiplication, rate can be modified or converted to a probability,
     depending on the data type of the object being multiplied.
 
-    When a `rateprob` is multiplied by a scalar or array, the rate is simply
+    When a `InstProb` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
     represent agents experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
-    Alternatively, when a `rateprob` is multiplied by a duration (type
+    Alternatively, when a `InstProb` is multiplied by a duration (type
     ss.Dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
         `1 - np.exp(-rate/factor)`,
@@ -1156,7 +1156,7 @@ class rateprob(Rate):
     period (denominator).
 
     For example, consider
-    >>> p = ss.rateprob(0.8, ss.years(1))
+    >>> p = ss.InstProb(0.8, ss.years(1))
     When multiplied by a duration of 1 year, the calculated probability is
         `1 - np.exp(-0.8)`, which is approximately 55%.
     >>> p*ss.years(1)
@@ -1164,10 +1164,10 @@ class rateprob(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between `TimeProb` and `rateprob` is subtle, but important. `rateprob` works directly
+    The difference between `TimeProb` and `InstProb` is subtle, but important. `InstProb` works directly
     with the instantaneous rate of an event occurring. In contrast, `TimeProb` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
-    * rateprob: rate -> probability
+    * InstProb: rate -> probability
     * TimeProb: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
@@ -1549,43 +1549,26 @@ class Timeline:
 #%% Convenience classes
 
 # Durations
-
 class years(Dur):  base = 'year'
 class months(Dur): base = 'month'
 class weeks(Dur):  base = 'week'
 class days(Dur):   base = 'day'
 
-# Shortcuts
+# Duration shortcuts
 year = years(1)
 month = months(1)
 week = weeks(1)
-day = days(1)   
+day = days(1)
 for obj in [year, month, week, day]:
     object.__setattr__(obj, '_locked', True) # Make immutable
 
-# Rates
-class perday(Rate):   base = 'day'
-class perweek(Rate):  base = 'week'
-class permonth(Rate): base = 'month'
-class peryear(Rate):  base = 'year'
+# TimeProbs
+class perday(TimeProb):   base = 'day'
+class perweek(TimeProb):  base = 'week'
+class permonth(TimeProb): base = 'month'
+class peryear(TimeProb):  base = 'year'
 
-# Probabilities
-
-def perday(v):
-    """Shortcut to specify rate per calendar day"""
-    return Rate(v, DateDur(days=1)) # TODO: fix
-
-def perweek(v):
-    """Shortcut to specify rate per calendar week"""
-    return Rate(v, DateDur(weeks=1))
-
-def permonth(v):
-    """Shortcut to specify rate per calendar month"""
-    return Rate(v, DateDur(months=1))
-
-def peryear(v):
-    """Shortcut to specify rate per numeric year"""
-    return Rate(v, years(1))
+# InstProbs
 
 class rateperday:
     pass
@@ -1629,10 +1612,10 @@ reverse_class_map = {
     ratepermonth: ['ratepermonth', ratepermonth],
     rateperyear:  ['rateperyear', rateperyear],
 
-    iprobperday:   ['iprobperday', 'rateprobperday', iprobperday],
-    iprobperweek:  ['iprobperweek', 'rateprobperweek', iprobperweek],
-    iprobpermonth: ['iprobpermonth', 'rateprobpermonth', iprobpermonth],
-    iprobperyear:  ['iprobperyear', 'rateprobperyear', iprobperyear],
+    iprobperday:   ['iprobperday', 'InstProbperday', iprobperday],
+    iprobperweek:  ['iprobperweek', 'InstProbperweek', iprobperweek],
+    iprobpermonth: ['iprobpermonth', 'InstProbpermonth', iprobpermonth],
+    iprobperyear:  ['iprobperyear', 'InstProbperyear', iprobperyear],
 }
 
 # Convert to the actual class map
