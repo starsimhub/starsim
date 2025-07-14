@@ -1406,18 +1406,20 @@ class Timeline:
         """ Initialize all vectors """
 
         if sim is not None:
-            self.dt = sc.ifelse(self.dt, sim.t.dt, sim.pars.dt)
+            self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
-            self.stop = sc.ifelse(self.stop, sim.t.stop, sim.pars.stop)
-            self.dur = sc.ifelse(self.dur, sim.t.dur, sim.pars.dur)
+            self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
+            self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
         if sc.isnumber(self.dur):
             self.dur = Dur(self.dur)
         assert self.dur is None or isinstance(self.dur, Dur), 'Timeline.dur must be a number, a Dur object or None'
 
         def is_calendar_year(val):
-            """ Whether a number should be interpreted as a calendar year """
-            return sc.isnumber(val) and val < self.calendar_year_threshold
+            """
+            Whether a number should be interpreted as a calendar year -- by default, a number greater than 1900
+            """
+            return sc.isnumber(val) and val > self.calendar_year_threshold
 
         match (self.start, self.stop, self.dur):
             case (None, None, None):
