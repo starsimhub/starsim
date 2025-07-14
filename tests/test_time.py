@@ -67,7 +67,7 @@ def test_classes():
     assert r5*ss.days(1) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
     assert r5*ss.Dur(weeks=0.1) == rval * ss.weeks(0.1) / ss.weeks(1)
 
-    # Test timeprob
+    # Test TimeProb
     tpval = 0.1
     tp0 = ss.TimeProb(tpval)
     assert tp0*ss.Dur(1) == tpval, 'Multiplication by the base denominator should not change the value'
@@ -330,13 +330,13 @@ def test_syntax():
     assert Rate(0.5)/Rate(1) == 0.5
 
     # Probabilities
-    p = timeprob(0.1, Dur(years=1))
+    p = TimeProb(0.1, Dur(years=1))
     f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
 
-    p = timeprob(0.1, Dur(1))
+    p = TimeProb(0.1, Dur(1))
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5 ) == f(2)
     assert p * Dur(months=1) == f(12)

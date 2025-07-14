@@ -1127,7 +1127,7 @@ class TimeProb(Rate):
             rate = - np.log(1 - scaled_vals)
             return 1-np.exp(-rate*factor)
 
-        else: # Assume arr is an array of values, that would be the values of a timeprob with unit=ss.years(1)
+        else: # Assume arr is an array of values, that would be the values of a TimeProb with unit=ss.years(1)
             factor = dur / ss.years(1)
             scaled_vals = arr * v
             rate = - np.log(1 - scaled_vals)
