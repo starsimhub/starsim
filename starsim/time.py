@@ -369,6 +369,23 @@ factors = Factors()
 
 class TimePar:
     """ Parent class for all TimePars -- Dur, Rate, etc. """
+    base = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._set_factors()
+        return
+
+    @classmethod
+    def _set_factors(cls):
+        # if cls.base is not None:
+        try:
+            cls.factors = factors[cls.base].items
+            cls.factor_keys = factors[cls.base].keys
+            cls.factor_vals = factors[cls.base].keys
+        except KeyError as e:
+            errormsg = f'Invalid base unit "{cls.base}"; are you trying to use ss.Dur()/ss.Rate instead of ss.years(), ss.perday(), etc?'
+            raise KeyError(errormsg) from e
 
     def __setattrr__(self, attr, value):
         if object.__getattribute__(self, '_locked'):
@@ -426,7 +443,6 @@ class Dur(TimePar):
 
     Subclasses for date-durations and fixed-durations
     """
-    base = None
     def __new__(cls, *args, **kwargs):
         # Return
         if cls is Dur:
@@ -441,15 +457,6 @@ class Dur(TimePar):
             else:
                 return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
         return super().__new__(cls)
-
-    def set_factors(self):
-        try:
-            self.factors = factors[self.base].items
-            self.factor_keys = factors[self.base].keys
-            self.factor_vals = factors[self.base].keys
-        except AttributeError as e:
-            errormsg = f'Invalid base unit "{self.base}"; are you trying to use ss.Dur() instead of ss.years(), ss.days(), etc?'
-            raise AttributeError(errormsg) from e
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
@@ -477,7 +484,7 @@ class Dur(TimePar):
 
     @property
     def to_numpy(self):
-        raise NotImplementedError
+        return self.value
 
     @property
     def is_variable(self):
@@ -583,11 +590,11 @@ class Dur(TimePar):
         return np.array(tvec)
 
 
-class years(Dur): # CKTODO: rename ss.years
+class years(Dur):
     """ Year based duration e.g., if requiring 52 weeks per year """
     base = 'year'
 
-    def __init__(self, years=0):
+    def __init__(self, years=1):
         """
         Construct a year-based fixed duration
 
@@ -599,7 +606,7 @@ class years(Dur): # CKTODO: rename ss.years
         Args:
             years: float, years, DateDur
         """
-        self.set_factors()
+        super().__init__()
         if isinstance(years, Dur):
             self.value = years.years
         else:
@@ -659,12 +666,15 @@ class years(Dur): # CKTODO: rename ss.years
     def __abs__(self):
         return self.__class__(abs(self.value))
 
-# Shortcut
+# Shortcuts
 year = years(1)
+for obj in [year]:
+    object.__setattribute__(obj, '_locked', True) # Make immutable
 
 
 class DateDur(Dur):
-    # date based duration e.g., if requiring a week to be 7 calendar days later
+    """ Date based duration e.g., if requiring a week to be 7 calendar days later """
+    base = 'year' # TODO: think about if this is correct
 
     def __init__(self, *args, **kwargs):
         """
@@ -686,6 +696,7 @@ class DateDur(Dur):
             args:
             kwargs:
         """
+        super.__init__()
         if args:
             assert not kwargs, 'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
             assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
@@ -719,7 +730,7 @@ class DateDur(Dur):
         Returns:
             A numpy array with as many elements as `ss.time.factors`
         """
-        return np.array([dateoffset.kwds.get(k, 0) for k in unit_keys])
+        return np.array([dateoffset.kwds.get(k, 0) for k in cls.factor_keys])
 
     @classmethod
     def _as_args(cls, x):
@@ -738,7 +749,7 @@ class DateDur(Dur):
         """
         if isinstance(x, pd.DateOffset):
             x = cls._as_array(x)
-        return {k: v for k, v in zip(unit_keys, x)}
+        return {k: v for k, v in zip(cls.factor_keys, x)}
 
     @property
     def years(self):
@@ -787,12 +798,12 @@ class DateDur(Dur):
             A pd.DateOffset
         """
         if isinstance(vals, np.ndarray):
-            d = sc.objdict({k:v for k,v in zip(unit_keys, vals)})
+            d = sc.objdict({k:v for k,v in zip(cls.factor_keys, vals)})
         elif isinstance(vals, pd.DateOffset):
-            d = sc.objdict.fromkeys(unit_keys, 0)
+            d = sc.objdict.fromkeys(cls.factor_keys, 0)
             d.update(vals.kwds)
         elif isinstance(vals, dict):
-            d = sc.objdict.fromkeys(unit_keys, 0)
+            d = sc.objdict.fromkeys(cls.factor_keys, 0)
             d.update(vals)
         else:
             raise TypeError()
@@ -804,7 +815,7 @@ class DateDur(Dur):
         for i in range(len(cls.factors)-1):
             remainder, div = np.modf(d[i])
             d[i] = int(div)
-            d[i+1] += remainder * unit_vals[i+1]/unit_vals[i]
+            d[i+1] += remainder * cls.factor_vals[i+1]/cls.factor_vals[i]
         d[-1] = round(d[-1])
 
         return pd.DateOffset(**d)
@@ -872,7 +883,7 @@ class DateDur(Dur):
         if self.years == 0:
             return '<DateDur: 0>'
         else:
-            labels = unit_keys
+            labels = self.factor_keys
             vals = self._as_array(self.value).astype(float)
 
             time_portion = vals[4:]
@@ -886,11 +897,11 @@ class DateDur(Dur):
 
         # If we have only one nonzero value, return 'year', 'month', etc.
         if np.count_nonzero(vals == 1) == 1:
-            for unit, val in zip(unit_keys, vals):
+            for unit, val in zip(self.factor_keys, vals):
                 if val == 1:
                     return unit[:-1]
 
-        strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(unit_keys, vals) if v != 0]
+        strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(self.factor_keys, vals) if v != 0]
         return ', '.join(strs)
 
     def __add__(self, other):
@@ -901,7 +912,7 @@ class DateDur(Dur):
         elif isinstance(other, pd.DateOffset):
             return self.__class__(**self._as_args(self._as_array(self.value) + self._as_array(other)))
         elif isinstance(other, years):
-            kwargs = {k: v for k, v in zip(unit_keys, self._as_array(self.value))}
+            kwargs = {k: v for k, v in zip(self.factor_keys, self._as_array(self.value))}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
         elif isinstance(other, DateArray):
