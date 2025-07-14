@@ -692,7 +692,7 @@ class Dur(TimePar):
 
 class DateDur(Dur):
     """ Date based duration e.g., if requiring a week to be 7 calendar days later """
-    base = 'date' # TODO: think about if this is correct
+    base = 'year' # DateDur uses 'year' as the default unit for conversion
     timepar_type = 'dur'
     timepar_subtype = 'datedur'
 
@@ -999,18 +999,20 @@ class Rate(TimePar):
         return -1*self
 
     def __add__(self, other):
-        if self.__class__ == other.__class__:
-            return self.__class__(self.value+other*self.unit, self.unit)
-        elif not isinstance(other, Rate):
+        if isinstance(other, Rate):
+            if self.timepar_subtype == other.timepar_subtype:
+                print('hiii', self.value, self.unit, other.value, other.unit)
+                return self.__class__(self.value+other*self.unit, self.unit)
+            else:
+                errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, TimeProb+TimeProb); you added {self} + {other}'
+                raise TypeError(errormsg)
+        else:
             if sc.isnumber(other) or isinstance(other, np.ndarray):
                 errormsg = 'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
                 raise TypeError(errormsg)
             else:
                 errormsg = 'Only rates can be added to rates, not {other}'
                 raise TypeError(errormsg)
-        else:
-            errormsg = 'Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb); you added {self} + {other}'
-            raise TypeError(errormsg)
 
     def __radd__(self, other): return self.__add__(other)
 

@@ -162,7 +162,7 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, Dur, DateDur, years, perday, perweek, Rate, TimeProb, InstProb
+    from starsim import date, Timeline, Dur, DateDur, years, rateperday, rateperweek, Rate, TimeProb, InstProb
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
@@ -177,7 +177,7 @@ def test_syntax():
 
     assert date(2050) - date(2020) == years(30)
 
-    assert np.isclose((perweek(1)+perday(1)).value, perweek(8).value) # CKTODO: would be nice if this were exact
+    assert np.isclose((rateperweek(1)+rateperday(1)).value, rateperweek(8).value) # CKTODO: would be nice if this were exact
 
     assert date('2020-01-01') + Dur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
     assert date('2020-01-01') + 52*Dur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
@@ -218,7 +218,7 @@ def test_syntax():
     assert (2/years(1)) == ss.rateperyear(2)
     assert (4/years(1)) == ss.rateperyear(4)
     assert (4/DateDur(1)) == ss.rateperyear(4)
-    assert (perday(5)*Dur(days=1)) == 5
+    assert (rateperday(5)*Dur(days=1)) == 5
     assert 2/Rate(0.25) == Dur(8)
     assert 1/(2*Rate(0.25)) == Dur(2)
     assert Rate(0.5)/Rate(1) == 0.5
