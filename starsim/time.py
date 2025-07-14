@@ -1,5 +1,29 @@
 """
 Functions and classes for handling time
+
+Hierarchy of TimePars:
+TimePar  # All time parameters
+├── Dur  # All durations, units of *time*
+│   ├── days  # Duration with units of days
+│   ├── weeks
+│   ├── months
+│   ├── years
+│   └── DateDur  # Calendar durations
+└── Rate  # All rates, units of *per time*
+    ├── rateperday  # Number of events happening per day
+    ├── rateperweek
+    ├── ratepermonth
+    ├── rateperyear
+    ├── TimeProb  # Probability of an event happening in a given time
+    │   ├── perday # Probability of an event happening in a day
+    │   ├── perweek
+    │   ├── permonth
+    │   └── peryear
+    └── InstProb  # Instantaneous probability of an event happening
+        ├── iprobperday
+        ├── iprobperweek
+        ├── iprobpermonth
+        └── iprobperyear
 """
 import sciris as sc
 import numpy as np
@@ -377,6 +401,7 @@ class TimePar:
     """ Parent class for all TimePars -- Dur, Rate, etc. """
     base = None # e.g. 'year', 'day', etc
     timepar_type = None # 'dur' or 'rate'
+    timepar_subtype = None # e.g. 'datedur' or 'timeprob'
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -452,7 +477,7 @@ class TimePar:
     def to_base(cls, other):
         """ Convert another TimePar object to this TimePar's base units """
         try:
-            return getattr(other, cls.basekey)
+            return getattr(other, cls.basekey) # e.g. other.years
         except AttributeError as e:
             errormsg = f'Cannot get property {cls.basekey} from object {other}. Is it a TimePar?'
             raise AttributeError(errormsg) from e
@@ -475,7 +500,10 @@ class Dur(TimePar):
     Note that although they are different classes, `ss.Dur` objects can be modified
     in place if needed via the `ss.Dur.mutate()` method.
     """
+    base = None
     timepar_type = 'dur'
+    timepar_subtype = 'dur'
+
     def __new__(cls, *args, **kwargs):
         # Return
         if cls is Dur:
@@ -664,7 +692,9 @@ class Dur(TimePar):
 
 class DateDur(Dur):
     """ Date based duration e.g., if requiring a week to be 7 calendar days later """
-    base = 'year' # TODO: think about if this is correct
+    base = 'date' # TODO: think about if this is correct
+    timepar_type = 'dur'
+    timepar_subtype = 'datedur'
 
     def __init__(self, *args, **kwargs):
         """
@@ -931,6 +961,8 @@ class Rate(TimePar):
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
     timepar_type = 'rate'
+    timepar_subtype = 'rate'
+
     def __init__(self, value, unit=None):
         if unit is None:
             self.unit = years(1)
@@ -977,7 +1009,7 @@ class Rate(TimePar):
                 errormsg = 'Only rates can be added to rates, not {other}'
                 raise TypeError(errormsg)
         else:
-            errormsg = 'Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb); you added '
+            errormsg = 'Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb); you added {self} + {other}'
             raise TypeError(errormsg)
 
     def __radd__(self, other): return self.__add__(other)
@@ -1083,6 +1115,7 @@ class TimeProb(Rate):
     Use `InstProb` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
+    timepar_subtype = 'timeprob'
     def __init__(self, value, unit=None):
         try:
             assert 0 <= value <= 1, 'Value must be between 0 and 1'
@@ -1201,6 +1234,7 @@ class InstProb(Rate):
 
     The behavior of both classes is depending on the data type of the object being multiplied.
     """
+    timepar_subtype = 'instprob'
     def __init__(self, value, unit=None):
         assert value >= 0, 'Value must be >= 0'
         return super().__init__(value, unit)
