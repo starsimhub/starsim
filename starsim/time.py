@@ -455,7 +455,7 @@ class Dur(TimePar):
         # We also need divide the duration by the numerator when calculating the rate
         if self.years == 0:
             raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(Dur(np.inf))
-        elif sc.isnumber(other) and other == 0:
+        elif (sc.isnumber(other) and other == 0) or isinstance(other, Dur) and other.years == 0:
             return Rate(0)
         else:
             return Rate(other, self)
