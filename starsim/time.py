@@ -10,7 +10,6 @@ __all__ = ['date', 'TimePar', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', '
            'Timeline', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
-
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
     def __new__(cls, arr=None):
@@ -18,6 +17,10 @@ class DateArray(np.ndarray):
             arr = np.array([])
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
             return arr.view(cls)
+        else:
+            errormsg = f'Argument must be an array, not {type(arr)}'
+            raise TypeError(errormsg)
+
 
 class date(pd.Timestamp):
     """
