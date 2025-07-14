@@ -857,7 +857,7 @@ class Rate(TimePar):
         if isinstance(other, np.ndarray):
             self.array_mul_error()
         elif isinstance(other, Dur):
-            return self.value*(other/self.unit)
+            return self.value*other/self.unit
         else:
             return self.__class__(self.value*other, self.unit)
 

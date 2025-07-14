@@ -362,7 +362,7 @@ class Pregnancy(Demographics):
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
-            fertility_rate[uids] = float(self.fertility_rate_data) # Rate per timestep (we multiply by the timestep later)
+            fertility_rate[uids] = self.fertility_rate_data # Rate per timestep (we multiply by the timestep later)
         else:
             year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
             nearest_year = frd.index[year_ind]
