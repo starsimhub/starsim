@@ -381,7 +381,7 @@ class TimePar:
         if cls.base is not None:
             cls.factors = factors[cls.base].items
             cls.factor_keys = factors[cls.base].keys
-            cls.factor_vals = factors[cls.base].keys
+            cls.factor_vals = factors[cls.base].values
         return
         # except KeyError as e:
         #     errormsg = f'Invalid base unit "{cls.base}"; are you trying to use ss.Dur()/ss.Rate instead of ss.years(), ss.perday(), etc?'
