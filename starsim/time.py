@@ -522,9 +522,8 @@ class Dur(TimePar):
     def days(self):
         return self.value*self.factors.day # Needs to return float so matplotlib can plot it correctly
 
-    @property
     def to_numpy(self):
-        return self.value
+        return sc.toarray(self.value)
 
     def __add__(self, other):
         if isinstance(other, Dur):
