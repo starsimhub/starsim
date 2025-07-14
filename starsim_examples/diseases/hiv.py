@@ -22,7 +22,7 @@ class HIV(ss.Infection):
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
-            p_death = ss.rateprob(0.05), # NB: this is death per unit time, not death per infection
+            p_death = ss.peryear(0.05), # NB: this is death per unit time, not death per infection
         )
         self.update_pars(pars, **kwargs)
 
