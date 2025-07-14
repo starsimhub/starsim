@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 
-__all__ = ['date', 'TimePar', 'Dur', 'years', 'DateDur', 'Rate', 'TimeProb', 'InstProb',
-           'Timeline', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
+# General classes; specific classes are listed below
+__all__ = ['date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'InstProb', 'Timeline']
 
 #%% Base classes
 class DateArray(np.ndarray):
