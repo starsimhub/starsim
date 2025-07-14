@@ -238,8 +238,10 @@ class Deaths(Demographics):
                 binned_ages = np.digitize(ppl.age, s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
                 death_rate[:] = s.values[binned_ages]
 
-        # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * self.t.dt * self.pars.rate_units * self.pars.rel_death
+        # Scale from rate to probability
+        if not isinstance(death_rate, ss.Rate):
+            death_rate = ss.peryear(death_rate)
+        death_prob = death_rate * self.dt * self.pars.rate_units * self.pars.rel_death
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
@@ -360,7 +362,7 @@ class Pregnancy(Demographics):
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
-            fertility_rate[uids] = self.fertility_rate_data * self.t.dt # Rate per timestep
+            fertility_rate[uids] = float(self.fertility_rate_data) # Rate per timestep (we multiply by the timestep later)
         else:
             year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
             nearest_year = frd.index[year_ind]
@@ -385,11 +387,11 @@ class Pregnancy(Demographics):
                 new_denom = age_counts - infecund_age_counts  # New denominator for rates
                 np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
-            fertility_rate[uids] = new_rate[age_bin_all] * self.t.dt
+            fertility_rate[uids] = new_rate[age_bin_all]
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.rate_units * self.pars.rel_fertility)
+        fertility_prob = fertility_rate * (self.pars.rel_fertility * ss.peryear(self.pars.rate_units) * self.dt) # Convert to per-year and then back to unitless with dt
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)

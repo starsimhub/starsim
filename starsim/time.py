@@ -833,8 +833,7 @@ class Rate(TimePar):
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
-
-    def __init__(self, value:float, unit:Dur=None):
+    def __init__(self, value, unit):
         if unit is None:
             self.unit = YearDur(1)
         elif isinstance(unit, Dur):
@@ -842,17 +841,23 @@ class Rate(TimePar):
         else:
             self.unit = Dur(unit)
 
-        assert sc.isnumber(value), 'Value must be a scalar number'
+        if not sc.isnumber(value) or isinstance(value, np.ndarray):
+            errormsg = f'Value must be a scalar number or array, not {type(value)}'
+            raise TypeError(errormsg)
         self.value = value
+        return
 
     def __repr__(self):
         return f'<{self.__class__.__name__}: {self.value} per {self.unit.str()}>' # Use str to get the friendly representation
+
+    def __float__(self):
+        return float(self.value)
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
             self.array_mul_error()
         elif isinstance(other, Dur):
-            return self.value*other/self.unit
+            return self.value*(other/self.unit)
         else:
             return self.__class__(self.value*other, self.unit)
 
