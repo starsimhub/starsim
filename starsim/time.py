@@ -696,7 +696,7 @@ class DateDur(Dur):
             args:
             kwargs:
         """
-        super.__init__()
+        super().__init__()
         if args:
             assert not kwargs, 'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
             assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
