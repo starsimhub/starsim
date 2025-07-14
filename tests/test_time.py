@@ -61,11 +61,11 @@ def test_classes():
 
     # Test rate units
     rval = 0.7
-    r5 = ss.Rate(rval, ss.Dur(weeks=1))
+    r5 = ss.Rate(rval, ss.week)
     assert np.isclose(r5*ss.days(1), rval/7) # These should be close, but not match exactly
-    assert np.isclose(r5*ss.Dur(weeks=0.1), rval/10)
+    assert np.isclose(r5*ss.weeks(0.1), rval/10)
     assert r5*ss.days(1) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
-    assert r5*ss.Dur(weeks=0.1) == rval * ss.weeks(0.1) / ss.weeks(1)
+    assert r5*ss.weeks(0.1) == rval * ss.weeks(0.1) / ss.weeks(1)
 
     # Test TimeProb
     tpval = 0.1
@@ -77,112 +77,6 @@ def test_classes():
     assert tp0*ss.Dur(2) == 1 - np.exp(np.log(1-0.1) * ss.Dur(2)/ss.Dur(1)) # These should be close, but not match exactly
 
     return d3, d4, r3, r4, tp0
-
-
-@sc.timer()
-def test_units(do_plot=False):
-    sc.heading('Test behavior of year vs day units')
-
-    sis = ss.SIS(
-        beta = ss.TimeProb(0.05, ss.days(1)),
-        init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
-        waning = ss.Rate(0.05, ss.days(1)),
-        imm_boost = 1.0,
-    )
-
-    rnet = ss.RandomNet(
-        n_contacts = 10,
-        dur = 0, # Note; network edge durations are required to have the same unit as the network
-    )
-
-    pars = dict(
-        diseases = sis,
-        networks = rnet,
-        n_agents = small,
-    )
-
-    sims = sc.objdict()
-    sims.y = ss.Sim(pars, label='Year', start=2000, stop=2002, dt=1/365, verbose=0)
-    sims.d = ss.Sim(pars, label='Day', start='2000-01-01', stop='2002-01-01', dt=ss.days(1), verbose=0)
-
-    for sim in sims.values():
-        sim.run()
-        if do_plot:
-            sim.plot()
-
-    # Check that results match to within stochastic uncertainty
-    rtol = 0.05
-    vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
-    assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
-
-    return sims
-
-
-@sc.timer()
-def test_multi_timestep(do_plot=False):
-    sc.heading('Test behavior of different modules having different timesteps')
-
-    pars = dict(
-        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.TimeProb(0.01)),
-        demographics = ss.Births(dt=0.25),
-        networks = ss.RandomNet(dt=ss.weeks(1)),
-        n_agents = small,
-        verbose = 0,
-    )
-
-    sim = ss.Sim(pars, dt=ss.days(2), start='2000-01-01', stop='2002-01-01')
-    sim.run()
-
-    twoyears = 366*2
-    quarters = 2/0.25
-    assert len(sim) == twoyears//2
-    assert len(sim.diseases.sis) == twoyears
-    assert len(sim.demographics.births) == quarters+1
-    assert sim.t.tvec[-1] == ss.date('2001-12-31') # Every second day, this is the last time point
-    assert sim.diseases.sis.t.tvec[-1] == ss.date('2002-01-01') # Every day, we can match the last time point exactly
-    assert sim.demographics.births.t.tvec[-1] == ss.date('2002-01-01') # Every quarter, we can match the last time point exactly
-
-    if do_plot:
-        sim.plot()
-
-    return sim
-
-
-@sc.timer()
-def test_mixed_timesteps():
-    sc.heading('Test behavior of different combinations of timesteps')
-
-    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
-    kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
-
-    print('Year-year')
-    sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-    sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
-
-    print('Day-day')
-    sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-    sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
-
-    print('Day-year')
-    sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-    sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
-
-    print('Year-day')
-    sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-    sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
-
-    msim = ss.parallel(sim1, sim2, sim3, sim4)
-
-    # Check that all results are close
-    threshold = 0.02
-    summary = msim.summarize()
-    for key,res in summary.items():
-        if res.mean:
-            ratio = res.std/res.mean
-            assert ratio < threshold, f'Result {key} exceeds threshold: {ratio:n} > {threshold}'
-            print(f'✓ Result {key} within threshold: {ratio:n} < {threshold}')
-    return msim
 
 
 @sc.timer()
@@ -355,6 +249,112 @@ def test_syntax():
     return tv
 
 
+@sc.timer()
+def test_multi_timestep(do_plot=False):
+    sc.heading('Test behavior of different modules having different timesteps')
+
+    pars = dict(
+        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.TimeProb(0.01)),
+        demographics = ss.Births(dt=0.25),
+        networks = ss.RandomNet(dt=ss.weeks(1)),
+        n_agents = small,
+        verbose = 0,
+    )
+
+    sim = ss.Sim(pars, dt=ss.days(2), start='2000-01-01', stop='2002-01-01')
+    sim.run()
+
+    twoyears = 366*2
+    quarters = 2/0.25
+    assert len(sim) == twoyears//2
+    assert len(sim.diseases.sis) == twoyears
+    assert len(sim.demographics.births) == quarters+1
+    assert sim.t.tvec[-1] == ss.date('2001-12-31') # Every second day, this is the last time point
+    assert sim.diseases.sis.t.tvec[-1] == ss.date('2002-01-01') # Every day, we can match the last time point exactly
+    assert sim.demographics.births.t.tvec[-1] == ss.date('2002-01-01') # Every quarter, we can match the last time point exactly
+
+    if do_plot:
+        sim.plot()
+
+    return sim
+
+
+@sc.timer()
+def test_mixed_timesteps():
+    sc.heading('Test behavior of different combinations of timesteps')
+
+    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
+    kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+
+    print('Year-year')
+    sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+    sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
+
+    print('Day-day')
+    sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+    sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
+
+    print('Day-year')
+    sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+    sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
+
+    print('Year-day')
+    sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+    sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
+
+    msim = ss.parallel(sim1, sim2, sim3, sim4)
+
+    # Check that all results are close
+    threshold = 0.02
+    summary = msim.summarize()
+    for key,res in summary.items():
+        if res.mean:
+            ratio = res.std/res.mean
+            assert ratio < threshold, f'Result {key} exceeds threshold: {ratio:n} > {threshold}'
+            print(f'✓ Result {key} within threshold: {ratio:n} < {threshold}')
+    return msim
+
+
+@sc.timer()
+def test_units(do_plot=False):
+    sc.heading('Test behavior of year vs day units')
+
+    sis = ss.SIS(
+        beta = ss.TimeProb(0.05, ss.days(1)),
+        init_prev = ss.bernoulli(p=0.1),
+        dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
+        waning = ss.Rate(0.05, ss.days(1)),
+        imm_boost = 1.0,
+    )
+
+    rnet = ss.RandomNet(
+        n_contacts = 10,
+        dur = 0, # Note; network edge durations are required to have the same unit as the network
+    )
+
+    pars = dict(
+        diseases = sis,
+        networks = rnet,
+        n_agents = small,
+    )
+
+    sims = sc.objdict()
+    sims.y = ss.Sim(pars, label='Year', start=2000, stop=2002, dt=1/365, verbose=0)
+    sims.d = ss.Sim(pars, label='Day', start='2000-01-01', stop='2002-01-01', dt=ss.days(1), verbose=0)
+
+    for sim in sims.values():
+        sim.run()
+        if do_plot:
+            sim.plot()
+
+    # Check that results match to within stochastic uncertainty
+    rtol = 0.05
+    vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
+    assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
+
+    return sims
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -364,11 +364,11 @@ if __name__ == '__main__':
 
     o1 = test_ratio()
     o2 = test_classes()
-    o3 = test_units(do_plot)
-    o4 = test_multi_timestep(do_plot)
-    o5 = test_mixed_timesteps()
-    o6 = test_time_class()
-    o7 = test_callable_dists()
-    o8 = test_syntax()
+    o3 = test_time_class()
+    o4 = test_callable_dists()
+    o5 = test_syntax()
+    o6 = test_multi_timestep(do_plot)
+    o7 = test_mixed_timesteps()
+    o8 = test_units(do_plot)
 
     T.toc()

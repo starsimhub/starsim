@@ -285,6 +285,9 @@ class date(pd.Timestamp):
         Returns:
             An array of date instances
         """
+        # Convert this first
+        if isinstance(step, ss.Dur):
+            step = DateDur(step)
 
         if isinstance(step, ss.DateDur):
             if not isinstance(low, date):
@@ -298,10 +301,13 @@ class date(pd.Timestamp):
                 tvec.append(t)
                 t += step
             return DateArray(np.array(tvec))
-        else:
+        elif sc.isnumber(step):
             low = low.years if isinstance(low, date) else low
             high = high.years if isinstance(high, date) else high
             return cls.from_array(np.arange(low, high, step))
+        else:
+            errormsg = f'Cannot construct date range from {low = }, {high = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
+            raise TypeError(errormsg)
 
     def to_json(self):
         """ Returns a JSON representation of the date """
@@ -639,17 +645,14 @@ class Dur(TimePar):
         all be Dur instances. Mixing Dur types (years and DateDur) is permitted.
 
         Args:
-            low: Starting point e.g., ss.Dur(0)
-            high:
-            step:
-
-        Returns:
+            low (ss.Dur): Starting point, e.g., ss.years(0)
+            high (ss.Dur): Ending point, e.g. ss.years(20)
+            step (ss.Dur): Step size, e.g. ss.years(2)
         """
-        ss.war('Dur.arange is deprecated')
-
-        assert isinstance(low, Dur), 'Low input must be an ss.Dur'
-        assert isinstance(high, Dur), 'High input must be an ss.Dur'
-        assert isinstance(step, Dur), 'Step input must be an ss.Dur'
+        args = [low, high, step]
+        if not all([isinstance(arg, ss.Dur) for arg in args]):
+            errormsg = f'All inputs must be ss.Dur, not {args}'
+            raise TypeError(errormsg)
 
         tvec = []
         t = low
@@ -691,12 +694,13 @@ class DateDur(Dur):
                 self.value = self._round_duration(args[0])
             elif isinstance(args[0], DateDur):
                 self.value = args[0].unit # pd.DateOffset is immutable so this should be OK
-            elif isinstance(args[0], years):
+            elif isinstance(args[0], Dur):
                 self.value = self._round_duration({'years': args[0].years})
             elif sc.isnumber(args[0]):
                 self.value = self._round_duration({'years': args[0]})
             else:
-                raise TypeError('Unsupported input')
+                errormsg = f'Unsupported input {args}.\nExpecting number, ss.Dur, ss.DateDur, or pd.DateOffset'
+                raise TypeError(errormsg)
         else:
             self.value = self._round_duration(kwargs)
 
@@ -1530,7 +1534,7 @@ class Timeline:
             # If dt has been specified as a DateDur then preference setting dates. So first
             # calculate the dates/durations, and then convert them to the equivalent fractional years
             if isinstance(self.stop, Dur):
-                self._tvec = ss.Dur.arange(self.start, self.stop, self.dt)
+                self._tvec = ss.Dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
             else:
                 self._tvec = ss.date.arange(self.start, self.stop, self.dt)
             self._yearvec = np.array([x.years for x in self._tvec])
