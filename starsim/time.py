@@ -1548,23 +1548,28 @@ class Timeline:
 
 #%% Convenience classes
 
-class years(Dur): base = 'year'
+# Durations
 
-
+class years(Dur):  base = 'year'
+class months(Dur): base = 'month'
+class weeks(Dur):  base = 'week'
+class days(Dur):   base = 'day'
 
 # Shortcuts
 year = years(1)
-for obj in [year]:
+month = months(1)
+week = weeks(1)
+day = days(1)   
+for obj in [year, month, week, day]:
     object.__setattr__(obj, '_locked', True) # Make immutable
 
-def months(x: float) -> Dur:
-    return Dur(months=x)
+# Rates
+class perday(Rate):   base = 'day'
+class perweek(Rate):  base = 'week'
+class permonth(Rate): base = 'month'
+class peryear(Rate):  base = 'year'
 
-def weeks(x: float) -> Dur:
-    return Dur(weeks=x)
-
-def days(x: float) -> Dur:
-    return Dur(days=x)
+# Probabilities
 
 def perday(v):
     """Shortcut to specify rate per calendar day"""
