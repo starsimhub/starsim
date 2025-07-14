@@ -322,7 +322,16 @@ unit_keys = list(time_units.keys())
 
 
 class TimePar:
-    pass
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ Disallow array operations by default, as they create arrays of objects (basically lists) """
+        return self.array_mul_error(ufunc)
+
+    def array_mul_error(self, ufunc=None):
+        ufuncstr = f"{ufunc} " if ufunc is not None else ''
+        errormsg = f'Cannot perform array operation {ufuncstr}on {self}: this would create an array of {self.__class__} objects, which is very inefficient. '
+        errormsg += 'Are you missing parentheses? If you convert to a unitless quantity by multiplying a rate and a duration, then you can multiply by an array. '
+        errormsg += 'If you really want to do this, use an explicit loop instead.'
+        raise TypeError(errormsg)
 
 
 class Dur(TimePar):
@@ -524,9 +533,9 @@ class YearDur(Dur): # CKTODO: rename ss.years
         else:
             return self.__class__(max(self.value - other, 0))
 
-    def __mul__(self, other: float):
+    def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            return other*self # This means np.arange(2)*ss.years(1) and ss.years(1)*np.arange(2) both give [ss.years(1), ss.years(2)] as the output
+            self.array_mul_error()
         elif isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
@@ -733,7 +742,7 @@ class DateDur(Dur):
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            return other*self
+            self.array_mul_error()
         elif isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
@@ -841,7 +850,7 @@ class Rate(TimePar):
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            return other*self
+            self.array_mul_error()
         elif isinstance(other, Dur):
             return self.value*other/self.unit
         else:
@@ -971,7 +980,7 @@ class timeprob(Rate):
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            return other*self # This means np.arange(2)*ss.years(1) and ss.years(1)*np.arange(2) both give [ss.years(1), ss.years(2)] as the output
+            self.array_mul_error()
         elif isinstance(other, Dur):
             if self.value == 0:
                 return 0
@@ -1042,7 +1051,7 @@ class rateprob(Rate):
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            return other*self
+            self.array_mul_error()
         elif isinstance(other, Dur):
             if self.value == 0:
                 return 0
@@ -1068,7 +1077,7 @@ class rateprob(Rate):
     def __rtruediv__(self, other): raise NotImplementedError()
 
 
-#%% Simulation time vectors
+#%% Simulation and module timelines
 
 class Timeline:
     """

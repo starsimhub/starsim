@@ -190,8 +190,8 @@ ss.rateperweek()
 ss.ratepermonth()
 ss.rateperyear()
 
-# 4. InstantProb shortcuts
-ss.irateperday()
-ss.irateperweek()
-ss.iratepermonth()
-ss.irateperyear()
+# 4. InstProb shortcuts
+ss.iprobperday()
+ss.iprobperweek()
+ss.iprobpermonth()
+ss.iprobperyear()
