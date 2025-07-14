@@ -1240,10 +1240,10 @@ class Timeline:
 
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
-    default_dur = Dur(50)
-    default_start = date(2000)
-    min_year = 1900
-    default_dt = Dur(1)
+    default_dur   = 50
+    default_start = 2000
+    min_year      = 1900
+    default_dt    = 1.0
 
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None):
 
@@ -1569,31 +1569,16 @@ class permonth(TimeProb): base = 'month'
 class peryear(TimeProb):  base = 'year'
 
 # InstProbs
+class iprobperday(InstProb):   base = 'day'
+class iprobperweek(InstProb):  base = 'week'
+class iprobpermonth(InstProb): base = 'month'
+class iprobperyear(InstProb):  base = 'year'
 
-class rateperday:
-    pass
-
-class rateperweek:
-    pass
-
-class ratepermonth:
-    pass
-
-class rateperyear:
-    pass
-
-class iprobperday:
-    pass
-
-class iprobperweek:
-    pass
-
-class iprobpermonth:
-    pass
-
-class iprobperyear:
-    pass
-
+# Rates
+class rateperday(Rate):   base = 'day'
+class rateperweek(Rate):  base = 'week'
+class ratepermonth(Rate): base = 'month'
+class rateperyear(Rate):  base = 'year'
 
 # Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
 reverse_class_map = {
@@ -1626,5 +1611,3 @@ for v, keylist in reverse_class_map.items():
 
 dur_class_map  = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Dur))
 rate_class_map = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Rate))
-
-
