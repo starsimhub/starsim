@@ -324,7 +324,19 @@ unit_keys = list(time_units.keys())
 class TimePar:
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
-        return self.array_mul_error(ufunc)
+        a,b = inputs
+        a_b = True
+        if b is self: # Swap order if needed
+            b,a = a,b
+            a_b = True
+
+        if   ufunc == np.add:      return self.__add__(b)
+        elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)
+        elif ufunc == np.multiply: return self.__mul__(b)
+        elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
+        else:
+            self.array_mul_error(ufunc)
+        return
 
     def array_mul_error(self, ufunc=None):
         ufuncstr = f"{ufunc} " if ufunc is not None else ''
@@ -534,9 +546,7 @@ class YearDur(Dur): # CKTODO: rename ss.years
             return self.__class__(max(self.value - other, 0))
 
     def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(other, Rate):
+        if isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
@@ -741,9 +751,7 @@ class DateDur(Dur):
         raise Exception('Cannot multiply a duration by a duration')
 
     def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(other, Rate):
+        if isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
