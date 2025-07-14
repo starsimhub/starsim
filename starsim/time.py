@@ -1556,6 +1556,10 @@ class Timeline:
 
 
 #%% Convenience classes
+__all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day',
+            'perday', 'perweek', 'permonth', 'peryear',
+            'iprobperday', 'iprobperweek', 'iprobpermonth', 'iprobperyear',
+            'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear']
 
 # Durations
 class years(Dur):  base = 'year'
