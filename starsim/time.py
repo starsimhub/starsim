@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 
-__all__ = ['date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'rateprob',
+__all__ = ['date', 'TimePar', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'rateprob',
            'Timeline', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
@@ -725,7 +725,7 @@ class DateDur(Dur):
         return pd.DateOffset(**d)
 
 
-    def _scale(self, dateoffset: pd.DateOffset, scale: float) -> pd.DateOffset:
+    def _scale(self, dateoffset, scale):
         """
         Scale a pd.DateOffset by a factor
 
@@ -863,7 +863,7 @@ class Rate(TimePar):
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            self.array_mul_error()
+            return self*other
         elif isinstance(other, Dur):
             return self.value*other/self.unit
         else:
