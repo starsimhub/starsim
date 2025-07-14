@@ -1243,23 +1243,26 @@ class Timeline:
 
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
-    default_dur   = 50
-    default_start = 2000
-    min_year      = 1900
-    default_dt    = 1.0
 
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None):
-
+        # Store inputs
         self.name = name
         self.start = start
         self.stop = stop
         self.dt = dt
         self.dur = dur
+
+        # Set defaults
+        self.default_dur   = ss.years(50)
+        self.default_start = ss.years(2000)
+        self.default_dt    = ss.years(1.0)
+        self.calendar_year_threshold = 1900.0 # Value at which to switch over from interpreting a value from a year duration to a calendar year
+
+        # Populated later
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self._tvec    = None # The time vector for this instance in date or Dur format
         self._yearvec = None # Time vector as floating point years
         self.initialized = False # Call self.init(sim) to initialise the object
-
         return
 
     @property
@@ -1389,6 +1392,10 @@ class Timeline:
             self.dur = Dur(self.dur)
         assert self.dur is None or isinstance(self.dur, Dur), 'Timeline.dur must be a number, a Dur object or None'
 
+        def is_calendar_year(val):
+            """ Whether a number should be interpreted as a calendar year """
+            return sc.isnumber(val) and val < self.calendar_year_threshold
+
         match (self.start, self.stop, self.dur):
             case (None, None, None):
                 start = self.default_start
@@ -1398,7 +1405,7 @@ class Timeline:
             case (start, None, None):
                 if isinstance(start, Dur):
                     pass  # Already a Dur which is fine
-                elif sc.isnumber(start) and start < self.min_year:
+                elif is_calendar_year(start):
                     start = Dur(start)
                 else:
                     start = date(start)
@@ -1408,7 +1415,7 @@ class Timeline:
             case (None, stop, None):
                 if isinstance(stop, Dur):
                     start = stop.__class__(0)
-                elif sc.isnumber(stop) and stop < self.min_year:
+                elif is_calendar_year(stop):
                     stop = Dur(stop)
                     start = Dur(0)
                 else:
@@ -1423,7 +1430,7 @@ class Timeline:
             case (start, None, dur):
                 if isinstance(start, Dur):
                     pass
-                elif sc.isnumber(start) and start < self.min_year:
+                elif is_calendar_year(start):
                     start = Dur(start)
                 else:
                     start = date(start)
@@ -1432,7 +1439,7 @@ class Timeline:
             case (None, stop, dur):
                 if isinstance(stop, Dur):
                     pass
-                elif sc.isnumber(stop) and stop < self.min_year:
+                elif is_calendar_year(stop):
                     stop = Dur(stop)
                 else:
                     stop = date(stop)
@@ -1447,7 +1454,7 @@ class Timeline:
                     stop = date(stop)
 
                 if sc.isnumber(start) and sc.isnumber(stop):
-                    if stop < self.min_year:
+                    if stop < self.calendar_year_threshold:
                         start = Dur(start)
                         stop = Dur(stop)
                     else:
