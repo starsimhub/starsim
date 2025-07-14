@@ -379,6 +379,7 @@ class TimePar:
     @classmethod
     def _set_factors(cls):
         if cls.base is not None:
+            cls.basekey = cls.base + 's' # 'year' -> 'years'
             cls.factors = factors[cls.base].items
             cls.factor_keys = factors[cls.base].keys
             cls.factor_vals = factors[cls.base].values
@@ -436,12 +437,36 @@ class TimePar:
         errormsg += 'If you really want to do this, use an explicit loop instead.'
         raise TypeError(errormsg)
 
+    def to(self, unit):
+        """ Convert this TimePar to one of a different class """
+        return class_map[unit](self)
+
+    @classmethod
+    def to_self(cls, other):
+        """ Convert another TimePar object to this TimePar's base units """
+        try:
+            return getattr(other, cls.basekey)
+        except AttributeError as e:
+            errormsg = f'Cannot get property {cls.basekey} from object {other}. Is it a TimePar?'
+            raise AttributeError(errormsg) from e
+
+    def mutate(self, unit):
+        """ Mutate a TimePar in place to a new base unit -- see `TimePar.to()` to return a new instance (much more common) """
+        self.base = unit
+        self._set_factors()
+        self.__class__ = class_map[unit] # Mutate the class in place
+        return self
+
 
 class Dur(TimePar):
     """
-    Base class for durations/dts
+    Base class for durations
 
-    Subclasses for date-durations and fixed-durations
+    Note: this class should not be used by the user directly; instead, use ss.years(),
+    ss.days(), etc.
+
+    Note that although they are different classes, `ss.Dur` objects can be modified
+    in place if needed via the `ss.Dur.mutate()` method.
     """
     def __new__(cls, *args, **kwargs):
         # Return
@@ -457,6 +482,19 @@ class Dur(TimePar):
             else:
                 return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
         return super().__new__(cls)
+
+    def __init__(self, value=1):
+        """
+        Construct a value-based duration
+
+        Args:
+            value (float/`ss.Dur`): the value to use
+        """
+        super().__init__()
+        if isinstance(value, Dur):
+            self.value = self.to_base(value)
+        else:
+            self.value = value
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
@@ -594,24 +632,6 @@ class years(Dur):
     """ Year based duration e.g., if requiring 52 weeks per year """
     base = 'year'
 
-    def __init__(self, years=1):
-        """
-        Construct a year-based fixed duration
-
-        Supported inputs are
-            - A float number of years (so can use values like 1/52 for 1 week)
-            - A years instance (as a copy-constructor)
-            - A DateDur instance (to convert from date-based to fixed representation)
-
-        Args:
-            years: float, years, DateDur
-        """
-        super().__init__()
-        if isinstance(years, Dur):
-            self.value = years.years
-        else:
-            self.value = years
-
     def to_numpy(self):
         return self.value
 
@@ -621,7 +641,7 @@ class years(Dur):
 
     def __add__(self, other):
         if isinstance(other, Dur):
-            return self.__class__(self.value + other.years)
+            return self.__class__(self.value + self.to_base(other))
         elif isinstance(other, date):
             return date.from_year(other.to_year() + self.value)
         elif isinstance(other, DateArray):
@@ -1580,3 +1600,10 @@ def permonth(v):
 def peryear(v):
     """Shortcut to specify rate per numeric year"""
     return Rate(v, years(1))
+
+# Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
+reverse_class_map = {
+    years: ['y', 'YE', 'year', 'years', year, years],
+    months: ['m', 'MO', 'month', 'months', month, months],
+
+}
