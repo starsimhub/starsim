@@ -364,8 +364,8 @@ class Factors(sc.dictobj):
             string += entry
         return string
 
+# Preallocate for performance
 factors = Factors()
-
 
 class TimePar:
     """ Parent class for all TimePars -- Dur, Rate, etc. """
@@ -426,6 +426,7 @@ class Dur(TimePar):
 
     Subclasses for date-durations and fixed-durations
     """
+    base = None
     def __new__(cls, *args, **kwargs):
         # Return
         if cls is Dur:
@@ -441,6 +442,15 @@ class Dur(TimePar):
                 return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
         return super().__new__(cls)
 
+    def set_factors(self):
+        try:
+            self.factors = factors[self.base].items
+            self.factor_keys = factors[self.base].keys
+            self.factor_vals = factors[self.base].keys
+        except AttributeError as e:
+            errormsg = f'Invalid base unit "{self.base}"; are you trying to use ss.Dur() instead of ss.years(), ss.days(), etc?'
+            raise AttributeError(errormsg) from e
+
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
     def __hash__(self):
@@ -451,13 +461,19 @@ class Dur(TimePar):
 
     @property
     def years(self):
-        """ Return approximate conversion into years """
-        raise NotImplementedError
+        return self.value*self.factors.years # Needs to return float so matplotlib can plot it correctly
+
+    @property
+    def months(self):
+        return self.value*self.factors.months # Needs to return float so matplotlib can plot it correctly
+
+    @property
+    def weeks(self):
+        return self.value*self.factors.weeks # Needs to return float so matplotlib can plot it correctly
 
     @property
     def days(self):
-        """ Return approximate conversion into days """
-        raise NotImplementedError
+        return self.value*self.factors.day # Needs to return float so matplotlib can plot it correctly
 
     @property
     def to_numpy(self):
@@ -583,6 +599,7 @@ class years(Dur): # CKTODO: rename ss.years
         Args:
             years: float, years, DateDur
         """
+        self.set_factors()
         if isinstance(years, Dur):
             self.value = years.years
         else:
@@ -590,14 +607,6 @@ class years(Dur): # CKTODO: rename ss.years
 
     def to_numpy(self):
         return self.value
-
-    @property
-    def years(self):
-        return self.value # Needs to return float so matplotlib can plot it correctly
-
-    @property
-    def days(self):
-        return self.value*time_units.day # Needs to return float so matplotlib can plot it correctly
 
     @property
     def is_variable(self):
@@ -667,9 +676,9 @@ class DateDur(Dur):
                 - A pd.DateOffset
                 - A Dur instance
             - Keyword arguments
-                - Argument names that match time periods in `ss.time.time_units` e.g., 'years', 'months'
+                - Argument names that match time periods in `ss.time.factors` e.g., 'years', 'months'
                   supporting floating point values. If the value is not an integer, the values
-                  will be cascaded to smaller units using `ss.time.time_units`
+                  will be cascaded to smaller units using `ss.time.factors`
 
         If no arguments are specified, a DateDur with zero duration will be produced
 
@@ -702,13 +711,13 @@ class DateDur(Dur):
         Return array representation of a pd.DateOffset
 
         In the array representation, each element corresponds to one of the time units
-        in `ss.time.time_units` e.g., a 1 year, 2 week duration would be [1, 0, 2, 0, 0, 0, 0, 0]
+        in `ss.time.factors` e.g., a 1 year, 2 week duration would be [1, 0, 2, 0, 0, 0, 0, 0]
 
         Args:
             dateoffset: A pd.DateOffset object
 
         Returns:
-            A numpy array with as many elements as `ss.time.time_units`
+            A numpy array with as many elements as `ss.time.factors`
         """
         return np.array([dateoffset.kwds.get(k, 0) for k in unit_keys])
 
@@ -718,14 +727,14 @@ class DateDur(Dur):
         Return a dictionary representation of a DateOffset or DateOffset array
 
         This function takes in either a pd.DateOffset, or the result of `_as_array`, and returns
-        a dictionary with the same keys as `ss.time.time_units` and the values from the input. The
+        a dictionary with the same keys as `ss.time.factors` and the values from the input. The
         output of this function can be passed to the `Dur()` constructor to create a new DateDur object.
 
         Args:
-            x: A pd.DateOffset or an array with the same number of elements as `ss.time.time_units`
+            x: A pd.DateOffset or an array with the same number of elements as `ss.time.factors`
 
         Returns:
-            Dictionary with keys from `ss.time.time_units` and values from the input
+            Dictionary with keys from `ss.time.factors` and values from the input
         """
         if isinstance(x, pd.DateOffset):
             x = cls._as_array(x)
@@ -740,14 +749,14 @@ class DateDur(Dur):
         occur if module parameters have been entered with `DateDur` durations, but the simulation
         timestep is in `years` units).
 
-        The conversion is based on `ss.time.time_units` which defines the conversion from each time unit
+        The conversion is based on `ss.time.factors` which defines the conversion from each time unit
         to the next
 
         Returns:
             A float representing the duration in years
         """
         years = 0
-        for k, v in time_units.items():
+        for k, v in self.factors.items():
             years += self.value.kwds.get(k, 0)/v
         return years
 
@@ -764,12 +773,12 @@ class DateDur(Dur):
         Round a dictionary of duration values by overflowing remainders
 
         The input can be
-            - A numpy array of length `ss.time.time_units` containing values in key order
+            - A numpy array of length `ss.time.factors` containing values in key order
             - A pd.DateOffset instance
-            - A dictionary with keys from `ss.time.time_units`
+            - A dictionary with keys from `ss.time.factors`
 
         The output will be a pd.DateOffset with integer values, where non-integer values
-        have been handled by overflow using the factors in `ss.time.time_units`. For example, 2.5 weeks
+        have been handled by overflow using the factors in `ss.time.factors`. For example, 2.5 weeks
         would first become 2 weeks and 0.5*7 = 3.5 days, and then become 3 days + 0.5*24 = 12 hours.
 
         Negative values are supported - -1.5 weeks for example will become (-1w, -3d, -12h)
@@ -792,7 +801,7 @@ class DateDur(Dur):
             if isinstance(vals, pd.DateOffset): return vals  # pd.DateOffset is immutable so this should be OK
             return pd.DateOffset(**d)
 
-        for i in range(len(time_units)-1):
+        for i in range(len(cls.factors)-1):
             remainder, div = np.modf(d[i])
             d[i] = int(div)
             d[i+1] += remainder * unit_vals[i+1]/unit_vals[i]
@@ -805,7 +814,7 @@ class DateDur(Dur):
         """
         Scale a pd.DateOffset by a factor
 
-        This function will automatically cascade remainders to finer units using `ss.time.time_units` so for
+        This function will automatically cascade remainders to finer units using `ss.time.factors` so for
         example 2.5 weeks would first become 2 weeks and 0.5*7 = 3.5 days,
         and then become 3 days + 0.5*24 = 12 hours.
 
@@ -847,7 +856,7 @@ class DateDur(Dur):
             unit = np.argmax((self_array != 0) | (other_array != 0))
             a = 0
             b = 0
-            for i, v in enumerate(time_units.values()):
+            for i, v in enumerate(self.factor_vals):
                 if i < unit:
                     continue
                 a += self_array[i] / v
