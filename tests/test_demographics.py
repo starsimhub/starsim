@@ -128,7 +128,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, birth_rate=ss.peryear(10), death_rate=ss.peryear(10/1010*1000), dur=ss.years(200), rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, birth_rate=ss.rateperyear(10), death_rate=ss.rateperyear(10/1010*1000), dur=ss.years(200), rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
@@ -143,11 +143,11 @@ def test_constant_pop(do_plot=False):
 def test_module_adding():
     """ Test that modules can't be added twice """
     sc.heading('Testing module duplication')
-    births = ss.Births(birth_rate=ss.peryear(10))
-    deaths = ss.Deaths(death_rate=ss.peryear(10))
+    births = ss.Births(birth_rate=ss.rateperyear(10))
+    deaths = ss.Deaths(death_rate=ss.rateperyear(10))
     demographics = [births, deaths]
     with pytest.raises(ValueError):
-        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.peryear(10), death_rate=ss.peryear(10)).run()
+        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.rateperyear(10), death_rate=ss.rateperyear(10)).run()
     return demographics
 
 

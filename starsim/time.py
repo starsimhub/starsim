@@ -498,6 +498,12 @@ class Dur(TimePar):
         else:
             self.value = value
 
+    def __repr__(self):
+        if self.value == 1:
+            return f'{self.base}'
+        else:
+            return f'{self.basekey}({self.value})'
+
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
     def __hash__(self):
@@ -620,18 +626,6 @@ class Dur(TimePar):
             return Rate(0)
         else:
             return Rate(other, self)
-
-    def __repr__(self):
-        if self.value == 1:
-            return f'{self.base}'
-        else:
-            return f'{self.basekey}({self.value})'
-
-    def str(self):
-        if self.value == 1:
-            return 'year'
-        else:
-            return f'{self.value} years'
 
     def __abs__(self):
         return self.__class__(abs(self.value))
@@ -948,7 +942,11 @@ class Rate(TimePar):
         return
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}: {self.value} per {self.unit.str()}>' # Use str to get the friendly representation
+        name = self.__class__.__name__
+        if name == 'Rate':
+            return f'{name}({self.value}/{self.unit})'
+        else:
+            return f'{name}({self.value})'
 
     def __float__(self):
         return float(self.value)
@@ -1078,10 +1076,32 @@ class TimeProb(Rate):
     Use `InstProb` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
-
     def __init__(self, value, unit=None):
-        assert 0 <= value <= 1, 'Value must be between 0 and 1'
-        return super().__init__(value, unit)
+        try:
+            assert 0 <= value <= 1, 'Value must be between 0 and 1'
+        except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
+            if sc.isnumber(value):
+                valstr = f'Value provided: {value}'
+                lt0 = value < 0
+                gt1 = value > 1
+            else:
+                valstr = f'Values provided:\n{value}'
+                lt0 = np.any(value<0)
+                gt1 = np.any(value>1)
+            if lt0:
+                errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
+            elif gt1:
+                if self.base is not None:
+                    correct = f'ss.rateper{self.base}()'
+                    self.__class__ = class_map.rate[f'rateper{self.base}'] # Mutate the class to the correct class
+                    if ss.options.warn_convert:
+                        warnmsg = f'Probabilities cannot be greater than one, so converting to a rate. Please use {correct} instead, or set ss.options.warn_convert=false. {valstr}'
+                        ss.warn(warnmsg)
+                else:
+                    errormsg = 'Probabilities are >1, and no base was unit provided. Please use e.g. ss.rateperyear() instead of doing whatever you did. {valstr}'
+                    raise ValueError(errormsg)
+        Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
+        return
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
@@ -1556,10 +1576,11 @@ class Timeline:
 
 
 #%% Convenience classes
-__all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day',
-            'perday', 'perweek', 'permonth', 'peryear',
-            'iprobperday', 'iprobperweek', 'iprobpermonth', 'iprobperyear',
-            'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear']
+__all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
+            'perday', 'perweek', 'permonth', 'peryear', # TimeProbs
+            'probperday', 'probperweek', 'probpermonth', 'probperyear', # TimeProb aliases
+            'iprobperday', 'iprobperweek', 'iprobpermonth', 'iprobperyear', # InstProbs
+            'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear'] # Rates
 
 # Durations
 class years(Dur):  base = 'year'
@@ -1580,6 +1601,12 @@ class perday(TimeProb):   base = 'day'
 class perweek(TimeProb):  base = 'week'
 class permonth(TimeProb): base = 'month'
 class peryear(TimeProb):  base = 'year'
+
+# Aliases
+probperday = perday
+probperweek = perweek
+probpermonth = permonth
+probperyear = peryear
 
 # InstProbs
 class iprobperday(InstProb):   base = 'day'

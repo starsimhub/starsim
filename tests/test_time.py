@@ -320,10 +320,10 @@ def test_syntax():
     Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + date(2000)
 
     # Rates
-    assert (1/years(1)) == ss.peryear(1)
-    assert (2/years(1)) == ss.peryear(2)
-    assert (4/years(1)) == ss.peryear(4)
-    assert (4/DateDur(1)) == ss.peryear(4)
+    assert (1/years(1)) == ss.rateperyear(1)
+    assert (2/years(1)) == ss.rateperyear(2)
+    assert (4/years(1)) == ss.rateperyear(4)
+    assert (4/DateDur(1)) == ss.rateperyear(4)
     assert (perday(5)*Dur(days=1)) == 5
     assert 2/Rate(0.25) == Dur(8)
     assert 1/(2*Rate(0.25)) == Dur(2)

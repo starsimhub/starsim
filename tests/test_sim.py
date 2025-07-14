@@ -135,8 +135,8 @@ def test_complex_api():
             dict(type='sis', beta=ss.TimeProb(0.07), init_prev=0.1),
         ],
         demographics = [
-            ss.Births(birth_rate=ss.peryear(20)),
-            dict(type='deaths', death_rate=ss.peryear(20))
+            ss.Births(birth_rate=ss.rateperyear(20)),
+            dict(type='deaths', death_rate=ss.rateperyear(20))
         ],
         interventions = jump_age,
     )
@@ -152,8 +152,8 @@ def test_complex_api():
     dis2 = ss.SIS(beta=ss.TimeProb(0.07), init_prev=ss.bernoulli(0.1))
     diseases = ss.ndict(dis1, dis2)
 
-    dem1 = ss.Births(birth_rate=ss.peryear(20))
-    dem2 = ss.Deaths(death_rate=ss.peryear(20))
+    dem1 = ss.Births(birth_rate=ss.rateperyear(20))
+    dem2 = ss.Deaths(death_rate=ss.rateperyear(20))
     demographics = ss.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)

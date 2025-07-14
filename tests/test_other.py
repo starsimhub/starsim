@@ -102,8 +102,8 @@ def test_arrs():
 
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')
-    p1 = sc.mergedicts(pars, birth_rate=ss.peryear(10))
-    p2 = sc.mergedicts(pars, death_rate=ss.peryear(10))
+    p1 = sc.mergedicts(pars, birth_rate=ss.rateperyear(10))
+    p2 = sc.mergedicts(pars, death_rate=ss.rateperyear(10))
     s1 = ss.Sim(pars=p1).run()
     s2 = ss.Sim(pars=p2).run()
 

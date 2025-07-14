@@ -30,7 +30,7 @@ def test_sir():
     sir = ss.SIR(**sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': ss.peryear(0.1)}
+    sir.pars.beta = {'random': ss.rateperyear(0.1)}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -195,7 +195,7 @@ def test_mtct():
     ppl = ss.People(n_agents)
     sis = ss.SIS(beta={'random':[ss.TimeProb(0.005, ss.Dur(months=1)), ss.TimeProb(0.001, ss.Dur(months=1))], 'prenatal':[ss.TimeProb(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.TimeProb(0.1, ss.Dur(months=1)), 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
-    demographics = ss.Pregnancy(fertility_rate=ss.peryear(20))
+    demographics = ss.Pregnancy(fertility_rate=ss.rateperyear(20))
     sim = ss.Sim(dt=ss.Dur(1/12), people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     sim.plot()
