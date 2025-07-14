@@ -317,21 +317,66 @@ class date(pd.Timestamp):
         return date(json['ss.date'])
 
 
-# Define time units and values
-time_units = sc.dictobj( # Use dictobj since slightly faster than objdict
-    years   = 1.0,
-    months  = 12.0,
-    weeks   = 365.0/7, # If 52, then day/week conversion is incorrect
-    days    = 365.0,
-    hours   = 365.0*24,
-    minutes = 365.0*24*60,
-    seconds = 365.0*24*60*60,
-)
-unit_vals = np.array(list(time_units.values())) # For computational efficiency
-unit_keys = list(time_units.keys())
+
+class UnitFactors(sc.dictobj):
+    def __init__(self, base, unit):
+        unit_items = base.copy()
+        for k,v in unit_items.items():
+            unit_items[k] /= base[f'{unit}s'] # e.g. 'year' -> 'years'
+        self.unit = unit
+        self.items = unit_items
+        self.values = np.array(list(unit_items.values())) # Precompute for computational efficiency
+        self.keys = list(unit_items.keys())
+        return
+
+    def __repr__(self):
+        return f'{self.unit}:\n{repr(sc.objdict(self.items))}'
+
+    def disp(self):
+        return sc.pr(self)
+
+
+class Factors(sc.dictobj):
+    """ Define time unit conversion factors """
+    unit_keys = ['year', 'month', 'week', 'day']
+
+    def __init__(self):
+        base = sc.dictobj( # Use dictobj since slightly faster than objdict
+            years   = 1, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
+            months  = 12,
+            weeks   = 365/7, # If 52, then day/week conversion is incorrect
+            days    = 365,
+            hours   = 365*24,
+            minutes = 365*24*60,
+            seconds = 365*24*60*60,
+        )
+        for key in self.unit_keys:
+            unit_factors = UnitFactors(base, key)
+            self[key] = unit_factors
+        return
+
+    def __repr__(self):
+        string = ''
+        for key in self.unit_keys:
+            string += 'factors.'
+            entry = repr(self[key])
+            entry = sc.indent(text=entry, n=4).lstrip() # Don't indent the first line
+            string += entry
+        return string
+
+factors = Factors()
 
 
 class TimePar:
+    """ Parent class for all TimePars -- Dur, Rate, etc. """
+
+    def __setattrr__(self, attr, value):
+        if object.__getattribute__(self, '_locked'):
+            errormsg = f'Cannot set attributes of {self}; object is read-only'
+            raise AttributeError(errormsg)
+        else:
+            super().__setattrr__(self, attr, value)
+            return
 
     def __getitem__(self, index):
         """ For indexing and slicing, e.g. TimePar[inds] """
@@ -552,7 +597,7 @@ class years(Dur): # CKTODO: rename ss.years
 
     @property
     def days(self):
-        return self.value # Needs to return float so matplotlib can plot it correctly
+        return self.value*time_units.day # Needs to return float so matplotlib can plot it correctly
 
     @property
     def is_variable(self):
