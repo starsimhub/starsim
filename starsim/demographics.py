@@ -39,7 +39,7 @@ class Births(Demographics):
         """
         super().__init__()
         self.define_pars(
-            birth_rate = ss.peryear(20),
+            birth_rate = ss.rateperyear(20),
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
@@ -76,7 +76,7 @@ class Births(Demographics):
             # If the user has provided a bare number, assume it is per year
             msg = f'Birth rate was specified as a number rather than a rate - assuming it is {birth_rate} per year'
             ss.warn(msg)
-            return ss.peryear(birth_rate)
+            return ss.rateperyear(birth_rate)
         return birth_rate
 
     def init_results(self):
@@ -177,7 +177,7 @@ class Deaths(Demographics):
         super().__init__()
         self.define_pars(
             rel_death = 1,
-            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.rateperyear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -208,7 +208,7 @@ class Deaths(Demographics):
             # If the user has provided a bare number, assume it is per year
             msg = f'Death rate was specified as a number rather than a rate - assuming it is {death_rate} per year'
             ss.warn(msg)
-            return ss.peryear(death_rate)
+            return ss.rateperyear(death_rate)
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
@@ -321,7 +321,7 @@ class Pregnancy(Demographics):
         self.define_pars(
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = ss.peryear(100), # Can be a number of Pandas DataFrame
+            fertility_rate = ss.rateperyear(100), # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             p_maternal_death = ss.bernoulli(0),
             p_neonatal_death = ss.bernoulli(0),
@@ -426,7 +426,7 @@ class Pregnancy(Demographics):
         if sc.isnumber(fertility_rate):
             msg = f'Fertility rate was specified as a number rather than a rate - assuming it is {fertility_rate} per year'
             ss.warn(msg)
-            return ss.peryear(fertility_rate)
+            return ss.rateperyear(fertility_rate)
         return fertility_rate
 
     def init_pre(self, sim):
