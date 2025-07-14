@@ -94,6 +94,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     def __setitem__(self, index, value):
         """ Assign values, e.g. arr1[inds] = arr2 """
         self.values[index] = value
+        return
 
     def __array__(self, *args, **kwargs):
         """ To ensure isinstance(arr, BaseArr) passes when creating new instances """

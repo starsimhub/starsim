@@ -322,6 +322,25 @@ unit_keys = list(time_units.keys())
 
 
 class TimePar:
+
+    def __getitem__(self, index):
+        """ For indexing and slicing, e.g. TimePar[inds] """
+        if isinstance(self.value, np.ndarray):
+            return self.value[index]
+        else:
+            errormsg = f'Can only index {type(self)} if value is an array, not a scalar'
+            raise TypeError(errormsg)
+
+    def __setitem__(self, index, value):
+        """ For indexing and slicing, e.g. TimePar[inds] """
+        print('HI i am setting', len(index), value)
+        if isinstance(self.value, np.ndarray):
+            self.value[index] = value
+            return
+        else:
+            errormsg = f'Can only index {type(self)} if value is an array, not a scalar'
+            raise TypeError(errormsg)
+
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
         a,b = inputs
@@ -364,7 +383,7 @@ class Dur(TimePar):
                     assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
                     return super().__new__(YearDur)
             else:
-                return super().__new__(DateDur)
+                return super().__new__(YearDur)
         return super().__new__(cls)
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
@@ -849,7 +868,7 @@ class Rate(TimePar):
         else:
             self.unit = Dur(unit)
 
-        if not sc.isnumber(value) or isinstance(value, np.ndarray):
+        if not (sc.isnumber(value) or isinstance(value, np.ndarray)):
             errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)
         self.value = value
@@ -1471,15 +1490,15 @@ def days(x: float) -> Dur:
 
 def perday(v):
     """Shortcut to specify rate per calendar day"""
-    return Rate(v, Dur(days=1))
+    return Rate(v, DateDur(days=1)) # TODO: fix
 
 def perweek(v):
     """Shortcut to specify rate per calendar week"""
-    return Rate(v, Dur(weeks=1))
+    return Rate(v, DateDur(weeks=1))
 
 def permonth(v):
     """Shortcut to specify rate per calendar month"""
-    return Rate(v, Dur(months=1))
+    return Rate(v, DateDur(months=1))
 
 def peryear(v):
     """Shortcut to specify rate per numeric year"""
