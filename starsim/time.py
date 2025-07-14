@@ -416,9 +416,6 @@ class TimePar:
             cls.factor_keys = factors[cls.base].keys
             cls.factor_vals = factors[cls.base].values
         return
-        # except KeyError as e:
-        #     errormsg = f'Invalid base unit "{cls.base}"; are you trying to use ss.Dur()/ss.Rate instead of ss.years(), ss.perday(), etc?'
-        #     raise KeyError(errormsg) from e
 
     def __setattrr__(self, attr, value):
         if object.__getattribute__(self, '_locked'):
@@ -438,7 +435,6 @@ class TimePar:
 
     def __setitem__(self, index, value):
         """ For indexing and slicing, e.g. TimePar[inds] """
-        print('HI i am setting', len(index), value)
         if isinstance(self.value, np.ndarray):
             self.value[index] = value
             return
@@ -960,6 +956,7 @@ class Rate(TimePar):
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
+    base = None
     timepar_type = 'rate'
     timepar_subtype = 'rate'
 
@@ -1117,7 +1114,10 @@ class TimeProb(Rate):
     Use `InstProb` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
+    base = None # Can inherit, but clearer to specify
+    timepar_type = 'rate'
     timepar_subtype = 'timeprob'
+
     def __init__(self, value, unit=None):
         try:
             assert 0 <= value <= 1, 'Value must be between 0 and 1'
@@ -1236,7 +1236,10 @@ class InstProb(Rate):
 
     The behavior of both classes is depending on the data type of the object being multiplied.
     """
+    base = None # Can inherit, but clearer to specify
+    timepar_type = 'rate'
     timepar_subtype = 'instprob'
+
     def __init__(self, value, unit=None):
         assert value >= 0, 'Value must be >= 0'
         return super().__init__(value, unit)
