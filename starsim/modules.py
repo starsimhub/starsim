@@ -182,6 +182,12 @@ class Base(sc.quickobj):
             return out
 
     @property
+    def dt(self):
+        """ Get the current module timestep """
+        try:    return self.t.dt
+        except: return None
+
+    @property
     def ti(self):
         """ Get the current module timestep """
         try:    return self.t.ti

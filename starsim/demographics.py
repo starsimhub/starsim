@@ -443,7 +443,7 @@ class Pregnancy(Demographics):
 
     def step(self):
         if self.ti == 0 and self.pars.burnin: # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy), 0, 1).astype(int)
+            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy/self.dt), 0, 1).astype(int)
             for dti in dtis:
                 self.t.ti = dti
                 self.do_step()
