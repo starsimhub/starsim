@@ -11,6 +11,14 @@ __all__ = ['date', 'TimePar', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', '
 
 #%% Base classes
 
+class DateArray(np.ndarray):
+    """ Lightweight wrapper for an array of dates """
+    def __new__(cls, arr=None):
+        if arr is None:
+            arr = np.array([])
+        if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+            return arr.view(cls)
+
 class date(pd.Timestamp):
     """
     Define a point in time, based on `pd.Timestamp`
@@ -153,8 +161,7 @@ class date(pd.Timestamp):
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
-
-        if isinstance(other, DateDur):
+        elif isinstance(other, DateDur):
             return self._timestamp_add(other.value)
         elif isinstance(other, YearDur):
             return date(self.to_year() + other.value)
@@ -252,7 +259,7 @@ class date(pd.Timestamp):
         Returns:
             An array of date instances
         """
-        return np.vectorize(cls)(array)
+        return DateArray(np.vectorize(cls)(array))
 
     @classmethod
     def arange(cls, low, high, step=1):
@@ -287,7 +294,7 @@ class date(pd.Timestamp):
             while t <= high:
                 tvec.append(t)
                 t += step
-            return np.array(tvec)
+            return DateArray(np.array(tvec))
         else:
             low = low.years if isinstance(low, date) else low
             high = high.years if isinstance(high, date) else high
