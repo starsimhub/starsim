@@ -833,7 +833,7 @@ class Rate(TimePar):
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
-    def __init__(self, value, unit):
+    def __init__(self, value, unit=None):
         if unit is None:
             self.unit = YearDur(1)
         elif isinstance(unit, Dur):
