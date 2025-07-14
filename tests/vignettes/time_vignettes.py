@@ -1,6 +1,6 @@
 import sciris as sc
 import numpy as np
-from starsim.time import Dur, YearDur, DateDur, date, TimeVec, timeprob, Rate, perday   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
+from starsim.time import Dur, YearDur, DateDur, date, TimeVec, TimeProb, Rate, perday   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
 import starsim as ss
 
 def loc(module, sim, uids):
@@ -84,12 +84,12 @@ print(perday(5)*Dur(days=1))
 
 
 # time_prob
-p = timeprob(0.1, Dur(years=1))
+p = TimeProb(0.1, Dur(years=1))
 p*Dur(years=2)
 p * Dur(0.5)
 p * Dur(months=1)
 
-p = timeprob(0.1, Dur(1))
+p = TimeProb(0.1, Dur(1))
 p*Dur(years=2)
 p * Dur(0.5)
 p * Dur(months=1)

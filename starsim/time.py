@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 
-__all__ = ['date', 'TimePar', 'Dur', 'years', 'DateDur', 'Rate', 'timeprob', 'rateprob',
+__all__ = ['date', 'TimePar', 'Dur', 'years', 'DateDur', 'Rate', 'TimeProb', 'rateprob',
            'Timeline', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
@@ -971,7 +971,7 @@ class Rate(TimePar):
             else:
                 raise TypeError('Only rates can be added to rates')
         else:
-            raise TypeError('Can only add rates of identical types (e.g., Rate+Rate, timeprob+timeprob)')
+            raise TypeError('Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
 
     def __radd__(self, other): return self.__add__(other)
 
@@ -984,7 +984,7 @@ class Rate(TimePar):
             else:
                 raise TypeError('Only rates can be added to rates')
         else:
-            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, timeprob+timeprob)')
+            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
 
     def __eq__(self, other):
         return self.value == other.value/other.unit*self.unit
@@ -1010,16 +1010,16 @@ class Rate(TimePar):
         Calculate a time-specific probability value
 
         This function is mainly useful for subclasses where the multiplication by a duration is non-linear
-        (e.g., `timeprob`) and therefore it is important to apply the factor prior to multiplication by duration.
+        (e.g., `TimeProb`) and therefore it is important to apply the factor prior to multiplication by duration.
         This function avoids creating an intermediate array of rates, and is therefore much higher performance.
 
         e.g.
 
-        >>> p = ss.timeprob(0.05)*self.cd4*self.t.dt
+        >>> p = ss.TimeProb(0.05)*self.cd4*self.t.dt
 
         and
 
-        >>> p = ss.timeprob(0.05).scale(self.cd4,self.t.dt)
+        >>> p = ss.TimeProb(0.05).scale(self.cd4,self.t.dt)
 
         are equivalent, except that the second one is (much) faster.
 
@@ -1037,9 +1037,9 @@ class Rate(TimePar):
         return (self.value*v)*factor
 
 
-class timeprob(Rate):
+class TimeProb(Rate):
     """
-    `timeprob` represents the probability of an event occurring during a
+    `TimeProb` represents the probability of an event occurring during a
     specified period of time.
 
     The class is designed to allow conversion of a probability from one
@@ -1054,7 +1054,7 @@ class timeprob(Rate):
     where `factor` is the ratio of the new duration to the original duration.
 
     For example,
-    >>> p = ss.timeprob(0.8, ss.years(1))
+    >>> p = ss.TimeProb(0.8, ss.years(1))
     indicates a 80% chance of an event occurring in one year.
 
     >>> p*ss.years(1)
@@ -1067,13 +1067,13 @@ class timeprob(Rate):
     probability of 96% representing the chance of the event occurring at least
     once over the new duration of two years.
 
-    However, the behavior is different when a `timeprob` object is multiplied
+    However, the behavior is different when a `TimeProb` object is multiplied
     by a scalar or array. In this case, the probability is simply scaled. This scaling
     may result in a value greater than 1, which is not valid. For example,
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use `rateprob` instead if `timeprob` if you would prefer to directly
+    Use `rateprob` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
 
@@ -1118,7 +1118,7 @@ class timeprob(Rate):
             vectorize = np.vectorize(to_prob)
             return vectorize(arr, dur)
 
-        elif isinstance(arr[0], timeprob):
+        elif isinstance(arr[0], TimeProb):
             factor = np.array([dur / a.unit for a in arr])
             scaled_vals = np.array([a.value * v for a in arr])
             rate = - np.log(1 - scaled_vals)
@@ -1164,11 +1164,11 @@ class rateprob(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between `timeprob` and `rateprob` is subtle, but important. `rateprob` works directly
-    with the instantaneous rate of an event occurring. In contrast, `timeprob` starts with a probability and a duration,
+    The difference between `TimeProb` and `rateprob` is subtle, but important. `rateprob` works directly
+    with the instantaneous rate of an event occurring. In contrast, `TimeProb` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
     * rateprob: rate -> probability
-    * timeprob: probability -> rate -> probability
+    * TimeProb: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
     """
@@ -1643,3 +1643,5 @@ for v, keylist in reverse_class_map.items():
 
 dur_class_map  = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Dur))
 rate_class_map = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Rate))
+
+

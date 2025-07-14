@@ -69,7 +69,7 @@ def test_classes():
 
     # Test timeprob
     tpval = 0.1
-    tp0 = ss.timeprob(tpval)
+    tp0 = ss.TimeProb(tpval)
     assert tp0*ss.Dur(1) == tpval, 'Multiplication by the base denominator should not change the value'
     assert np.isclose(tp0*ss.Dur(0.5), tpval/2, rtol=0.1) # These should be close, but not match exactly
     assert np.isclose(tp0*ss.Dur(2), tpval*2, rtol=0.1)
@@ -84,7 +84,7 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
     sis = ss.SIS(
-        beta = ss.timeprob(0.05, ss.days(1)),
+        beta = ss.TimeProb(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
         waning = ss.Rate(0.05, ss.days(1)),
@@ -124,7 +124,7 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
     pars = dict(
-        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.timeprob(0.01)),
+        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.TimeProb(0.01)),
         demographics = ss.Births(dt=0.25),
         networks = ss.RandomNet(dt=ss.weeks(1)),
         n_agents = small,
@@ -153,7 +153,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.timeprob(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -268,7 +268,7 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, Dur, DateDur, years, perday, perweek, Rate, timeprob, rateprob
+    from starsim import date, Timeline, Dur, DateDur, years, perday, perweek, Rate, TimeProb, rateprob
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
