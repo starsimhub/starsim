@@ -369,7 +369,8 @@ factors = Factors()
 
 class TimePar:
     """ Parent class for all TimePars -- Dur, Rate, etc. """
-    base = None
+    base = None # e.g. 'year', 'day', etc
+    timepar_type = None # 'dur' or 'rate'
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -439,7 +440,7 @@ class TimePar:
 
     def to(self, unit):
         """ Convert this TimePar to one of a different class """
-        return class_map[unit](self)
+        return class_map[self.timepar_type][unit](self)
 
     @classmethod
     def to_base(cls, other):
@@ -454,7 +455,7 @@ class TimePar:
         """ Mutate a TimePar in place to a new base unit -- see `TimePar.to()` to return a new instance (much more common) """
         self.base = unit
         self._set_factors()
-        self.__class__ = class_map[unit] # Mutate the class in place
+        self.__class__ = class_map[self.timepar_type][unit] # Mutate the class in place
         return self
 
 
@@ -468,6 +469,7 @@ class Dur(TimePar):
     Note that although they are different classes, `ss.Dur` objects can be modified
     in place if needed via the `ss.Dur.mutate()` method.
     """
+    timepar_type = 'dur'
     def __new__(cls, *args, **kwargs):
         # Return
         if cls is Dur:
@@ -931,6 +933,7 @@ class Rate(TimePar):
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
+    timepar_type = 'rate'
     def __init__(self, value, unit=None):
         if unit is None:
             self.unit = years(1)
@@ -1604,10 +1607,13 @@ reverse_class_map = {
 }
 
 # Convert to the actual class map
-class_map = sc.objdict()
+class_map = sc.objdict(dur=sc.objdict(), rate=sc.objdict()) # TODO: make a class with an informative error message for invalid lookups (e.g. dur vs rate)
 for v, keylist in reverse_class_map.items():
     for key in keylist:
-        class_map[key] = v
-
-dur_class_map  = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Dur))
-rate_class_map = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Rate))
+        if issubclass(v, Dur):
+            class_map.dur[key] = v
+        elif issubclass(v, Rate):
+            class_map.rate[key] = v
+        else:
+            errormsg = f'Unexpected entry: {v}'
+            raise TypeError(errormsg)
