@@ -1601,9 +1601,56 @@ def peryear(v):
     """Shortcut to specify rate per numeric year"""
     return Rate(v, years(1))
 
+class rateperday:
+    pass
+
+class rateperweek:
+    pass
+
+class ratepermonth:
+    pass
+
+class rateperyear:
+    pass
+
+class iprobperday:
+    pass
+
+class iprobperweek:
+    pass
+
+class iprobpermonth:
+    pass
+
+class iprobperyear:
+    pass
+
+
 # Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
 reverse_class_map = {
-    years: ['y', 'YE', 'year', 'years', year, years],
+    days:   ['d', 'DA', 'day', 'days', day, days],
+    weeks:  ['w', 'WK', 'week', 'weeks', week, weeks],
     months: ['m', 'MO', 'month', 'months', month, months],
+    years:  ['y', 'YE', 'year', 'years', year, years],
+    
+    perday:   ['perday', perday],
+    perweek:  ['perweek', perweek],
+    permonth: ['permonth', permonth],
+    peryear:  ['peryear', peryear],
 
+    rateperday:   ['rateperday', rateperday],
+    rateperweek:  ['rateperweek', rateperweek],
+    ratepermonth: ['ratepermonth', ratepermonth],
+    rateperyear:  ['rateperyear', rateperyear],
+
+    iprobperday:   ['iprobperday', 'rateprobperday', iprobperday],
+    iprobperweek:  ['iprobperweek', 'rateprobperweek', iprobperweek],
+    iprobpermonth: ['iprobpermonth', 'rateprobpermonth', iprobpermonth],
+    iprobperyear:  ['iprobperyear', 'rateprobperyear', iprobperyear],
 }
+
+# Convert to the actual class map
+class_map = sc.objdict()
+for v, keylist in reverse_class_map.items():
+    for key in keylist:
+        class_map[key] = v
