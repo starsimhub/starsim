@@ -1184,7 +1184,7 @@ class Timeline:
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
     default_dur = Dur(50)
-    default_start = Dur(2000)
+    default_start = date(2000)
     min_year = 1900
     default_dt = Dur(1)
 
@@ -1338,7 +1338,7 @@ class Timeline:
             case (start, None, None):
                 if isinstance(start, Dur):
                     pass  # Already a Dur which is fine
-                elif sc.isnumber(start):
+                elif sc.isnumber(start) and start < self.min_year:
                     start = Dur(start)
                 else:
                     start = date(start)
@@ -1348,9 +1348,12 @@ class Timeline:
             case (None, stop, None):
                 if isinstance(stop, Dur):
                     start = stop.__class__(0)
-                else:
+                elif sc.isnumber(stop) and stop < self.min_year:
                     stop = Dur(stop)
                     start = Dur(0)
+                else:
+                    stop = date(stop)
+                    start = self.default_start
                 dur = stop-start
 
             case (None, None, dur):
@@ -1360,7 +1363,7 @@ class Timeline:
             case (start, None, dur):
                 if isinstance(start, Dur):
                     pass
-                elif sc.isnumber(start):
+                elif sc.isnumber(start) and start < self.min_year:
                     start = Dur(start)
                 else:
                     start = date(start)
@@ -1369,7 +1372,7 @@ class Timeline:
             case (None, stop, dur):
                 if isinstance(stop, Dur):
                     pass
-                elif sc.isnumber(stop):
+                elif sc.isnumber(stop) and stop < self.min_year:
                     stop = Dur(stop)
                 else:
                     stop = date(stop)
@@ -1384,8 +1387,12 @@ class Timeline:
                     stop = date(stop)
 
                 if sc.isnumber(start) and sc.isnumber(stop):
-                    start = Dur(start)
-                    stop = Dur(stop)
+                    if stop < self.min_year:
+                        start = Dur(start)
+                        stop = Dur(stop)
+                    else:
+                        start = date(start)
+                        stop = date(stop)
                 elif sc.isnumber(start):
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
