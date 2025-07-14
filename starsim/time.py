@@ -560,6 +560,8 @@ class YearDur(Dur): # CKTODO: rename ss.years
             return self.__class__(self.value + other.years)
         elif isinstance(other, date):
             return date.from_year(other.to_year() + self.value)
+        elif isinstance(other, DateArray):
+            return DateArray(np.vectorize(self.__add__)(other))
         else:
             return self.__class__(self.value + other)
 
@@ -834,7 +836,6 @@ class DateDur(Dur):
         strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(unit_keys, vals) if v != 0]
         return ', '.join(strs)
 
-
     def __add__(self, other):
         if isinstance(other, date):
             return other + self.value
@@ -846,8 +847,11 @@ class DateDur(Dur):
             kwargs = {k: v for k, v in zip(unit_keys, self._as_array(self.value))}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
+        elif isinstance(other, DateArray):
+            return DateArray(np.vectorize(self.__add__)(other))
         else:
-            raise TypeError('For a DateDur instance, it is only possible to add or subtract dates, Dur objects, or pd.DateOffset objects')
+            errormsg = f'For DateDur, it is only possible to add/subtract dates, Dur objects, or pd.DateOffset objects, not {type(other)}'
+            raise TypeError(errormsg)
 
     def __sub__(self, other):
         return self.__add__(-1*other)
