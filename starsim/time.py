@@ -971,11 +971,14 @@ class Rate(TimePar):
             return self.__class__(self.value+other*self.unit, self.unit)
         elif not isinstance(other, Rate):
             if sc.isnumber(other) or isinstance(other, np.ndarray):
-                raise TypeError('Only rates can be added to rates. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
+                errormsg = 'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
+                raise TypeError(errormsg)
             else:
-                raise TypeError('Only rates can be added to rates')
+                errormsg = 'Only rates can be added to rates, not {other}'
+                raise TypeError(errormsg)
         else:
-            raise TypeError('Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
+            errormsg = 'Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb); you added '
+            raise TypeError(errormsg)
 
     def __radd__(self, other): return self.__add__(other)
 
@@ -1425,28 +1428,28 @@ class Timeline:
             case (None, None, None):
                 start = self.default_start
                 dur = self.default_dur
-                stop = start+dur
+                stop = start + dur
 
             case (start, None, None):
                 if isinstance(start, Dur):
                     pass  # Already a Dur which is fine
                 elif is_calendar_year(start):
-                    start = Dur(start)
-                else:
                     start = date(start)
+                else:
+                    start = Dur(start)
                 dur = self.default_dur
-                stop = start+dur
+                stop = start + dur
 
             case (None, stop, None):
                 if isinstance(stop, Dur):
                     start = stop.__class__(0)
                 elif is_calendar_year(stop):
+                    stop = date(stop)
+                    start = date(self.default_start)
+                else:
                     stop = Dur(stop)
                     start = Dur(0)
-                else:
-                    stop = date(stop)
-                    start = self.default_start
-                dur = stop-start
+                dur = stop - start
 
             case (None, None, dur):
                 start = self.default_start
@@ -1459,16 +1462,16 @@ class Timeline:
                     start = Dur(start)
                 else:
                     start = date(start)
-                stop = start+dur
+                stop = start + dur
 
             case (None, stop, dur):
                 if isinstance(stop, Dur):
                     pass
                 elif is_calendar_year(stop):
-                    stop = Dur(stop)
-                else:
                     stop = date(stop)
-                start = stop-dur
+                else:
+                    stop = Dur(stop)
+                start = stop - dur
 
             case (start, stop, dur):
                 # Note that this block will run if dur is None and if it is not None, which is fine because
@@ -1479,19 +1482,20 @@ class Timeline:
                     stop = date(stop)
 
                 if sc.isnumber(start) and sc.isnumber(stop):
-                    if stop < self.calendar_year_threshold:
-                        start = Dur(start)
-                        stop = Dur(stop)
-                    else:
+                    if is_calendar_year(stop):
                         start = date(start)
                         stop = date(stop)
+                    else:
+                        start = Dur(start)
+                        stop = Dur(stop)
                 elif sc.isnumber(start):
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
                     stop = start.__class__(stop)
                 dur = stop-start
             case _:
-                raise Exception('Failed to match start, stop, and dur') # This should not occur
+                errormsg = f'Failed to match {start = }, {stop = }, and {dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.Dur objects.'
+                raise ValueError(errormsg) # This should not occur
 
         assert isinstance(start, (date, Dur)), 'Start must be a date or Dur'
         assert isinstance(stop, (date, Dur)), 'Stop must be a date or Dur'
@@ -1628,25 +1632,25 @@ class rateperyear(Rate):  base = 'year'
 
 # Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
 reverse_class_map = {
-    days:   ['d', 'DA', 'day', 'days', day, days],
-    weeks:  ['w', 'WK', 'week', 'weeks', week, weeks],
-    months: ['m', 'MO', 'month', 'months', month, months],
-    years:  ['y', 'YE', 'year', 'years', year, years],
+    days:   ['d', 'day', 'days', day, days],
+    weeks:  ['w', 'week', 'weeks', week, weeks],
+    months: ['m', 'month', 'months', month, months],
+    years:  ['y', 'year', 'years', year, years],
 
-    perday:   ['perday', perday],
-    perweek:  ['perweek', perweek],
-    permonth: ['permonth', permonth],
-    peryear:  ['peryear', peryear],
+    perday:   ['perday', 'probperday', perday],
+    perweek:  ['perweek', 'probperweek', perweek],
+    permonth: ['permonth', 'probpermonth', permonth],
+    peryear:  ['peryear', 'probperyear', peryear],
 
     rateperday:   ['rateperday', rateperday],
     rateperweek:  ['rateperweek', rateperweek],
     ratepermonth: ['ratepermonth', ratepermonth],
     rateperyear:  ['rateperyear', rateperyear],
 
-    iprobperday:   ['iprobperday', 'InstProbperday', iprobperday],
-    iprobperweek:  ['iprobperweek', 'InstProbperweek', iprobperweek],
-    iprobpermonth: ['iprobpermonth', 'InstProbpermonth', iprobpermonth],
-    iprobperyear:  ['iprobperyear', 'InstProbperyear', iprobperyear],
+    iprobperday:   ['iprobperday', iprobperday],
+    iprobperweek:  ['iprobperweek', iprobperweek],
+    iprobpermonth: ['iprobpermonth', iprobpermonth],
+    iprobperyear:  ['iprobperyear', iprobperyear],
 }
 
 # Convert to the actual class map
