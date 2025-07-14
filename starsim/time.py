@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 
-__all__ = ['date', 'TimePar', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'rateprob',
+__all__ = ['date', 'TimePar', 'Dur', 'years', 'DateDur', 'Rate', 'timeprob', 'rateprob',
            'Timeline', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
@@ -166,7 +166,7 @@ class date(pd.Timestamp):
             return np.vectorize(self.__add__)(other)
         elif isinstance(other, DateDur):
             return self._timestamp_add(other.value)
-        elif isinstance(other, YearDur):
+        elif isinstance(other, years):
             return date(self.to_year() + other.value)
         elif isinstance(other, pd.DateOffset):
             return self._timestamp_add(other)
@@ -184,12 +184,12 @@ class date(pd.Timestamp):
 
         if isinstance(other, DateDur):
             return date(self.to_pandas() - other.value)
-        elif isinstance(other, YearDur):
+        elif isinstance(other, years):
             return date(self.to_year() - other.value)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() - other)
         elif isinstance(other, date):
-            return YearDur(self.years-other.years)
+            return years(self.years-other.years)
         else:
             errormsg = f'Unsupported type {type(other)}'
             raise TypeError(errormsg)
@@ -387,11 +387,11 @@ class Dur(TimePar):
             if args:
                 if isinstance(args[0], (pd.DateOffset, DateDur)):
                     return super().__new__(DateDur)
-                elif isinstance(args[0], YearDur):
-                    return super().__new__(YearDur)
+                elif isinstance(args[0], years):
+                    return super().__new__(years)
                 else:
                     assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
-                    return super().__new__(YearDur)
+                    return super().__new__(years)
             else:
                 return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
         return super().__new__(cls)
@@ -500,7 +500,7 @@ class Dur(TimePar):
         Construct an array of Dur instances
 
         For this function, the low, high, and step must ALL be specified, and they must
-        all be Dur instances. Mixing Dur types (YearDur and DateDur) is permitted.
+        all be Dur instances. Mixing Dur types (years and DateDur) is permitted.
 
         Args:
             low: Starting point e.g., ss.Dur(0)
@@ -522,7 +522,7 @@ class Dur(TimePar):
         return np.array(tvec)
 
 
-class YearDur(Dur): # CKTODO: rename ss.years
+class years(Dur): # CKTODO: rename ss.years
     """ Year based duration e.g., if requiring 52 weeks per year """
     base = 'year'
 
@@ -532,11 +532,11 @@ class YearDur(Dur): # CKTODO: rename ss.years
 
         Supported inputs are
             - A float number of years (so can use values like 1/52 for 1 week)
-            - A YearDur instance (as a copy-constructor)
+            - A years instance (as a copy-constructor)
             - A DateDur instance (to convert from date-based to fixed representation)
 
         Args:
-            years: float, YearDur, DateDur
+            years: float, years, DateDur
         """
         if isinstance(years, Dur):
             self.value = years.years
@@ -594,7 +594,7 @@ class YearDur(Dur): # CKTODO: rename ss.years
             return self.__class__(self.value / other)
 
     def __repr__(self):
-        return f'<YearDur: {self.value} years>'
+        return f'<years: {self.value} years>'
 
     def str(self):
         if self.value == 1:
@@ -606,7 +606,7 @@ class YearDur(Dur): # CKTODO: rename ss.years
         return self.__class__(abs(self.value))
 
 # Shortcut
-year = YearDur(1)
+year = years(1)
 
 
 class DateDur(Dur):
@@ -639,7 +639,7 @@ class DateDur(Dur):
                 self.value = self._round_duration(args[0])
             elif isinstance(args[0], DateDur):
                 self.value = args[0].unit # pd.DateOffset is immutable so this should be OK
-            elif isinstance(args[0], YearDur):
+            elif isinstance(args[0], years):
                 self.value = self._round_duration({'years': args[0].years})
             elif sc.isnumber(args[0]):
                 self.value = self._round_duration({'years': args[0]})
@@ -691,9 +691,9 @@ class DateDur(Dur):
         """
         Return approximate conversion into years
 
-        This allows interoperability with YearDur objects (which would typically be expected to
+        This allows interoperability with years objects (which would typically be expected to
         occur if module parameters have been entered with `DateDur` durations, but the simulation
-        timestep is in `YearDur` units).
+        timestep is in `years` units).
 
         The conversion is based on `ss.time.time_units` which defines the conversion from each time unit
         to the next
@@ -846,7 +846,7 @@ class DateDur(Dur):
             return self.__class__(**self._as_args(self._as_array(self.value) + self._as_array(other.value)))
         elif isinstance(other, pd.DateOffset):
             return self.__class__(**self._as_args(self._as_array(self.value) + self._as_array(other)))
-        elif isinstance(other, YearDur):
+        elif isinstance(other, years):
             kwargs = {k: v for k, v in zip(unit_keys, self._as_array(self.value))}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
@@ -864,7 +864,7 @@ class DateDur(Dur):
         # DateDur(months=-1,days=1) - this is a sensible DateDur interpreted as 'go back 1 month, then go forward 1 day'
         # but just taking the absolute value of all of the components wouldn't work because this would be on average 1 month + 1 day
         # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
-        # (whereas abs(YearDur) arises when comparing dates, which automatically return YearDur)
+        # (whereas abs(years) arises when comparing dates, which automatically return years)
         raise NotImplementedError('The absolute value of a DateDur instance is undefined as components (e.g., months, days) may have different signs.')
 
 
@@ -876,7 +876,7 @@ class Rate(TimePar):
     """
     def __init__(self, value, unit=None):
         if unit is None:
-            self.unit = YearDur(1)
+            self.unit = years(1)
         elif isinstance(unit, Dur):
             self.unit = unit
         else:
@@ -1432,8 +1432,8 @@ class Timeline:
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
         # prioritise one or the other depending on what type of quantity the user has specified for dt
-        if isinstance(self.dt, YearDur):
-            # If dt has been specified as a YearDur then preference setting fractional years. So first
+        if isinstance(self.dt, years):
+            # If dt has been specified as a years then preference setting fractional years. So first
             # calculate the fractional years, and then convert them to the equivalent dates
             self._yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             if isinstance(self.stop, Dur):
@@ -1489,10 +1489,7 @@ class Timeline:
         return now
 
 
-#%% Convenience functions
-
-def years(x=1) -> Dur:
-    return Dur(x)
+#%% Convenience classes
 
 def months(x: float) -> Dur:
     return Dur(months=x)
@@ -1517,4 +1514,4 @@ def permonth(v):
 
 def peryear(v):
     """Shortcut to specify rate per numeric year"""
-    return Rate(v, YearDur(1))
+    return Rate(v, years(1))

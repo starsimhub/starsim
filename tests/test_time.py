@@ -268,12 +268,12 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, Dur, DateDur, YearDur, perday, perweek, Rate, timeprob, rateprob
+    from starsim import date, Timeline, Dur, DateDur, years, perday, perweek, Rate, timeprob, rateprob
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
 
-    assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
+    assert np.all((years(1)*np.arange(5)) == (np.arange(5)*years(1)))
 
     tv = Timeline(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
@@ -281,7 +281,7 @@ def test_syntax():
 
     assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)), 6/365)
 
-    assert date(2050) - date(2020) == YearDur(30)
+    assert date(2050) - date(2020) == years(30)
 
     assert np.isclose((perweek(1)+perday(1)).value, perweek(8).value) # CKTODO: would be nice if this were exact
 
@@ -302,14 +302,14 @@ def test_syntax():
     assert len(Timeline(date(2020), date(2030.5), Dur(0.1)).init()) == 106
 
     # Operations on date vectors
-    date.arange(2020,2030)+YearDur(1) # add YearDur to date array
+    date.arange(2020,2030)+years(1) # add years to date array
     date.arange(2020,2030)+DateDur(years=1) # add DateDur to date array
 
     # Construction of various duration ranges and addition with durations and dates
-    Dur.arange(Dur(0),Dur(10),Dur(1)) + YearDur(1)
-    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + YearDur(1)
-    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + YearDur(1)
-    # Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + YearDur(1) # TODO: do not allow for now
+    Dur.arange(Dur(0),Dur(10),Dur(1)) + years(1)
+    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + years(1)
+    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + years(1)
+    # Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + years(1) # TODO: do not allow for now
     # Dur.arange(Dur(0),Dur(10),Dur(1)) + DateDur(years=1)
     # Dur.arange(Dur(0),Dur(10),Dur(years=1)) + DateDur(years=1)
     # Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
@@ -320,9 +320,9 @@ def test_syntax():
     Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + date(2000)
 
     # Rates
-    assert (1/YearDur(1)) == ss.peryear(1)
-    assert (2/YearDur(1)) == ss.peryear(2)
-    assert (4/YearDur(1)) == ss.peryear(4)
+    assert (1/years(1)) == ss.peryear(1)
+    assert (2/years(1)) == ss.peryear(2)
+    assert (4/years(1)) == ss.peryear(4)
     assert (4/DateDur(1)) == ss.peryear(4)
     assert (perday(5)*Dur(days=1)) == 5
     assert 2/Rate(0.25) == Dur(8)
