@@ -442,7 +442,7 @@ class TimePar:
         return class_map[unit](self)
 
     @classmethod
-    def to_self(cls, other):
+    def to_base(cls, other):
         """ Convert another TimePar object to this TimePar's base units """
         try:
             return getattr(other, cls.basekey)
@@ -524,22 +524,50 @@ class Dur(TimePar):
     def to_numpy(self):
         return self.value
 
-    @property
-    def is_variable(self):
-        """
-        Returns True if the duration has variable length
-
-        Some date-based durations like years and months correspond to a variable
-        period of time. This attribute captures whether or not the quantity has
-        variable length.
-        """
-        raise NotImplementedError
+    def __add__(self, other):
+        if isinstance(other, Dur):
+            return self.__class__(self.value + self.to_base(other))
+        elif isinstance(other, date): # If adding to a date, convert to years
+            return date.from_year(other.to_year() + self.years)
+        elif isinstance(other, DateArray):
+            return DateArray(np.vectorize(self.__add__)(other))
+        else:
+            return self.__class__(self.value + other)
 
     def __radd__(self, other):
         return self.__add__(other)
 
+    def __sub__(self, other):
+        if isinstance(other, Dur):
+            out = self.__class__(self.value - self.to_base(other))
+        elif isinstance(other, date):
+            return date.from_year(other.to_year() - self.years)
+        else:
+            out = self.__class__(self.value - other)
+            if sc.isnumber(out) and out < 0:
+                warnmsg = f'Subtracting {self} and {other} yields {out}. Durations are rarely negative; are you sure this is intentional?'
+                ss.warn(warnmsg)
+        return out
+
+    def __mul__(self, other):
+        if isinstance(other, Rate):
+            return NotImplemented # Delegate to Rate.__rmul__
+        elif isinstance(other, Dur):
+            raise Exception('Cannot multiply a duration by a duration')
+        elif isinstance(other, date):
+            raise Exception('Cannot multiply a duration by a date')
+        return self.__class__(self.value*other)
+
     def __rmul__(self, other):
         return self.__mul__(other)
+
+    def __truediv__(self, other):
+        if isinstance(other, Dur):
+            return self.years/other.years
+        elif isinstance(other, Rate):
+            raise Exception('Cannot divide a duration by a rate')
+        else:
+            return self.__class__(self.value / other)
 
     def __neg__(self):
         return -1*self
@@ -580,9 +608,6 @@ class Dur(TimePar):
         except:
             return self.years != other
 
-    def __truediv__(self, other):
-        raise NotImplementedError('Dur subclasses are required to implement this method')
-
     def __rtruediv__(self, other):
         # If a Dur is divided by a Dur then we will call __truediv__
         # If a float is divided by a Dur, then we should return a rate
@@ -595,13 +620,23 @@ class Dur(TimePar):
         else:
             return Rate(other, self)
 
+    def __repr__(self):
+        if self.value == 1:
+            return f'{self.base}'
+        else:
+            return f'{self.basekey}({self.value})'
+
     def str(self):
-        # This method should return a readable representation of the duration e.g., 'day', '2 days', 'year'
-        # Not using __str__ because we still want print(Dur) to show the repr
-        raise NotImplementedError('Dur subclasses are required to implement this method')
+        if self.value == 1:
+            return 'year'
+        else:
+            return f'{self.value} years'
+
+    def __abs__(self):
+        return self.__class__(abs(self.value))
 
     @classmethod
-    def arange(cls, low, high, step):
+    def arange(cls, low, high, step): # TODO: remove? ss.Dur(arr) is preferable to array(ss.Dur) for performance
         """
         Construct an array of Dur instances
 
@@ -615,6 +650,7 @@ class Dur(TimePar):
 
         Returns:
         """
+        ss.war('Dur.arange is deprecated')
 
         assert isinstance(low, Dur), 'Low input must be an ss.Dur'
         assert isinstance(high, Dur), 'High input must be an ss.Dur'
@@ -626,70 +662,6 @@ class Dur(TimePar):
             tvec.append(t)
             t += step
         return np.array(tvec)
-
-
-class years(Dur):
-    """ Year based duration e.g., if requiring 52 weeks per year """
-    base = 'year'
-
-    def to_numpy(self):
-        return self.value
-
-    @property
-    def is_variable(self):
-        return False
-
-    def __add__(self, other):
-        if isinstance(other, Dur):
-            return self.__class__(self.value + self.to_base(other))
-        elif isinstance(other, date):
-            return date.from_year(other.to_year() + self.value)
-        elif isinstance(other, DateArray):
-            return DateArray(np.vectorize(self.__add__)(other))
-        else:
-            return self.__class__(self.value + other)
-
-    def __sub__(self, other):
-        if isinstance(other, Dur):
-            return self.__class__(max(self.value - other.years, 0))
-        elif isinstance(other, date):
-            return date.from_year(other.to_year() - self.value)
-        else:
-            return self.__class__(max(self.value - other, 0))
-
-    def __mul__(self, other):
-        if isinstance(other, Rate):
-            return NotImplemented # Delegate to Rate.__rmul__
-        elif isinstance(other, Dur):
-            raise Exception('Cannot multiply a duration by a duration')
-        elif isinstance(other, date):
-            raise Exception('Cannot multiply a duration by a date')
-        return self.__class__(self.value*other)
-
-    def __truediv__(self, other):
-        if isinstance(other, Dur):
-            return self.years/other.years
-        elif isinstance(other, Rate):
-            raise Exception('Cannot divide a duration by a rate')
-        else:
-            return self.__class__(self.value / other)
-
-    def __repr__(self):
-        return f'<years: {self.value} years>'
-
-    def str(self):
-        if self.value == 1:
-            return 'year'
-        else:
-            return f'{self.value} years'
-
-    def __abs__(self):
-        return self.__class__(abs(self.value))
-
-# Shortcuts
-year = years(1)
-for obj in [year]:
-    object.__setattr__(obj, '_locked', True) # Make immutable
 
 
 class DateDur(Dur):
@@ -1576,6 +1548,15 @@ class Timeline:
 
 #%% Convenience classes
 
+class years(Dur): base = 'year'
+
+
+
+# Shortcuts
+year = years(1)
+for obj in [year]:
+    object.__setattr__(obj, '_locked', True) # Make immutable
+
 def months(x: float) -> Dur:
     return Dur(months=x)
 
@@ -1632,7 +1613,7 @@ reverse_class_map = {
     weeks:  ['w', 'WK', 'week', 'weeks', week, weeks],
     months: ['m', 'MO', 'month', 'months', month, months],
     years:  ['y', 'YE', 'year', 'years', year, years],
-    
+
     perday:   ['perday', perday],
     perweek:  ['perweek', perweek],
     permonth: ['permonth', permonth],
@@ -1654,3 +1635,6 @@ class_map = sc.objdict()
 for v, keylist in reverse_class_map.items():
     for key in keylist:
         class_map[key] = v
+
+dur_class_map  = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Dur))
+rate_class_map = sc.objdict({k:v} for k,v in class_map.items() if issubclass(v, Rate))
