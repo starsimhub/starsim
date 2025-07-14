@@ -378,14 +378,14 @@ class TimePar:
 
     @classmethod
     def _set_factors(cls):
-        # if cls.base is not None:
-        try:
+        if cls.base is not None:
             cls.factors = factors[cls.base].items
             cls.factor_keys = factors[cls.base].keys
             cls.factor_vals = factors[cls.base].keys
-        except KeyError as e:
-            errormsg = f'Invalid base unit "{cls.base}"; are you trying to use ss.Dur()/ss.Rate instead of ss.years(), ss.perday(), etc?'
-            raise KeyError(errormsg) from e
+        return
+        # except KeyError as e:
+        #     errormsg = f'Invalid base unit "{cls.base}"; are you trying to use ss.Dur()/ss.Rate instead of ss.years(), ss.perday(), etc?'
+        #     raise KeyError(errormsg) from e
 
     def __setattrr__(self, attr, value):
         if object.__getattribute__(self, '_locked'):
@@ -669,7 +669,7 @@ class years(Dur):
 # Shortcuts
 year = years(1)
 for obj in [year]:
-    object.__setattribute__(obj, '_locked', True) # Make immutable
+    object.__setattr__(obj, '_locked', True) # Make immutable
 
 
 class DateDur(Dur):
