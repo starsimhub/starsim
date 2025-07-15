@@ -530,7 +530,7 @@ class Dur(TimePar):
 
     def __repr__(self):
         if self.value == 1:
-            return f'{self.base}'
+            return f'{self.base}()'
         else:
             return f'{self.basekey}({self.value})'
 
@@ -962,18 +962,22 @@ class Rate(TimePar):
 
     def __init__(self, value, unit=None):
         if unit is not None and self.base is not None:
-            errormsg = f'Cannot specify unit "{unit}" for a rate when base "{self.base}" is already specified'
-            raise ValueError(errormsg)
+            unitstr = unit.base if isinstance(unit, ss.TimePar) else unit
+            if unitstr != self.base:
+                errormsg = f'Cannot specify incompatible unit "{unit}" for a rate when base "{self.base}" is already specified'
+                raise ValueError(errormsg)
 
         if unit is None:
             if self.base is not None:
-                self.unit = class_map.dur[self.base]
+                dur = class_map.dur[self.base]
+                self.unit = dur(1)
             else:
                 self.unit = years(1)
         elif isinstance(unit, Dur):
             self.unit = unit
         elif isinstance(unit, str):
-            self.unit = class_map.dur[unit]
+            dur = class_map.dur[unit]
+            self.unit = dur(1)
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
 
@@ -981,17 +985,16 @@ class Rate(TimePar):
             errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)
         self.value = value
-        self._set_factors()
+        self._set_base()
         return
 
-    def _set_factors(self):
-        # Rates can have either unit or base set; handle either
-        if self.base is None:
-            if isinstance(self.unit, ss.TimePar):
-                self.base = self.unit.base
-            elif isinstance(self.unit, str):
-                self.base = self.unit
-        super()._set_factors()
+    def _set_base(self):
+        """ Rates can have either unit or base set; handle either """
+        if self.base is None and isinstance(self.unit, ss.TimePar):
+            self.base = self.unit.base
+        elif self.base != self.unit.base: # Should not be possible, but check just in case
+            errormsg = f'Inconsistent definition: base = {self.base} but unit = {self.unit.base}'
+            raise ValueError(errormsg)
         return
 
     def __repr__(self):
