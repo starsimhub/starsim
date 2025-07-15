@@ -162,7 +162,7 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, Dur, DateDur, years, rateperday, rateperweek, Rate, TimeProb, InstProb
+    from starsim import date, Timeline, Dur, DateDur, years, rateperday, rateperweek, Rate, TimeProb, RateProb
 
     assert float(date(1500))==1500
     assert float(date(1500.1))==1500.1
@@ -235,13 +235,13 @@ def test_syntax():
     assert p * Dur(0.5 ) == f(2)
     assert p * Dur(months=1) == f(12)
 
-    p = InstProb(0.1, Dur(years=1))
+    p = RateProb(0.1, Dur(years=1))
     f = lambda factor: 1 - np.exp(-p.value/factor)
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
 
-    p = InstProb(0.1, Dur(1))
+    p = RateProb(0.1, Dur(1))
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)

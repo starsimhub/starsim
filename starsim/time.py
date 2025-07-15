@@ -19,11 +19,7 @@ TimePar  # All time parameters
     │   ├── perweek
     │   ├── permonth
     │   └── peryear
-    └── InstProb  # Instantaneous probability of an event happening
-        ├── iprobperday
-        ├── iprobperweek
-        ├── iprobpermonth
-        └── iprobperyear
+    └── RateProb  # Instantaneous probability of an event happening
 """
 import sciris as sc
 import numpy as np
@@ -31,7 +27,7 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'InstProb', 'Timeline']
+__all__ = ['date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb', 'Timeline']
 
 #%% Base classes
 class DateArray(np.ndarray):
@@ -719,7 +715,7 @@ class DateDur(Dur):
             if isinstance(args[0], pd.DateOffset):
                 self.value = self._round_duration(args[0])
             elif isinstance(args[0], DateDur):
-                self.value = args[0].unit # pd.DateOffset is immutable so this should be OK
+                self.value = sc.dcp(args[0].value) # pd.DateOffset is immutable so this should be OK
             elif isinstance(args[0], Dur):
                 self.value = self._round_duration({'years': args[0].years})
             elif sc.isnumber(args[0]):
@@ -734,7 +730,7 @@ class DateDur(Dur):
         return float(self.years)
 
     @classmethod
-    def _as_array(cls, dateoffset: pd.DateOffset):
+    def _as_array(cls, dateoffset):
         """
         Return array representation of a pd.DateOffset
 
@@ -1134,7 +1130,7 @@ class TimeProb(Rate):
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use `InstProb` instead if `TimeProb` if you would prefer to directly
+    Use `RateProb` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
     base = None # Can inherit, but clearer to specify
@@ -1221,21 +1217,21 @@ class TimeProb(Rate):
     def __rtruediv__(self, other): raise NotImplementedError()
 
 
-class InstProb(Rate):
+class RateProb(Rate):
     """
-    A `InstProb` represents an instantaneous rate of an event occurring. Rates
+    A `RateProb` represents an instantaneous rate of an event occurring. Rates
     must be non-negative, but need not be less than 1.
 
     Through multiplication, rate can be modified or converted to a probability,
     depending on the data type of the object being multiplied.
 
-    When a `InstProb` is multiplied by a scalar or array, the rate is simply
+    When a `RateProb` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
     represent agents experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
-    Alternatively, when a `InstProb` is multiplied by a duration (type
+    Alternatively, when a `RateProb` is multiplied by a duration (type
     ss.Dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
         `1 - np.exp(-rate/factor)`,
@@ -1243,7 +1239,7 @@ class InstProb(Rate):
     period (denominator).
 
     For example, consider
-    >>> p = ss.InstProb(0.8, ss.years(1))
+    >>> p = ss.RateProb(0.8, ss.years(1))
     When multiplied by a duration of 1 year, the calculated probability is
         `1 - np.exp(-0.8)`, which is approximately 55%.
     >>> p*ss.years(1)
@@ -1251,17 +1247,17 @@ class InstProb(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between `TimeProb` and `InstProb` is subtle, but important. `InstProb` works directly
+    The difference between `TimeProb` and `RateProb` is subtle, but important. `RateProb` works directly
     with the instantaneous rate of an event occurring. In contrast, `TimeProb` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
-    * InstProb: rate -> probability
+    * RateProb: rate -> probability
     * TimeProb: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
-    timepar_subtype = 'instprob'
+    timepar_subtype = 'rateprob'
 
     def __init__(self, value, unit=None):
         assert value >= 0, 'Value must be >= 0'
@@ -1651,7 +1647,6 @@ class Timeline:
 __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
             'perday', 'perweek', 'permonth', 'peryear', # TimeProbs
             'probperday', 'probperweek', 'probpermonth', 'probperyear', # TimeProb aliases
-            'iprobperday', 'iprobperweek', 'iprobpermonth', 'iprobperyear', # InstProbs
             'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear'] # Rates
 
 # Durations
@@ -1680,12 +1675,6 @@ probperweek = perweek
 probpermonth = permonth
 probperyear = peryear
 
-# InstProbs
-class iprobperday(InstProb):   base = 'day'
-class iprobperweek(InstProb):  base = 'week'
-class iprobpermonth(InstProb): base = 'month'
-class iprobperyear(InstProb):  base = 'year'
-
 # Rates
 class rateperday(Rate):   base = 'day'
 class rateperweek(Rate):  base = 'week'
@@ -1708,11 +1697,6 @@ reverse_class_map = {
     rateperweek:  ['rateperweek', rateperweek],
     ratepermonth: ['ratepermonth', ratepermonth],
     rateperyear:  ['rateperyear', rateperyear],
-
-    iprobperday:   ['iprobperday', iprobperday],
-    iprobperweek:  ['iprobperweek', iprobperweek],
-    iprobpermonth: ['iprobpermonth', iprobpermonth],
-    iprobperyear:  ['iprobperyear', iprobperyear],
 }
 
 # Convert to the actual class map
