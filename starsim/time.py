@@ -544,37 +544,14 @@ class Dur(TimePar):
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    def __new__(cls, *args, value=None, base='years'):
+    def __new__(cls, value=None, base='years'):
         """ Return the correct type based on the inputs """
-        if cls is Dur: # This class, not a subclass
-            value = None # No value
-            base = 'years' # Default base
-            n_args = len(args)
-            if n_args >= 1:
-                value = args[0]
-            elif n_args == 2:
-                base = args[1]
-
-            if 'base' in kwargs:
-                base = kwargs['base']
-                n_args += 1 # Since same as supplying it as an argument
-            if 'value' in kwargs:
-                value = kwargs['value']
-                n_args += 1 # Not used, but we need to track it
-
-            if n_args == 1:
-                if isinstance(arg, Dur):
-                    return super().__new__(arg.__class__)
-                else: # Not recognized
-                    errormsg = f"If supplying one argument to ss.Dur(), it must be a Dur, DateDur, or pd.DateOffset. Otherwise, use two arguments, e.g. ss.Dur(3, 'years')"
-                    raise ValueError(errormsg)
-            elif n_args == 2:
-                new_cls = class_map.dur[base]
-                return super().__new__(new_cls)
-
+        if cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
+            new_cls = class_map.dur[base]
+            self = super().__new__(new_cls)
             self.__init__(value=value)
-
-        return super().__new__(cls) # Default initialization
+            return self
+        return super().__new__(cls) # Otherwise, do default initialization
 
     def __init__(self, value=1, base=None):
         """
