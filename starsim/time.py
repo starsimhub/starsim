@@ -961,17 +961,37 @@ class Rate(TimePar):
     timepar_subtype = 'rate'
 
     def __init__(self, value, unit=None):
+        if unit is not None and self.base is not None:
+            errormsg = f'Cannot specify unit "{unit}" for a rate when base "{self.base}" is already specified'
+            raise ValueError(errormsg)
+
         if unit is None:
-            self.unit = years(1)
+            if self.base is not None:
+                self.unit = class_map.dur[self.base]
+            else:
+                self.unit = years(1)
         elif isinstance(unit, Dur):
             self.unit = unit
-        else:
-            self.unit = Dur(unit)
+        elif isinstance(unit, str):
+            self.unit = class_map.dur[unit]
+        else: # e.g. number
+            self.unit = ss.years(unit) # Default of years
 
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)):
             errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)
         self.value = value
+        self._set_factors()
+        return
+
+    def _set_factors(self):
+        # Rates can have either unit or base set; handle either
+        if self.base is None:
+            if isinstance(self.unit, ss.TimePar):
+                self.base = self.unit.base
+            elif isinstance(self.unit, str):
+                self.base = self.unit
+        super()._set_factors()
         return
 
     def __repr__(self):
