@@ -68,8 +68,14 @@ class date(pd.Timestamp):
                 return pd.Timestamp(None)
             elif isinstance(arg, pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
-            elif sc.isnumber(arg):
+            elif sc.isnumber(arg): # e.g. 2020
                 single_year_arg = True
+            elif isinstance(arg, ss.DateDur): # e.g. ss.DateDur(years=2020)
+                kwargs.update(arg.to_dict())
+            elif isinstance(arg, ss.Dur): # e.g. ss.years(2020)
+                arg = arg.years
+                single_year_arg = True
+
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
         if single_year_arg:
             return cls.from_year(args[0])
@@ -140,7 +146,6 @@ class date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
-
         if isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
@@ -764,6 +769,18 @@ class DateDur(Dur):
             x = cls._as_array(x)
         return {k: v for k, v in zip(cls.factor_keys, x)}
 
+    def to_array(self):
+        """ Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years """
+        return self._as_array(self.value)
+
+    def to_numpy(self):
+        # TODO: This is a quick fix to get plotting to work, but this should do something more sensible
+        return self.years
+
+    def to_dict(self):
+        """ Convert to a dictionary """
+        return self._as_args(self.to_array())
+
     @property
     def years(self):
         """
@@ -851,11 +868,6 @@ class DateDur(Dur):
         """
         return self._round_duration(self._as_array(dateoffset) * scale)
 
-    def to_numpy(self):
-        # TODO: This is a quick fix to get plotting to work, but this should do something more sensible
-        return self.years
-        # return self.value.to_numpy()
-
     def __pow__(self, other):
         raise Exception('Cannot multiply a duration by a duration')
 
@@ -875,8 +887,8 @@ class DateDur(Dur):
             # both to years. Instead though, we can just convert days into weeks instead of days into years, and
             # then divide 1 week by (1/7) days.
             # return self.years/other.years
-            self_array = self._as_array(self.value)
-            other_array = other._as_array(other.value)
+            self_array = self.to_array()
+            other_array = other.to_array()
             unit = np.argmax((self_array != 0) | (other_array != 0))
             a = 0
             b = 0
@@ -897,7 +909,7 @@ class DateDur(Dur):
             return '<DateDur: 0>'
         else:
             labels = self.factor_keys
-            vals = self._as_array(self.value).astype(float)
+            vals = self.to_array().astype(float)
 
             time_portion = vals[4:]
             time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
@@ -906,7 +918,7 @@ class DateDur(Dur):
 
     def str(self):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
-        vals = self._as_array(self.value)
+        vals = self.to_array()
 
         # If we have only one nonzero value, return 'year', 'month', etc.
         if np.count_nonzero(vals == 1) == 1:
@@ -921,11 +933,11 @@ class DateDur(Dur):
         if isinstance(other, date):
             return other + self.value
         elif isinstance(other, DateDur):
-            return self.__class__(**self._as_args(self._as_array(self.value) + self._as_array(other.value)))
+            return self.__class__(**self._as_args(self.to_array() + self._as_array(other.value)))
         elif isinstance(other, pd.DateOffset):
-            return self.__class__(**self._as_args(self._as_array(self.value) + self._as_array(other)))
+            return self.__class__(**self._as_args(self.to_array() + self._as_array(other)))
         elif isinstance(other, years):
-            kwargs = {k: v for k, v in zip(self.factor_keys, self._as_array(self.value))}
+            kwargs = {k: v for k, v in zip(self.factor_keys, self.to_array())}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
         elif isinstance(other, DateArray):

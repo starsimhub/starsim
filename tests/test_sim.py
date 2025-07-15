@@ -166,7 +166,6 @@ def test_complex_api():
     # Run
     s1.run()
     s2.run()
-
     assert ss.check_sims_match(s1, s2), 'Sims should match'
 
     return s1
