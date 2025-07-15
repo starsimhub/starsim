@@ -448,9 +448,13 @@ class TimePar:
             errormsg = f'{type(self)} is a scalar; index 0 is valid but all others are not'
             raise IndexError(errormsg)
 
+    def __bool__(self):
+        return True
+
     def __len__(self):
         if self.is_scalar:
-            return 1
+            errormsg = f'{self} is a scalar' # This error is needed so NumPy doesn't try to iterate over the array
+            raise TypeError(errormsg)
         else:
             return len(self.value)
 

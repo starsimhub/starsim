@@ -351,14 +351,7 @@ class Timeline:
         self.datevec = ss.date.arange(date_start, self.stop, self.dt)
         if isinstance(self.start, ss.Dur): # Use durations
             self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
-            vals = []
-            cla = self.default_type
-            print(cla)
-            for x in self.yearvec:
-                print(x)
-                vals.append(cla(value=x))
-            self.tvec = np.array(vals)
-            # self.tvec = np.array([self.start.__class__(value=x) for x in self.yearvec]) # TODO: refactor
+            self.tvec = np.array([self.default_type(value=x) for x in self.yearvec]) # TODO: refactor
         elif isinstance(self.start, ss.date):
             self.tvec = self.datevec
             self.yearvec = np.array([x.years for x in self.datevec])
