@@ -428,20 +428,25 @@ class TimePar:
 
     def __getitem__(self, index):
         """ For indexing and slicing, e.g. TimePar[inds] """
-        if isinstance(self.value, np.ndarray):
+        if self.is_array:
             return self.__class__(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
+        elif index == 0:
+            return self.value
         else:
-            errormsg = f'Can only index {type(self)} if value is an array, not a scalar'
-            raise TypeError(errormsg)
+            errormsg = f'{type(self)} is a scalar; index 0 is valid but all others are not'
+            raise IndexError(errormsg)
 
     def __setitem__(self, index, value):
         """ For indexing and slicing, e.g. TimePar[inds] """
-        if isinstance(self.value, np.ndarray):
+        if self.is_array:
             self.value[index] = value
             return
+        elif index == 0:
+            self.value = value
+            return
         else:
-            errormsg = f'Can only index {type(self)} if value is an array, not a scalar'
-            raise TypeError(errormsg)
+            errormsg = f'{type(self)} is a scalar; index 0 is valid but all others are not'
+            raise IndexError(errormsg)
 
     def __len__(self):
         if self.is_scalar:
@@ -515,20 +520,21 @@ class Dur(TimePar):
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    def __new__(cls, *args, **kwargs):
-        # Return
-        if cls is Dur:
-            if args:
-                if isinstance(args[0], (pd.DateOffset, DateDur)):
-                    return super().__new__(DateDur)
-                elif isinstance(args[0], years):
-                    return super().__new__(years)
-                else:
-                    assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
-                    return super().__new__(years)
-            else:
-                return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
-        return super().__new__(cls)
+    # def __new__(cls, *args, **kwargs):
+    #     # Return
+    #     if cls is Dur:
+    #         if args:
+    #             arg = args[0]
+    #             if isinstance(arg, (pd.DateOffset, DateDur)):
+    #                 return super().__new__(DateDur)
+    #             elif isinstance(arg, Dur):
+    #                 return super().__new__(arg.__class__)
+    #             else:
+    #                 assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
+    #                 return super().__new__(years)
+    #         else:
+    #             return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
+    #     return super().__new__(cls)
 
     def __init__(self, value=1):
         """
