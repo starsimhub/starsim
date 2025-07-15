@@ -546,6 +546,7 @@ class Dur(TimePar):
 
         Args:
             value (float/`ss.Dur`): the value to use
+            base (str): the base unit, e.g. 'year'
         """
         super().__init__()
         if sc.isnumber(value) or isinstance(value, np.ndarray):
