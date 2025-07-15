@@ -544,34 +544,37 @@ class Dur(TimePar):
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args, value=None, base='years'):
         """ Return the correct type based on the inputs """
-        if cls is Dur:
-            has_args = len(args)
-            has_kwargs = len(kwargs)
+        if cls is Dur: # This class, not a subclass
+            value = None # No value
+            base = 'years' # Default base
+            n_args = len(args)
+            if n_args >= 1:
+                value = args[0]
+            elif n_args == 2:
+                base = args[1]
 
-            # e.g. ss.Dur(3, 'years') or ss.Dur(pd.DateOffset(years=5)) or
-            if has_args and not has_kwargs:
-                if len(args) == 2:
-                    value = args[0]
-                    base = args[1]
+            if 'base' in kwargs:
+                base = kwargs['base']
+                n_args += 1 # Since same as supplying it as an argument
+            if 'value' in kwargs:
+                value = kwargs['value']
+                n_args += 1 # Not used, but we need to track it
 
-            # Only valid options is e.g. ss.Dur(3, base='years')
-            # if has_args and has_kwargs:
-            #     try:
-
-            if args:
-                arg = args[0]
-                if isinstance(arg, (pd.DateOffset, DateDur)):
-                    return super().__new__(DateDur)
-                elif isinstance(arg, Dur):
+            if n_args == 1:
+                if isinstance(arg, Dur):
                     return super().__new__(arg.__class__)
-                else:
-                    assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
-                    return super().__new__(years)
-            else:
-                return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
-        return super().__new__(cls)
+                else: # Not recognized
+                    errormsg = f"If supplying one argument to ss.Dur(), it must be a Dur, DateDur, or pd.DateOffset. Otherwise, use two arguments, e.g. ss.Dur(3, 'years')"
+                    raise ValueError(errormsg)
+            elif n_args == 2:
+                new_cls = class_map.dur[base]
+                return super().__new__(new_cls)
+
+            self.__init__(value=value)
+
+        return super().__new__(cls) # Default initialization
 
     def __init__(self, value=1, base=None):
         """
