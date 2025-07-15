@@ -540,7 +540,7 @@ class Dur(TimePar):
     #             return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
     #     return super().__new__(cls)
 
-    def __init__(self, value=1):
+    def __init__(self, value=1, base=None):
         """
         Construct a value-based duration
 
@@ -548,8 +548,19 @@ class Dur(TimePar):
             value (float/`ss.Dur`): the value to use
         """
         super().__init__()
-        if isinstance(value, Dur):
-            self.value = self.to_base(value)
+        if sc.isnumber(value) or isinstance(value, np.ndarray):
+            self.value = value
+            if base is not None:
+                if self.base is None:
+                    self.base = base
+                else:
+                    errormsg = f'Cannot change the base of `ss.Dur` from {self.base} to {base}; use `Dur.mutate()` instead'
+                    raise AttributeError(errormsg)
+        elif isinstance(value, Dur):
+            if self.base is not None:
+                self.value = self.to_base(value)
+            else:
+                self.mutate(value.base)
         else:
             self.value = value
 
