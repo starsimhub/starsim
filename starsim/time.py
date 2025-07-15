@@ -367,10 +367,20 @@ class UnitFactors(sc.dictobj):
         return sc.pr(self)
 
 
+def base_to_basekey(string):
+    """ Convert from a base (e.g. 'year') to a basekey (e.g. 'years') -- i.e. add an 's' """
+    return string if string[-1] == 's' else string+'s'
+
+def basekey_to_base(string):
+    """ Convert from a basekey (e.g. 'years') to a base (e.g. 'year') -- i.e. remove the 's' """
+    return string if string[-1] != 's' else string.removesuffix('s')
+
+# Define valid unit bases and basekeys -- why both?
+valid_bases    = ['year', 'month', 'week', 'day']
+valid_basekeys = [base_to_basekey(unit) for unit in valid_bases] # Just add an 's'
+
 class Factors(sc.dictobj):
     """ Define time unit conversion factors """
-    unit_keys = ['year', 'month', 'week', 'day']
-
     def __init__(self):
         base = sc.dictobj( # Use dictobj since slightly faster than objdict
             years   = 1, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
@@ -381,14 +391,14 @@ class Factors(sc.dictobj):
             minutes = 365*24*60,
             seconds = 365*24*60*60,
         )
-        for key in self.unit_keys:
+        for key in valid_bases:
             unit_factors = UnitFactors(base, key)
             self[key] = unit_factors
         return
 
     def __repr__(self):
         string = ''
-        for key in self.unit_keys:
+        for key in valid_bases:
             string += 'factors.'
             entry = repr(self[key])
             entry = sc.indent(text=entry, n=4).lstrip() # Don't indent the first line
@@ -398,9 +408,11 @@ class Factors(sc.dictobj):
 # Preallocate for performance
 factors = Factors()
 
+
 class TimePar:
     """ Parent class for all TimePars -- Dur, Rate, etc. """
     base = None # e.g. 'year', 'day', etc
+    basekey = None # e.g. 'years'
     timepar_type = None # 'dur' or 'rate'
     timepar_subtype = None # e.g. 'datedur' or 'timeprob'
 
@@ -412,7 +424,7 @@ class TimePar:
     @classmethod
     def _set_factors(cls):
         if cls.base is not None:
-            cls.basekey = cls.base + 's' # 'year' -> 'years'
+            cls.basekey = cls.base + 's' # 'year' -> 'years', used for indexing ss.time.factors
             cls.factors = factors[cls.base].items
             cls.factor_keys = factors[cls.base].keys
             cls.factor_vals = factors[cls.base].values
@@ -521,24 +533,42 @@ class Dur(TimePar):
     in place if needed via the `ss.Dur.mutate()` method.
     """
     base = None
+    basekey = None
+    factors = None
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    # def __new__(cls, *args, **kwargs):
-    #     # Return
-    #     if cls is Dur:
-    #         if args:
-    #             arg = args[0]
-    #             if isinstance(arg, (pd.DateOffset, DateDur)):
-    #                 return super().__new__(DateDur)
-    #             elif isinstance(arg, Dur):
-    #                 return super().__new__(arg.__class__)
-    #             else:
-    #                 assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
-    #                 return super().__new__(years)
-    #         else:
-    #             return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
-    #     return super().__new__(cls)
+    def __new__(cls, *args, **kwargs):
+        """ Return the correct type based on the inputs """
+        if cls is Dur:
+            has_args = len(args)
+            has_kwargs = len(kwargs)
+
+            # e.g. ss.Dur(3, 'years') or ss.Dur(pd.DateOffset(years=5)) or
+            if has_args and not has_kwargs:
+                if len(args) == 2:
+                    value = args[0]
+                    base = args[1]
+
+
+
+            # Only valid options is e.g. ss.Dur(3, base='year')
+            if has_args and has_kwargs:
+                try:
+
+
+            if args:
+                arg = args[0]
+                if isinstance(arg, (pd.DateOffset, DateDur)):
+                    return super().__new__(DateDur)
+                elif isinstance(arg, Dur):
+                    return super().__new__(arg.__class__)
+                else:
+                    assert len(args) == 1, f'Dur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
+                    return super().__new__(years)
+            else:
+                return super().__new__(DateDur) # TODO: do not make the default, but needs new classes
+        return super().__new__(cls)
 
     def __init__(self, value=1, base=None):
         """
@@ -554,6 +584,7 @@ class Dur(TimePar):
             if base is not None:
                 if self.base is None:
                     self.base = base
+                    self._set_factors()
                 else:
                     errormsg = f'Cannot change the base of `ss.Dur` from {self.base} to {base}; use `Dur.mutate()` instead'
                     raise AttributeError(errormsg)
@@ -1003,6 +1034,8 @@ class Rate(TimePar):
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
     base = None
+    basekey = None
+    factors = None
     timepar_type = 'rate'
     timepar_subtype = 'rate'
 
