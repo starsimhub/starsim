@@ -29,7 +29,7 @@ import starsim as ss
 # General classes; specific classes are listed below
 __all__ = ['date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb']
 
-#%% Base classes
+#%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
     def __new__(cls, arr=None):
@@ -349,11 +349,30 @@ class date(pd.Timestamp):
 
 
 
+#%% Define base time units and conversion factors
+valid_bases = ['years', 'months', 'weeks', 'days']
+
+def normalize_base(base):
+    """ Allow either e.g. 'year' or 'years' as input -- i.e. add an 's' """
+    if isinstance(base, str):
+        if base[-1] != 's':
+            base = base+'s'
+        if base not in valid_bases:
+            errormsg = f'Invalid base {base}; valid bases are {sc.strjoin(valid_bases)}. Note that not all time units (e.g. seconds) are valid as bases.'
+            raise ValueError(errormsg)
+    elif isinstance(base, TimePar):
+        base = base.base
+    else:
+        errormsg = f'Base must be str or ss.TimePar, not {base}'
+        raise TypeError(errormsg)
+    return base
+
+
 class UnitFactors(sc.dictobj):
-    def __init__(self, base, unit):
-        unit_items = base.copy()
+    def __init__(self, base_factors, unit):
+        unit_items = base_factors.copy()
         for k,v in unit_items.items():
-            unit_items[k] /= base[f'{unit}s'] # e.g. 'year' -> 'years'
+            unit_items[k] /= base_factors[unit]
         self.unit = unit
         self.items = unit_items
         self.values = np.array(list(unit_items.values())) # Precompute for computational efficiency
@@ -367,22 +386,10 @@ class UnitFactors(sc.dictobj):
         return sc.pr(self)
 
 
-def base_to_basekey(string):
-    """ Convert from a base (e.g. 'year') to a basekey (e.g. 'years') -- i.e. add an 's' """
-    return string if string[-1] == 's' else string+'s'
-
-def basekey_to_base(string):
-    """ Convert from a basekey (e.g. 'years') to a base (e.g. 'year') -- i.e. remove the 's' """
-    return string if string[-1] != 's' else string.removesuffix('s')
-
-# Define valid unit bases and basekeys -- why both?
-valid_bases    = ['year', 'month', 'week', 'day']
-valid_basekeys = [base_to_basekey(unit) for unit in valid_bases] # Just add an 's'
-
 class Factors(sc.dictobj):
     """ Define time unit conversion factors """
     def __init__(self):
-        base = sc.dictobj( # Use dictobj since slightly faster than objdict
+        base_factors = sc.dictobj( # Use dictobj since slightly faster than objdict
             years   = 1, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
             months  = 12,
             weeks   = 365/7, # If 52, then day/week conversion is incorrect
@@ -392,7 +399,7 @@ class Factors(sc.dictobj):
             seconds = 365*24*60*60,
         )
         for key in valid_bases:
-            unit_factors = UnitFactors(base, key)
+            unit_factors = UnitFactors(base_factors, key)
             self[key] = unit_factors
         return
 
@@ -409,10 +416,11 @@ class Factors(sc.dictobj):
 factors = Factors()
 
 
+#%% Define TimePars
+
 class TimePar:
     """ Parent class for all TimePars -- Dur, Rate, etc. """
-    base = None # e.g. 'year', 'day', etc
-    basekey = None # e.g. 'years'
+    base = None # e.g. 'years', 'days', etc
     timepar_type = None # 'dur' or 'rate'
     timepar_subtype = None # e.g. 'datedur' or 'timeprob'
 
@@ -424,7 +432,6 @@ class TimePar:
     @classmethod
     def _set_factors(cls):
         if cls.base is not None:
-            cls.basekey = cls.base + 's' # 'year' -> 'years', used for indexing ss.time.factors
             cls.factors = factors[cls.base].items
             cls.factor_keys = factors[cls.base].keys
             cls.factor_vals = factors[cls.base].values
@@ -508,11 +515,11 @@ class TimePar:
     @classmethod
     def to_base(cls, other):
         """ Convert another TimePar object to this TimePar's base units """
-        try:
-            return getattr(other, cls.basekey) # e.g. other.years
-        except AttributeError as e:
-            errormsg = f'Cannot get property {cls.basekey} from object {other}. Is it a TimePar?'
-            raise AttributeError(errormsg) from e
+        if isinstance(other, TimePar):
+            return getattr(other, cls.base) # e.g. other.years
+        else:
+            errormsg = f'Can only convert TimePars to a different base, not {other}'
+            raise AttributeError(errormsg)
 
     def mutate(self, unit):
         """ Mutate a TimePar in place to a new base unit -- see `TimePar.to()` to return a new instance (much more common) """
@@ -533,7 +540,6 @@ class Dur(TimePar):
     in place if needed via the `ss.Dur.mutate()` method.
     """
     base = None
-    basekey = None
     factors = None
     timepar_type = 'dur'
     timepar_subtype = 'dur'
@@ -550,12 +556,9 @@ class Dur(TimePar):
                     value = args[0]
                     base = args[1]
 
-
-
-            # Only valid options is e.g. ss.Dur(3, base='year')
-            if has_args and has_kwargs:
-                try:
-
+            # Only valid options is e.g. ss.Dur(3, base='years')
+            # if has_args and has_kwargs:
+            #     try:
 
             if args:
                 arg = args[0]
@@ -576,7 +579,7 @@ class Dur(TimePar):
 
         Args:
             value (float/`ss.Dur`): the value to use
-            base (str): the base unit, e.g. 'year'
+            base (str): the base unit, e.g. 'years'
         """
         super().__init__()
         if sc.isnumber(value) or isinstance(value, np.ndarray):
@@ -598,10 +601,10 @@ class Dur(TimePar):
 
     def __repr__(self):
         if self.is_scalar and self.value == 1:
-            return f'{self.base}()'
+            return f'{self.base.removesuffix("s")}()' # e.g. 'year()'
         else:
             valstr = f'{self.value:n}' if self.is_scalar else f'{self.value}' # NumPy can't handle :n
-            return f'{self.basekey}({valstr})'
+            return f'{self.base}({valstr})'
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
@@ -757,7 +760,7 @@ class Dur(TimePar):
 
 class DateDur(Dur):
     """ Date based duration e.g., if requiring a week to be 7 calendar days later """
-    base = 'year' # DateDur uses 'year' as the default unit for conversion
+    base = 'years' # DateDur uses 'years' as the default unit for conversion
     timepar_type = 'dur'
     timepar_subtype = 'datedur'
 
@@ -989,7 +992,7 @@ class DateDur(Dur):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
         vals = self.to_array()
 
-        # If we have only one nonzero value, return 'year', 'month', etc.
+        # If we have only one nonzero value, return 'years', 'months', etc.
         if np.count_nonzero(vals == 1) == 1:
             for unit, val in zip(self.factor_keys, vals):
                 if val == 1:
@@ -1034,7 +1037,6 @@ class Rate(TimePar):
     - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
     base = None
-    basekey = None
     factors = None
     timepar_type = 'rate'
     timepar_subtype = 'rate'
@@ -1381,10 +1383,10 @@ __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', 
             'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear'] # Rates
 
 # Durations
-class years(Dur):  base = 'year'
-class months(Dur): base = 'month'
-class weeks(Dur):  base = 'week'
-class days(Dur):   base = 'day'
+class years(Dur):  base = 'years'
+class months(Dur): base = 'months'
+class weeks(Dur):  base = 'weeks'
+class days(Dur):   base = 'days'
 
 # Duration shortcuts
 year = years(1)
@@ -1395,10 +1397,10 @@ for obj in [year, month, week, day]:
     object.__setattr__(obj, '_locked', True) # Make immutable
 
 # TimeProbs
-class perday(TimeProb):   base = 'day'
-class perweek(TimeProb):  base = 'week'
-class permonth(TimeProb): base = 'month'
-class peryear(TimeProb):  base = 'year'
+class perday(TimeProb):   base = 'days'
+class perweek(TimeProb):  base = 'weeks'
+class permonth(TimeProb): base = 'months'
+class peryear(TimeProb):  base = 'years'
 
 # Aliases
 probperday = perday
@@ -1407,10 +1409,10 @@ probpermonth = permonth
 probperyear = peryear
 
 # Rates
-class rateperday(Rate):   base = 'day'
-class rateperweek(Rate):  base = 'week'
-class ratepermonth(Rate): base = 'month'
-class rateperyear(Rate):  base = 'year'
+class rateperday(Rate):   base = 'days'
+class rateperweek(Rate):  base = 'weeks'
+class ratepermonth(Rate): base = 'months'
+class rateperyear(Rate):  base = 'years'
 
 # Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
 reverse_class_map = {
