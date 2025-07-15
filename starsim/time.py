@@ -429,7 +429,7 @@ class TimePar:
     def __getitem__(self, index):
         """ For indexing and slicing, e.g. TimePar[inds] """
         if isinstance(self.value, np.ndarray):
-            return self.value[index]
+            return self.__class__(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
         else:
             errormsg = f'Can only index {type(self)} if value is an array, not a scalar'
             raise TypeError(errormsg)
@@ -442,6 +442,12 @@ class TimePar:
         else:
             errormsg = f'Can only index {type(self)} if value is an array, not a scalar'
             raise TypeError(errormsg)
+
+    def __len__(self):
+        if self.is_scalar:
+            return 1
+        else:
+            return len(self.value)
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
@@ -465,6 +471,14 @@ class TimePar:
         errormsg += 'Are you missing parentheses? If you convert to a unitless quantity by multiplying a rate and a duration, then you can multiply by an array. '
         errormsg += 'If you really want to do this, use an explicit loop instead.'
         raise TypeError(errormsg)
+
+    @property
+    def is_scalar(self):
+        return sc.isnumber(self.value)
+
+    @property
+    def is_array(self):
+        return isinstance(self.value, np.ndarray)
 
     def to(self, unit):
         """ Convert this TimePar to one of a different class """
@@ -530,10 +544,11 @@ class Dur(TimePar):
             self.value = value
 
     def __repr__(self):
-        if self.value == 1:
+        if self.is_scalar and self.value == 1:
             return f'{self.base}()'
         else:
-            return f'{self.basekey}({self.value:n})'
+            valstr = f'{self.value:n}' if self.is_scalar else f'{self.value}' # NumPy can't handle :n
+            return f'{self.basekey}({valstr})'
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
@@ -1188,7 +1203,7 @@ class TimeProb(Rate):
                 factor = self.unit/other
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
-                rate = -np.log(1 - self.value)
+                rate = -np.log(1 - self.value) #!! TODO: Dan suggests storing the rate, and doing operations on it, only converting back to a prob at the final step
                 return 1 - np.exp(-rate/factor)
         else:
             return self.__class__(self.value*other, self.unit)
