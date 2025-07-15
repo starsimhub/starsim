@@ -10,7 +10,7 @@ __all__ = ['Timeline']
 
 class Timeline:
     """
-    Handle time vectors for both simulations and modules.
+    Handle time vectors and sequencing ("timelines") for both simulations and modules.
 
     Each module can have its own time instance, in the case where the time vector
     is defined by absolute dates, these time vectors are by definition aligned. Otherwise
@@ -18,14 +18,12 @@ class Timeline:
     to a date to get an absolute time)
 
     Args:
-        start : ss.date or ss.Dur
-        stop : ss.date if start is an ss.date, or an ss.Dur if start is an ss.Dur
-        dt (ss.Dur): Simulation step size
-        pars (dict): if provided, populate parameter values from this dictionary
-        parent (obj): if provided, populate missing parameter values from a 'parent" `Timeline` instance
+        start (str/int/float/ss.date/ss.Dur): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
+        stop (str/int/float/ss.date/ss.Dur): when the simulation/module ends (note: if start is a date, stop must be too)
+        dt (int/float/ss.Dur): Simulation step size
         name (str): if provided, name the `Timeline` object
-        init (bool): whether or not to immediately initialize the Timeline object
-        sim (bool/Sim): if True, initializes as a sim-specific `Timeline` instance; if a Sim instance, initialize the absolute time vector
+        init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop or start and dur are provided; otherwise no)
+        sim (Sim): if provided, initialize the `Timeline` with this as the parent (i.e. populating missing values)
 
     The `Timeline` object, after initialization, has the following attributes:
 
@@ -43,7 +41,7 @@ class Timeline:
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
 
-    def __init__(self, start=None, stop=None, dt=None, dur=None, name=None):
+    def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=None, sim=None):
         # Store inputs
         self.name = name
         self.start = start
@@ -52,9 +50,11 @@ class Timeline:
         self.dur = dur
 
         # Set defaults
-        self.default_dur   = ss.years(50)
-        self.default_start = ss.years(2000)
-        self.default_dt    = ss.years(1.0)
+        default_type = ss.years # The default Dur type, e.g. ss.years; this is reset after all the parameters are reconciled
+        self.default_type  = default_type
+        self.default_dur   = default_type(50)
+        self.default_start = default_type(2000)
+        self.default_dt    = default_type(1.0)
         self.calendar_year_threshold = 1900.0 # Value at which to switch over from interpreting a value from a year duration to a calendar year
 
         # Populated later
@@ -63,8 +63,10 @@ class Timeline:
         self.yearvec = None # Time vector as floating point years
         self.datevec = None # The time vector as date objects
         self.initialized = False # Call self.init(sim) to initialize the object
-        if sum([x is not None for x in [start, stop, dur]]) >= 2: # If arguments are supplied directly, initialize
-            self.init()
+
+        # Decide whether to initialized: we're asked, a sim is provided, or arguments are supplied directly
+        if init or sim or init is None and sum([x is not None for x in [start, stop, dur]]) >= 2:
+            self.init(sim)
         return
 
     def __repr__(self):
@@ -203,20 +205,29 @@ class Timeline:
 
     def reconcile_args(self, sim=None):
         """ Reconcile the different options for the input parameters """
+
+        def is_calendar_year(val):
+            """ Whether a number should be interpreted as a calendar year -- by default, a number greater than 1900 """
+            return sc.isnumber(val) and val > self.calendar_year_threshold
+
         if sim is not None:
             self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
             self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
             self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
+        # Check to see if any inputs were provided as durations: if so, reset the default type
+        for arg in [self.start, self.stop, self.dur, self.dt]:
+            if isinstance(arg, ss.Dur):
+                self.default_type = type(arg)
+                break # Stop at the first one
+
+        # Ensure dur is valid
         if sc.isnumber(self.dur):
-            self.dur = ss.Dur(self.dur)
+            self.dur = self.default_type(self.dur)
         assert self.dur is None or isinstance(self.dur, ss.Dur), 'Timeline.dur must be a number, a Dur object or None'
 
-        def is_calendar_year(val):
-            """ Whether a number should be interpreted as a calendar year -- by default, a number greater than 1900 """
-            return sc.isnumber(val) and val > self.calendar_year_threshold
-
+        # Now, figure out start, stop, and dur
         match (self.start, self.stop, self.dur):
             case (None, None, None):
                 start = self.default_start
@@ -235,7 +246,7 @@ class Timeline:
 
             case (None, stop, None):
                 if isinstance(stop, ss.Dur):
-                    start = stop.__class__(0)
+                    start = stop.__class__(value=0)
                 elif is_calendar_year(stop):
                     stop = ss.date(stop)
                     start = ss.date(self.default_start)
@@ -275,7 +286,7 @@ class Timeline:
                     stop = ss.date(stop)
 
                 if sc.isnumber(start) and sc.isnumber(stop):
-                    if is_calendar_year(stop):
+                    if is_calendar_year(start):
                         start = ss.date(start)
                         stop = ss.date(stop)
                     else:
@@ -285,16 +296,21 @@ class Timeline:
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
                     stop = start.__class__(stop)
-                dur = stop-start
+                dur = stop - start
             case _:
                 errormsg = f'Failed to match {start = }, {stop = }, and {dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.Dur objects.'
                 raise ValueError(errormsg) # This should not occur
 
-        assert isinstance(start, (ss.date, ss.Dur)), 'Start must be date or ss.Dur'
-        assert isinstance(stop, (ss.date, ss.Dur)), 'Stop must be a date or Dur'
-        assert type(start) is type(stop), 'Start and stop must be the same type'
-        assert start <= stop, 'Start must be before stop'
+        start_type = type(start)
+        stop_type = type(start)
+        assert isinstance(start, (ss.date, ss.Dur)), f'Start must be ss.date or ss.Dur, not {start_type}'
+        assert isinstance(stop, (ss.date, ss.Dur)), f'Stop must be ss.date or ss.Dur, not {stop_type}'
+        assert start_type is stop_type, f'Start and stop must be the same type, not {start_type} and {stop_type}'
+        assert start <= stop, f'Start must be before stop, not {start} and {stop}'
 
+        # Figure out type and store everything
+        if issubclass(start_type, ss.Dur):
+            self.default_type = start_type # Now that we've reconciled everything, reset the default type if needed
         self.start = start
         self.stop = stop
         self.dur = dur
@@ -303,7 +319,7 @@ class Timeline:
             self.dt = self.default_dt
 
         if sc.isnumber(self.dt):
-            self.dt = ss.Dur(self.dt)
+            self.dt = self.default_type(self.dt)
         return
 
     def init(self, sim=None):
@@ -336,7 +352,7 @@ class Timeline:
         if isinstance(self.start, ss.Dur): # Use durations
             self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             vals = []
-            cla = self.start.__class__
+            cla = self.default_type
             print(cla)
             for x in self.yearvec:
                 print(x)

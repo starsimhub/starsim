@@ -738,14 +738,15 @@ class DateDur(Dur):
         if args:
             assert not kwargs, 'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
             assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
-            if isinstance(args[0], pd.DateOffset):
-                self.value = self._round_duration(args[0])
-            elif isinstance(args[0], DateDur):
-                self.value = sc.dcp(args[0].value) # pd.DateOffset is immutable so this should be OK
-            elif isinstance(args[0], Dur):
-                self.value = self._round_duration({'years': args[0].years})
-            elif sc.isnumber(args[0]):
-                self.value = self._round_duration({'years': args[0]})
+            arg = args[0]
+            if isinstance(arg, pd.DateOffset):
+                self.value = self._round_duration(arg)
+            elif isinstance(arg, DateDur):
+                self.value = sc.dcp(arg.value) # pd.DateOffset is immutable so this should be OK
+            elif isinstance(arg, Dur):
+                self.value = self._round_duration({'years': arg.years})
+            elif sc.isnumber(arg):
+                self.value = self._round_duration({'years': arg})
             else:
                 errormsg = f'Unsupported input {args}.\nExpecting number, ss.Dur, ss.DateDur, or pd.DateOffset'
                 raise TypeError(errormsg)
