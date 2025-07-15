@@ -78,7 +78,7 @@ class date(pd.Timestamp):
 
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
         if single_year_arg:
-            return cls.from_year(args[0])
+            return cls.from_year(arg)
         if year_kwarg:
             return cls.from_year(kwargs['year'])
 
