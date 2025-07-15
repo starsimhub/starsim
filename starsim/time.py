@@ -533,7 +533,7 @@ class Dur(TimePar):
         if self.value == 1:
             return f'{self.base}()'
         else:
-            return f'{self.basekey}({self.value})'
+            return f'{self.basekey}({self.value:n})'
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
     # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
@@ -1007,10 +1007,10 @@ class Rate(TimePar):
 
     def __repr__(self):
         name = self.__class__.__name__
-        if name == 'Rate':
-            return f'{name}({self.value}/{self.unit})'
-        else:
-            return f'{name}({self.value})'
+        if name == 'Rate': # If it's a plain rate, show the unit, e.g. Rate(3/years())
+            return f'{name}({self.value:n}/{self.unit:n})'
+        else: # Otherwise, it's in the class name, e.g. peryear(3)
+            return f'{name}({self.value:n})'
 
     def __float__(self):
         return float(self.value)

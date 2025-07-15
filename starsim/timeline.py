@@ -61,11 +61,14 @@ class Timeline:
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self._tvec    = None # The time vector for this instance in date or Dur format
         self._yearvec = None # Time vector as floating point years
-        self.initialized = False # Call self.init(sim) to initialise the object
+        self.initialized = False # Call self.init(sim) to initialize the object
+        if sum([x is not None for x in [start, stop, dur]]) >= 2: # If arguments are supplied directly, initialize
+            self.init()
         return
 
     @property
     def tvec(self):
+        return self.check_initialized(self._tvec)
         if self._tvec is None:
             raise Exception('Timeline object has not yet been not initialized - call `init()` before using the object')
         else:
@@ -139,9 +142,45 @@ class Timeline:
         A relative time vector can be made absolute by adding a date to it.
         """
         try:
-            return isinstance(self.start, date)
+            return isinstance(self.start, ss.date)
         except:
             return False
+
+    def now(self, key=None):
+        """
+        Get the current simulation time
+
+        Args:
+            which (str): which type of time to get: default (None), "year", "date", "tvec", or "str"
+
+        **Examples**:
+
+            t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
+            t.ti = 25
+            t.now() # Returns <2021-06-25>
+            t.now('date') # Returns <2021-06-25>
+            t.now('year') # Returns 2021.479
+            t.now('str') # Returns '2021-06-25'
+        """
+        if key in [None, 'none', 'time', 'str']:
+            vec = self.tvec
+        elif key == 'year':
+            vec = self.yearvec
+        else:
+            errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
+            raise ValueError(errormsg)
+
+        if 0 <= self.ti < len(vec):
+            now = vec[self.ti]
+        else:
+            now = self.tvec[0] + self.dt*self.ti
+            if key == 'year':
+                now = float(now)
+
+        if key == 'str':
+            now = str(now)
+
+        return now
 
     def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
         """ Reconcile different ways of supplying inputs """
@@ -306,7 +345,7 @@ class Timeline:
             # calculate the fractional years, and then convert them to the equivalent dates
             self._yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             if isinstance(self.stop, ss.Dur):
-                self._tvec = np.array([self.stop.__class__(x) for x in self._yearvec])
+                self._tvec = self.stop.__class__(self._yearvec)
             else:
                 self._tvec = np.array([ss.date(x) for x in self._yearvec])
         else:
@@ -320,39 +359,3 @@ class Timeline:
 
         self.initialized = True
         return self
-
-    def now(self, key=None):
-        """
-        Get the current simulation time
-
-        Args:
-            which (str): which type of time to get: default (None), "year", "date", "tvec", or "str"
-
-        **Examples**:
-
-            t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
-            t.ti = 25
-            t.now() # Returns <2021-06-25>
-            t.now('date') # Returns <2021-06-25>
-            t.now('year') # Returns 2021.479
-            t.now('str') # Returns '2021-06-25'
-        """
-        if key in [None, 'none', 'time', 'str']:
-            vec = self.tvec
-        elif key == 'year':
-            vec = self.yearvec
-        else:
-            errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
-            raise ValueError(errormsg)
-
-        if 0 <= self.ti < len(vec):
-            now = vec[self.ti]
-        else:
-            now = self.tvec[0] + self.dt*self.ti
-            if key == 'year':
-                now = float(now)
-
-        if key == 'str':
-            now = str(now)
-
-        return now
