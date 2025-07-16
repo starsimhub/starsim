@@ -493,12 +493,15 @@ class TimePar:
         else:
             return tuple(years)
 
-    def __array__(self):
+    def __array__(self, dtype=None, copy=None):
         """ The built-in NumPy method for converting to an array """
-        # if self.is_scalar:
-        #     raise TypeError("Scalar instances of this class cannot be converted to NumPy arrays")
-        # else:
-        return np.array(self.value)
+        # print('WHO ARE YOU', args, kwargs)
+        if self.is_scalar:
+            vals = [self.value]
+            # raise TypeError("Scalar instances of this class cannot be converted to NumPy arrays")
+        else:
+            vals = [self.__class__(x) for x in self.value]
+        return np.array(vals, dtype=object)
 
     def to_numpy(self):
         return self.__array__()
@@ -533,7 +536,7 @@ class TimePar:
 
     @property
     def is_scalar(self):
-        return sc.isnumber(self.value)
+        return not isinstance(self.value, np.ndarray)
 
     @property
     def is_array(self):
@@ -762,7 +765,9 @@ class Dur(TimePar):
         while t <= high:
             tvec.append(t)
             t += step
-        return np.array(tvec)
+        out = np.empty(len(tvec), dtype=object) # To stop it converting the array to 2D
+        out[:] = tvec
+        return out
 
 
 class DateDur(Dur):
@@ -1115,7 +1120,6 @@ class Rate(TimePar):
     def __add__(self, other):
         if isinstance(other, Rate):
             if self.timepar_subtype == other.timepar_subtype:
-                print('hiii', self.value, self.unit, other.value, other.unit)
                 return self.__class__(self.value+other*self.unit, self.unit)
             else:
                 errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, TimeProb+TimeProb); you added {self} + {other}'

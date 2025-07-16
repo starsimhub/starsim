@@ -126,7 +126,7 @@ def test_time_class():
     print('Testing durations 1')
     s4 = sim(start=0, stop=ss.Dur(10), dt=1.0)
     assert s4.t.tvec[0] == ss.Dur(0)
-    assert s4.t.datevec[-1] == ss.DateDur(years=10)
+    assert s4.t.datevec[-1] == ss.DateDur(years=10).years # Did not use to require .years
     assert len(s4.t) == 11
 
     print('Testing durations 2')
@@ -138,13 +138,13 @@ def test_time_class():
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
     assert s5.t.datevec[0] == ss.Dur(0)
-    assert s5.t.datevec[-1] == ss.DateDur(years=30)
+    assert s5.t.datevec[-1] == ss.DateDur(years=30).years
     assert len(s5.t) == 31
 
     print('Testing numeric 2')
     s6 = sim(start=2, stop=None, dt=None)  # Will default to start=Dur(2), dur=Dur(50), end=start+dur
     assert s6.t.tvec[0] == ss.Dur(2)
-    assert s6.t.tvec[-1] == ss.DateDur(years=52)
+    assert s6.t.tvec[-1] == ss.DateDur(years=52).years
     assert len(s6.t) == 51
 
     return [s1, t1, s2, t2]
@@ -169,13 +169,13 @@ def test_syntax():
     from starsim import date, Timeline, Dur, DateDur, years, rateperday, rateperweek, Rate, TimeProb, RateProb
 
     assert float(date(1500))==1500
-    assert float(date(1500.1))==1500.1
+    assert np.isclose(float(date(1500.1)), 1500.1) # Not exactly equal, but very close
 
     assert np.all((years(1)*np.arange(5)) == (np.arange(5)*years(1)))
 
     tv = Timeline(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
-    assert np.isclose(Dur(weeks=1)/Dur(days=1), 7) # CKTODO: would be nice if this were exact
+    assert np.isclose(DateDur(weeks=1)/DateDur(days=1), 7) # TODO: would be nice if this were exact, but maybe impossible
 
     assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)), 6/365)
 
@@ -183,20 +183,20 @@ def test_syntax():
 
     assert np.isclose((rateperweek(1)+rateperday(1)).value, rateperweek(8).value) # CKTODO: would be nice if this were exact
 
-    assert date('2020-01-01') + Dur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
-    assert date('2020-01-01') + 52*Dur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
+    assert date('2020-01-01') + DateDur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
+    assert date('2020-01-01') + 52*DateDur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
     assert date('2020-01-01') + 52*Dur(1/52) == date('2021-01-01') # Should give us 1st Jan 2021
-    assert date('2020-01-01') + Dur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
+    assert date('2020-01-01') + DateDur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
     # These should all work - confirm the sizes
-    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), Dur(days=1)).init()) == 153
-    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), Dur(months=1)).init()) == 6
-    assert len(Timeline(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
-    assert len(Timeline(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
-    assert len(Timeline(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
-    assert len(Timeline(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
+    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), DateDur(days=1)).init()) == 153
+    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), DateDur(months=1)).init()) == 6
+    assert len(Timeline(DateDur(days=0), DateDur(days=30), DateDur(days=1)).init()) == 31
+    assert len(Timeline(DateDur(days=0), DateDur(months=1), DateDur(days=30)).init()) == 2
+    assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(weeks=1)).init()) == 53
+    assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(months=1)) .init()) == 13
     assert len(Timeline(Dur(0), Dur(1), Dur(1/12)).init()) == 13
-    assert len(Timeline(date('2020-01-01'), date('2030-06-01'), Dur(days=1)).init()) == 3805
+    assert len(Timeline(date('2020-01-01'), date('2030-06-01'), DateDur(days=1)).init()) == 3805
     assert len(Timeline(date(2020), date(2030.5), Dur(0.1)).init()) == 106
 
     # Operations on date vectors
@@ -205,17 +205,17 @@ def test_syntax():
 
     # Construction of various duration ranges and addition with durations and dates
     Dur.arange(Dur(0),Dur(10),Dur(1)) + years(1)
-    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + years(1)
-    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + years(1)
-    # Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + years(1) # TODO: do not allow for now
+    Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + years(1)
+    Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + years(1)
+    # Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + years(1) # TODO: do not allow for now
     # Dur.arange(Dur(0),Dur(10),Dur(1)) + DateDur(years=1)
-    # Dur.arange(Dur(0),Dur(10),Dur(years=1)) + DateDur(years=1)
-    # Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
-    # Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
+    # Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + DateDur(years=1)
+    # Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + DateDur(years=1)
+    # Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + DateDur(years=1)
     Dur.arange(Dur(0),Dur(10),Dur(1)) + date(2000)
-    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + date(2000)
-    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + date(2000)
-    Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + date(2000)
+    Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + date(2000)
+    Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + date(2000)
+    Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + date(2000)
 
     # Rates
     assert (1/years(1)) == ss.rateperyear(1)
@@ -228,27 +228,27 @@ def test_syntax():
     assert Rate(0.5)/Rate(1) == 0.5
 
     # Probabilities
-    p = TimeProb(0.1, Dur(years=1))
+    p = TimeProb(0.1, DateDur(years=1))
     f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
-    assert p * Dur(months=1) == f(12)
+    assert p * DateDur(months=1) == f(12)
 
     p = TimeProb(0.1, Dur(1))
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5 ) == f(2)
-    assert p * Dur(months=1) == f(12)
+    assert p * DateDur(months=1) == f(12)
 
-    p = RateProb(0.1, Dur(years=1))
+    p = RateProb(0.1, DateDur(years=1))
     f = lambda factor: 1 - np.exp(-p.value/factor)
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
-    assert p * Dur(months=1) == f(12)
+    assert p * DateDur(months=1) == f(12)
 
     p = RateProb(0.1, Dur(1))
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
-    assert p * Dur(months=1) == f(12)
+    assert p * DateDur(months=1) == f(12)
 
     return tv
 
