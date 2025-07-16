@@ -58,6 +58,7 @@ class date(pd.Timestamp):
         ss.date('2024-04-04') # Returns <2024-04-04>
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
     """
+    year_zero_offset = 9999 # Since year 0 doesn't exist, replace it with this placeholder value
 
     def __new__(cls, *args, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
@@ -70,22 +71,24 @@ class date(pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
                 single_year_arg = True
-            elif isinstance(arg, ss.DateDur): # e.g. ss.DateDur(years=2020)
-                kwargs.update(arg.to_dict())
+            # elif isinstance(arg, ss.DateDur): # e.g. ss.DateDur(years=2020)
+            #     kwargs.update(arg.to_dict())
             elif isinstance(arg, ss.Dur): # e.g. ss.years(2020)
                 arg = arg.years
                 single_year_arg = True
 
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
         if single_year_arg:
+            year = arg
             return cls.from_year(arg)
         if year_kwarg:
             return cls.from_year(kwargs['year'])
 
         # Otherwise, proceed as normal
-        out = super(date, cls).__new__(cls, *args, **kwargs)
-        out = cls._reset_class(out)
-        return out
+        self = super(date, cls).__new__(cls, *args, **kwargs)
+        self = cls._reset_class(self)
+        self.year_zero = False
+        return self
 
     @classmethod
     def _reset_class(cls, obj):
@@ -137,7 +140,7 @@ class date(pd.Timestamp):
         return sc.pr(self, **kwargs)
 
     @classmethod
-    def from_year(cls, year):
+    def from_year(cls, year, round=True):
         """
         Convert an int or float year to a date.
 
@@ -146,12 +149,19 @@ class date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
+        if year == 0:
+            year += cls.year_zero_offset
         if isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
-            year_start = pd.Timestamp(year=int(year), month=1, day=1)
-            year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
-            return cls._reset_class(year_start + year % 1 * (year_end - year_start))
+            if round:
+                date = sc.yeartodate(year)
+                timestamp = pd.Timestamp(date)
+            else:
+                year_start = pd.Timestamp(year=int(year), month=1, day=1)
+                year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
+                timestamp = year_start + year % 1 * (year_end - year_start)
+            return cls._reset_class(timestamp)
 
     def to_year(self):
         """
