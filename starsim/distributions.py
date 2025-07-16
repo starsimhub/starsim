@@ -542,14 +542,28 @@ class Dist:
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Dur):
-                self._pars[key] = v/self.module.t.dt
-                try:
-                    self._pars[key] = self._pars[key].astype(float)
-                except:
-                    pass
-            elif isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Rate):
-                self._pars[key] = v*self.module.t.dt
+            is_timepar = False
+            if isinstance(v, ss.TimePar):
+                is_timepar = True
+                timepar_type = type(v)
+            elif isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.TimePar):
+                is_timepar = True
+                timepar_type = type(v.flat[0])
+                if v.size == 1:
+                    v = v.flat[0] # Case where we have an array wrapping a Dur wrapping an array # TODO: refactor
+                else:
+                    warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
+                    ss.warn(warnmsg)
+
+            if is_timepar:
+                if issubclass(timepar_type, ss.Dur):
+                    self._pars[key] = v/self.module.dt
+                elif issubclass(timepar_type, ss.Rate):
+                    self._pars[key] = v*self.module.dt
+                else:
+                    errormsg = f'Unknown timepar type {v}'
+                    raise NotImplementedError(errormsg)
+
                 try:
                     self._pars[key] = self._pars[key].astype(float)
                 except:

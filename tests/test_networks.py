@@ -79,7 +79,7 @@ def test_randomsafe():
 
     # Set up a sim with some small number of births and deaths
     pars = sc.objdict(n_agents=small, dur=5, verbose=False)
-    births = ss.Births(birth_rate=ss.peryear(5))
+    births = ss.Births(birth_rate=ss.rateperyear(5))
     simil = sc.objdict()
 
     # Confirm that non-safe networks diverge immediately

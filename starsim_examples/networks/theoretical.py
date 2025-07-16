@@ -57,7 +57,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.ones(len(p1))*self.pars.dur/self.t.dt
+            dur = np.ones(len(p1))*(self.pars.dur/self.t.dt)
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return

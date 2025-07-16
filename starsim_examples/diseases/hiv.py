@@ -14,7 +14,7 @@ class HIV(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.timeprob(1.0), # Placeholder value
+            beta = ss.TimeProb(1.0), # Placeholder value
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -22,7 +22,7 @@ class HIV(ss.Infection):
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
-            p_death = ss.rateprob(0.05), # NB: this is death per unit time, not death per infection
+            p_death = ss.peryear(0.05), # NB: this is death per unit time, not death per infection
         )
         self.update_pars(pars, **kwargs)
 

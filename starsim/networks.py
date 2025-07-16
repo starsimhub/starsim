@@ -754,7 +754,7 @@ class MFNet(SexualNetwork):
         self.define_pars(
             duration = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=ss.peryear(80)),
+            acts = ss.poisson(lam=ss.rateperyear(80)),
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             rel_part_rates = 1.0,
         )

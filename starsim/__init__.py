@@ -26,6 +26,7 @@ from .utils         import *
 from .debugtools    import *
 from .arrays        import *
 from .time          import *
+from .timeline      import *
 from .parameters    import *
 from .distributions import *
 from .people        import *

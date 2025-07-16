@@ -132,11 +132,11 @@ def test_complex_api():
         ],
         diseases = [
             dict(type='sir',  dur_inf=dict(type='expon', scale=ss.Dur(6.0))),
-            dict(type='sis', beta=ss.timeprob(0.07), init_prev=0.1),
+            dict(type='sis', beta=ss.TimeProb(0.07), init_prev=0.1),
         ],
         demographics = [
-            ss.Births(birth_rate=ss.peryear(20)),
-            dict(type='deaths', death_rate=ss.peryear(20))
+            ss.Births(birth_rate=ss.rateperyear(20)),
+            dict(type='deaths', death_rate=ss.rateperyear(20))
         ],
         interventions = jump_age,
     )
@@ -149,11 +149,11 @@ def test_complex_api():
     networks = ss.ndict(net1, net2)
 
     dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.Dur(6.0)))
-    dis2 = ss.SIS(beta=ss.timeprob(0.07), init_prev=ss.bernoulli(0.1))
+    dis2 = ss.SIS(beta=ss.TimeProb(0.07), init_prev=ss.bernoulli(0.1))
     diseases = ss.ndict(dis1, dis2)
 
-    dem1 = ss.Births(birth_rate=ss.peryear(20))
-    dem2 = ss.Deaths(death_rate=ss.peryear(20))
+    dem1 = ss.Births(birth_rate=ss.rateperyear(20))
+    dem2 = ss.Deaths(death_rate=ss.rateperyear(20))
     demographics = ss.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)
@@ -166,7 +166,6 @@ def test_complex_api():
     # Run
     s1.run()
     s2.run()
-
     assert ss.check_sims_match(s1, s2), 'Sims should match'
 
     return s1
