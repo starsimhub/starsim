@@ -905,6 +905,36 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         return spars
 
 
+class beta(Dist):
+    """
+    Beta distribution
+
+    Args:
+        a (float): shape, > 1 (default 0)
+        b (float): shape, > 1 (default 1)
+
+    """
+    def __init__(self, a=0.0, b=1.0, **kwargs):
+        super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
+        return
+
+
+class beta_mean(Dist):
+    """
+    Beta distribution paramterized by the mean
+
+    Args:
+        a (float): mean of distribution, 0 < a < 1 (default 0.5)
+        b (float): variance of distribution, > 0 (default 0.05)
+
+    """
+    def __init__(self, par1=0.5, par2=0.05, **kwargs):  # Does not accept dtype
+        a = ((1 - par1)/par2 - 1/par1) * par1**2
+        b = a * (1 / par1 - 1)
+        super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
+        return
+
+
 class nbinom(Dist):
     """
     Negative binomial distribution
