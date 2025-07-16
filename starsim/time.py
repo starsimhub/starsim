@@ -1079,6 +1079,10 @@ class Rate(TimePar):
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
 
+        if isinstance(value, ss.TimePar):
+            value = value.value
+            ss.warn('TODO: check if this is correct')
+
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)):
             errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)

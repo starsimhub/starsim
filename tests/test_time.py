@@ -154,9 +154,9 @@ def test_time_class():
 def test_callable_dists():
     sc.heading('Testing callable distributions')
     def loc(module, sim, uids):
-        return ss.Dur(np.arange(uids))
-    module = ss.mock_module(dt=ss.DateDur(days=1))
-    d = ss.normal(loc, ss.DateDur(days=1), module=module, strict=False)
+        return ss.days(np.arange(uids))
+    module = ss.mock_module(dt=ss.day)
+    d = ss.normal(loc, ss.days(2), module=module, strict=False)
     d.init()
     d.rvs(10)
     return d

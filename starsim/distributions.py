@@ -545,8 +545,10 @@ class Dist:
             is_timepar = False
             if isinstance(v, ss.TimePar):
                 is_timepar = True
+                timepar_type = type(v)
             elif isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.TimePar):
                 is_timepar = True
+                timepar_type = type(v.flat[0])
                 if v.size == 1:
                     v = v.flat[0] # Case where we have an array wrapping a Dur wrapping an array # TODO: refactor
                 else:
@@ -554,9 +556,9 @@ class Dist:
                     ss.warn(warnmsg)
 
             if is_timepar:
-                if isinstance(v, ss.Dur):
+                if issubclass(timepar_type, ss.Dur):
                     self._pars[key] = v/self.module.dt
-                elif isinstance(v, ss.Rate):
+                elif issubclass(timepar_type, ss.Rate):
                     self._pars[key] = v*self.module.dt
                 else:
                     errormsg = f'Unknown timepar type {v}'
