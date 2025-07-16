@@ -494,6 +494,7 @@ class TimePar:
         a,b = inputs
         a_b = True # Are inputs in this order?
         if b is self: # Opposite order than expected
+            b,a = a,b
             a_b = False # NB, the functions reverse the
 
         if   ufunc == np.add:      return self.__add__(b)
@@ -1078,9 +1079,10 @@ class Rate(TimePar):
     def __repr__(self):
         name = self.__class__.__name__
         if name == 'Rate': # If it's a plain rate, show the unit, e.g. Rate(3/years())
-            return f'{name}({self.value:n}/{self.unit:n})'
+            valstr = f'{self.value:n}/{self.unit}' if self.is_scalar else f'{self.value}/{self.unit}'
         else: # Otherwise, it's in the class name, e.g. peryear(3)
-            return f'{name}({self.value:n})'
+            valstr = f'{self.value}'
+        return f'{name}({valstr})'
 
     def __float__(self):
         return float(self.value)
@@ -1235,8 +1237,10 @@ class TimeProb(Rate):
                 errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
             elif gt1:
                 if self.base is not None:
-                    correct = f'ss.rateper{self.base}()'
-                    self.__class__ = class_map.rate[f'rateper{self.base}'] # Mutate the class to the correct class
+                    correct_base = self.base.removesuffix('s') # e.g. years -> year
+                    correct_class = f'rateper{correct_base}' # e.g. rateperyear
+                    correct = f'ss.{correct_class}()' # e.g. ss.rateperyear()
+                    self.__class__ = class_map.rate[correct_class] # Mutate the class to the correct class
                     if ss.options.warn_convert:
                         warnmsg = f'Probabilities cannot be greater than one, so converting to a rate. Please use {correct} instead, or set ss.options.warn_convert=false. {valstr}'
                         ss.warn(warnmsg)
