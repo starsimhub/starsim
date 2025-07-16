@@ -114,7 +114,6 @@ class DateArray(np.ndarray):
             die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
         """
         day_round = sc.ifelse(day_round, not(self.subdaily))
-        print('coke', day_round, self.subdaily)
         try:
             vals = [ss.date(x, day_round=day_round, allow_zero=False) for x in self]
         except Exception as e:
@@ -163,7 +162,6 @@ class date(pd.Timestamp):
     """
     def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
-        # print('gosh', day_round)
         single_year_arg = False
         if len(args) == 1:
             arg = args[0]
@@ -259,7 +257,6 @@ class date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
-        # print('HIIII', year, day_round)
         if year < 1:
             warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
             if allow_zero is False:
@@ -460,7 +457,6 @@ class date(pd.Timestamp):
         Returns:
             An array of date instances
         """
-        print('MASH', day_round)
         # Handle the special (but common) case of start < 1
         if (sc.isnumber(start) or isinstance(start, ss.DateDur)) and start < 1.0:
             date_type = ss.DateDur
@@ -493,16 +489,13 @@ class date(pd.Timestamp):
 
             compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
             while compare(t):
-                print('step start', t, compare(t))
                 tvec.append(t)
                 t += step
-                print('step end', t, compare(t))
             return DateArray(tvec)
 
         # We're converting them from float years, do it approximately
         elif sc.isnumber(step):
             day_round = sc.ifelse(day_round, not(cls.subdaily(step)))
-            print('FRISH', day_round, step, cls.subdaily(step))
             start = start.years if isinstance(start, (date, ss.Dur)) else start
             stop = stop.years if isinstance(stop, (date, ss.Dur)) else stop
             n_steps = (stop - start) / step
@@ -512,7 +505,6 @@ class date(pd.Timestamp):
                 if within_day(stop, rounded_stop):
                     stop = rounded_stop
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
-            print('CHICK', inclusive, start, stop, step, arr)
             return cls.from_array(arr, date_type=date_type, day_round=day_round)
         else:
             errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
@@ -681,16 +673,6 @@ class TimePar:
             return years
         else:
             return tuple(years)
-
-    # def __array__(self, dtype=None, copy=None):
-    #     """ The built-in NumPy method for converting to an array """
-    #     # print('WHO ARE YOU', args, kwargs)
-    #     if self.is_scalar:
-    #         vals = [self.value]
-    #         # raise TypeError("Scalar instances of this class cannot be converted to NumPy arrays")
-    #     else:
-    #         vals = [self.__class__(x) for x in self.value]
-    #     return np.array(vals, dtype=object)
 
     def to_numpy(self):
         return self.to_array()
