@@ -14,15 +14,15 @@ sc.options(interactive=False)
 # %% Define the tests
 @sc.timer()
 def test_ratio():
-    sc.heading('Test time ratio calculation')
+    sc.heading('Test DateDur time ratio calculation')
 
     assert ss.Dur(1) / ss.Dur(1) == 1
     assert ss.Dur(1) / ss.Dur(0.1) == 10
     assert ss.Dur(0.5) / ss.Dur(5) == 0.1
 
-    assert ss.Dur(years=1) / ss.Dur(days=1) == 365
-    assert np.isclose(ss.Dur(years=1) / ss.Dur(weeks=1) * 7, 365)
-    assert ss.Dur(years=1) / ss.Dur(months=1) == 12
+    assert ss.DateDur(years=1) / ss.DateDur(days=1) == 365
+    assert np.isclose(ss.DateDur(years=1) / ss.DateDur(weeks=1) * 7, 365)
+    assert ss.DateDur(years=1) / ss.DateDur(months=1) == 12
 
     return
 
@@ -54,10 +54,10 @@ def test_classes():
     assert r4 / 2 == ss.Rate(1.5/0.2)
 
     # Test duration units
-    d5 = ss.Dur(years=2)
-    d6 = ss.Dur(days=5)
+    d5 = ss.DateDur(years=2)
+    d6 = ss.DateDur(days=5)
     assert d5 + d6 == 2 + 5/365
-    assert (d5 + d6)/ss.Dur(days=1) == 365*2+5
+    assert (d5 + d6)/ss.DateDur(days=1) == 365*2+5
 
     # Test rate units
     rval = 0.7
@@ -122,25 +122,25 @@ def test_time_class():
     print('Testing durations 1')
     s4 = sim(start=0, stop=ss.Dur(10), dt=1.0)
     assert s4.t.datevec[0] == ss.Dur(0)
-    assert s4.t.datevec[-1] == ss.Dur(years=10)
+    assert s4.t.datevec[-1] == ss.DateDur(years=10)
     assert len(s4.t) == 11
 
     print('Testing durations 2')
-    s4 = sim(start=0, stop=ss.Dur(months=10), dt=ss.Dur(months=1))
+    s4 = sim(start=0, stop=ss.DateDur(months=10), dt=ss.DateDur(months=1))
     assert s4.t.datevec[0] == ss.Dur(0)
-    assert s4.t.datevec[-1] == ss.Dur(months=10)
+    assert s4.t.datevec[-1] == ss.DateDur(months=10)
     assert len(s4.t) == 11
 
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
     assert s5.t.datevec[0] == ss.Dur(0)
-    assert s5.t.datevec[-1] == ss.Dur(years=30)
+    assert s5.t.datevec[-1] == ss.DateDur(years=30)
     assert len(s5.t) == 31
 
     print('Testing numeric 2')
     s6 = sim(start=2, stop=None, dt=None)  # Will default to start=Dur(2), dur=Dur(50), end=start+dur
     assert s6.t.datevec[0] == ss.Dur(2)
-    assert s6.t.datevec[-1] == ss.Dur(years=52)
+    assert s6.t.datevec[-1] == ss.DateDur(years=52)
     assert len(s6.t) == 51
 
     return [s1, t1, s2, t2]
@@ -151,8 +151,8 @@ def test_callable_dists():
     sc.heading('Testing callable distributions')
     def loc(module, sim, uids):
         return ss.Dur(np.arange(uids))
-    module = ss.mock_module(dt=ss.Dur(days=1))
-    d = ss.normal(loc, ss.Dur(days=1), module=module, strict=False)
+    module = ss.mock_module(dt=ss.DateDur(days=1))
+    d = ss.normal(loc, ss.DateDur(days=1), module=module, strict=False)
     d.init()
     d.rvs(10)
     return d
@@ -283,7 +283,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.DateDur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -322,7 +322,7 @@ def test_units(do_plot=False):
     sis = ss.SIS(
         beta = ss.TimeProb(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
+        dur_inf = ss.lognorm_ex(mean=ss.DateDur(days=10)),
         waning = ss.Rate(0.05, ss.days(1)),
         imm_boost = 1.0,
     )

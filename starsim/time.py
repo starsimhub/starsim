@@ -544,9 +544,12 @@ class Dur(TimePar):
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    def __new__(cls, value=None, base='years'):
+    def __new__(cls, value=None, base='years', **kwargs):
         """ Return the correct type based on the inputs """
         if cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
+            if kwargs:
+                errormsg = f'Invalid arguments {kwargs} for ss.Dur; valid arguments are "value" and "base". If you are trying to construct a DateDur, call it directly.'
+                raise ValueError(errormsg)
             new_cls = class_map.dur[base]
             self = super().__new__(new_cls)
             self.__init__(value=value)
@@ -565,7 +568,9 @@ class Dur(TimePar):
         if sc.isnumber(value) or isinstance(value, np.ndarray):
             self.value = value
             if base is not None:
-                if self.base is None:
+                if self.base == base:
+                    pass # We're not actually changing the base, even though it's supplied
+                elif self.base is None:
                     self.base = base
                     self._set_factors()
                 else:
