@@ -21,6 +21,7 @@ TimePar  # All time parameters
     │   └── peryear
     └── RateProb  # Instantaneous probability of an event happening
 """
+import numbers
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -39,6 +40,67 @@ class DateArray(np.ndarray):
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
+
+    def is_(self, which):
+        """ Checks if the DateArray is comprised of ss.date objects """
+        if isinstance(which, type(type)):
+            types = which
+        elif isinstance(which, str):
+            mapping = dict(date=ss.date, dur=ss.Dur, datedur=ss.DateDur, float=numbers.Number, scalar=numbers.Number)
+            if which in mapping:
+                types = mapping[which]
+            else:
+                errormsg = f'"which" must be "date", "dur", "datedur", "float", or a type, not "{which}"'
+                raise ValueError(errormsg)
+
+        if not len(self):
+            ss.warn('Checking the type of a length-zero DateArray always returns False')
+            return False
+
+        # Do the check
+        out = isinstance(self[0], types)
+        return out
+
+    @property
+    def is_date(self):
+        return self.is_('date')
+
+    @property
+    def is_dur(self):
+        return self.is_('dur')
+
+    @property
+    def is_datedur(self):
+        return self.is_('datedur')
+
+    @property
+    def is_float(self):
+        return self.is_('float')
+
+    def to_date(self, inplace=False, die=True):
+        """ Convert to ss.date
+
+        Args:
+            inplace (bool): whether to modify in place
+            die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
+        """
+        try:
+            vals = [ss.date(x) for x in self]
+        except:
+            return self.to_float(inplace=inplace)
+
+        if inplace:
+            self[:] = vals
+        else:
+            return ss.DateArray(vals)
+
+    def to_float(self, inplace=False):
+        """ Convert to a float, returning a new DateArray unless inplace=True """
+        vals = [float(x) for x in self]
+        if inplace:
+            self[:] = vals
+        else:
+            return ss.DateArray(vals)
 
 
 class date(pd.Timestamp):
@@ -153,6 +215,8 @@ class date(pd.Timestamp):
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
         if year < 1:
+            warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
+            ss.warn(warnmsg)
             return ss.DateDur(years=year)
         elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
@@ -290,20 +354,23 @@ class date(pd.Timestamp):
     # Convenience methods based on application usage
 
     @classmethod
-    def from_array(cls, array):
+    def from_array(cls, array, date_type=None):
         """
         Convert an array of float years into an array of date instances
 
         Args:
-            array: An array of float years
+            array (array): An array of float years
+            date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.DateDur`)
 
         Returns:
             An array of date instances
         """
-        return DateArray(np.vectorize(cls)(array))
+        if date_type is None: # Optionally
+            date_type = cls
+        return DateArray(np.vectorize(date_type)(array))
 
     @classmethod
-    def arange(cls, low, high, step=1):
+    def arange(cls, low, high, step=1.0, inclusive=True):
         """
         Construct an array of dates
 
@@ -313,36 +380,48 @@ class date(pd.Timestamp):
 
         >>> date.arange(2020, 2025)
             array([<2020.01.01>, <2021.01.01>, <2022.01.01>, <2023.01.01>,
-                   <2024.01.01>], dtype=object)
+                   <2024.01.01>, <2025.01.01>], dtype=object)
 
         Args:
-            low: Lower bound - can be a date or a numerical year
-            high: Upper bound - can be a date or a numerical year
-            step: Assumes 1 calendar year steps by default
+            low (float/ss.date/ss.Dur): Lower bound - can be a date or a numerical year
+            high (float/ss.date/ss.Dur): Upper bound - can be a date or a numerical year
+            step (float/ss.Dur): Assumes 1 calendar year steps by default
+            inclusive (bool): whether to include "high" in the output
 
         Returns:
             An array of date instances
         """
+        # Handle the special (but common) case of low < 1
+        if sc.isnumber(low) and low < 1.0:
+            date_type = ss.DateDur
+        else:
+            date_type = cls
+
         # Convert this first
         if isinstance(step, ss.Dur):
             step = DateDur(step)
 
         if isinstance(step, ss.DateDur):
             if not isinstance(low, date):
-                low = cls(low)
+                low = date_type(low)
             if not isinstance(high, date):
-                high = cls(high)
+                high = date_type(high)
 
             tvec = []
             t = low
-            while t <= high:
+            if inclusive:
+                high += step
+            while t < high:
                 tvec.append(t)
                 t += step
             return DateArray(np.array(tvec))
+
         elif sc.isnumber(step):
             low = low.years if isinstance(low, date) else low
             high = high.years if isinstance(high, date) else high
-            return cls.from_array(np.arange(low, high, step))
+            if inclusive:
+                high += step
+            return cls.from_array(np.arange(low, high, step), date_type=date_type)
         else:
             errormsg = f'Cannot construct date range from {low = }, {high = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
             raise TypeError(errormsg)
