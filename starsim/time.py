@@ -339,15 +339,15 @@ class date(pd.Timestamp):
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
         elif sc.isnumber(other):
-            raise TypeError(f'Attempted to add a number ({other}) to a date, which is not supported. Only durations can be added to dates e.g., "ss.years({other})" or "ss.days({other})"')
+            errormsg = f'Attempted to add "{other}" to a date, which is not supported. Only durations can be added to dates e.g., "ss.years({other})" or "ss.days({other})"'
+            raise TypeError(errormsg)
         else:
-            raise TypeError(f'Attempted to add an instance of {other.__class__.__name__} to a date, which is not supported. Only durations can be added to dates.')
+            errormsg = f'Attempted to add an instance of {type(other)} to a date, which is not supported. Only durations can be added to dates.'
+            raise TypeError(errormsg)
 
     def __sub__(self, other):
-
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-
         if isinstance(other, DateDur):
             return date(self.to_pandas() - other.value)
         elif isinstance(other, years):
@@ -357,7 +357,7 @@ class date(pd.Timestamp):
         elif isinstance(other, date):
             return years(self.years-other.years)
         else:
-            errormsg = f'Unsupported type {type(other)}'
+            errormsg = f'Attempted to subtract "{other}" from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
             raise TypeError(errormsg)
 
     def __radd__(self, other): return self.__add__(other)
@@ -476,6 +476,11 @@ class date(pd.Timestamp):
                 # start = float(start)
                 # stop = float(stop)
 
+        # For handling floating point issues
+        atol = 0.5 / factors.years.days # It's close if it's within half a day
+        def within_day(y1, y2):
+            return np.isclose(y1, y2, rtol=0, atol=atol)
+
         # We're creating dates from DateDurs, step exactly
         if isinstance(step, ss.DateDur):
             if not isinstance(start, date):
@@ -485,10 +490,13 @@ class date(pd.Timestamp):
 
             tvec = []
             t = start
-            compare = (lambda t: t < stop or np.isclose(t, stop)) if inclusive else (lambda t: t < stop)
+
+            compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
             while compare(t):
+                print('step start', t, compare(t))
                 tvec.append(t)
                 t += step
+                print('step end', t, compare(t))
             return DateArray(tvec)
 
         # We're converting them from float years, do it approximately
@@ -497,6 +505,12 @@ class date(pd.Timestamp):
             print('FRISH', day_round, step, cls.subdaily(step))
             start = start.years if isinstance(start, (date, ss.Dur)) else start
             stop = stop.years if isinstance(stop, (date, ss.Dur)) else stop
+            n_steps = (stop - start) / step
+            if not n_steps.is_integer():
+                rounded_steps = round(n_steps)
+                rounded_stop = start + rounded_steps * step
+                if within_day(stop, rounded_stop):
+                    stop = rounded_stop
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
             print('CHICK', inclusive, start, stop, step, arr)
             return cls.from_array(arr, date_type=date_type, day_round=day_round)

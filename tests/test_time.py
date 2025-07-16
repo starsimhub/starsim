@@ -194,7 +194,7 @@ def test_syntax():
     assert len(Timeline(DateDur(days=0), DateDur(days=30), DateDur(days=1)).init()) == 31
     assert len(Timeline(DateDur(days=0), DateDur(months=1), DateDur(days=30)).init()) == 2
     assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(weeks=1)).init()) == 53
-    assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(months=1)) .init()) == 13
+    assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(months=1)).init()) == 13
     assert len(Timeline(Dur(0), Dur(1), Dur(1/12)).init()) == 13
     assert len(Timeline(date('2020-01-01'), date('2030-06-01'), DateDur(days=1)).init()) == 3805
     assert len(Timeline(date(2020), date(2030.5), Dur(0.1)).init()) == 106
