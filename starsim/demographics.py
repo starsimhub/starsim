@@ -106,7 +106,7 @@ class Births(Demographics):
             if isinstance(this_birth_rate, ss.Rate):
                 this_birth_rate = ss.TimeProb(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(dur=ss.years(1))
             else: # number
-                this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_death
+                this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_birth
 
             scaled_birth_prob = ss.TimeProb.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
 
