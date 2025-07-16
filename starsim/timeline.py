@@ -343,6 +343,32 @@ class Timeline:
             self.initialized = True
             return self
 
+
+
+        # # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
+        # # need to decide which of these quantities to prioritise considering that the calendar dates
+        # # don't convert consistently into fractional years due to varying month/year lengths. We will
+        # # prioritise one or the other depending on what type of quantity the user has specified for dt
+        # if isinstance(self.dt, ss.years):
+        #     # If dt has been specified as a years then preference setting fractional years. So first
+        #     # calculate the fractional years, and then convert them to the equivalent dates
+        #     self._yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+        #     if isinstance(self.stop, ss.Dur):
+        #         self._tvec = np.array([self.stop.__class__(x) for x in self._yearvec])
+        #     else:
+        #         self._tvec = np.array([ss.date(x) for x in self._yearvec])
+        # else:
+        #     # If dt has been specified as a DateDur then preference setting dates. So first
+        #     # calculate the dates/durations, and then convert them to the equivalent fractional years
+        #     if isinstance(self.stop, ss.Dur):
+        #         self._tvec = ss.Dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
+        #     else:
+        #         self._tvec = ss.date.arange(self.start, self.stop, self.dt)
+        #     self._yearvec = np.array([x.years for x in self._tvec])
+
+
+        # BROKEN
+
         # We need to make the tvec (dates/Durs) the yearvec (years), and the datevec (dates). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
@@ -350,15 +376,24 @@ class Timeline:
         if self.start.years >= 1: # Years below 1 are not allowed
             self.datevec = ss.date.arange(self.start, self.stop, self.dt)
 
-        if isinstance(self.start, ss.Dur): # Use durations
-            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
-            self.tvec = np.array([self.default_type(value=x) for x in self.yearvec]) # TODO: refactor
-        elif isinstance(self.start, ss.date):
-            self.tvec = self.datevec
-            self.yearvec = np.array([x.years for x in self.datevec])
-        else:
-            errormsg = f'Unexpected start {self.start}: expecting ss.Dur or ss.Date'
-            raise TypeError(errormsg)
+        if isinstance(self.dt, ss.DateDur):
+            if isinstance(self.start, ss.Dur):
+                self.tvec = ss.Dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
+            else:
+                self.tvec = ss.date.arange(self.start, self.stop, self.dt)
+            self.yearvec = np.array([x.years for x in self.tvec])
+
+        else: # self.dt = ss.years, ss.days etc
+
+            if isinstance(self.start, ss.Dur): # Use durations
+                self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+                self.tvec = np.array([self.default_type(value=x) for x in self.yearvec]) # TODO: refactor
+            elif isinstance(self.start, ss.date):
+                self.tvec = self.datevec
+                self.yearvec = np.array([x.years for x in self.datevec])
+            else:
+                errormsg = f'Unexpected start {self.start}: expecting ss.Dur or ss.Date'
+                raise TypeError(errormsg)
 
         if self.start.years < 1: # If we didn't initialize the datevec before, do so now
             self.datevec = self.tvec

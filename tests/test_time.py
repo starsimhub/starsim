@@ -143,8 +143,8 @@ def test_time_class():
 
     print('Testing numeric 2')
     s6 = sim(start=2, stop=None, dt=None)  # Will default to start=Dur(2), dur=Dur(50), end=start+dur
-    assert s6.t.datevec[0] == ss.Dur(2)
-    assert s6.t.datevec[-1] == ss.DateDur(years=52)
+    assert s6.t.tvec[0] == ss.Dur(2)
+    assert s6.t.tvec[-1] == ss.DateDur(years=52)
     assert len(s6.t) == 51
 
     return [s1, t1, s2, t2]
