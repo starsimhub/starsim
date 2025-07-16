@@ -82,11 +82,9 @@ class DateArray(np.ndarray):
         """ Check if the array has sub-daily timesteps """
         try:
             delta = float(self[1] - self[0]) # float should return years
-            delta_days = delta*factors.years.days
-            out = delta_days < 1.0
+            return ss.date.subdaily(delta)
         except:
-            out = False
-        return out
+            return False
 
     def to_date(self, inplace=False, day_round=None, die=True):
         """ Convert to ss.date
@@ -97,6 +95,7 @@ class DateArray(np.ndarray):
             die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
         """
         day_round = sc.ifelse(day_round, not(self.subdaily))
+        print('coke', day_round, self.subdaily)
         try:
             vals = [ss.date(x, day_round=day_round, allow_zero=False) for x in self]
         except Exception as e:
@@ -145,6 +144,7 @@ class date(pd.Timestamp):
     """
     def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
+        print('gosh', day_round)
         single_year_arg = False
         if len(args) == 1:
             arg = args[0]
@@ -240,6 +240,7 @@ class date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
+        print('HIIII', year, day_round)
         if year < 1:
             warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
             if allow_zero is False:
@@ -252,7 +253,7 @@ class date(pd.Timestamp):
         else:
             if day_round:
                 date = sc.yeartodate(year)
-                timestamp = pd.Timestamp(date)
+                timestamp = pd.Timestamp(date).round('d')
             else:
                 year_start = pd.Timestamp(year=int(year), month=1, day=1)
                 year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
@@ -260,8 +261,7 @@ class date(pd.Timestamp):
             return cls._reset_class(timestamp)
 
     def to_year(self):
-        """
-        Convert a date to a floating-point year
+        """ Convert a date to a floating-point year
 
         **Examples**:
 
@@ -277,8 +277,24 @@ class date(pd.Timestamp):
 
     @property
     def years(self):
-        # This matches Dur.years
+        """ Return the date as a number of years """
         return self.to_year()
+
+    @staticmethod
+    def subdaily(years): # TODO: add to Dur as well? Could define a DateTime class that both inherit from, with this and any other duplicate methods
+        """ Check if a subdaily timestep is used
+
+        A date has no concept of a timestep, but add this as a convienence method since
+        this is required by other methods (e.g. `ss.date.arange()`).
+        """
+        days = years*factors.years.days
+        return days < 1.0
+
+    def round(self, to='d'):
+        """ Round to a given interval (by default a day """
+        timestamp = self.round(to)
+        self._reset_class(timestamp)
+        return
 
     def to_pandas(self):
         """ Convert to a standard pd.Timestamp instance """
@@ -425,15 +441,21 @@ class date(pd.Timestamp):
         Returns:
             An array of date instances
         """
+        print('MASH', day_round)
         # Handle the special (but common) case of start < 1
-        if sc.isnumber(start) and start < 1.0:
+        if (sc.isnumber(start) or isinstance(start, ss.DateDur)) and start < 1.0:
             date_type = ss.DateDur
         else:
             date_type = cls
 
         # Convert this first
-        if isinstance(step, ss.Dur):
-            step = DateDur(step)
+        if isinstance(step, ss.Dur) and not isinstance(step, ss.DateDur):
+            if step.value == int(step.value): # e.g. ss.days(2)
+                step = DateDur(step)
+            else:
+                step = step.years # Don't try to convert e.g. ss.years(0.1) to a DateDur, you get rounding errors
+                # start = float(start)
+                # stop = float(stop)
 
         # We're creating dates from DateDurs, step exactly
         if isinstance(step, ss.DateDur):
@@ -452,8 +474,10 @@ class date(pd.Timestamp):
 
         # We're converting them from float years, do it approximately
         elif sc.isnumber(step):
-            start = start.years if isinstance(start, date) else start
-            stop = stop.years if isinstance(stop, date) else stop
+            day_round = sc.ifelse(day_round, not(cls.subdaily(step)))
+            print('FRISH', day_round, step, cls.subdaily(step))
+            start = start.years if isinstance(start, (date, ss.Dur)) else start
+            stop = stop.years if isinstance(stop, (date, ss.Dur)) else stop
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
             return cls.from_array(arr, date_type=date_type, day_round=day_round)
         else:
@@ -504,6 +528,12 @@ class UnitFactors(sc.dictobj):
         self.unit_values = np.array(list(unit_items.values())) # Precompute for computational efficiency
         self.unit_keys = list(unit_items.keys())
         return
+
+    def __getattr__(self, attr):
+        return self.items[attr]
+
+    def __getitem__(self, key):
+        return self.items[key]
 
     def __repr__(self):
         return f'factors.{self.unit}:\n{repr(sc.objdict(self.items))}'

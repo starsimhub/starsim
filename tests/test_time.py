@@ -115,7 +115,7 @@ def test_time_class():
 
     print('Testing different units and dt')
     s3 = sim(start=2001, stop=2003, dt=ss.years(0.1))
-    t3 = ss.Timeline(start='2001-01-01', stop='2003-01-01',dt=ss.days(2))
+    t3 = ss.Timeline(start='2001-01-01', stop='2003-01-01', dt=ss.days(2))
     t3.init(sim=s3)
     assert np.array_equal(s3.t.timevec, s3.t.datevec)
     ss.warn('FIX')
@@ -207,6 +207,7 @@ def test_syntax():
     Dur.arange(Dur(0),Dur(10),Dur(1)) + years(1)
     Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + years(1)
     Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + years(1)
+    print('FIX')
     # Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + years(1) # TODO: do not allow for now
     # Dur.arange(Dur(0),Dur(10),Dur(1)) + DateDur(years=1)
     # Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + DateDur(years=1)
