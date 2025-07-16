@@ -83,8 +83,9 @@ class date(pd.Timestamp):
             years = kwargs['year']
 
         if years is not None:
-            if years == 0:
-                return ss.DateDur(years=0)
+            if years < 1.0:
+                errormsg = 'Years below 1 are not valid, and are not supported by ss.date or pd.Timestamp. Use e.g. ss.years(0) instead.'
+                raise ValueError(errormsg)
             else:
                 return cls.from_year(years)
 
@@ -492,15 +493,19 @@ class TimePar:
         else:
             return tuple(years)
 
-    def __array__(self):
-        """ The built-in NumPy method for converting to an array """
-        return np.array(self.value)
+    # def __array__(self):
+    #     """ The built-in NumPy method for converting to an array """
+    #     # if self.is_scalar:
+    #     #     raise TypeError("Scalar instances of this class cannot be converted to NumPy arrays")
+    #     # else:
+    #     return np.array(self.value)
 
-    def to_numpy(self):
-        return self.__array__()
+    # def to_numpy(self):
+    #     return self.__array__()
 
     def to_array(self):
-        return self.__array__()
+        """ Force conversion to an array """
+        return np.array(self.value)
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
@@ -693,40 +698,31 @@ class Dur(TimePar):
         return -1*self
 
     def __lt__(self, other):
-        try:
-            return self.years < other.years
-        except:
-            return self.years < other
+        try:    return self.years < other.years
+        except: return self.years < other
 
     def __gt__(self, other):
-        try:
-            return self.years > other.years
-        except:
-            return self.years > other
+        try:    return self.years > other.years
+        except: return self.years > other
 
     def __le__(self, other):
-        try:
-            return self.years <= other.years
-        except:
-            return self.years <= other
+        try:    return self.years <= other.years
+        except: return self.years <= other
 
     def __ge__(self, other):
-        try:
-            return self.years >= other.years
-        except:
-            return self.years >= other
+        try:    return self.years >= other.years
+        except: return self.years >= other
 
     def __eq__(self, other):
-        try:
+        if isinstance(other, ss.Dur):
             return self.years == other.years
-        except:
+        elif sc.isnumber(other):
             return self.years == other
+        return NotImplemented # Used to set precedence
 
     def __ne__(self, other):
-        try:
-            return self.years != other.years
-        except:
-            return self.years != other
+        try:    return self.years != other.years
+        except: return self.years != other
 
     def __rtruediv__(self, other):
         # If a Dur is divided by a Dur then we will call __truediv__

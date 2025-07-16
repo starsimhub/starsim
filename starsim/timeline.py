@@ -347,15 +347,21 @@ class Timeline:
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
         # prioritise one or the other depending on what type of quantity the user has specified for start
-        date_start = self.start if self.start.years > 0 else 1 # There is no year 0, so start at 1 for datevec
-        self.datevec = ss.date.arange(date_start, self.stop, self.dt)
+        if self.start.years >= 1: # Years below 1 are not allowed
+            self.datevec = ss.date.arange(self.start, self.stop, self.dt)
+
         if isinstance(self.start, ss.Dur): # Use durations
             self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             self.tvec = np.array([self.default_type(value=x) for x in self.yearvec]) # TODO: refactor
         elif isinstance(self.start, ss.date):
             self.tvec = self.datevec
             self.yearvec = np.array([x.years for x in self.datevec])
+        else:
+            errormsg = f'Unexpected start {self.start}: expecting ss.Dur or ss.Date'
+            raise TypeError(errormsg)
 
+        if self.start.years < 1: # If we didn't initialize the datevec before, do so now
+            self.datevec = self.tvec
 
         self.initialized = True
         return self
