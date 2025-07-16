@@ -30,6 +30,25 @@ import starsim as ss
 # General classes; specific classes are listed below
 __all__ = ['DateArray', 'date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb']
 
+def approx_compare(a, op='==', b=None, **kwargs):
+    """ Floating-point issues are common working with dates, so allow approximate matching
+
+    Specifically, this replaces e.g. "a <= b" with "a < b or np.isclose(a,b)"
+
+    Args:
+        a (int/float): the first value to compare
+        op (str): the operation: ==, <, or >
+        b (int/float): the second value to compare
+        **kwargs (dict): passed to `np.isclose()`
+    """
+    close = np.isclose(a, b, **kwargs)
+    if close:       return True
+    elif op == '<': return a < b
+    elif op == '>': return a > b
+    else:
+        errormsg = f'Unsupported operation "{op}", should be "==", "<", or ">"'
+        raise ValueError(errormsg)
+
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
@@ -144,7 +163,7 @@ class date(pd.Timestamp):
     """
     def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
-        print('gosh', day_round)
+        # print('gosh', day_round)
         single_year_arg = False
         if len(args) == 1:
             arg = args[0]
@@ -240,7 +259,7 @@ class date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
-        print('HIIII', year, day_round)
+        # print('HIIII', year, day_round)
         if year < 1:
             warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
             if allow_zero is False:
@@ -466,7 +485,7 @@ class date(pd.Timestamp):
 
             tvec = []
             t = start
-            compare = (lambda t: t <= stop) if inclusive else (lambda t: t < stop)
+            compare = (lambda t: t < stop or np.isclose(t, stop)) if inclusive else (lambda t: t < stop)
             while compare(t):
                 tvec.append(t)
                 t += step
@@ -479,6 +498,7 @@ class date(pd.Timestamp):
             start = start.years if isinstance(start, (date, ss.Dur)) else start
             stop = stop.years if isinstance(stop, (date, ss.Dur)) else stop
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
+            print('CHICK', inclusive, start, stop, step, arr)
             return cls.from_array(arr, date_type=date_type, day_round=day_round)
         else:
             errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
