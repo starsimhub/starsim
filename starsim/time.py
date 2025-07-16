@@ -621,8 +621,8 @@ class Dur(TimePar):
         if self.is_scalar and self.value == 1:
             return f'{self.base.removesuffix("s")}()' # e.g. 'year()'
         else:
-            if self.is_scalar and self.value != int(self.value):
-                valstr = f'{self.value:n}'  # e.g. 21.38472
+            if self.is_scalar:
+                valstr = f'{self.value:g}'  # e.g. 2031.35
             else:
                 valstr = f'{self.value}' # e.g. 2000, or an array
             return f'{self.base}({valstr})'
