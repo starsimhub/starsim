@@ -5,6 +5,10 @@ that may result in differences in model output, or are required in order
 to run an old parameter set with the current version, are flagged with
 the term "Regression information".
 
+## Version 2.3.2 (2025-07-16)
+-   Fix argument passing in `Infection.infect`. This will be the final Starsim v2.x release.
+-   *GitHub info*: PR [1008](https://github.com/starsimhub/starsim/pull/1008)
+
 ## Version 2.3.1 (2025-02-25)
 -   Updated `ss.Sim.shrink()` to remove additional objects, resulting in
     a smaller sim size.
