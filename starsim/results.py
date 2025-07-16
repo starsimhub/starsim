@@ -250,7 +250,7 @@ class Result(ss.BaseArr):
         return s
 
     def convert_timevec(self, force=False):
-        # Make sure we're using a timevec that's in the right format i.e. dates
+        """ Make sure we're using a timevec that's in the right format i.e. dates """
         if self.timevec is not None:
             if not self.has_dates or force:
                 timevec = ss.DateArray([ss.date(t) for t in self.timevec])
