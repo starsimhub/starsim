@@ -550,8 +550,8 @@ class Dist:
                 if v.size == 1:
                     v = v.flat[0] # Case where we have an array wrapping a Dur wrapping an array # TODO: refactor
                 else:
-                    errormsg = 'Cannot operate on an array of timepars; timepars should wrap arrays, not vice versa'
-                    raise NotImplementedError(errormsg)
+                    warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
+                    ss.warn(warnmsg)
 
             if is_timepar:
                 if isinstance(v, ss.Dur):

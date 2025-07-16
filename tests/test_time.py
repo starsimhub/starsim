@@ -215,14 +215,14 @@ def test_syntax():
     Dur.arange(Dur(0),Dur(10),Dur(1)) + date(2000)
     Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + date(2000)
     Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + date(2000)
-    Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + date(2000)
+    Dur.arange(DateDur(years=0), DateDur(years=10), DateDur(years=1)) + date(2000)
 
     # Rates
     assert (1/years(1)) == ss.rateperyear(1)
     assert (2/years(1)) == ss.rateperyear(2)
     assert (4/years(1)) == ss.rateperyear(4)
     assert (4/DateDur(1)) == ss.rateperyear(4)
-    assert (rateperday(5)*Dur(days=1)) == 5
+    assert (rateperday(5)*DateDur(days=1)) == 5
     assert 2/Rate(0.25) == Dur(8)
     assert 1/(2*Rate(0.25)) == Dur(2)
     assert Rate(0.5)/Rate(1) == 0.5
@@ -230,23 +230,23 @@ def test_syntax():
     # Probabilities
     p = TimeProb(0.1, DateDur(years=1))
     f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
-    assert p*Dur(years=2) == f(0.5)
+    assert p*DateDur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * DateDur(months=1) == f(12)
 
     p = TimeProb(0.1, Dur(1))
-    assert p*Dur(years=2) == f(0.5)
+    assert p*DateDur(years=2) == f(0.5)
     assert p * Dur(0.5 ) == f(2)
     assert p * DateDur(months=1) == f(12)
 
     p = RateProb(0.1, DateDur(years=1))
     f = lambda factor: 1 - np.exp(-p.value/factor)
-    assert p*Dur(years=2) == f(0.5)
+    assert p*DateDur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * DateDur(months=1) == f(12)
 
     p = RateProb(0.1, Dur(1))
-    assert p*Dur(years=2) == f(0.5)
+    assert p*DateDur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * DateDur(months=1) == f(12)
 

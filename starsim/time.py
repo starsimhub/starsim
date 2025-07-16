@@ -493,18 +493,18 @@ class TimePar:
         else:
             return tuple(years)
 
-    def __array__(self, dtype=None, copy=None):
-        """ The built-in NumPy method for converting to an array """
-        # print('WHO ARE YOU', args, kwargs)
-        if self.is_scalar:
-            vals = [self.value]
-            # raise TypeError("Scalar instances of this class cannot be converted to NumPy arrays")
-        else:
-            vals = [self.__class__(x) for x in self.value]
-        return np.array(vals, dtype=object)
+    # def __array__(self, dtype=None, copy=None):
+    #     """ The built-in NumPy method for converting to an array """
+    #     # print('WHO ARE YOU', args, kwargs)
+    #     if self.is_scalar:
+    #         vals = [self.value]
+    #         # raise TypeError("Scalar instances of this class cannot be converted to NumPy arrays")
+    #     else:
+    #         vals = [self.__class__(x) for x in self.value]
+    #     return np.array(vals, dtype=object)
 
     def to_numpy(self):
-        return self.__array__()
+        return self.to_array()
 
     def to_array(self):
         """ Force conversion to an array """
