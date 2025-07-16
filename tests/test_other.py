@@ -279,12 +279,12 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl = test_people()
-    sim1 = test_microsim(do_plot)
-    sim2 = test_ppl_construction(do_plot)
-    sims = test_arrs()
-    sims2 = test_deepcopy()
-    sims3 = test_deepcopy_until()
+    # ppl = test_people()
+    # sim1 = test_microsim(do_plot)
+    # sim2 = test_ppl_construction(do_plot)
+    # sims = test_arrs()
+    # sims2 = test_deepcopy()
+    # sims3 = test_deepcopy_until()
     sim4 = test_results()
     sim5 = test_check_requires()
     objs = test_mock_objects()

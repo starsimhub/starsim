@@ -27,14 +27,13 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb']
+__all__ = ['DateArray', 'date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb']
 
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
     def __new__(cls, arr=None):
-        if arr is None:
-            arr = np.array([])
+        arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
             return arr.view(cls)
         else:

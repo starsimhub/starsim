@@ -85,6 +85,13 @@ class Result(ss.BaseArr):
         else:
             return super().__getitem__(key)
 
+    def __setitem__(self, key, value):
+        """ Allow e.g. result['low'] = 2 """
+        if isinstance(key, str):
+            return setattr(self, key, value)
+        else:
+            return super().__setitem__(key, value)
+
     @property
     def initialized(self):
         return self.values is not None
@@ -172,6 +179,10 @@ class Result(ss.BaseArr):
         if self.timevec is None:
             raise ValueError('Cannot resample: timevec is not set')
 
+        # Convert the timevec if needed
+        orig_timevec = self.timevec # TODO: refactor
+        self.timevec = self.convert_timevec(force=True)
+
         # Handle summarization method
         if summarize_by is None:
             if self.summarize_by is not None:
@@ -207,6 +218,8 @@ class Result(ss.BaseArr):
         elif output_form == 'result':
             out = self.from_df(df)
 
+        self.timevec = orig_timevec
+
         return out
 
     def from_df(self, df):
@@ -236,11 +249,11 @@ class Result(ss.BaseArr):
         s = pd.Series(self.values, index=timevec, name=name)
         return s
 
-    def convert_timevec(self):
+    def convert_timevec(self, force=False):
         # Make sure we're using a timevec that's in the right format i.e. dates
         if self.timevec is not None:
-            if not self.has_dates:
-                timevec = [ss.date(t) for t in self.timevec]
+            if not self.has_dates or force:
+                timevec = ss.DateArray([ss.date(t) for t in self.timevec])
             else:
                 timevec = self.timevec
         return timevec
