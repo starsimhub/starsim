@@ -40,6 +40,7 @@ class Timeline:
 
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
+    _time_vecs = ['tvec', 'yearvec', 'datevec', 'timevec']
 
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=None, sim=None):
         # Store inputs
@@ -77,12 +78,6 @@ class Timeline:
 
     def disp(self):
         return sc.pr(self)
-
-    @property
-    def timevec(self):
-        warnmsg = 'In Starsim v3.0, use t.tvec instead of t.timevec'
-        ss.warn(warnmsg)
-        return self.tvec
 
     @property
     def npts(self):
@@ -328,53 +323,22 @@ class Timeline:
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
 
-        # if sim is not None:
-        #     if self.is_absolute != sim.t.is_absolute: # TODO: remove this check?
-        #         errormsg = 'Cannot mix absolute/relative times across modules and the sim: both must be either dates or e.g. year/day ranges'
-        #         raise Exception(errormsg)
-
         # The sim is provided and matches the current object: copy from the sim
         if sim is not None and sim.t.initialized and \
                 all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in ('start', 'stop', 'dt')]) and \
                 all([getattr(self, key) == getattr(sim.t, key) for key in ('start', 'stop', 'dt')]):
-            self.yearvec = sc.dcp(sim.t.yearvec)
-            self.tvec    = sc.dcp(sim.t.tvec)
-            self.datevec = sc.cp(sim.t.datevec) # ss.Dates are immutable so only need shallow copy
+
+            for attr in self._time_vecs:
+                new = sc.dcp(getattr(sim.t, attr))
+                setattr(self, attr, new)
             self.initialized = True
             return self
-
-
-
-        # # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
-        # # need to decide which of these quantities to prioritise considering that the calendar dates
-        # # don't convert consistently into fractional years due to varying month/year lengths. We will
-        # # prioritise one or the other depending on what type of quantity the user has specified for dt
-        # if isinstance(self.dt, ss.years):
-        #     # If dt has been specified as a years then preference setting fractional years. So first
-        #     # calculate the fractional years, and then convert them to the equivalent dates
-        #     self._yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
-        #     if isinstance(self.stop, ss.Dur):
-        #         self._tvec = np.array([self.stop.__class__(x) for x in self._yearvec])
-        #     else:
-        #         self._tvec = np.array([ss.date(x) for x in self._yearvec])
-        # else:
-        #     # If dt has been specified as a DateDur then preference setting dates. So first
-        #     # calculate the dates/durations, and then convert them to the equivalent fractional years
-        #     if isinstance(self.stop, ss.Dur):
-        #         self._tvec = ss.Dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
-        #     else:
-        #         self._tvec = ss.date.arange(self.start, self.stop, self.dt)
-        #     self._yearvec = np.array([x.years for x in self._tvec])
-
-
-        # BROKEN
 
         # We need to make the tvec (dates/Durs) the yearvec (years), and the datevec (dates). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
         # prioritise one or the other depending on what type of quantity the user has specified for start
-        if self.start.years >= 1: # Years below 1 are not allowed
-            self.datevec = ss.date.arange(self.start, self.stop, self.dt)
+        self.datevec = ss.date.arange(self.start, self.stop, self.dt)
 
         if isinstance(self.dt, ss.DateDur):
             if isinstance(self.start, ss.Dur):
@@ -396,8 +360,15 @@ class Timeline:
                 errormsg = f'Unexpected start {self.start}: expecting ss.Dur or ss.Date'
                 raise TypeError(errormsg)
 
-        if self.start.years < 1: # If we didn't initialize the datevec before, do so now
-            self.datevec = self.tvec
+        # Ensure everything is a DateArray
+        for attr in self._time_vecs:
+            if attr != 'timevec': # We make this in a moment
+                vec = getattr(self, attr)
+                if not isinstance(vec, ss.DateArray):
+                    setattr(self, attr, ss.DateArray(vec))
+
+        # The most human-friendly version of the dates: either dates or floats
+        self.timevec = self.tvec.to_human()
 
         self.initialized = True
         return self

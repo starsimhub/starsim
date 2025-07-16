@@ -77,17 +77,33 @@ class DateArray(np.ndarray):
     def is_float(self):
         return self.is_('float')
 
-    def to_date(self, inplace=False, die=True):
+    @property
+    def subdaily(self):
+        """ Check if the array has sub-daily timesteps """
+        try:
+            delta = float(self[1] - self[0]) # float should return years
+            delta_days = delta*factors.years.days
+            out = delta_days < 1.0
+        except:
+            out = False
+        return out
+
+    def to_date(self, inplace=False, day_round=None, die=True):
         """ Convert to ss.date
 
         Args:
             inplace (bool): whether to modify in place
+            round (bool): whether to round dates to the nearest day (otherwise, keep timestamp); if None, round if and only if the span of the first timestep is at least one day
             die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
         """
+        day_round = sc.ifelse(day_round, not(self.subdaily))
         try:
-            vals = [ss.date(x) for x in self]
-        except:
-            return self.to_float(inplace=inplace)
+            vals = [ss.date(x, day_round=day_round, allow_zero=False) for x in self]
+        except Exception as e:
+            if die:
+                raise e
+            else:
+                return self.to_float(inplace=inplace)
 
         if inplace:
             self[:] = vals
@@ -102,6 +118,13 @@ class DateArray(np.ndarray):
         else:
             return ss.DateArray(vals)
 
+    def to_human(self):
+        """
+        Return the most human-friendly (i.e. plotting-friendly) version of the dates,
+        i.e. ss.date if possible, float otherwise
+        """
+        return self.to_date(die=False)
+
 
 class date(pd.Timestamp):
     """
@@ -109,6 +132,7 @@ class date(pd.Timestamp):
 
     Args:
         date (int/float/str/datetime): Any type of date input (ints and floats will be interpreted as years)
+        allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
         kwargs (dict): passed to pd.Timestamp()
 
     **Examples**:
@@ -119,7 +143,7 @@ class date(pd.Timestamp):
         ss.date('2024-04-04') # Returns <2024-04-04>
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
     """
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
         single_year_arg = False
         if len(args) == 1:
@@ -134,26 +158,23 @@ class date(pd.Timestamp):
                 arg = arg.years
                 single_year_arg = True
 
+        # Handle converting a float year to a date
         years = None
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
 
         if single_year_arg:
             years = arg
-            return cls.from_year(arg)
         if year_kwarg:
             years = kwargs['year']
 
         if years is not None:
-            if years < 1.0:
-                errormsg = 'Years below 1 are not valid, and are not supported by ss.date or pd.Timestamp. Use e.g. ss.years(0) instead.'
-                raise ValueError(errormsg)
-            else:
-                return cls.from_year(years)
+            return cls.from_year(arg, day_round=day_round, allow_zero=allow_zero)
 
         # Otherwise, proceed as normal
-        self = super(date, cls).__new__(cls, *args, **kwargs)
-        self = cls._reset_class(self)
-        return self
+        else:
+            self = super(date, cls).__new__(cls, *args, **kwargs)
+            self = cls._reset_class(self)
+            return self
 
     @classmethod
     def _reset_class(cls, obj):
@@ -205,9 +226,14 @@ class date(pd.Timestamp):
         return sc.pr(self, **kwargs)
 
     @classmethod
-    def from_year(cls, year, round=True):
+    def from_year(cls, year, day_round=True, allow_zero=None):
         """
         Convert an int or float year to a date.
+
+        Args:
+            year (float): the year to round
+            day_round (bool): whether to round to the nearest day
+            allow_zero (bool): whether to allow year 0 (if so, return ss.DateDur instead)
 
         **Examples**:
 
@@ -216,12 +242,15 @@ class date(pd.Timestamp):
         """
         if year < 1:
             warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
-            ss.warn(warnmsg)
+            if allow_zero is False:
+                raise ValueError(warnmsg)
+            elif allow_zero is None:
+                ss.warn(warnmsg)
             return ss.DateDur(years=year)
         elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
-            if round:
+            if day_round:
                 date = sc.yeartodate(year)
                 timestamp = pd.Timestamp(date)
             else:
@@ -467,12 +496,12 @@ class UnitFactors(sc.dictobj):
             unit_items[k] /= base_factors[unit]
         self.unit = unit
         self.items = unit_items
-        self.values = np.array(list(unit_items.values())) # Precompute for computational efficiency
-        self.keys = list(unit_items.keys())
+        self.unit_values = np.array(list(unit_items.values())) # Precompute for computational efficiency
+        self.unit_keys = list(unit_items.keys())
         return
 
     def __repr__(self):
-        return f'{self.unit}:\n{repr(sc.objdict(self.items))}'
+        return f'factors.{self.unit}:\n{repr(sc.objdict(self.items))}'
 
     def disp(self):
         return sc.pr(self)
@@ -498,11 +527,19 @@ class Factors(sc.dictobj):
     def __repr__(self):
         string = ''
         for key in valid_bases:
-            string += 'factors.'
             entry = repr(self[key])
             entry = sc.indent(text=entry, n=4).lstrip() # Don't indent the first line
             string += entry
         return string
+
+    def __getattr__(self, attr):
+        """ Be a little flexible, and then give helpful warnings """
+        attr = normalize_base(attr)
+        try:
+            return super().__getattribute__(attr)
+        except AttributeError as e:
+            errormsg = f'Attribute "{attr}" is not valid; choices are: {sc.strjoin(self.keys())}'
+            raise AttributeError(errormsg) from e
 
 # Preallocate for performance
 factors = Factors()
@@ -523,10 +560,15 @@ class TimePar:
 
     @classmethod
     def _set_factors(cls):
+        """ Resets the default factors
+
+        For example, with base = 'year', years=1.0 and days=1/365. With base='day',
+        years=365.0 and days=1.0.
+        """
         if cls.base is not None:
             cls.factors = factors[cls.base].items
-            cls.factor_keys = factors[cls.base].keys
-            cls.factor_vals = factors[cls.base].values
+            cls.factor_keys = factors[cls.base].unit_keys
+            cls.factor_vals = factors[cls.base].unit_values
         return
 
     def __setattrr__(self, attr, value):
