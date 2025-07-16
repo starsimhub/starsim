@@ -449,23 +449,18 @@ class TimePar:
         """ For indexing and slicing, e.g. TimePar[inds] """
         if self.is_array:
             return self.__class__(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
-        elif index == 0:
-            return self.value
         else:
-            errormsg = f'{type(self)} is a scalar; index 0 is valid but all others are not'
-            raise IndexError(errormsg)
+            errormsg = f'{type(self)} is a scalar'
+            raise TypeError(errormsg)
 
     def __setitem__(self, index, value):
         """ For indexing and slicing, e.g. TimePar[inds] """
         if self.is_array:
             self.value[index] = value
             return
-        elif index == 0:
-            self.value = value
-            return
         else:
-            errormsg = f'{type(self)} is a scalar; index 0 is valid but all others are not'
-            raise IndexError(errormsg)
+            errormsg = f'{type(self)} is a scalar'
+            raise TypeError(errormsg)
 
     def __bool__(self):
         return True
@@ -477,20 +472,37 @@ class TimePar:
         else:
             return len(self.value)
 
+    def __hash__(self):
+        years = self.years
+        if self.is_scalar:
+            return years
+        else:
+            return tuple(years)
+
+    def __array__(self):
+        """ The built-in NumPy method for converting to an array """
+        return np.array(self.value)
+
+    def to_numpy(self):
+        return self.__array__()
+
+    def to_array(self):
+        return self.__array__()
+
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
         a,b = inputs
-        a_b = True
-        if b is self: # Swap order if needed
-            b,a = a,b
-            a_b = True
+        a_b = True # Are inputs in this order?
+        if b is self: # Opposite order than expected
+            a_b = False # NB, the functions reverse the
 
         if   ufunc == np.add:      return self.__add__(b)
         elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)
         elif ufunc == np.multiply: return self.__mul__(b)
         elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
-        else:
-            self.array_mul_error(ufunc)
+        else: # Fall back to standard ufunc ... TODO, check if this is appropriate
+            inputs = [inp.value if isinstance(inp, TimePar) else inp for inp in inputs] # Just pull out the values
+            return getattr(ufunc, method)(*inputs, **kwargs)
         return
 
     def array_mul_error(self, ufunc=None):
@@ -588,7 +600,10 @@ class Dur(TimePar):
         if self.is_scalar and self.value == 1:
             return f'{self.base.removesuffix("s")}()' # e.g. 'year()'
         else:
-            valstr = f'{self.value:n}' if self.is_scalar else f'{self.value}' # NumPy can't handle :n
+            if self.is_scalar and self.value != int(self.value):
+                valstr = f'{self.value:n}'  # e.g. 21.38472
+            else:
+                valstr = f'{self.value}' # e.g. 2000, or an array
             return f'{self.base}({valstr})'
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
@@ -614,9 +629,6 @@ class Dur(TimePar):
     @property
     def days(self):
         return self.value*self.factors.day # Needs to return float so matplotlib can plot it correctly
-
-    def to_numpy(self):
-        return sc.toarray(self.value)
 
     def __add__(self, other):
         if isinstance(other, Dur):
