@@ -338,7 +338,7 @@ class Timeline:
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
         # prioritise one or the other depending on what type of quantity the user has specified for start
-        self.datevec = ss.date.arange(self.start, self.stop, self.dt)
+        self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
 
         if isinstance(self.dt, ss.DateDur):
             if isinstance(self.start, ss.Dur):

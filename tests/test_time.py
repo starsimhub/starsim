@@ -10,6 +10,8 @@ small = 100
 medium = 1000
 sc.options(interactive=False)
 
+# ss.options.warnings = 'error'
+
 
 # %% Define the tests
 @sc.timer()
@@ -100,9 +102,7 @@ def test_time_class():
     assert t1.npts == sc.daydiff('2001-01-01', '2001-06-30')//2 + 1
     assert isinstance(s1.t.start, ss.date)
     assert isinstance(t1.start, ss.date)
-    ss.warn('FIX')
-    print('FIX')
-    # assert s1.t.tvec[-1] == ss.date('2002-01-01')
+    assert s1.t.tvec[-1] == ss.date('2002-01-01')
     assert t1.tvec[-1] == ss.date('2001-06-30')
 
     print('Testing weeks vs. days')
@@ -118,9 +118,7 @@ def test_time_class():
     t3 = ss.Timeline(start='2001-01-01', stop='2003-01-01', dt=ss.days(2))
     t3.init(sim=s3)
     assert np.array_equal(s3.t.timevec, s3.t.datevec)
-    ss.warn('FIX')
-    print('FIX')
-    # assert s3.t.datevec[-1] == ss.date('2003-01-01')
+    assert s3.t.datevec[-1] == ss.date('2003-01-01')
     assert s3.t.npts == 21
 
     print('Testing durations 1')
@@ -207,8 +205,9 @@ def test_syntax():
     Dur.arange(Dur(0),Dur(10),Dur(1)) + years(1)
     Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + years(1)
     Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + years(1)
-    print('FIX')
-    # Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + years(1) # TODO: do not allow for now
+
+    # TODO: DateDur calculations no longer work due to using __array_ufunc__ for performance -- could consider enabling later
+    # Dur.arange(Dur(years=0), DateDur(years=10), DateDur(years=1)) + years(1)
     # Dur.arange(Dur(0),Dur(10),Dur(1)) + DateDur(years=1)
     # Dur.arange(Dur(0),Dur(10), DateDur(years=1)) + DateDur(years=1)
     # Dur.arange(Dur(0), DateDur(years=10), DateDur(years=1)) + DateDur(years=1)

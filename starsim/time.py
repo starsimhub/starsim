@@ -415,13 +415,14 @@ class date(pd.Timestamp):
     # Convenience methods based on application usage
 
     @classmethod
-    def from_array(cls, array, day_round=True, allow_zero=None, date_type=None):
+    def from_array(cls, array, day_round=True, allow_zero=True, date_type=None):
         """
         Convert an array of float years into an array of date instances
 
         Args:
             array (array): An array of float years
             day_round (bool): Whether to round to the nearest day
+            allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
             date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.DateDur`)
 
         Returns:
@@ -435,7 +436,7 @@ class date(pd.Timestamp):
         return DateArray(np.vectorize(date_type)(array, **kwargs))
 
     @classmethod
-    def arange(cls, start, stop, step=1.0, day_round=None, inclusive=True):
+    def arange(cls, start, stop, step=1.0, inclusive=True, day_round=None, allow_zero=True):
         """
         Construct an array of dates
 
@@ -451,8 +452,9 @@ class date(pd.Timestamp):
             start (float/ss.date/ss.Dur): Lower bound - can be a date or a numerical year
             stop (float/ss.date/ss.Dur): Upper bound - can be a date or a numerical year
             step (float/ss.Dur): Assumes 1 calendar year steps by default
-            day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
             inclusive (bool): Whether to include "stop" in the output
+            day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
+            allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
 
         Returns:
             An array of date instances
@@ -460,8 +462,10 @@ class date(pd.Timestamp):
         # Handle the special (but common) case of start < 1
         if (sc.isnumber(start) or isinstance(start, ss.DateDur)) and start < 1.0:
             date_type = ss.DateDur
+            kw = {}
         else:
             date_type = cls
+            kw = dict(day_round=day_round, allow_zero=allow_zero)
 
         # Convert this first
         if isinstance(step, ss.Dur) and not isinstance(step, ss.DateDur):
@@ -480,9 +484,9 @@ class date(pd.Timestamp):
         # We're creating dates from DateDurs, step exactly
         if isinstance(step, ss.DateDur):
             if not isinstance(start, date):
-                start = date_type(start)
+                start = date_type(start, **kw)
             if not isinstance(stop, date):
-                stop = date_type(stop)
+                stop = date_type(stop, **kw)
 
             tvec = []
             t = start
@@ -505,7 +509,7 @@ class date(pd.Timestamp):
                 if within_day(stop, rounded_stop):
                     stop = rounded_stop
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
-            return cls.from_array(arr, date_type=date_type, day_round=day_round)
+            return cls.from_array(arr, day_round=day_round, allow_zero=allow_zero, date_type=date_type)
         else:
             errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
             raise TypeError(errormsg)
@@ -1197,7 +1201,7 @@ class DateDur(Dur):
             return self.__class__(**self._as_args(self.to_array() + self._as_array(other.value)))
         elif isinstance(other, pd.DateOffset):
             return self.__class__(**self._as_args(self.to_array() + self._as_array(other)))
-        elif isinstance(other, years):
+        elif isinstance(other, Dur):
             kwargs = {k: v for k, v in zip(self.factor_keys, self.to_array())}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
@@ -1206,6 +1210,9 @@ class DateDur(Dur):
         else:
             errormsg = f'For DateDur, it is only possible to add/subtract dates, Dur objects, or pd.DateOffset objects, not {type(other)}'
             raise TypeError(errormsg)
+
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __sub__(self, other):
         return self.__add__(-1*other)
@@ -1253,7 +1260,7 @@ class Rate(TimePar):
 
         if isinstance(value, ss.TimePar):
             value = value.value
-            ss.warn('TODO: check if this is correct')
+            ss.warn('Converting TimePars in this way is inadvisable and will become an exception in future')
 
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)):
             errormsg = f'Value must be a scalar number or array, not {type(value)}'

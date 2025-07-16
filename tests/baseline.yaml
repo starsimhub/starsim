@@ -16,9 +16,9 @@ sir_n_recovered: 5170.0990099009905
 sir_n_susceptible: 2370.920792079208
 sir_new_infections: 117.53465346534654
 sir_prevalence: 0.3231773204734715
-sis_cum_infections: 17833.0
-sis_n_infected: 6330.633663366337
-sis_n_susceptible: 4695.762376237623
-sis_new_infections: 176.56435643564356
-sis_prevalence: 0.5602351080000668
-sis_rel_sus: 0.5135773588525187
+sis_cum_infections: 17800.0
+sis_n_infected: 6326.683168316832
+sis_n_susceptible: 4699.712871287129
+sis_new_infections: 176.23762376237624
+sis_prevalence: 0.5599016654524251
+sis_rel_sus: 0.5116398830224972
