@@ -328,10 +328,10 @@ class Timeline:
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
 
-        if sim is not None:
-            if self.is_absolute != sim.t.is_absolute:
-                errormsg = 'Cannot mix absolute/relative times across modules and the sim: both must be either dates or e.g. year/day ranges'
-                raise Exception(errormsg)
+        # if sim is not None:
+        #     if self.is_absolute != sim.t.is_absolute: # TODO: remove this check?
+        #         errormsg = 'Cannot mix absolute/relative times across modules and the sim: both must be either dates or e.g. year/day ranges'
+        #         raise Exception(errormsg)
 
         # The sim is provided and matches the current object: copy from the sim
         if sim is not None and sim.t.initialized and \
