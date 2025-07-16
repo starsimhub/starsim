@@ -58,8 +58,6 @@ class date(pd.Timestamp):
         ss.date('2024-04-04') # Returns <2024-04-04>
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
     """
-    year_zero_offset = 9999 # Since year 0 doesn't exist, replace it with this placeholder value
-
     def __new__(cls, *args, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
         single_year_arg = False
@@ -71,23 +69,28 @@ class date(pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
                 single_year_arg = True
-            # elif isinstance(arg, ss.DateDur): # e.g. ss.DateDur(years=2020)
-            #     kwargs.update(arg.to_dict())
             elif isinstance(arg, ss.Dur): # e.g. ss.years(2020)
                 arg = arg.years
                 single_year_arg = True
 
+        years = None
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
+
         if single_year_arg:
-            year = arg
+            years = arg
             return cls.from_year(arg)
         if year_kwarg:
-            return cls.from_year(kwargs['year'])
+            years = kwargs['year']
+
+        if years is not None:
+            if years == 0:
+                return ss.DateDur(years=0)
+            else:
+                return cls.from_year(years)
 
         # Otherwise, proceed as normal
         self = super(date, cls).__new__(cls, *args, **kwargs)
         self = cls._reset_class(self)
-        self.year_zero = False
         return self
 
     @classmethod
@@ -149,9 +152,9 @@ class date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
-        if year == 0:
-            year += cls.year_zero_offset
-        if isinstance(year, int):
+        if year < 1:
+            return ss.DateDur(years=year)
+        elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
             if round:
@@ -798,18 +801,21 @@ class DateDur(Dur):
             assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
             arg = args[0]
             if isinstance(arg, pd.DateOffset):
-                self.value = self._round_duration(arg)
+                self.value = self.round_duration(arg)
             elif isinstance(arg, DateDur):
                 self.value = sc.dcp(arg.value) # pd.DateOffset is immutable so this should be OK
             elif isinstance(arg, Dur):
-                self.value = self._round_duration({'years': arg.years})
+                self.value = self.round_duration(years=arg.years)
             elif sc.isnumber(arg):
-                self.value = self._round_duration({'years': arg})
+                self.value = self.round_duration(years=arg)
             else:
                 errormsg = f'Unsupported input {args}.\nExpecting number, ss.Dur, ss.DateDur, or pd.DateOffset'
                 raise TypeError(errormsg)
         else:
-            self.value = self._round_duration(kwargs)
+            if 'value' in kwargs:
+                self.value = self.round_duration(years=kwargs.pop('value'))
+            else:
+                self.value = self.round_duration(kwargs)
 
     def __float__(self):
         return float(self.years)
@@ -889,7 +895,7 @@ class DateDur(Dur):
             return False
 
     @classmethod
-    def _round_duration(cls, vals):
+    def round_duration(cls, vals=None, **kwargs):
         """
         Round a dictionary of duration values by overflowing remainders
 
@@ -907,16 +913,18 @@ class DateDur(Dur):
         Returns:
             A pd.DateOffset
         """
-        if isinstance(vals, np.ndarray):
+        if isinstance(vals, np.ndarray): # Main use case: convert from an array
             d = sc.objdict({k:v for k,v in zip(cls.factor_keys, vals)})
-        elif isinstance(vals, pd.DateOffset):
-            d = sc.objdict.fromkeys(cls.factor_keys, 0)
-            d.update(vals.kwds)
-        elif isinstance(vals, dict):
-            d = sc.objdict.fromkeys(cls.factor_keys, 0)
-            d.update(vals)
         else:
-            raise TypeError()
+            d = sc.objdict.fromkeys(cls.factor_keys, 0)
+            if isinstance(vals, pd.DateOffset):
+                d.update(vals.kwds)
+            elif isinstance(vals, dict):
+                d.update(vals)
+            elif vals is not None:
+                errormsg = f'Could not interpret values {vals}; expecting, array, pd.DateOffset, or dict'
+                raise TypeError(errormsg)
+            d = sc.odict(sc.mergedicts(d, kwargs))
 
         if all([isinstance(val, int) for val in d.values()]):
             if isinstance(vals, pd.DateOffset): return vals  # pd.DateOffset is immutable so this should be OK
@@ -931,7 +939,7 @@ class DateDur(Dur):
         return pd.DateOffset(**d)
 
 
-    def _scale(self, dateoffset, scale):
+    def scale(self, dateoffset, scale):
         """
         Scale a pd.DateOffset by a factor
 
@@ -946,7 +954,7 @@ class DateDur(Dur):
         Returns:
             A pd.DateOffset instance scaled by the requested amount
         """
-        return self._round_duration(self._as_array(dateoffset) * scale)
+        return self.round_duration(self._as_array(dateoffset) * scale)
 
     def __pow__(self, other):
         raise Exception('Cannot multiply a duration by a duration')
@@ -956,7 +964,7 @@ class DateDur(Dur):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
-        return self.__class__(self._scale(self.value, other))
+        return self.__class__(self.scale(self.value, other))
 
     def __truediv__(self, other):
         if isinstance(other, DateDur):
@@ -982,7 +990,7 @@ class DateDur(Dur):
             return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
-        return self.__class__(self._scale(self.value, 1/other))
+        return self.__class__(self.scale(self.value, 1/other))
 
     def __repr__(self):
         if self.years == 0:
