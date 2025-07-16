@@ -383,23 +383,27 @@ class date(pd.Timestamp):
     # Convenience methods based on application usage
 
     @classmethod
-    def from_array(cls, array, date_type=None):
+    def from_array(cls, array, day_round=True, allow_zero=None, date_type=None):
         """
         Convert an array of float years into an array of date instances
 
         Args:
             array (array): An array of float years
+            day_round (bool): Whether to round to the nearest day
             date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.DateDur`)
 
         Returns:
             An array of date instances
         """
-        if date_type is None: # Optionally
+        if date_type is None:
             date_type = cls
-        return DateArray(np.vectorize(date_type)(array))
+        kwargs = {}
+        if date_type is ss.date:
+            kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.DateDur
+        return DateArray(np.vectorize(date_type)(array, **kwargs))
 
     @classmethod
-    def arange(cls, low, high, step=1.0, inclusive=True):
+    def arange(cls, start, stop, step=1.0, day_round=None, inclusive=True):
         """
         Construct an array of dates
 
@@ -412,16 +416,17 @@ class date(pd.Timestamp):
                    <2024.01.01>, <2025.01.01>], dtype=object)
 
         Args:
-            low (float/ss.date/ss.Dur): Lower bound - can be a date or a numerical year
-            high (float/ss.date/ss.Dur): Upper bound - can be a date or a numerical year
+            start (float/ss.date/ss.Dur): Lower bound - can be a date or a numerical year
+            stop (float/ss.date/ss.Dur): Upper bound - can be a date or a numerical year
             step (float/ss.Dur): Assumes 1 calendar year steps by default
-            inclusive (bool): whether to include "high" in the output
+            day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
+            inclusive (bool): Whether to include "stop" in the output
 
         Returns:
             An array of date instances
         """
-        # Handle the special (but common) case of low < 1
-        if sc.isnumber(low) and low < 1.0:
+        # Handle the special (but common) case of start < 1
+        if sc.isnumber(start) and start < 1.0:
             date_type = ss.DateDur
         else:
             date_type = cls
@@ -430,29 +435,29 @@ class date(pd.Timestamp):
         if isinstance(step, ss.Dur):
             step = DateDur(step)
 
+        # We're creating dates from DateDurs, step exactly
         if isinstance(step, ss.DateDur):
-            if not isinstance(low, date):
-                low = date_type(low)
-            if not isinstance(high, date):
-                high = date_type(high)
+            if not isinstance(start, date):
+                start = date_type(start)
+            if not isinstance(stop, date):
+                stop = date_type(stop)
 
             tvec = []
-            t = low
-            if inclusive:
-                high += step
-            while t < high:
+            t = start
+            compare = (lambda t: t <= stop) if inclusive else (lambda t: t < stop)
+            while compare(t):
                 tvec.append(t)
                 t += step
-            return DateArray(np.array(tvec))
+            return DateArray(tvec)
 
+        # We're converting them from float years, do it approximately
         elif sc.isnumber(step):
-            low = low.years if isinstance(low, date) else low
-            high = high.years if isinstance(high, date) else high
-            if inclusive:
-                high += step
-            return cls.from_array(np.arange(low, high, step), date_type=date_type)
+            start = start.years if isinstance(start, date) else start
+            stop = stop.years if isinstance(stop, date) else stop
+            arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
+            return cls.from_array(arr, date_type=date_type, day_round=day_round)
         else:
-            errormsg = f'Cannot construct date range from {low = }, {high = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
+            errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
             raise TypeError(errormsg)
 
     def to_json(self):
@@ -863,26 +868,27 @@ class Dur(TimePar):
         return self.__class__(abs(self.value))
 
     @classmethod
-    def arange(cls, low, high, step): # TODO: remove? ss.Dur(arr) is preferable to array(ss.Dur) for performance
+    def arange(cls, start, stop, step, inclusive=True): # TODO: remove? ss.Dur(arr) is preferable to array(ss.Dur) for performance
         """
         Construct an array of Dur instances
 
-        For this function, the low, high, and step must ALL be specified, and they must
+        For this function, the start, stop, and step must ALL be specified, and they must
         all be Dur instances. Mixing Dur types (years and DateDur) is permitted.
 
         Args:
-            low (ss.Dur): Starting point, e.g., ss.years(0)
-            high (ss.Dur): Ending point, e.g. ss.years(20)
+            start (ss.Dur): Starting point, e.g., ss.years(0)
+            stop (ss.Dur): Ending point, e.g. ss.years(20)
             step (ss.Dur): Step size, e.g. ss.years(2)
         """
-        args = [low, high, step]
+        args = [start, stop, step]
         if not all([isinstance(arg, ss.Dur) for arg in args]):
             errormsg = f'All inputs must be ss.Dur, not {args}'
             raise TypeError(errormsg)
 
         tvec = []
-        t = low
-        while t <= high:
+        t = start
+        compare = (lambda t: t <= stop) if inclusive else (lambda t: t < stop)
+        while compare(t):
             tvec.append(t)
             t += step
         out = np.empty(len(tvec), dtype=object) # To stop it converting the array to 2D
