@@ -624,6 +624,18 @@ class TimePar:
     timepar_type = None # 'dur' or 'rate'
     timepar_subtype = None # e.g. 'datedur' or 'timeprob'
 
+    def __new__(cls, *args, **kwargs):
+        """Special handling for ss.Dist
+
+        This is so e.g. ss.years(ss.normal(3)) is the same as ss.normal(3, unit=ss.years)
+        """
+        if len(args) and isinstance(args[0], ss.Dist):
+            dist = args[0]
+            dist.unit = cls
+            return dist
+        else: # Everything else
+            return super().__new__(cls)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._set_factors()
@@ -1667,6 +1679,7 @@ for v, keylist in reverse_class_map.items():
         else:
             errormsg = f'Unexpected entry: {v}'
             raise TypeError(errormsg)
+class_map.full = sc.mergedicts(class_map.dur, class_map.rate) # TODO: do we need this?
 
 def get_unit_class(which, unit):
     """ Take a string or class and return the corresponding TimePar class """
