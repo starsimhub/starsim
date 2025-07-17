@@ -390,7 +390,21 @@ class Dist:
         return self.jump(to=to, force=force)
 
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
-        """ Calculate the starting seed and create the RNG """
+        """
+        Calculate the starting seed and create the RNG
+
+        Typically this is not invoked by the user, although the user can call it with force=True
+        to initialize a distribution manually independently of a `ss.Sim` object
+        (which is equivalent to setting strict=False when creating the dist).
+
+        Args:
+            trace (str): the distribution's location within the sim
+            seed (int): the base random number seed that other random number seeds will be generated from
+            module (`ss.Module`): the parent module
+            sim (`ss.Sim`): the parent sim
+            slots (array): the agent slots of the parent sim
+            force (bool): whether to skip validation (if the dist has already been initialized, and if any inputs are None)
+        """
 
         if self.initialized is True and not force: # Don't warn if we have a partially initialized distribution
             msg = f'Distribution {self} is already initialized, use force=True if intentional'
@@ -426,8 +440,9 @@ class Dist:
         none_dict = {k:v for k,v in none_dict.items() if v is None}
         if len(none_dict):
             self.initialized = 'partial'
-            if self.strict:
-                errormsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict.keys()}\nThis distribution may not produce valid random numbers.'
+            if self.strict and not force:
+                errormsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict.keys()}\n'
+                errormsg += 'This distribution may not produce valid random numbers; set force=True if this is intentional (e.g. for testing it independently of a sim).'
                 raise RuntimeError(errormsg)
         else:
             self.initialized = True
@@ -1001,11 +1016,10 @@ class beta(Dist):
     Beta distribution
 
     Args:
-        a (float): shape, > 1 (default 0)
-        b (float): shape, > 1 (default 1)
-
+        a (float): shape parameter, must be > 0 (default 1.0)
+        b (float): shape parameter, must be > 0 (default 1.0)
     """
-    def __init__(self, a=0.0, b=1.0, **kwargs):
+    def __init__(self, a=1.0, b=1.0, **kwargs):
         super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
         return
 
@@ -1014,14 +1028,25 @@ class beta_mean(Dist):
     """
     Beta distribution paramterized by the mean
 
-    Args:
-        a (float): mean of distribution, 0 < a < 1 (default 0.5)
-        b (float): variance of distribution, > 0 (default 0.05)
+    Note: it is somewhat nontrivial
 
+    Args:
+        mean (float): mean of distribution, must be 0 < a < 1 (default 0.5)
+        var (float): variance of distribution, must be > 0 (default 0.05)
     """
-    def __init__(self, par1=0.5, par2=0.05, **kwargs):  # Does not accept dtype
-        a = ((1 - par1)/par2 - 1/par1) * par1**2
-        b = a * (1 / par1 - 1)
+    def __init__(self, mean=0.5, var=0.05, **kwargs):  # Does not accept dtype
+        # Validation
+        max_var = mean*(1-mean)
+        if not (0 < mean < 1):
+            errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean}'
+            raise ValueError(errormsg)
+        if not (0 < var < max_var):
+            errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
+            raise ValueError(errormsg)
+
+        # We're good to go
+        a = ((1 - mean)/var - 1/mean) * mean**2
+        b = a * (1 / mean - 1)
         super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
         return
 
