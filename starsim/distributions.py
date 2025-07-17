@@ -771,14 +771,18 @@ class Dist:
 
         # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
         if self.unit is not None:
-            print('WARNING, auto-scaling by dt') # Should not do this in future
+            print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
+            print('BEFORE', rvs)
             rvs = self.unit(rvs)
+
             if isinstance(rvs, ss.Dur):
                 rvs = rvs/self.module.dt
             elif isinstance(rvs, ss.Rate):
                 rvs = rvs*self.module.dt
             else:
                 raise NotImplementedError
+
+            print('AFTER', rvs)
 
         # Round if needed
         if round:

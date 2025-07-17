@@ -538,7 +538,7 @@ class date(pd.Timestamp):
 #%% Define base time units and conversion factors
 valid_bases = ['years', 'months', 'weeks', 'days']
 
-def normalize_unit(base):
+def normalize_unit(base): # TODO: use lookup on class_map instead of this manual approach of adding 's'
     """ Allow either e.g. 'year' or 'years' as input -- i.e. add an 's' """
     if isinstance(base, str):
         if base[-1] != 's':
@@ -1687,7 +1687,8 @@ def get_unit_class(which, unit):
         return unit
     elif isinstance(unit, str):
         this_map = class_map[which]
-        unit = normalize_unit(unit)
+        if which == 'dur': # Only durations have multiple names
+            unit = normalize_unit(unit)
         unit = this_map[unit]
         return unit
     elif unit is None:
