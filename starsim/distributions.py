@@ -216,7 +216,7 @@ class Dist:
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     valid_pars = None
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
+    def __init__(self, dist=None, distname=None, name=None, unit=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -226,6 +226,7 @@ class Dist:
         self.distname = distname
         self.name = name
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
+        self.unit = unit # The time unit
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.module = module
@@ -580,6 +581,11 @@ class Dist:
             if isinstance(v, ss.TimePar):
                 is_timepar = True
                 timepar_type = type(v)
+                if self.unit is None:
+                    self.unit = timepar_type
+                else:
+                    if self.unit != timepar_type:
+                        v.mutate(self.unit.base)
             elif isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.TimePar):
                 is_timepar = True
                 timepar_type = type(v.flat[0])

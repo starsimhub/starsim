@@ -34,7 +34,7 @@ class Cholera(ss.Infection):
             # Environmental parameters
             beta_env = ss.TimeProb(0.5 / 3), # Scaling factor for transmission from environment,
             half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            shedding_rate = ss.perday(10), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            shedding_rate = ss.rateperday(10), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             decay_rate = ss.perday(0.033), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
         )

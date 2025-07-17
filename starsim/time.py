@@ -479,7 +479,7 @@ class date(pd.Timestamp):
                 # start = float(start)
                 # stop = float(stop)
         elif isinstance(step, str):
-            step_class = class_map.dur[normalize_base(step)]  # TODO: build normalize_base into class_map
+            step_class = get_dur_class(step)
             step = ss.DateDur(step_class(1.0)) # e.g. ss.DateDur(ss.years(1.0))
 
         # For handling floating point issues
@@ -538,7 +538,7 @@ class date(pd.Timestamp):
 #%% Define base time units and conversion factors
 valid_bases = ['years', 'months', 'weeks', 'days']
 
-def normalize_base(base):
+def normalize_unit(base):
     """ Allow either e.g. 'year' or 'years' as input -- i.e. add an 's' """
     if isinstance(base, str):
         if base[-1] != 's':
@@ -605,7 +605,7 @@ class Factors(sc.dictobj):
 
     def __getattr__(self, attr):
         """ Be a little flexible, and then give helpful warnings """
-        attr = normalize_base(attr)
+        attr = normalize_unit(attr)
         try:
             return super().__getattribute__(attr)
         except AttributeError as e:
@@ -736,7 +736,8 @@ Examples:
 
     def to(self, unit):
         """ Convert this TimePar to one of a different class """
-        return class_map[self.timepar_type][unit](self)
+        unit = get_unit_class(self.timepar_type, unit)
+        return unit(self)
 
     @classmethod
     def to_base(cls, other):
@@ -749,9 +750,10 @@ Examples:
 
     def mutate(self, unit):
         """ Mutate a TimePar in place to a new base unit -- see `TimePar.to()` to return a new instance (much more common) """
-        self.base = unit
+        unit_class = get_unit_class(self.timepar_type, unit) # Mutate the class in place
+        self.base = unit_class.base
         self._set_factors()
-        self.__class__ = class_map[self.timepar_type][unit] # Mutate the class in place
+        self.__class__ = unit_class
         return self
 
 
@@ -776,7 +778,7 @@ class Dur(TimePar):
             if kwargs:
                 errormsg = f'Invalid arguments {kwargs} for ss.Dur; valid arguments are "value" and "base". If you are trying to construct a DateDur, call it directly.'
                 raise ValueError(errormsg)
-            new_cls = class_map.dur[base]
+            new_cls = get_dur_class(base)
             self = super().__new__(new_cls)
             self.__init__(value=value)
             return self
@@ -1263,14 +1265,14 @@ class Rate(TimePar):
 
         if unit is None:
             if self.base is not None:
-                dur = class_map.dur[self.base]
+                dur = get_dur_class(self.base)
                 self.unit = dur(1)
             else:
                 self.unit = years(1)
         elif isinstance(unit, Dur):
             self.unit = unit
         elif isinstance(unit, str):
-            dur = class_map.dur[unit]
+            dur = get_dur_class(unit)
             self.unit = dur(1)
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
@@ -1459,7 +1461,7 @@ class TimeProb(Rate):
                     correct_base = self.base.removesuffix('s') # e.g. years -> year
                     correct_class = f'rateper{correct_base}' # e.g. rateperyear
                     correct = f'ss.{correct_class}()' # e.g. ss.rateperyear()
-                    self.__class__ = class_map.rate[correct_class] # Mutate the class to the correct class
+                    self.__class__ = get_rate_class(correct_class) # Mutate the class to the correct class
                     if ss.options.warn_convert:
                         warnmsg = f'Probabilities cannot be greater than one, so converting to a rate. Please use {correct} instead, or set ss.options.warn_convert=false. {valstr}'
                         ss.warn(warnmsg)
@@ -1634,6 +1636,8 @@ class rateperweek(Rate):  base = 'weeks'
 class ratepermonth(Rate): base = 'months'
 class rateperyear(Rate):  base = 'years'
 
+#%% Class mappings
+
 # Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
 reverse_class_map = {
     days:   ['d', 'day', 'days', day, days],
@@ -1663,3 +1667,24 @@ for v, keylist in reverse_class_map.items():
         else:
             errormsg = f'Unexpected entry: {v}'
             raise TypeError(errormsg)
+
+def get_unit_class(which, unit):
+    """ Take a string or class and return the corresponding TimePar class """
+    if isinstance(unit, TimePar):
+        return unit
+    elif isinstance(unit, str):
+        this_map = class_map[which]
+        unit = normalize_unit(unit)
+        unit = this_map[unit]
+        return unit
+    else:
+        errormsg = f'Unit must be str (e.g. "years") or TimePar (e.g. ss.years), not "{unit}"'
+        raise TypeError(errormsg)
+
+def get_dur_class(unit):
+    """ Helper function to get a Dur class """
+    return get_unit_class('dur', unit)
+
+def get_rate_class(unit):
+    """ Helper function to get a Rate class """
+    return get_unit_class('rate', unit)
