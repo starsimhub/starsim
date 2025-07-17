@@ -120,6 +120,13 @@ class Pars(sc.objdict):
         elif sc.checktype(new, 'arraylike'):
             old.value = sc.toarray(new)
 
+        # It's a dict, e.g. beta for different networks, just set it directly and trust the user
+        elif isinstance(new, dict):
+            # for key,val in new.items(): # TODO: should we include validation like this?
+            #     if sc.isnumber(val):
+            #         new[key] = old.__class__(val)
+            self[key] = new
+
         # Give up
         else:
             errormsg = f'Updating timepar {old} from {type(old)} to {type(new)} is not supported'
