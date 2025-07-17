@@ -469,12 +469,15 @@ class date(pd.Timestamp):
 
         # Convert this first
         if isinstance(step, ss.Dur) and not isinstance(step, ss.DateDur):
-            if step.value == int(step.value): # e.g. ss.days(2)
-                step = DateDur(step)
+            if step.value == int(step.value): # e.g. ss.days(2) not ss.days(2.5)
+                step = ss.DateDur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
                 step = step.years # Don't try to convert e.g. ss.years(0.1) to a DateDur, you get rounding errors
                 # start = float(start)
                 # stop = float(stop)
+        elif isinstance(step, str):
+            step_class = class_map.dur[normalize_base(step)]  # TODO: build normalize_base into class_map
+            step = ss.DateDur(step_class(1.0)) # e.g. ss.DateDur(ss.years(1.0))
 
         # For handling floating point issues
         atol = 0.5 / factors.years.days # It's close if it's within half a day
@@ -687,11 +690,12 @@ class TimePar:
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
-        a,b = inputs
-        a_b = True # Are inputs in this order?
-        if b is self: # Opposite order than expected
-            b,a = a,b
-            a_b = False # NB, the functions reverse the
+        if len(inputs) == 2: # TODO: check if this is needed
+            a,b = inputs
+            a_b = True # Are inputs in this order?
+            if b is self: # Opposite order than expected
+                b,a = a,b
+                a_b = False # NB, the functions reverse the
 
         if   ufunc == np.add:      return self.__add__(b)
         elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)

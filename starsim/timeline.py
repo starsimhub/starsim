@@ -142,6 +142,8 @@ class Timeline:
             t.now('str') # Returns '2021-06-25'
         """
         if key in [None, 'none', 'time', 'str']:
+            vec = self.timevec
+        elif key == 'tvec':
             vec = self.tvec
         elif key == 'year':
             vec = self.yearvec
