@@ -1462,7 +1462,10 @@ class TimeProb(Rate):
                 lt0 = value < 0
                 gt1 = value > 1
             else:
-                value = sc.toarray(value)
+                if isinstance(value, ss.TimePar):
+                    value = value.value
+                else:
+                    value = sc.toarray(value)
                 valstr = f'Values provided:\n{value}'
                 lt0 = np.any(value<0)
                 gt1 = np.any(value>1)
@@ -1482,6 +1485,9 @@ class TimeProb(Rate):
                     raise ValueError(errormsg)
         Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
         return
+
+    def disp(self):
+        return sc.pr(self)
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):

@@ -608,8 +608,20 @@ class Dist:
                 val = self.unit(val) # e.g. ss.weeks(ss.years(2))
 
             # Now that they're all consistent, replace the timepar with its value, and then postprocess
-            self._pars[key] = val.value
+            # self._pars[key] = val.value # TODO: try to make this work -- it's fine for e.g. normal, but fails for Poisson since dt changes the shape of the distribution. Need is_scalable parameter!
 
+            # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
+            print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
+            print('BEFORE', val)
+            if isinstance(val, ss.Dur):
+                val = val/self.module.dt
+            elif isinstance(val, ss.Rate):
+                val = val*self.module.dt
+            else:
+                raise NotImplementedError
+            self._pars[key] = val
+
+            print('AFTER', val)
         return
 
 
@@ -768,21 +780,6 @@ class Dist:
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
                 rvs = rvs[self._slots]
-
-        # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
-        if self.unit is not None:
-            print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
-            print('BEFORE', rvs)
-            rvs = self.unit(rvs)
-
-            if isinstance(rvs, ss.Dur):
-                rvs = rvs/self.module.dt
-            elif isinstance(rvs, ss.Rate):
-                rvs = rvs*self.module.dt
-            else:
-                raise NotImplementedError
-
-            print('AFTER', rvs)
 
         # Round if needed
         if round:
