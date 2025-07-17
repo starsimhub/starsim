@@ -22,6 +22,7 @@ TimePar  # All time parameters
     └── RateProb  # Instantaneous probability of an event happening
 """
 import numbers
+import datetime as dt
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -327,7 +328,7 @@ class date(pd.Timestamp):
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
-        elif isinstance(other, DateDur):
+        elif isinstance(other, ss.DateDur):
             return self._timestamp_add(other.value)
         elif isinstance(other, years):
             return date(self.to_year() + other.value)
@@ -345,16 +346,18 @@ class date(pd.Timestamp):
     def __sub__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-        if isinstance(other, DateDur):
+        if isinstance(other, ss.DateDur):
             return date(self.to_pandas() - other.value)
         elif isinstance(other, years):
             return date(self.to_year() - other.value)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() - other)
-        elif isinstance(other, date):
+        elif isinstance(other, (ss.date, dt.date, dt.datetime)):
+            if not isinstance(other, ss.date): # Convert e.g. dt.date to ss.date
+                other = ss.date(other)
             return years(self.years-other.years)
         else:
-            errormsg = f'Attempted to subtract "{other}" from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
+            errormsg = f'Attempted to subtract "{other}" ({type(other)}) from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
             raise TypeError(errormsg)
 
     def __radd__(self, other): return self.__add__(other)
