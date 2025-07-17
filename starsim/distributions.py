@@ -762,9 +762,16 @@ class Dist:
             if self._slots is not None:
                 rvs = rvs[self._slots]
 
-        # Convert back to a timepar if needed
+        # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
         if self.unit is not None:
+            print('WARNING, auto-scaling by dt') # Should not do this in future
             rvs = self.unit(rvs)
+            if isinstance(rvs, ss.Dur):
+                rvs = rvs/self.module.dt
+            elif isinstance(rvs, ss.Rate):
+                rvs = rvs*self.module.dt
+            else:
+                raise NotImplementedError
 
         # Round if needed
         if round:
