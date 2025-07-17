@@ -1690,6 +1690,8 @@ def get_unit_class(which, unit):
         unit = normalize_unit(unit)
         unit = this_map[unit]
         return unit
+    elif unit is None:
+        return None
     else:
         errormsg = f'Unit must be str (e.g. "years") or TimePar (e.g. ss.years), not "{unit}"'
         raise TypeError(errormsg)
@@ -1701,3 +1703,7 @@ def get_dur_class(unit):
 def get_rate_class(unit):
     """ Helper function to get a Rate class """
     return get_unit_class('rate', unit)
+
+def get_timepar_class(unit):
+    """ Helper function to get any Timepar class (either Dur or Rate) """
+    return get_unit_class('full', unit)

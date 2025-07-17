@@ -204,7 +204,7 @@ class Dist:
         p_death = ss.bernoulli(p=0.1).init(force=True)
         p_death.rvs(50) # Create 50 draws
 
-        # Create a normal distribution
+        # Create a normal distribution that's also a timepar
         dur_infection = ss.normal(loc=12, scale=2, unit='years')
         dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
         dur_infection = ss.normal(loc=ss.years(12), scale=2)) # Same as above
@@ -226,7 +226,7 @@ class Dist:
         self.distname = distname
         self.name = name
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
-        self.unit = unit # The time unit
+        self.unit = ss.time.get_timepar_class(unit) # The timepar class -- can be None
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.module = module
@@ -576,6 +576,17 @@ class Dist:
         - Durations are divided by `dt` (so the result will be a number of timesteps)
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
+        # Check through and see if anything is a timepar
+        timepar_types = [self.unit]
+        for key, v in self._pars.items():
+            if isinstance(v, ss.TimePar):
+                timepar_type = type(v)
+                if timepar_type not in timepar_types:
+                    timepar_types.append(timepar_type)
+
+
+
+
         for key, v in self._pars.items():
             is_timepar = False
             if isinstance(v, ss.TimePar):
@@ -712,16 +723,16 @@ class Dist:
         rvs = self.dist.ppf(rands)
         return rvs
 
-    def postprocess_timepar(self, rvs):
-        """ Scale random variates after generation; not for the user """
-        timepar = self._timepar # Shorten
-        self._timepar = None # Remove the timepar which is no longer needed
-        timepar.v = rvs # Replace the base value with the random variates
-        timepar.update_cached() # Recalculate the factor and values with the time scaling
-        rvs = timepar.values # Replace the rvs with the scaled version
-        if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
-            rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
-        return rvs
+    # def postprocess_timepar(self, rvs):
+    #     """ Scale random variates after generation; not for the user """
+    #     timepar = self._timepar # Shorten
+    #     self._timepar = None # Remove the timepar which is no longer needed
+    #     timepar.v = rvs # Replace the base value with the random variates
+    #     timepar.update_cached() # Recalculate the factor and values with the time scaling
+    #     rvs = timepar.values # Replace the rvs with the scaled version
+    #     if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
+    #         rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
+    #     return rvs
 
     def rvs(self, n=1, round=False, reset=False):
         """
@@ -765,9 +776,9 @@ class Dist:
             if self._slots is not None:
                 rvs = rvs[self._slots]
 
-        # Scale by time if needed
-        if self._timepar is not None:
-            rvs = self.postprocess_timepar(rvs)
+        # # Scale by time if needed
+        # if self._timepar is not None:
+        #     rvs = self.postprocess_timepar(rvs)
 
         # Round if needed
         if round:
