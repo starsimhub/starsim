@@ -63,6 +63,8 @@ class Pars(sc.objdict):
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module):  # Update modules
                     self._update_module(key, old, new)
+                elif isinstance(old, ss.TimePar):
+                    self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
@@ -97,6 +99,32 @@ class Pars(sc.objdict):
         else:
             errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
             raise TypeError(errormsg)
+        return
+
+    def _update_timepar(self, key, old, new):
+        """ Update a time parameter """
+
+        # It's a TimePar, e.g. dur_inf = ss.years(6); use directly
+        if isinstance(new, ss.TimePar):
+            self[key] = new
+
+        # It's a dataframe, allow the update -- used for demographics
+        elif isinstance(new, (pd.Series, pd.DataFrame)):
+            self[key] = new # TODO: add validation or convert to timepar
+
+        # It's a single number, e.g. dur_inf = 6; set parameters
+        elif sc.isnumber(new):
+            old.value = new
+
+        # It's array-like; set the value, but convert first to handle lists etc
+        elif sc.checktype(new, 'arraylike'):
+            old.value = sc.toarray(new)
+
+        # Give up
+        else:
+            errormsg = f'Updating timepar {old} from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def _update_dist(self, key, old, new):
