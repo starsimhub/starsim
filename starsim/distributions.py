@@ -576,6 +576,9 @@ class Dist:
         - Durations are divided by `dt` (so the eresult will be a number of timesteps)
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
+        # Nonscalar types have to be handled separately
+        nonscalar_types = [ss.DateDur]
+
         # Check through and see if anything is a timepar
         timepar_dict = dict()
         for key,val in self._pars.items():
@@ -583,6 +586,10 @@ class Dist:
                 timepar_type = type(val)
                 timepar_dict[key] = timepar_type
                 if self.unit is None:
+                    if timepar_type in nonscalar_types:
+                        # warnmsg = f'Trying to use a nonscalar timepar, {timepar_type}, as the Dist unit; automatically converting to ss.years instead'
+                        # ss.warn(warnmsg) # Don't think we actually need this warning, should always be safe to convert to ss.years?
+                        timepar_type = ss.years # Fallback for working with dates
                     self.unit = timepar_type # Reset with the first found timepar
 
         # Convert timepars, if any found
@@ -597,7 +604,7 @@ class Dist:
                 raise TypeError(errormsg)
 
             # Same type, different base: convert
-            if self.unit.base != val.base:
+            if self.unit.base != val.base or self.unit.timepar_subtype != val.timepar_subtype:
                 val = self.unit(val) # e.g. ss.weeks(ss.years(2))
 
             # Now that they're all consistent, replace the timepar with its value, and then postprocess
