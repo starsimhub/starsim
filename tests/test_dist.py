@@ -273,10 +273,9 @@ def test_repeat_slot():
 def make_mock_modules():
     """ Create mock modules for the tests to use """
     mod = sc.objdict()
-    mod.year  = ss.mock_module(dt=ss.Dur(1))
-    # mod.month = ss.mock_module(dt=ss.Dur(months=1))
-    print('TODO: re-enable when "MonthDur" is enabled')
-    mod.week  = ss.mock_module(dt=ss.Dur(1/52))
+    mod.year  = ss.mock_module(dt=ss.year)
+    mod.month = ss.mock_module(dt=ss.month)
+    mod.week  = ss.mock_module(dt=ss.week)
     return mod
 
 
@@ -392,12 +391,14 @@ def test_timepar_callable():
     mock_mods = make_mock_modules()
 
     def call_scalar(module, sim, uids):
-        return ss.Dur(1)
+        return 5.0
 
     for module in mock_mods.values():
-        d = ss.normal(call_scalar, ss.DateDur(days=1), module=module, strict=False)
+        d = ss.normal(call_scalar, ss.days(1), unit=ss.years, module=module, strict=False)
         d.init()
-        assert np.isclose(d.rvs(n).mean(), ss.Dur(1)/module.dt, rtol=rtol)
+        expected = ss.years(5.0)/module.dt
+        actual = d.rvs(n).mean()
+        assert np.isclose(actual, expected, rtol=rtol)
 
     print('Testing callable parameters with Bernoulli distributions')
     n = 1000
@@ -423,10 +424,9 @@ def test_timepar_callable():
 
     # Higher-performance option - perform the time conversion on the parameter here
     def age_prob(module, sim, uids):
-        out = np.zeros_like(uids, dtype=object)
+        out = np.zeros_like(uids)
         out[young] = ss.Rate(p_young)*module.t.dt
         out[old]   = ss.Rate(p_old)*module.t.dt
-
         return out
 
     sim = ss.mock_sim(n_agents=100_000)
@@ -465,7 +465,7 @@ if __name__ == '__main__':
     # o7 = test_callable()
     # o8 = test_array()
     # o9 = test_repeat_slot()
-    o10 = test_timepar_dists()
+    # o10 = test_timepar_dists()
     o10 = test_timepar_callable()
 
     T.toc()

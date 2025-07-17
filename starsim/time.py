@@ -1689,8 +1689,15 @@ class_map.full = sc.mergedicts(class_map.dur, class_map.rate) # TODO: do we need
 
 def get_unit_class(which, unit):
     """ Take a string or class and return the corresponding TimePar class """
-    if isinstance(unit, TimePar):
+    if isinstance(unit, type) and issubclass(unit, ss.TimePar):
         return unit
+    elif isinstance(unit, ss.TimePar):
+        if sc.isnumber(unit.value) and unit.value == 1:
+            return unit.__class__
+        else:
+            errormsg = f'TimePar instances can only be used as base classes when the value is one, e.g. ss.years(1), but you supplied {unit}. '
+            errormsg += 'Please convert to the equivalent base unit, e.g. instead of ss.Rate(value=4, unit=ss.weeks(2)), do ss.Rate(value=2, unit=ss.weeks).'
+            raise ValueError(errormsg)
     elif isinstance(unit, str):
         this_map = class_map[which]
         if which == 'dur': # Only durations have multiple names
