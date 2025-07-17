@@ -638,7 +638,6 @@ class SIS(Infection):
 
     def update_immunity(self):
         waning = self.pars.waning*self.t.dt # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)
-        print('WANING IS', self.pars.waning, self.t.dt, waning)
         has_imm = (self.immunity > 0).uids
         self.immunity[has_imm] *= waning
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
