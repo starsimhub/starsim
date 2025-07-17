@@ -167,7 +167,13 @@ class Dist:
     Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
 
-    See ss.dist_list for a full list of supported distributions.
+    See `ss.dist_list` for a full list of supported distributions. Parameter inputs
+    tend to follow SciPy's, rather than NumPy's, definitions (although in most
+    cases they're the same).
+
+    Note: by default, `ss.Dist` is initialized with an `ss.Sim` object to ensure
+    random number reproducibility. You can override this with either `ss.Dist(strict=False)`
+    on creation, or `dist.init(force=True)` after creation.
 
     Although it's possible in theory to define a custom distribution (i.e., not
     one from NumPy or SciPy), in practice this is difficult. The distribution needs
@@ -178,9 +184,10 @@ class Dist:
     whatever custom distribution you want to create.
 
     Args:
-        dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
+        dist (rv_generic): optional; a `scipy.stats` distribution (frozen or not) to get the ppf from
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
+        unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
         strict (bool): if True, require initialization and invalidate after each call to rvs()
@@ -193,7 +200,19 @@ class Dist:
 
     **Examples**:
 
-        dist = ss.Dist(sps.norm, loc=3)
+        # Create a Bernoulli distribution
+        p_death = ss.bernoulli(p=0.1).init(force=True)
+        p_death.rvs(50) # Create 50 draws
+
+        # Create a normal distribution
+        dur_infection = ss.normal(loc=12, scale=2, unit='years')
+        dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
+        dur_infection = ss.normal(loc=ss.years(12), scale=2)) # Same as above
+        dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
+        dur_infection.init(force=True).plot_hist() # Show results
+
+        # Create a distribution manually
+        dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     valid_pars = None
