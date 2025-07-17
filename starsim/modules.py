@@ -257,7 +257,7 @@ class Module(Base):
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
-        self._locked_attrs = ['pars', 't', 'sim', 'dists'] # Define key attributes that shouldn't be overwritten by the user
+        self._locked_attrs = ['pars', 't', 'sim', 'dists'] # Define key attributes that shouldn't be overwritten; note, 'results' would be included but self.results += result calls __setattr__
         self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters

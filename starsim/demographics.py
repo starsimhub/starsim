@@ -55,6 +55,7 @@ class Births(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
         self.n_births = 0 # For results tracking
+        self.dist = ss.bernoulli(p=0) # Used to generate random numbers; set to use the birth rate above
         return
 
     def init_pre(self, sim):
@@ -111,8 +112,10 @@ class Births(Demographics):
             scaled_birth_prob = ss.TimeProb.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
 
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
-        return n_new
+        self.dist.set(p=scaled_birth_prob) # Update the distribution with the probabilities for this timestep
+        birth_uids = self.dist.filter()
+        # n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
+        return birth_uids
 
     def step(self):
         new_uids = self.add_births()
@@ -122,9 +125,10 @@ class Births(Demographics):
     def add_births(self):
         """ Add n_new births to each state in the sim """
         people = self.sim.people
-        n_new = self.get_births()
-        new_uids = people.grow(n_new)
+        birth_uids = self.get_births()
+        new_uids = people.grow(len(birth_uids))
         people.age[new_uids] = 0
+        people.parent[new_uids] = birth_uids
         return new_uids
 
     def update_results(self):
