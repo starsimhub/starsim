@@ -701,9 +701,19 @@ class TimePar:
         elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)
         elif ufunc == np.multiply: return self.__mul__(b)
         elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
-        else: # Fall back to standard ufunc ... TODO, check if this is appropriate
-            inputs = [inp.value if isinstance(inp, TimePar) else inp for inp in inputs] # Just pull out the values
-            return getattr(ufunc, method)(*inputs, **kwargs)
+        else: # Fall back to standard ufunc
+            if any([isinstance(inp, TimePar) for inp in inputs]): # This is likely to be a confusing error, so let's go into detail about it
+                errormsg = f'''
+Cannot perform array operation "{ufunc}" on timepar {self}.
+
+This can be caused by e.g. forgetting to multiply a rate by dt, or multiplying a scalar (rather than a rate) by dt. Another cause is operating on the timepar rather than its value.
+
+Examples:
+• np.exp(-waning*dt) will cause this error if e.g. waning=0.1 instead of ss.peryear(0.1)
+• np.minimum(beta, 0.1) will cause this error if e.g. beta=ss.perday(0.2) instead use np.minimum(beta*dt, 0.1) or np.minimum(beta.value, 0.1) depending on what you intend.
+'''
+                raise ValueError(errormsg)
+            return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
         return
 
     def array_mul_error(self, ufunc=None):
@@ -1435,6 +1445,7 @@ class TimeProb(Rate):
                 lt0 = value < 0
                 gt1 = value > 1
             else:
+                value = sc.toarray(value)
                 valstr = f'Values provided:\n{value}'
                 lt0 = np.any(value<0)
                 gt1 = np.any(value>1)
