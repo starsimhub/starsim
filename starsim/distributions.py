@@ -558,7 +558,7 @@ class Dist:
 
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
-        self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
+        # self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
@@ -573,52 +573,38 @@ class Dist:
         This function converts time parameters into bare numbers that will be returned by rvs() depending
         on the timestep of the parent module for this `Dist`. The conversion for these types is
 
-        - Durations are divided by `dt` (so the result will be a number of timesteps)
+        - Durations are divided by `dt` (so the eresult will be a number of timesteps)
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
         # Check through and see if anything is a timepar
-        timepar_types = [self.unit]
-        for key, v in self._pars.items():
-            if isinstance(v, ss.TimePar):
-                timepar_type = type(v)
-                if timepar_type not in timepar_types:
-                    timepar_types.append(timepar_type)
-
-
-
-
-        for key, v in self._pars.items():
-            is_timepar = False
-            if isinstance(v, ss.TimePar):
-                is_timepar = True
-                timepar_type = type(v)
+        timepar_dict = dict()
+        for key,val in self._pars.items():
+            if isinstance(val, ss.TimePar):
+                timepar_type = type(val)
+                timepar_dict[key] = timepar_type
                 if self.unit is None:
-                    self.unit = timepar_type
-                else:
-                    if self.unit != timepar_type:
-                        v.mutate(self.unit.base)
-            elif isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.TimePar):
-                is_timepar = True
-                timepar_type = type(v.flat[0])
-                if v.size == 1:
-                    v = v.flat[0] # Case where we have an array wrapping a Dur wrapping an array # TODO: refactor
-                else:
-                    warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
-                    ss.warn(warnmsg)
+                    self.unit = timepar_type # Reset with the first found timepar
 
-            if is_timepar:
-                if issubclass(timepar_type, ss.Dur):
-                    self._pars[key] = v/self.module.dt
-                elif issubclass(timepar_type, ss.Rate):
-                    self._pars[key] = v*self.module.dt
-                else:
-                    errormsg = f'Unknown timepar type {v}'
-                    raise NotImplementedError(errormsg)
+        # Convert timepars, if any found
+        for key in timepar_dict.keys():
+            val = self._pars[key]
 
-                try:
-                    self._pars[key] = self._pars[key].astype(float)
-                except:
-                    pass
+            # Incompatible types: fail
+            self_type = self.unit.timepar_type # TODO: are different subtypes (prob vs rate) ok?
+            other_type = val.timepar_type
+            if self_type != other_type:
+                errormsg = f'Cannot convert timepars of incompatible types: dist={self_type} vs. {key}={other_type}'
+                raise TypeError(errormsg)
+
+            # Same type, different base: convert
+            if self.unit.base != val.base:
+                val = self.unit(val) # e.g. ss.weeks(ss.years(2))
+
+            # Now that they're all consistent, replace the timepar with its value, and then postprocess
+            self._pars[key] = val.value
+
+        return
+
 
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
@@ -776,9 +762,9 @@ class Dist:
             if self._slots is not None:
                 rvs = rvs[self._slots]
 
-        # # Scale by time if needed
-        # if self._timepar is not None:
-        #     rvs = self.postprocess_timepar(rvs)
+        # Convert back to a timepar if needed
+        if self.unit is not None:
+            rvs = self.unit(rvs)
 
         # Round if needed
         if round:
