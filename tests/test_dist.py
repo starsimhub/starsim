@@ -391,10 +391,10 @@ def test_timepar_callable():
     mock_mods = make_mock_modules()
 
     def call_scalar(module, sim, uids):
-        return 5.0
+        return ss.years(5.0)
 
     for module in mock_mods.values():
-        d = ss.normal(call_scalar, ss.days(1), unit=ss.years, module=module, strict=False)
+        d = ss.normal(call_scalar, ss.days(1), module=module, strict=False)
         d.init()
         expected = ss.years(5.0)/module.dt
         actual = d.rvs(n).mean()
@@ -456,16 +456,16 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    # o1 = test_dist()
-    # o2 = test_custom_dists(do_plot=do_plot)
-    # o3 = test_dists(do_plot=do_plot)
-    # o4 = test_scipy()
-    # o5 = test_exceptions()
-    # o6 = test_reset()
-    # o7 = test_callable()
-    # o8 = test_array()
-    # o9 = test_repeat_slot()
-    # o10 = test_timepar_dists()
+    o1 = test_dist()
+    o2 = test_custom_dists(do_plot=do_plot)
+    o3 = test_dists(do_plot=do_plot)
+    o4 = test_scipy()
+    o5 = test_exceptions()
+    o6 = test_reset()
+    o7 = test_callable()
+    o8 = test_array()
+    o9 = test_repeat_slot()
+    o10 = test_timepar_dists()
     o10 = test_timepar_callable()
 
     T.toc()
