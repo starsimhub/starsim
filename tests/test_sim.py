@@ -31,6 +31,7 @@ def make_sim_pars():
     return pars
 
 
+@sc.timer()
 def test_demo(do_plot=do_plot):
     """ Test Starsim's demo run """
     sc.heading('Testing demo...')
@@ -47,6 +48,7 @@ def test_demo(do_plot=do_plot):
     return s1
 
 
+@sc.timer()
 def test_default(do_plot=do_plot):
     """ Create, run, and plot a sim with default settings """
     sc.heading('Testing default...')
@@ -56,6 +58,7 @@ def test_default(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_simple(do_plot=do_plot):
     """ Create, run, and plot a sim by passing a parameters dictionary """
     sc.heading('Testing simple run...')
@@ -67,6 +70,7 @@ def test_simple(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_api():
     """ Test all different ways of creating a sim """
     sc.heading('Testing sim API...')
@@ -106,6 +110,7 @@ def test_api():
     return s1
 
 
+@sc.timer()
 def test_complex_api():
     """ Test that complex inputs can be parsed correctly """
     sc.heading('Testing complex API...')
@@ -126,12 +131,12 @@ def test_complex_api():
             dict(type='random', name='random2', n_contacts=4)
         ],
         diseases = [
-            dict(type='sir',  dur_inf=dict(type='expon', scale=6.0)),
-            dict(type='sis', beta=0.07, init_prev=0.1),
+            dict(type='sir',  dur_inf=dict(type='expon', scale=ss.Dur(6.0))),
+            dict(type='sis', beta=ss.TimeProb(0.07), init_prev=0.1),
         ],
         demographics = [
-            ss.Births(birth_rate=20),
-            dict(type='deaths', death_rate=20)
+            ss.Births(birth_rate=ss.rateperyear(20)),
+            dict(type='deaths', death_rate=ss.rateperyear(20))
         ],
         interventions = jump_age,
     )
@@ -143,12 +148,12 @@ def test_complex_api():
     net2 = ss.RandomNet(name='random2', n_contacts=4)
     networks = ss.ndict(net1, net2)
 
-    dis1 = ss.SIR(dur_inf=ss.expon(scale=6.0))
-    dis2 = ss.SIS(beta=0.07, init_prev=ss.bernoulli(0.1))
+    dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.Dur(6.0)))
+    dis2 = ss.SIS(beta=ss.TimeProb(0.07), init_prev=ss.bernoulli(0.1))
     diseases = ss.ndict(dis1, dis2)
 
-    dem1 = ss.Births(birth_rate=20)
-    dem2 = ss.Deaths(death_rate=20)
+    dem1 = ss.Births(birth_rate=ss.rateperyear(20))
+    dem2 = ss.Deaths(death_rate=ss.rateperyear(20))
     demographics = ss.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)
@@ -161,21 +166,20 @@ def test_complex_api():
     # Run
     s1.run()
     s2.run()
-
     assert ss.check_sims_match(s1, s2), 'Sims should match'
 
     return s1
 
 
+@sc.timer()
 def test_simple_vax(do_plot=do_plot):
     """ Create and run a sim with vaccination """
     sc.heading('Testing simple vaccination...')
-    ss.set_seed(1)
     pars = make_sim_pars()
     sim_base = ss.Sim(pars=pars)
     sim_base.run()
 
-    my_vax = ss.sir_vaccine(pars=dict(efficacy=0.5))
+    my_vax = ss.simple_vx(efficacy=0.5)
     intv = ss.routine_vx(start_year=2015, prob=0.2, product=my_vax)
     sim_intv = ss.Sim(pars=pars, interventions=intv)
     sim_intv.run()
@@ -194,12 +198,13 @@ def test_simple_vax(do_plot=do_plot):
     return sim_base, sim_intv
 
 
+@sc.timer()
 def test_shared_product(do_plot=do_plot):
     """ Check that multiple interventions can use the same product """
     sc.heading('Testing sharing a product across interventions...')
 
     # Make interventions
-    vax = ss.sir_vaccine(pars=dict(efficacy=0.5))
+    vax = ss.simple_vx(efficacy=0.5)
     routine1 = ss.routine_vx(name='early-small', start_year=2010, prob=0.05, product=vax)
     routine2 = ss.routine_vx(name='late-big', start_year=2020, prob=0.5, product=vax)
 
@@ -226,12 +231,13 @@ def test_shared_product(do_plot=do_plot):
     return s3
 
 
+@sc.timer()
 def test_components(do_plot=do_plot):
     """ Create, run, and plot a sim by assembling components """
     sc.heading('Testing components...')
     people = ss.People(n_agents=n_agents)
-    network = ss.RandomNet(pars=dict(n_contacts=4))
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    network = ss.RandomNet(n_contacts=4)
+    sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     if do_plot:
@@ -239,6 +245,7 @@ def test_components(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_save():
     """ Test save and export """
     sc.heading('Testing save and export...')
@@ -250,7 +257,7 @@ def test_save():
     # Run the methods
     sim.save(filename=f.sim)
     sim.to_json(filename=f.json)
-    json = sim.to_json()
+    json = sim.to_json(strkeys=True) # To match the loaded file, which converts keys to strings
 
     # Run methods
     s2 = sc.load(f.sim)

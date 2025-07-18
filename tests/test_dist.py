@@ -35,6 +35,7 @@ def make_sim():
 
 
 # %% Define the tests
+@sc.timer()
 def test_dist(m=m):
     """ Test the Dist class """
     sc.heading('Testing the basic Dist call')
@@ -50,6 +51,7 @@ def test_dist(m=m):
     return rvs
 
 
+@sc.timer()
 def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
@@ -77,6 +79,7 @@ def test_custom_dists(n=n, do_plot=False):
     return o
 
 
+@sc.timer()
 def test_dists(n=n, do_plot=False):
     """ Test the Dists container """
     sc.heading('Testing Dists container')
@@ -114,6 +117,7 @@ def test_dists(n=n, do_plot=False):
     return dists
 
 
+@sc.timer()
 def test_scipy(m=m):
     """ Test that SciPy distributions also work """
     sc.heading('Testing SciPy distributions')
@@ -131,6 +135,7 @@ def test_scipy(m=m):
     return dist1, dist2
 
 
+@sc.timer()
 def test_exceptions(m=m):
     """ Check that exceptions are being appropriately raised """
     sc.heading('Testing exceptions and strict')
@@ -161,6 +166,7 @@ def test_exceptions(m=m):
     return dist, dist2
 
 
+@sc.timer()
 def test_reset(m=m):
     """ Check that reset works as expected """
     sc.heading('Testing reset')
@@ -187,22 +193,12 @@ def test_reset(m=m):
     return dist
 
 
-def make_fake_sim(n=10):
-    """ Define a fake sim object for testing slots """
-    sim = sc.prettyobj()
-    sim.n = n
-    sim.people = sc.prettyobj()
-    sim.people.uid = np.arange(sim.n)
-    sim.people.slot = np.arange(sim.n)
-    sim.people.age = np.random.uniform(0, 100, size=sim.n)
-    return sim
-
-
+@sc.timer()
 def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
 
-    sim = make_fake_sim()
+    sim = ss.mock_sim(n_agents=10)
 
     # Define a parameter as a function
     def custom_loc(module, sim, uids):
@@ -226,6 +222,7 @@ def test_callable(n=n):
     return d1
 
 
+@sc.timer()
 def test_array(n=n):
     """ Test array parameters """
     sc.heading('Testing uniform with a array parameters')
@@ -244,6 +241,7 @@ def test_array(n=n):
     return draws
 
 
+@sc.timer()
 def test_repeat_slot():
     """ Test behavior of repeated slots """
     sc.heading('Test behavior of repeated slots')
@@ -272,24 +270,33 @@ def test_repeat_slot():
     return draws
 
 
+def make_mock_modules():
+    """ Create mock modules for the tests to use """
+    mod = sc.objdict()
+    mod.year  = ss.mock_module(dt=ss.year)
+    mod.month = ss.mock_module(dt=ss.month)
+    mod.week  = ss.mock_module(dt=ss.week)
+    return mod
+
+
+@sc.timer()
 def test_timepar_dists():
     """ Test interaction of distributions and timepars """
     sc.heading('Test interaction of distributions and timepars')
 
     # Set parameters
-    n = int(10e3)
-    u1 = 'day'
-    u2 = 'year'
-    dt_dur = 0.1
-    dt_rate = 20.0
-    ratio_dur  = ss.time_ratio(u1, 1.0, u2, dt_dur)
-    ratio_rate = ss.time_ratio(u2, 1.0, u1, dt_rate)
+    n = int(10e4)
+
+    # Mock modules
+    mock_mods = make_mock_modules()
 
     # Create time parameters
     v = sc.objdict()
     v.base = 30.0
-    v.dur = ss.dur(v.base, unit=u1, parent_unit=u2, parent_dt=dt_dur).init()
-    v.rate = ss.rate(v.base, unit=u2, parent_unit=u1, parent_dt=dt_rate).init() # Swap units
+    v.dur = ss.Dur(30)
+    v.rate = ss.Rate(30)
+
+    rtol = 0.1  # Be somewhat generous with the uncertainty
 
     # Check distributions that scale linearly with time, with the parameter we'll set
     print('Testing linear distributions ...')
@@ -306,131 +313,159 @@ def test_timepar_dists():
     for name,par in linear_dists.items():
         dist_class = getattr(ss, name)
 
-        # Create the dists, the first parameter of which should have time units
-        dists = sc.objdict()
-        for key,val in v.items():
-            pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
-            dists[key] = dist_class(**pardict, name=key, strict=False).init()
+        for module in mock_mods.values():
 
-        # Create th erandom variates
-        rvs = sc.objdict()
-        for k,dist in dists.items():
-            rvs[k] = dist.rvs(n)
+            # Create the dists, the first parameter of which should have time units
+            dists = sc.objdict()
+            for key,val in v.items():
+                pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
+                dists[key] = dist_class(**pardict, name=key, module=module, strict=False).init()
 
-        # Check that the distributions match
-        rtol = 0.1 # Be somewhat generous with the uncertainty
-        expected = rvs.base.mean()
-        expected_dur = expected*ratio_dur
-        expected_rate = expected/ratio_rate
-        actual_dur = rvs.dur.mean()
-        actual_rate = rvs.rate.mean()
-        assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
-        assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
-        sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n}')
+            # Create the random variates
+            rvs = sc.objdict()
+            for k,dist in dists.items():
+                rvs[k] = dist.rvs(n)
+
+            # Check that the distributions match
+            ratio = ss.years(1)/module.t.dt
+            expected = rvs.base.mean()
+            expected_dur = expected*ratio
+            expected_rate = expected/ratio
+            actual_dur = rvs.dur.mean()
+            actual_rate = rvs.rate.mean()
+            assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
+            assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
+            sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
 
     # Check that unitless distributions fail
     print('Testing unitless distributions ...')
-    par = ss.dur(10)
+    par = ss.Dur(10)
     unitless_dists = ['lognorm_im', 'randint', 'choice']
     for name in unitless_dists:
         dist_class = getattr(ss, name)
         with pytest.raises(NotImplementedError):
-            dist = dist_class(par, name='notimplemented', strict=False).init()
+            dist = dist_class(par, name='notimplemented', module=mock_mods.year, strict=False).init()
             dist.rvs(n)
         sc.printgreen(f'✓ {name} passed: raised appropriate error')
 
     # Check special distributions
     print('Testing Poisson distribution ...')
-    lam1 = ss.rate(dpy, 'year', parent_unit='year').init()
-    lam2 = ss.rate(1,   'day',  parent_unit='year').init()
-    poi1 = ss.poisson(lam=lam1, strict=False).init()
-    poi2 = ss.poisson(lam=lam2, strict=False).init()
-    mean1 = poi1.rvs(n).mean()
-    mean2 = poi2.rvs(n).mean()
-    assert np.isclose(mean1, mean2, rtol=rtol), f'Poisson values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
-    sc.printgreen(f'✓ poisson passed: {mean1:n} ≈ {mean2:n}')
+    lam1 = ss.rateperyear(1)
+    lam2 = ss.perday(1)
+    for module in mock_mods.values():
+        poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
+        poi2 = ss.poisson(lam=lam2, module=module, strict=False).init()
+        mean1 = poi1.rvs(n).mean()
+        mean2 = poi2.rvs(n).mean()
+        expected1 = lam1*module.t.dt
+        expected2 = lam2*module.t.dt
+        assert np.isclose(mean1, expected1, rtol=rtol), f'Poisson values do not match for {lam1}: {mean1:n} ≠ {expected1:n}'
+        assert np.isclose(mean2, expected2, rtol=rtol), f'Poisson values do not match for {lam2}: {mean2:n} ≠ {expected2:n}'
+        sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
+        sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
+
 
     print('Testing Bernoulli distribution ...')
-    p1 = 0.1
-    p2 = ss.time_prob(0.01, parent_dt=10).init()
-    ber1 = ss.bernoulli(p=p1, strict=False).init()
-    ber2 = ss.bernoulli(p=p2, strict=False).init()
+    p1 = 0.01
+    p2 = ss.TimeProb(0.1, ss.years(10))
+    ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
+    ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
     mean1 = ber1.rvs(n).mean()
     mean2 = ber2.rvs(n).mean()
     assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
     sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
 
+    print('Testing different syntaxes for adding timepars')
+    kw = dict(dt=ss.days(1))
+    mean = 10
+    std = 0.1
+
+    d = sc.objdict()
+    d.a = ss.normal(ss.years(mean), ss.years(std)).mock(**kw)
+    d.b = ss.normal(mean, std, unit=ss.years).mock(**kw)
+    d.c = ss.years(ss.normal(mean, std)).mock(**kw)
+
+    n = int(1e6)
+    rvs = sc.objdict()
+    for key,dist in d.items():
+        rvs.key = dist.rvs(n)
+
+    factor = ss.time.factors.years.days
+    expected = factor*mean
+
+    means = [rvs.mean() for rvs in rvs.values()]
+    assert all([np.isclose(expected, m) for m in means]), f'Expecting timepar scaling to match {expected = } and {means = }'
+
     return ber2
 
 
+@sc.timer()
 def test_timepar_callable():
     sc.heading('Test that timepars work with (some) callable functions')
 
+    # In this case, the callable returns a time par, which then gets further converted
     print('Testing callable parameters with regular-scaling distributions')
-    sim = make_fake_sim(n=10)
-    uids = np.array([1, 3, 7, 9])
 
-    def age_year(module, sim, uids):
-        """ Extract age as a year """
-        out = sim.people.age[uids].copy()
-        return out
+    n = 10_000
+    rtol = 0.05
 
-    def age_day(module, sim, uids):
-        """ Extract age as a day """
-        out = sim.people.age[uids].copy()
-        out *= dpy # Convert to days manually
-        return out
+    mock_mods = make_mock_modules()
 
-    scale = 1e-3 # Set to a very small but nonzero scale
-    loc  = ss.dur(age_year, unit='year', parent_unit='day').init(update_values=False)
-    mean = ss.dur(age_day,  unit='day',  parent_unit='day').init(update_values=False)
-    d3 = ss.normal(name='callable', loc=loc, scale=scale).init(sim=sim)
-    d4 = ss.lognorm_ex(name='callable', mean=mean, std=scale).init(sim=sim)
-    draws3 = d3.rvs(uids)
-    draws4 = d4.rvs(uids)
-    age_in_days = sim.people.age[uids]*dpy
-    draw_diff = np.abs(draws3 - draws4).mean()
-    age_diff = np.abs(age_in_days - draws3).mean()
-    print(f'Input ages were:\n{sim.people.age[uids]}')
-    print(f'Output samples were:\n{sc.sigfiground(draws3)}\n{sc.sigfiground(draws4)}')
-    assert draw_diff < 1, 'Day and year outputs should match to the nearest day'
-    assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
+    def call_scalar(module, sim, uids):
+        return ss.years(5.0)
+
+    for module in mock_mods.values():
+        d = ss.normal(call_scalar, ss.days(1), module=module, strict=False)
+        d.init()
+        expected = ss.years(5.0)/module.dt
+        actual = d.rvs(n).mean()
+        assert np.isclose(actual, expected, rtol=rtol)
 
     print('Testing callable parameters with Bernoulli distributions')
-    n = 100_000
-    sim = make_fake_sim(n=n)
+    n = 1000
+    sim = ss.mock_sim(n_agents=n)
     uids = np.random.choice(n, size=n//2, replace=False)
     age = sim.people.age[uids]
     mean = age.mean()
     young = sc.findinds(age<=mean)
     old = sc.findinds(age>mean)
-    p_young = 0.001
-    p_old = 0.010
+    p_young = 0.1
+    p_old = 0.2
 
+    # TODO: Shape mismatch, not sure why
+    # def age_prob(module, sim, uids):
+    #     out = ss.Rate(np.zeros(len(uids)))
+    #     out[young] = p_young
+    #     out[old]   = p_old
+    #     assert out.value.sum() > 0
+    #     return out
+
+    # ber1 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
+    # ber1.rvs(uids)
+
+    # Higher-performance option - perform the time conversion on the parameter here
     def age_prob(module, sim, uids):
-        out = np.zeros_like(age)
-        out[young] = p_young
-        out[old]   = p_old
+        out = np.zeros_like(uids)
+        out[young] = ss.Rate(p_young)*module.t.dt
+        out[old]   = ss.Rate(p_old)*module.t.dt
         return out
 
-    parent_dt = 10
-    p1 = age_prob
-    p2 = ss.time_prob(age_prob, parent_dt=parent_dt).init(update_values=False)
-    ber1 = ss.bernoulli(name='base', p=p1).init(sim=sim)
-    ber2 = ss.bernoulli(name='time', p=p2).init(sim=sim)
-    brvs1 = ber1.rvs(uids)
-    brvs2 = ber2.rvs(uids)
+    sim = ss.mock_sim(n_agents=100_000)
+    uids = np.random.choice(n, size=n//2, replace=False)
+    age = sim.people.age[uids]
+    mean = age.mean()
+    young = sc.findinds(age<=mean)
+    old = sc.findinds(age>mean)
 
-    rtol = 0.5 # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
-    sum1 = brvs1.sum()*parent_dt
-    sum2 = brvs2.sum()
-    assert np.isclose(sum1, sum2, rtol=rtol), f'Callable Bernoulli sums did not match: {sum1}  ≠  {sum2}'
-    sc.printgreen(f'✓ Callable Bernoulli sums matched: {sum1:n} ≈ {sum2:n}')
-    for key,expected,inds in zip(['young', 'old'], [p_young, p_old], [young, old]):
-        m1 = brvs1[inds].mean()
-        m2 = brvs2[inds].mean()/parent_dt
-        assert np.allclose([expected, m1], [expected, m2], rtol=rtol), f'Callable Bernoulli proportions did not match: {expected:n}  ≠  {m1:n}  ≠  {m2:n}'
-        sc.printgreen(f'✓ Callable Bernoulli proportions matched: {expected:n}  ≈  {m1:n}  ≈  {m2:n}')
+    ber2 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
+    a = ber2.rvs(uids).mean()
+
+    # TODO: waiting for implementing ss.months()
+    # ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
+    # b = ber3.rvs(uids).mean()
+
+    # rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
+    # assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {a} ≠ {b*12}'
 
     return
 

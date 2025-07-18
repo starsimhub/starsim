@@ -1,0 +1,61 @@
+---
+pagetitle: "Tutorials"
+---
+
+# Tutorials
+
+These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
+
+::: {.grid}
+::: {.g-col-4}
+[**T1 - Introduction to Starsim**](tutorials/t1_intro.ipynb)
+
+A quick introduction to the Starsim framework.
+:::
+
+::: {.g-col-4}
+[**T2 - Building a simulation**](tutorials/t2_model.ipynb)
+
+How to build your first simulation.
+:::
+
+::: {.g-col-4}
+[**T3 - Demographics**](tutorials/t3_demographics.ipynb)
+
+Implementing demographics: births, deaths, and population structure.
+:::
+
+::: {.g-col-4}
+[**T4 - Diseases**](tutorials/t4_diseases.ipynb)
+
+How to implement disease dynamics.
+:::
+
+::: {.g-col-4}
+[**T5 - Networks**](tutorials/t5_networks.ipynb)
+
+How diseases spread between agents: networks and mixing pools.
+:::
+
+::: {.g-col-4}
+[**T6 - Interventions**](tutorials/t6_interventions.ipynb)
+
+It's not all doom and gloom: implementing interventions to save lives.
+:::
+:::
+
+
+:::{.callout-note}
+You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+:::
+
+::: {.callout-tip}
+## Running tutorials locally
+
+To run these tutorials locally:
+
+1. Clone the Starsim repository
+2. Install Starsim and its dependencies
+3. Navigate to the `docs/tutorials` directory
+4. Launch Jupyter: `jupyter notebook`
+:::

@@ -3,16 +3,18 @@ Run tests of disease models
 """
 
 # %% Imports and settings
-import starsim as ss
 import sciris as sc
 import matplotlib.pyplot as plt
+import starsim as ss
+import starsim_examples as sse
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
-do_plot = False
+do_plot = True
 sc.options(interactive=do_plot) # Assume not running interactively
 
 
+@sc.timer()
 def test_sir():
     sc.heading('Testing SIR dynamics')
 
@@ -20,15 +22,15 @@ def test_sir():
     network_pars = {
         'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
     }
-    networks = ss.RandomNet(pars=network_pars)
+    networks = ss.RandomNet(**network_pars)
 
     sir_pars = {
         'dur_inf': ss.normal(loc=10),  # Override the default distribution
     }
-    sir = ss.SIR(sir_pars)
+    sir = ss.SIR(**sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': ss.rate(0.1)}
+    sir.pars.beta = {'random': ss.rateperyear(0.1)}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -54,6 +56,7 @@ def test_sir():
     return sim
 
 
+@sc.timer()
 def test_sir_epi():
     sc.heading('Test basic epi dynamics')
 
@@ -94,16 +97,17 @@ def test_sir_epi():
             v1 = s1.results.cum_deaths[-1]
         else:
             ind = 1 if par == 'init_prev' else -1
-            v0 = s0.results.sir.cum_infections[ind]
-            v1 = s1.results.sir.cum_infections[ind]
+            v0 = s0.results.sir.prevalence[ind]
+            v1 = s1.results.sir.prevalence[ind]
 
         print(f'Checking with varying {par:10s} ... ', end='')
-        assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
+        assert v0 <= v1, f'Expected prevalence to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
         print(f'✓ ({v0} <= {v1})')
 
     return s0, s1
 
 
+@sc.timer()
 def test_sis(do_plot=do_plot):
     sc.heading('Testing SIS dynamics')
 
@@ -120,12 +124,13 @@ def test_sis(do_plot=do_plot):
     return sim
 
 
+@sc.timer()
 def test_ncd():
     sc.heading('Testing NCDs')
 
     ppl = ss.People(n_agents)
-    ncd = ss.NCD(pars={'log':True})
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
+    ncd = ss.NCD(log=True)
+    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1)) # Since using ncd directly below
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
@@ -148,8 +153,10 @@ def test_ncd():
     return sim
 
 
+@sc.timer()
 def test_gavi():
     sc.heading('Testing GAVI diseases')
+    ss.register_modules(sse) # So we can use strings for these
 
     sims = sc.autolist()
     for disease in ['cholera', 'measles', 'ebola']:
@@ -160,10 +167,12 @@ def test_gavi():
         )
         sim = ss.Sim(pars)
         sim.run()
+        sim.plot()
         sims += sim
     return sims
 
 
+@sc.timer()
 def test_multidisease():
     sc.heading('Testing simulating multiple diseases')
 
@@ -173,21 +182,29 @@ def test_multidisease():
 
     sir1.pars.beta = {'randomnet': 0.1}
     sir2.pars.beta = {'randomnet': 0.2}
-    networks = ss.RandomNet(pars=dict(n_contacts=ss.poisson(4)))
+    networks = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
     sim.run()
     return sim
 
 
+@sc.timer()
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
-    sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
+    sis = ss.SIS(
+        beta = dict(
+            random = [ss.permonth(0.005)]*2,
+            prenatal = [ss.permonth(0.1), 0],
+            postnatal = [ss.permonth(0.1), 0]
+        )
+    )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
-    demographics = ss.Pregnancy(fertility_rate=20)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    demographics = ss.Pregnancy(fertility_rate=ss.rateperyear(20))
+    sim = ss.Sim(dt=ss.month, people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
+    sim.plot()
     return sim
 
 

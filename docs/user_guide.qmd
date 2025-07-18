@@ -1,0 +1,58 @@
+---
+pagetitle: "User guide"
+---
+
+# User guide
+
+These user guides provide a more in-depth look at each topic compared to the corresponding tutorials.
+
+:::{.callout-note}
+You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+:::
+
+::: {.callout-tip}
+## Running tutorials locally
+
+To run these tutorials locally:
+
+1. Clone the Starsim repository
+2. Install Starsim and its dependencies
+3. Navigate to the `docs/user_guide` folder
+4. Launch Jupyter: `jupyter lab`
+:::
+
+## Introduction
+
+- [Introduction to Starsim](user_guide/intro_starsim.ipynb)
+- [Starsim "spokes"](user_guide/intro_spokes.ipynb)
+
+## Basics
+
+- [Understanding the model](user_guide/basics_model.ipynb)
+- [The Sim object](user_guide/basics_sim.ipynb)
+- [Parameter configuration](user_guide/basics_parameters.ipynb)
+
+## Modules
+
+- [Diseases](user_guide/modules_diseases.ipynb)
+- [Networks](user_guide/modules_networks.ipynb)
+- [Demographics](user_guide/modules_demographics.ipynb)
+- [Interventions](user_guide/modules_interventions.ipynb)
+- [Analyzers](user_guide/modules_analyzers.ipynb)
+- [Connectors](user_guide/modules_connectors.ipynb)
+
+## Workflows
+
+- [Running simulations](user_guide/workflows_run.ipynb)
+- [Calibration](user_guide/workflows_calibration.ipynb)
+- [Deployment](user_guide/workflows_deploy.ipynb)
+- [Working with samples](user_guide/workflows_samples.ipynb)
+
+## Advanced topics
+
+- [Time handling](user_guide/advanced_time.ipynb)
+- [Indexing and arrays](user_guide/advanced_indexing.ipynb)
+- [Probability distributions](user_guide/advanced_distributions.ipynb)
+- [Random number generation](user_guide/advanced_random.ipynb)
+- [Profiling and optimization](user_guide/advanced_profiling.ipynb)
+- [Nonstandard usage](user_guide/advanced_nonstandard.ipynb)
