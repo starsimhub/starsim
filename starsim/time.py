@@ -1736,3 +1736,42 @@ def get_rate_class(unit):
 def get_timepar_class(unit):
     """ Helper function to get any Timepar class (either Dur or Rate) """
     return get_unit_class('full', unit)
+
+#%% Backwards compatibility functions
+
+__all__ += ['dur', 'rate', 'time_prob', 'rate_prob', 'rate', 'beta']
+
+def dur(value, unit=None):
+    """ Backwards compatibility function for Dur """
+    unitstr = str(unit) if unit is not None else 'years'
+    warnmsg = f'The Starsim v2 class ss.dur() is deprecated. Please use e.g. ss.{unitstr}({value}) instead.'
+    ss.warn(warnmsg)
+    return ss.Dur(value, unit)
+
+def rate(value, unit=None):
+    """ Backwards compatibility function for Rate """
+    unitstr = str(unit) if unit is not None else 'years'
+    warnmsg = f'The Starsim v2 class ss.rate() is deprecated. Please use e.g. ss.eventsper{unitstr}({value}) instead.'
+    ss.warn(warnmsg)
+    return ss.events(value, unit)
+
+def time_prob(value, unit=None):
+    """ Backwards compatibility function for TimeProb """
+    unitstr = str(unit) if unit is not None else 'years'
+    warnmsg = f'The Starsim v2 class ss.time_prob() is deprecated. Please use e.g. ss.probper{unitstr}({value}) instead.'
+    ss.warn(warnmsg)
+    return ss.prob(value, unit)
+
+def rate_prob(value, unit=None):
+    """ Backwards compatibility function for RateProb """
+    unitstr = str(unit) if unit is not None else 'years'
+    warnmsg = f'The Starsim v2 class ss.rate_prob() is deprecated. Please use e.g. ss.per{unitstr}({value}) instead.'
+    ss.warn(warnmsg)
+    return ss.per(value, unit)
+
+def beta(value, unit=None):
+    """ Backwards compatibility function for Beta """
+    unitstr = str(unit) if unit is not None else 'years'
+    warnmsg = f'The Starsim v2 class ss.beta() is deprecated. Please use e.g. ss.per{unitstr}({value}) instead.'
+    ss.warn(warnmsg)
+    return ss.per(value, unit)
