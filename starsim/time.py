@@ -629,17 +629,23 @@ class TimePar:
 
         This is so e.g. ss.years(ss.normal(3)) is the same as ss.normal(3, unit=ss.years)
         """
-        if len(args) and isinstance(args[0], ss.Dist):
-            dist = args[0]
-            dist.unit = cls
-            return dist
-        else: # Everything else
-            return super().__new__(cls)
+        dist = cls._check_dist_arg(*args, **kwargs)
+        return dist if dist is not None else super().__new__(cls)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._set_factors()
         return
+
+    @classmethod
+    def _check_dist_arg(cls, *args, **kwargs):
+        """ Enables e.g. ss.years(ss.normal(...)) instead of ss.normal(..., unit=ss.years) """
+        if len(args) and isinstance(args[0], ss.Dist):
+            dist = args[0]
+            dist.unit = cls
+            return dist
+        else:
+            return None
 
     @classmethod
     def _set_factors(cls):
@@ -786,7 +792,10 @@ class Dur(TimePar):
 
     def __new__(cls, value=None, base='years', **kwargs):
         """ Return the correct type based on the inputs """
-        if cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
+        dist = cls._check_dist_arg(value)
+        if dist is not None:
+            return dist
+        elif cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
             if kwargs:
                 errormsg = f'Invalid arguments {kwargs} for ss.Dur; valid arguments are "value" and "base". If you are trying to construct a DateDur, call it directly.'
                 raise ValueError(errormsg)
@@ -794,7 +803,8 @@ class Dur(TimePar):
             self = super().__new__(new_cls)
             self.__init__(value=value)
             return self
-        return super().__new__(cls) # Otherwise, do default initialization
+        else:
+            return super().__new__(cls) # Otherwise, do default initialization
 
     def __init__(self, value=1, base=None):
         """

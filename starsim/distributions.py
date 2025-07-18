@@ -10,7 +10,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 ss_int_ = ss.dtypes.int
 
-__all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
+__all__ = ['link_dists', 'make_dist', 'dist_list', 'scale_types', 'Dists', 'Dist']
 
 
 def str2int(string, modulo=1_000_000_000):
@@ -548,6 +548,23 @@ class Dist:
             self.initialized = True
         return self
 
+    def mock(self, trace='mock', **kwargs):
+        """ Create a distribution using a mock sim for testing purposes
+
+        Args:
+            trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
+            **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
+
+        **Example**:
+
+            dist = ss.normal(3, 2, unit='years').mock(dt=ss.days(1))
+            dist.rvs(10)
+        """
+        mock_sim = ss.mock_sim(**kwargs)
+        mock_mod = ss.mock_module(**kwargs)
+        self.init(trace=trace, module=mock_mod, sim=mock_sim)
+        return self
+
     def link_sim(self, sim=None, overwrite=False):
         """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True; not for the user """
         if (not self.sim or overwrite) and sim is not None:
@@ -665,21 +682,21 @@ class Dist:
 
         # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
         if self.unit is not None and len(timepar_dict):
-            errormsg = 'You have provided timepars both for the distribution itself ({dist.unit}) and one or more parameters:\n{timepar_dict}.\nPlease use one or the other, not both!'
+            errormsg = f'You have provided timepars both for the distribution itself ({self.unit}) and one or more parameters:\n{timepar_dict}.\nPlease use one or the other, not both!'
             raise ValueError(errormsg)
 
         # Check for e.g. ss.poisson(3, unit=ss.years) (valid, warning) or ss.gamma(0.5, 1, unit=ss.years) (invalid, error)
-        if self.unit is not None and ss.scale_types.check_predraw(self):
+        if self.unit is not None and not ss.distributions.scale_types.check_postdraw(self):
             msg = f'You have supplied a distribution-level timepar {self.unit}, but {self} can only be scaled pre-draw. '
             if len(self._pars) == 1:
                 self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions)
                 self.unit = None
                 if ss.options.warn_convert:
-                    msg += 'Since ss.{self.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
+                    msg += f'Since ss.{self.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
                     msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)), or set ss.options.warn_convert=False.'
                     ss.warnmsg(msg)
             else:
-                msg += 'Since ss.{self.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
+                msg += f'Since ss.{self.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
                 msg += 'Use e.g. ss.weibull(3, ss.years(5), ss.years(2)) instead of ss.weibull(3, 5, 2, unit=ss.years).'
                 raise ValueError(msg)
 
@@ -689,11 +706,6 @@ class Dist:
             if isinstance(v, ss.TimePar):
                 is_timepar = True
                 timepar_type = type(v)
-                if self.unit is None:
-                    self.unit = timepar_type
-                else:
-                    if self.unit != timepar_type:
-                        v.mutate(self.unit.base)
             elif isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.TimePar):
                 is_timepar = True
                 timepar_type = type(v.flat[0])
@@ -717,63 +729,63 @@ class Dist:
                 except:
                     pass
 
-    def convert_timepars2(self):
-        """
-        Convert time parameters (durations and rates) to scalars
+    # def convert_timepars2(self):
+    #     """
+    #     Convert time parameters (durations and rates) to scalars
 
-        This function converts time parameters into bare numbers that will be returned by rvs() depending
-        on the timestep of the parent module for this `Dist`. The conversion for these types is
+    #     This function converts time parameters into bare numbers that will be returned by rvs() depending
+    #     on the timestep of the parent module for this `Dist`. The conversion for these types is
 
-        - Durations are divided by `dt` (so the eresult will be a number of timesteps)
-        - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
-        """
-        # Nonscalar types have to be handled separately
-        nonscalar_types = [ss.DateDur]
+    #     - Durations are divided by `dt` (so the eresult will be a number of timesteps)
+    #     - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
+    #     """
+    #     # Nonscalar types have to be handled separately
+    #     nonscalar_types = [ss.DateDur]
 
-        # Check through and see if anything is a timepar
-        timepar_dict = dict()
-        for key,val in self._pars.items():
-            if isinstance(val, ss.TimePar):
-                timepar_type = type(val)
-                timepar_dict[key] = timepar_type
-                if self.unit is None:
-                    if timepar_type in nonscalar_types:
-                        # warnmsg = f'Trying to use a nonscalar timepar, {timepar_type}, as the Dist unit; automatically converting to ss.years instead'
-                        # ss.warn(warnmsg) # Don't think we actually need this warning, should always be safe to convert to ss.years?
-                        timepar_type = ss.years # Fallback for working with dates
-                    self.unit = timepar_type # Reset with the first found timepar
+    #     # Check through and see if anything is a timepar
+    #     timepar_dict = dict()
+    #     for key,val in self._pars.items():
+    #         if isinstance(val, ss.TimePar):
+    #             timepar_type = type(val)
+    #             timepar_dict[key] = timepar_type
+    #             if self.unit is None:
+    #                 if timepar_type in nonscalar_types:
+    #                     # warnmsg = f'Trying to use a nonscalar timepar, {timepar_type}, as the Dist unit; automatically converting to ss.years instead'
+    #                     # ss.warn(warnmsg) # Don't think we actually need this warning, should always be safe to convert to ss.years?
+    #                     timepar_type = ss.years # Fallback for working with dates
+    #                 self.unit = timepar_type # Reset with the first found timepar
 
-        # Convert timepars, if any found
-        for key in timepar_dict.keys():
-            val = self._pars[key]
+    #     # Convert timepars, if any found
+    #     for key in timepar_dict.keys():
+    #         val = self._pars[key]
 
-            # Incompatible types: fail
-            self_type = self.unit.timepar_type # TODO: are different subtypes (prob vs rate) ok?
-            other_type = val.timepar_type
-            if self_type != other_type:
-                errormsg = f'Cannot convert timepars of incompatible types: dist={self_type} vs. {key}={other_type}'
-                raise TypeError(errormsg)
+    #         # Incompatible types: fail
+    #         self_type = self.unit.timepar_type # TODO: are different subtypes (prob vs rate) ok?
+    #         other_type = val.timepar_type
+    #         if self_type != other_type:
+    #             errormsg = f'Cannot convert timepars of incompatible types: dist={self_type} vs. {key}={other_type}'
+    #             raise TypeError(errormsg)
 
-            # Same type, different base: convert
-            if self.unit.base != val.base or self.unit.timepar_subtype != val.timepar_subtype:
-                val = self.unit(val) # e.g. ss.weeks(ss.years(2))
+    #         # Same type, different base: convert
+    #         if self.unit.base != val.base or self.unit.timepar_subtype != val.timepar_subtype:
+    #             val = self.unit(val) # e.g. ss.weeks(ss.years(2))
 
-            # Now that they're all consistent, replace the timepar with its value, and then postprocess
-            # self._pars[key] = val.value # TODO: try to make this work -- it's fine for e.g. normal, but fails for Poisson since dt changes the shape of the distribution. Need is_scalable parameter!
+    #         # Now that they're all consistent, replace the timepar with its value, and then postprocess
+    #         # self._pars[key] = val.value # TODO: try to make this work -- it's fine for e.g. normal, but fails for Poisson since dt changes the shape of the distribution. Need is_scalable parameter!
 
-            # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
-            print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
-            print('BEFORE', val)
-            if isinstance(val, ss.Dur):
-                val = val/self.module.dt
-            elif isinstance(val, ss.Rate):
-                val = val*self.module.dt
-            else:
-                raise NotImplementedError
-            self._pars[key] = val
+    #         # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
+    #         print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
+    #         print('BEFORE', val)
+    #         if isinstance(val, ss.Dur):
+    #             val = val/self.module.dt
+    #         elif isinstance(val, ss.Rate):
+    #             val = val*self.module.dt
+    #         else:
+    #             raise NotImplementedError
+    #         self._pars[key] = val
 
-            print('AFTER', val)
-        return
+    #         print('AFTER', val)
+    #     return
 
 
     def convert_callable(self, parkey, func, size, uids):
