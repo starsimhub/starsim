@@ -1741,37 +1741,35 @@ def get_timepar_class(unit):
 
 __all__ += ['dur', 'rate', 'time_prob', 'rate_prob', 'rate', 'beta']
 
+def warn_deprecation(old, value, unit, with_s=False):
+    if ss.options.warn_convert:
+        unitstr = str(unit) if unit is not None else 'year'
+        if with_s: unitstr = unitstr + 's'
+        warnmsg = f'The Starsim v2 class ss.{old}() is deprecated. Please use e.g. ss.{unitstr}({value}) instead.'
+        ss.warn(warnmsg)
+    return
+
 def dur(value, unit=None):
     """ Backwards compatibility function for Dur """
-    unitstr = str(unit) if unit is not None else 'years'
-    warnmsg = f'The Starsim v2 class ss.dur() is deprecated. Please use e.g. ss.{unitstr}({value}) instead.'
-    ss.warn(warnmsg)
+    warn_deprecation('dur', value, unit, with_s=True)
     return ss.Dur(value, unit)
 
 def rate(value, unit=None):
     """ Backwards compatibility function for Rate """
-    unitstr = str(unit) if unit is not None else 'years'
-    warnmsg = f'The Starsim v2 class ss.rate() is deprecated. Please use e.g. ss.eventsper{unitstr}({value}) instead.'
-    ss.warn(warnmsg)
+    warn_deprecation('rate', value, unit)
     return ss.events(value, unit)
 
 def time_prob(value, unit=None):
     """ Backwards compatibility function for TimeProb """
-    unitstr = str(unit) if unit is not None else 'years'
-    warnmsg = f'The Starsim v2 class ss.time_prob() is deprecated. Please use e.g. ss.probper{unitstr}({value}) instead.'
-    ss.warn(warnmsg)
+    warn_deprecation('time_prob', value, unit)
     return ss.prob(value, unit)
 
 def rate_prob(value, unit=None):
     """ Backwards compatibility function for RateProb """
-    unitstr = str(unit) if unit is not None else 'years'
-    warnmsg = f'The Starsim v2 class ss.rate_prob() is deprecated. Please use e.g. ss.per{unitstr}({value}) instead.'
-    ss.warn(warnmsg)
+    warn_deprecation('rate_prob', value, unit)
     return ss.per(value, unit)
 
 def beta(value, unit=None):
     """ Backwards compatibility function for Beta """
-    unitstr = str(unit) if unit is not None else 'years'
-    warnmsg = f'The Starsim v2 class ss.beta() is deprecated. Please use e.g. ss.per{unitstr}({value}) instead.'
-    ss.warn(warnmsg)
+    warn_deprecation('beta', value, unit)
     return ss.per(value, unit)
