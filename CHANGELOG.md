@@ -5,6 +5,25 @@ that may result in differences in model output, or are required in order
 to run an old parameter set with the current version, are flagged with
 the term "Regression information".
 
+## Version 3.0.0 (2025-07-18)
+
+### Summary
+
+Full changelog coming soon!
+
+### Time
+
+TBC
+
+### Debug tools
+
+TBC
+
+### Other changes
+
+TBC
+
+
 ## Version 2.3.2 (2025-07-16)
 -   Fix argument passing in `Infection.infect`. This will be the final Starsim v2.x release.
 -   *GitHub info*: PR [1008](https://github.com/starsimhub/starsim/pull/1008)
