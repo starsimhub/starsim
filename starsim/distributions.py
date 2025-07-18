@@ -10,7 +10,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 ss_int_ = ss.dtypes.int
 
-__all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
+__all__ = ['link_dists', 'make_dist', 'dist_list', 'scale_types', 'Dists', 'Dist']
 
 
 def str2int(string, modulo=1_000_000_000):
@@ -162,12 +162,84 @@ class Dists(sc.prettyobj):
             new = None
         return new
 
+
+class scale_types(sc.prettyobj):
+    """ Define how distributions scale
+
+    Distributions scale in different ways, such as converting between time units.
+    Some distributions can't be scaled at all (e.g. `ss.beta()` or `ss.choice()`).
+    For distributions that can be scaled, some distributions can only be (linearly)
+    scaled *before* the random numbers are generated (called "predraw"), some can only be
+    scaled after (called "postdraw"), and some can be scaled in either way ("both").
+
+    For example, a normal distribution is "both" since 2*Normal(a, b) = Normal(2*a, 2*b).
+    A Poisson distribution is "predraw" since 2*Poisson(λ) ≠ Poisson(2*λ), and
+    there is no way to get the correct shape of a different Poisson distribution
+    once the numbers have been drawn. Finally, distributions with unitless shape
+    parameters as well as parameter that can have units (e.g. a gamma distribution
+    with shape and scale parameters) are referred to as "postdraw" since scaling
+    all input parameters is invalid (i.e. 2*Gamma(shape, scale) ≠ Gamma(2*shape, 2*scale)),
+    but they can still be scaled (i.e. 2*Gamma(shape, scale) = Gamma(1*shape, 2*scale)).
+
+    To summarize, options for `dist.scaling` are:
+
+        - 'postdraw' (after the random numbers are drawn, e.g. `ss.weibull()`)
+        - 'predraw' (before the draw, e.g. `ss.poisson()`)
+        - 'both' (either pre or post draw, e.g. `ss.normal()`)
+        - False (not at all, e.g. `ss.beta()`)
+
+    Use `ss.distributions.scale_types.show()` to show how each distribution scales
+    with time.
+    """
+    both = ['predraw', 'postdraw']
+    postdraw = 'postdraw'
+    predraw = 'predraw'
+    false = None
+
+    @classmethod
+    def check_predraw(cls, dist):
+        """ Check if the supplied distribution supports pre-draw (parameter) scaling """
+        return cls.predraw in sc.tolist(dist.scaling)
+
+    @classmethod
+    def check_postdraw(cls, dist):
+        """ Check if the supplied distribution supports post-draw (results) scaling """
+        return cls.postdraw in sc.tolist(dist.scaling)
+
+    @classmethod
+    def show(cls, to_df=False):
+        """ Show which distributions have which scale types """
+        data = []
+        for distname in ss.distributions.dist_list:
+            dist = getattr(ss.distributions, distname)
+            predraw = cls.check_predraw(dist)
+            postdraw = cls.check_postdraw(dist)
+            both = predraw and postdraw
+            none = not predraw and not postdraw
+            row = dict(name=distname, predraw=predraw, postdraw=postdraw, both=both, none=none)
+            data.append(row)
+        df = sc.dataframe(data)
+        if to_df:
+            return df
+        else:
+            print('Distribution scale types (see the ss.distributions.scale_types docstring for more info):')
+            df.disp()
+        return
+
+
 class Dist:
     """
     Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
 
-    See ss.dist_list for a full list of supported distributions.
+    See `ss.dist_list` for a full list of supported distributions. Parameter inputs
+    tend to follow SciPy's, rather than NumPy's, definitions (although in most
+    cases they're the same). See also `ss.distributions.scale_types` for more information
+    on how different distributions scale by time.
+
+    Note: by default, `ss.Dist` is initialized with an `ss.Sim` object to ensure
+    random number reproducibility. You can override this with either `ss.Dist(strict=False)`
+    on creation, or `dist.init(force=True)` after creation.
 
     Although it's possible in theory to define a custom distribution (i.e., not
     one from NumPy or SciPy), in practice this is difficult. The distribution needs
@@ -178,9 +250,10 @@ class Dist:
     whatever custom distribution you want to create.
 
     Args:
-        dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
+        dist (rv_generic): optional; a `scipy.stats` distribution (frozen or not) to get the ppf from
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
+        unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
         strict (bool): if True, require initialization and invalidate after each call to rvs()
@@ -193,11 +266,25 @@ class Dist:
 
     **Examples**:
 
-        dist = ss.Dist(sps.norm, loc=3)
+        # Create a Bernoulli distribution
+        p_death = ss.bernoulli(p=0.1).init(force=True)
+        p_death.rvs(50) # Create 50 draws
+
+        # Create a normal distribution that's also a timepar
+        dur_infection = ss.normal(loc=12, scale=2, unit='years')
+        dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
+        dur_infection = ss.normal(loc=ss.years(12), scale=2)) # Same as above
+        dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
+        dur_infection.init(force=True).plot_hist() # Show results
+
+        # Create a distribution manually
+        dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     valid_pars = None
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
+    scaling = None # See "scale_types" above
+
+    def __init__(self, dist=None, distname=None, name=None, unit=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -207,6 +294,7 @@ class Dist:
         self.distname = distname
         self.name = name
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
+        self.unit = ss.time.get_timepar_class(unit) # The timepar class -- can be None
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.module = module
@@ -215,6 +303,7 @@ class Dist:
         self.strict = strict
         self.auto = auto
         self.debug = debug
+        self.scaling = sc.tolist(self.scaling) # Convert e.g. 'predraw' to ['predraw'] so can use "if x in y" later
 
         # Auto-generated
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
@@ -238,6 +327,15 @@ class Dist:
             self.validate_pars()
 
         # Finalize
+        if self.unit is not None:
+            if scale_types.postdraw not in self.scaling:
+                errormsg = 'You can only specify a distribution-level time unit for distributions that can be scaled post-draw, e.g. ss.normal(). '
+                if scale_types.predraw in self.scaling:
+                    errormsg += f'{self} can only be scaled pre-draw, meaning you must convert the input parameters to TimePars.'
+                else:
+                    errormsg += f'Distributions ({type(self)} cannot be scaled.'
+                raise ValueError(errormsg)
+
         if mock:
             if mock is True: # Convert from boolean to a reasonable int
                 mock = 100
@@ -245,8 +343,10 @@ class Dist:
             self.sim = ss.mock_sim(mock)
             self.module = ss.mock_module()
             self.trace = 'mock_dist'
+
         if not strict: # Otherwise, wait for a sim
             self.init()
+
         return
 
     def __repr__(self):
@@ -390,7 +490,21 @@ class Dist:
         return self.jump(to=to, force=force)
 
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
-        """ Calculate the starting seed and create the RNG """
+        """
+        Calculate the starting seed and create the RNG
+
+        Typically this is not invoked by the user, although the user can call it with force=True
+        to initialize a distribution manually independently of a `ss.Sim` object
+        (which is equivalent to setting strict=False when creating the dist).
+
+        Args:
+            trace (str): the distribution's location within the sim
+            seed (int): the base random number seed that other random number seeds will be generated from
+            module (`ss.Module`): the parent module
+            sim (`ss.Sim`): the parent sim
+            slots (array): the agent slots of the parent sim
+            force (bool): whether to skip validation (if the dist has already been initialized, and if any inputs are None)
+        """
 
         if self.initialized is True and not force: # Don't warn if we have a partially initialized distribution
             msg = f'Distribution {self} is already initialized, use force=True if intentional'
@@ -426,11 +540,29 @@ class Dist:
         none_dict = {k:v for k,v in none_dict.items() if v is None}
         if len(none_dict):
             self.initialized = 'partial'
-            if self.strict:
-                errormsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict.keys()}\nThis distribution may not produce valid random numbers.'
+            if self.strict and not force:
+                errormsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict.keys()}\n'
+                errormsg += 'This distribution may not produce valid random numbers; set force=True if this is intentional (e.g. for testing it independently of a sim).'
                 raise RuntimeError(errormsg)
         else:
             self.initialized = True
+        return self
+
+    def mock(self, trace='mock', **kwargs):
+        """ Create a distribution using a mock sim for testing purposes
+
+        Args:
+            trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
+            **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
+
+        **Example**:
+
+            dist = ss.normal(3, 2, unit='years').mock(dt=ss.days(1))
+            dist.rvs(10)
+        """
+        mock_sim = ss.mock_sim(**kwargs)
+        mock_mod = ss.mock_module(**kwargs)
+        self.init(trace=trace, module=mock_mod, sim=mock_sim)
         return self
 
     def link_sim(self, sim=None, overwrite=False):
@@ -523,7 +655,7 @@ class Dist:
 
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
-        self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
+        # self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
@@ -541,6 +673,34 @@ class Dist:
         - Durations are divided by `dt` (so the result will be a number of timesteps)
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
+        # Check through and see if anything is a timepar
+        timepar_dict = dict()
+        for key,val in self._pars.items():
+            if isinstance(val, ss.TimePar):
+                timepar_type = type(val)
+                timepar_dict[key] = timepar_type
+
+        # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
+        if self.unit is not None and len(timepar_dict):
+            errormsg = f'You have provided timepars both for the distribution itself ({self.unit}) and one or more parameters:\n{timepar_dict}.\nPlease use one or the other, not both!'
+            raise ValueError(errormsg)
+
+        # Check for e.g. ss.poisson(3, unit=ss.years) (valid, warning) or ss.gamma(0.5, 1, unit=ss.years) (invalid, error)
+        if self.unit is not None and not ss.distributions.scale_types.check_postdraw(self):
+            msg = f'You have supplied a distribution-level timepar {self.unit}, but {self} can only be scaled pre-draw. '
+            if len(self._pars) == 1:
+                self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions)
+                self.unit = None
+                if ss.options.warn_convert:
+                    msg += f'Since ss.{self.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
+                    msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)), or set ss.options.warn_convert=False.'
+                    ss.warnmsg(msg)
+            else:
+                msg += f'Since ss.{self.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
+                msg += 'Use e.g. ss.weibull(3, ss.years(5), ss.years(2)) instead of ss.weibull(3, 5, 2, unit=ss.years).'
+                raise ValueError(msg)
+
+        # Do predraw scaling
         for key, v in self._pars.items():
             is_timepar = False
             if isinstance(v, ss.TimePar):
@@ -568,6 +728,65 @@ class Dist:
                     self._pars[key] = self._pars[key].astype(float)
                 except:
                     pass
+
+    # def convert_timepars2(self):
+    #     """
+    #     Convert time parameters (durations and rates) to scalars
+
+    #     This function converts time parameters into bare numbers that will be returned by rvs() depending
+    #     on the timestep of the parent module for this `Dist`. The conversion for these types is
+
+    #     - Durations are divided by `dt` (so the eresult will be a number of timesteps)
+    #     - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
+    #     """
+    #     # Nonscalar types have to be handled separately
+    #     nonscalar_types = [ss.DateDur]
+
+    #     # Check through and see if anything is a timepar
+    #     timepar_dict = dict()
+    #     for key,val in self._pars.items():
+    #         if isinstance(val, ss.TimePar):
+    #             timepar_type = type(val)
+    #             timepar_dict[key] = timepar_type
+    #             if self.unit is None:
+    #                 if timepar_type in nonscalar_types:
+    #                     # warnmsg = f'Trying to use a nonscalar timepar, {timepar_type}, as the Dist unit; automatically converting to ss.years instead'
+    #                     # ss.warn(warnmsg) # Don't think we actually need this warning, should always be safe to convert to ss.years?
+    #                     timepar_type = ss.years # Fallback for working with dates
+    #                 self.unit = timepar_type # Reset with the first found timepar
+
+    #     # Convert timepars, if any found
+    #     for key in timepar_dict.keys():
+    #         val = self._pars[key]
+
+    #         # Incompatible types: fail
+    #         self_type = self.unit.timepar_type # TODO: are different subtypes (prob vs rate) ok?
+    #         other_type = val.timepar_type
+    #         if self_type != other_type:
+    #             errormsg = f'Cannot convert timepars of incompatible types: dist={self_type} vs. {key}={other_type}'
+    #             raise TypeError(errormsg)
+
+    #         # Same type, different base: convert
+    #         if self.unit.base != val.base or self.unit.timepar_subtype != val.timepar_subtype:
+    #             val = self.unit(val) # e.g. ss.weeks(ss.years(2))
+
+    #         # Now that they're all consistent, replace the timepar with its value, and then postprocess
+    #         # self._pars[key] = val.value # TODO: try to make this work -- it's fine for e.g. normal, but fails for Poisson since dt changes the shape of the distribution. Need is_scalable parameter!
+
+    #         # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
+    #         print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
+    #         print('BEFORE', val)
+    #         if isinstance(val, ss.Dur):
+    #             val = val/self.module.dt
+    #         elif isinstance(val, ss.Rate):
+    #             val = val*self.module.dt
+    #         else:
+    #             raise NotImplementedError
+    #         self._pars[key] = val
+
+    #         print('AFTER', val)
+    #     return
+
 
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
@@ -672,16 +891,16 @@ class Dist:
         rvs = self.dist.ppf(rands)
         return rvs
 
-    def postprocess_timepar(self, rvs):
-        """ Scale random variates after generation; not for the user """
-        timepar = self._timepar # Shorten
-        self._timepar = None # Remove the timepar which is no longer needed
-        timepar.v = rvs # Replace the base value with the random variates
-        timepar.update_cached() # Recalculate the factor and values with the time scaling
-        rvs = timepar.values # Replace the rvs with the scaled version
-        if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
-            rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
-        return rvs
+    # def postprocess_timepar(self, rvs):
+    #     """ Scale random variates after generation; not for the user """
+    #     timepar = self._timepar # Shorten
+    #     self._timepar = None # Remove the timepar which is no longer needed
+    #     timepar.v = rvs # Replace the base value with the random variates
+    #     timepar.update_cached() # Recalculate the factor and values with the time scaling
+    #     rvs = timepar.values # Replace the rvs with the scaled version
+    #     if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
+    #         rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
+    #     return rvs
 
     def rvs(self, n=1, round=False, reset=False):
         """
@@ -725,9 +944,24 @@ class Dist:
             if self._slots is not None:
                 rvs = rvs[self._slots]
 
-        # Scale by time if needed
-        if self._timepar is not None:
-            rvs = self.postprocess_timepar(rvs)
+        # Handle unit if provided
+        if self.unit is not None:
+            if scale_types.check_postdraw(self): # It can be scaled post-draw, proceed
+                rvs = self.unit(rvs)
+                if isinstance(rvs, ss.Dur):
+                    rvs = rvs/self.module.dt
+                elif isinstance(rvs, ss.Rate):
+                    rvs = rvs*self.module.dt
+                else:
+                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Dur or ss.Rate'
+                    raise NotImplementedError(errormsg)
+            else:  # It can't, raise an error
+                errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
+                if scale_types.check_predraw(self):
+                    errormsg += 'Since this distribution supports pre-draw scaling, please scale the individual input parameters instead. '
+                else:
+                    errormsg += 'Not all distributions can be scaled; see ss.distributions.scale_types for information how different distributions scale. '
+                raise ValueError(errormsg)
 
         # Round if needed
         if round:
@@ -812,8 +1046,9 @@ class Dist:
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
-dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon', 'poisson', 'nbinom',
-             'weibull', 'gamma', 'constant', 'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
+dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
+             'poisson', 'nbinom', 'beta', 'beta_mean', 'weibull', 'gamma', 'constant',
+             'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
 __all__ += dist_list
 __all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. same tests would fail)
 
@@ -821,6 +1056,7 @@ __all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. s
 class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
     valid_pars = ['dtype']
+    scaling = scale_types.false # Always (0,1), can't be scaled
     def __init__(self, **kwargs):
         super().__init__(distname='random', dtype=ss.dtypes.float, **kwargs)
         return
@@ -838,6 +1074,8 @@ class uniform(Dist):
         high (float): the upper bound of the distribution (default 1.0)
     """
     valid_pars = ['low', 'high']
+    scaling = scale_types.both
+
     def __init__(self, low=None, high=None, **kwargs):
         if high is None and low is not None: # One argument, swap
             high = low
@@ -870,6 +1108,7 @@ class normal(Dist):
         scale (float) the standard deviation of the distribution (default 1.0)
 
     """
+    scaling = scale_types.both
     def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
@@ -891,6 +1130,8 @@ class lognorm_im(Dist):
 
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
+    scaling = scale_types.postdraw
+
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
@@ -930,6 +1171,8 @@ class lognorm_ex(Dist):
 
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
+    scaling = scale_types.both
+
     def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
         return
@@ -970,8 +1213,8 @@ class expon(Dist):
 
     Args:
         scale (float): the scale of the distribution (default 1.0)
-
     """
+    scaling = scale_types.both
     def __init__(self, scale=1.0, **kwargs):
         super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
@@ -984,6 +1227,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
     Args:
         lam (float): the scale of the distribution (default 1.0)
     """
+    scaling = scale_types.predraw
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
         return
@@ -995,6 +1239,48 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         return spars
 
 
+class beta(Dist):
+    """
+    Beta distribution
+
+    Args:
+        a (float): shape parameter, must be > 0 (default 1.0)
+        b (float): shape parameter, must be > 0 (default 1.0)
+    """
+    scaling = scale_types.false
+    def __init__(self, a=1.0, b=1.0, **kwargs):
+        super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
+        return
+
+
+class beta_mean(Dist):
+    """
+    Beta distribution paramterized by the mean
+
+    Note: the variance of a beta distribution must be 0 < var < mean*(1-mean)
+
+    Args:
+        mean (float): mean of distribution, must be 0 < a < 1 (default 0.5)
+        var (float): variance of distribution, must be > 0 (default 0.05)
+    """
+    scaling = scale_types.false
+    def __init__(self, mean=0.5, var=0.05, **kwargs):  # Does not accept dtype
+        # Validation
+        max_var = mean*(1-mean)
+        if not (0 < mean < 1):
+            errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean}'
+            raise ValueError(errormsg)
+        if not (0 < var < max_var):
+            errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
+            raise ValueError(errormsg)
+
+        # We're good to go
+        a = ((1 - mean)/var - 1/mean) * mean**2
+        b = a * (1 / mean - 1)
+        super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
+        return
+
+
 class nbinom(Dist):
     """
     Negative binomial distribution
@@ -1004,6 +1290,7 @@ class nbinom(Dist):
         p (float): the probability of success in [0,1], (default 0.5)
 
     """
+    scaling = scale_types.predraw
     def __init__(self, n=1, p=0.5, **kwargs):
         super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
         return
@@ -1018,7 +1305,9 @@ class randint(Dist):
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
         allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
+    scaling = scale_types.predraw
     valid_pars = ['low', 'high', 'dtype']
+
     def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
         self.allow_time = allow_time
@@ -1060,6 +1349,8 @@ class rand_raw(Dist):
     Typicaly only used with ss.combine_rands().
     """
     valid_pars = []
+    scaling = scale_types.false
+
     def make_rvs(self):
         if ss.options.single_rng:
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
@@ -1076,6 +1367,7 @@ class weibull(Dist):
         loc (float): the location parameter, which shifts the position of the distribution (default 0.0)
         scale (float): the scale parameter, sometimes called λ (default 1.0)
     """
+    scaling = scale_types.postdraw
     def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
         return
@@ -1095,6 +1387,7 @@ class gamma(Dist):
         loc (float): the location parameter, which shifts the position of the distribution (default 0.0)
         scale (float): the scale parameter, sometimes called θ (default 1.0)
     """
+    scaling = scale_types.postdraw
     def __init__(self, a=1.0, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='gamma', dist=sps.gamma, a=a, loc=loc, scale=scale, **kwargs)
         return
@@ -1113,6 +1406,8 @@ class constant(Dist):
         v (float): the value to return
     """
     valid_pars = ['v']
+    scaling = scale_types.both
+
     def __init__(self, v=0.0, **kwargs):
         super().__init__(distname='const', v=v, **kwargs)
         return
@@ -1135,6 +1430,8 @@ class bernoulli(Dist):
         p (float): the probability of returning True (default 0.5)
     """
     valid_pars = ['p']
+    scaling = scale_types.predraw
+
     def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
@@ -1210,6 +1507,8 @@ class choice(Dist):
     to use ss.bernoulli() instead.
     """
     valid_pars = ['a', 'p', 'replace', 'dtype']
+    scaling = scale_types.false
+
     def __init__(self, a=2, p=None, replace=True, **kwargs):
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
         self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
@@ -1269,6 +1568,8 @@ class histogram(Dist):
         h2.plot_hist(bins=100)
     """
     valid_pars = ['values', 'bins', 'density', 'data']
+    scaling = scale_types.false
+
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
         if data is not None:
             if values is not None:

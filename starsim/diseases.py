@@ -617,7 +617,7 @@ class SIS(Infection):
             beta = ss.TimeProb(0.05),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.years(10)),
-            waning = ss.peryear(0.05),
+            waning = ss.RateProb(0.05, 'year'), # TODO: replace with ss.peryear() in the new system
             imm_boost = 1.0,
         )
         self.update_pars(pars, **kwargs)
@@ -637,7 +637,7 @@ class SIS(Infection):
         return
 
     def update_immunity(self):
-        waning = np.exp(-self.pars.waning*self.t.dt) # Exponential waning (NB: could be cached for a tiny performance boost)
+        waning = self.pars.waning*self.t.dt # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)
         has_imm = (self.immunity > 0).uids
         self.immunity[has_imm] *= waning
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])

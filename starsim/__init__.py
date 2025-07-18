@@ -25,10 +25,10 @@ del sc, reqs, msg # Don't keep this in the module
 from .utils         import *
 from .debugtools    import *
 from .arrays        import *
+from .distributions import *
 from .time          import *
 from .timeline      import *
 from .parameters    import *
-from .distributions import *
 from .people        import *
 from .modules       import *
 from .networks      import *

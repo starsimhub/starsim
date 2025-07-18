@@ -22,6 +22,7 @@ TimePar  # All time parameters
     └── RateProb  # Instantaneous probability of an event happening
 """
 import numbers
+import datetime as dt
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -327,7 +328,7 @@ class date(pd.Timestamp):
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
-        elif isinstance(other, DateDur):
+        elif isinstance(other, ss.DateDur):
             return self._timestamp_add(other.value)
         elif isinstance(other, years):
             return date(self.to_year() + other.value)
@@ -345,16 +346,18 @@ class date(pd.Timestamp):
     def __sub__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-        if isinstance(other, DateDur):
+        if isinstance(other, ss.DateDur):
             return date(self.to_pandas() - other.value)
         elif isinstance(other, years):
             return date(self.to_year() - other.value)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() - other)
-        elif isinstance(other, date):
+        elif isinstance(other, (ss.date, dt.date, dt.datetime)):
+            if not isinstance(other, ss.date): # Convert e.g. dt.date to ss.date
+                other = ss.date(other)
             return years(self.years-other.years)
         else:
-            errormsg = f'Attempted to subtract "{other}" from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
+            errormsg = f'Attempted to subtract "{other}" ({type(other)}) from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
             raise TypeError(errormsg)
 
     def __radd__(self, other): return self.__add__(other)
@@ -469,12 +472,15 @@ class date(pd.Timestamp):
 
         # Convert this first
         if isinstance(step, ss.Dur) and not isinstance(step, ss.DateDur):
-            if step.value == int(step.value): # e.g. ss.days(2)
-                step = DateDur(step)
+            if step.value == int(step.value): # e.g. ss.days(2) not ss.days(2.5)
+                step = ss.DateDur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
                 step = step.years # Don't try to convert e.g. ss.years(0.1) to a DateDur, you get rounding errors
                 # start = float(start)
                 # stop = float(stop)
+        elif isinstance(step, str):
+            step_class = get_dur_class(step)
+            step = ss.DateDur(step_class(1.0)) # e.g. ss.DateDur(ss.years(1.0))
 
         # For handling floating point issues
         atol = 0.5 / factors.years.days # It's close if it's within half a day
@@ -532,7 +538,7 @@ class date(pd.Timestamp):
 #%% Define base time units and conversion factors
 valid_bases = ['years', 'months', 'weeks', 'days']
 
-def normalize_base(base):
+def normalize_unit(base): # TODO: use lookup on class_map instead of this manual approach of adding 's'
     """ Allow either e.g. 'year' or 'years' as input -- i.e. add an 's' """
     if isinstance(base, str):
         if base[-1] != 's':
@@ -599,7 +605,7 @@ class Factors(sc.dictobj):
 
     def __getattr__(self, attr):
         """ Be a little flexible, and then give helpful warnings """
-        attr = normalize_base(attr)
+        attr = normalize_unit(attr)
         try:
             return super().__getattribute__(attr)
         except AttributeError as e:
@@ -618,10 +624,28 @@ class TimePar:
     timepar_type = None # 'dur' or 'rate'
     timepar_subtype = None # e.g. 'datedur' or 'timeprob'
 
+    def __new__(cls, *args, **kwargs):
+        """Special handling for ss.Dist
+
+        This is so e.g. ss.years(ss.normal(3)) is the same as ss.normal(3, unit=ss.years)
+        """
+        dist = cls._check_dist_arg(*args, **kwargs)
+        return dist if dist is not None else super().__new__(cls)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._set_factors()
         return
+
+    @classmethod
+    def _check_dist_arg(cls, *args, **kwargs):
+        """ Enables e.g. ss.years(ss.normal(...)) instead of ss.normal(..., unit=ss.years) """
+        if len(args) and isinstance(args[0], ss.Dist):
+            dist = args[0]
+            dist.unit = cls
+            return dist
+        else:
+            return None
 
     @classmethod
     def _set_factors(cls):
@@ -687,19 +711,30 @@ class TimePar:
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
-        a,b = inputs
-        a_b = True # Are inputs in this order?
-        if b is self: # Opposite order than expected
-            b,a = a,b
-            a_b = False # NB, the functions reverse the
+        if len(inputs) == 2: # TODO: check if this is needed
+            a,b = inputs
+            a_b = True # Are inputs in this order?
+            if b is self: # Opposite order than expected
+                b,a = a,b
+                a_b = False # NB, the functions reverse the
 
         if   ufunc == np.add:      return self.__add__(b)
         elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)
         elif ufunc == np.multiply: return self.__mul__(b)
         elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
-        else: # Fall back to standard ufunc ... TODO, check if this is appropriate
-            inputs = [inp.value if isinstance(inp, TimePar) else inp for inp in inputs] # Just pull out the values
-            return getattr(ufunc, method)(*inputs, **kwargs)
+        else: # Fall back to standard ufunc
+            if any([isinstance(inp, TimePar) for inp in inputs]): # This is likely to be a confusing error, so let's go into detail about it
+                errormsg = f'''
+Cannot perform array operation "{ufunc}" on timepar {self}.
+
+This can be caused by e.g. forgetting to multiply a rate by dt, or multiplying a scalar (rather than a rate) by dt. Another cause is operating on the timepar rather than its value.
+
+Examples:
+• np.exp(-waning*dt) will cause this error if e.g. waning=0.1 instead of ss.peryear(0.1)
+• np.minimum(beta, 0.1) will cause this error if e.g. beta=ss.perday(0.2) instead use np.minimum(beta*dt, 0.1) or np.minimum(beta.value, 0.1) depending on what you intend.
+'''
+                raise ValueError(errormsg)
+            return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
         return
 
     def array_mul_error(self, ufunc=None):
@@ -719,7 +754,8 @@ class TimePar:
 
     def to(self, unit):
         """ Convert this TimePar to one of a different class """
-        return class_map[self.timepar_type][unit](self)
+        unit = get_unit_class(self.timepar_type, unit)
+        return unit(self)
 
     @classmethod
     def to_base(cls, other):
@@ -732,9 +768,10 @@ class TimePar:
 
     def mutate(self, unit):
         """ Mutate a TimePar in place to a new base unit -- see `TimePar.to()` to return a new instance (much more common) """
-        self.base = unit
+        unit_class = get_unit_class(self.timepar_type, unit) # Mutate the class in place
+        self.base = unit_class.base
         self._set_factors()
-        self.__class__ = class_map[self.timepar_type][unit] # Mutate the class in place
+        self.__class__ = unit_class
         return self
 
 
@@ -755,15 +792,19 @@ class Dur(TimePar):
 
     def __new__(cls, value=None, base='years', **kwargs):
         """ Return the correct type based on the inputs """
-        if cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
+        dist = cls._check_dist_arg(value)
+        if dist is not None:
+            return dist
+        elif cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
             if kwargs:
                 errormsg = f'Invalid arguments {kwargs} for ss.Dur; valid arguments are "value" and "base". If you are trying to construct a DateDur, call it directly.'
                 raise ValueError(errormsg)
-            new_cls = class_map.dur[base]
+            new_cls = get_dur_class(base)
             self = super().__new__(new_cls)
             self.__init__(value=value)
             return self
-        return super().__new__(cls) # Otherwise, do default initialization
+        else:
+            return super().__new__(cls) # Otherwise, do default initialization
 
     def __init__(self, value=1, base=None):
         """
@@ -1246,14 +1287,14 @@ class Rate(TimePar):
 
         if unit is None:
             if self.base is not None:
-                dur = class_map.dur[self.base]
+                dur = get_dur_class(self.base)
                 self.unit = dur(1)
             else:
                 self.unit = years(1)
         elif isinstance(unit, Dur):
             self.unit = unit
         elif isinstance(unit, str):
-            dur = class_map.dur[unit]
+            dur = get_dur_class(unit)
             self.unit = dur(1)
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
@@ -1431,6 +1472,10 @@ class TimeProb(Rate):
                 lt0 = value < 0
                 gt1 = value > 1
             else:
+                if isinstance(value, ss.TimePar):
+                    value = value.value
+                else:
+                    value = sc.toarray(value)
                 valstr = f'Values provided:\n{value}'
                 lt0 = np.any(value<0)
                 gt1 = np.any(value>1)
@@ -1441,7 +1486,7 @@ class TimeProb(Rate):
                     correct_base = self.base.removesuffix('s') # e.g. years -> year
                     correct_class = f'rateper{correct_base}' # e.g. rateperyear
                     correct = f'ss.{correct_class}()' # e.g. ss.rateperyear()
-                    self.__class__ = class_map.rate[correct_class] # Mutate the class to the correct class
+                    self.__class__ = get_rate_class(correct_class) # Mutate the class to the correct class
                     if ss.options.warn_convert:
                         warnmsg = f'Probabilities cannot be greater than one, so converting to a rate. Please use {correct} instead, or set ss.options.warn_convert=false. {valstr}'
                         ss.warn(warnmsg)
@@ -1450,6 +1495,9 @@ class TimeProb(Rate):
                     raise ValueError(errormsg)
         Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
         return
+
+    def disp(self):
+        return sc.pr(self)
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
@@ -1616,6 +1664,8 @@ class rateperweek(Rate):  base = 'weeks'
 class ratepermonth(Rate): base = 'months'
 class rateperyear(Rate):  base = 'years'
 
+#%% Class mappings
+
 # Define a mapping of all the options -- dictionary lookup is O(1) so it's OK to have a lot of keys
 reverse_class_map = {
     days:   ['d', 'day', 'days', day, days],
@@ -1645,3 +1695,39 @@ for v, keylist in reverse_class_map.items():
         else:
             errormsg = f'Unexpected entry: {v}'
             raise TypeError(errormsg)
+class_map.full = sc.mergedicts(class_map.dur, class_map.rate) # TODO: do we need this?
+
+def get_unit_class(which, unit):
+    """ Take a string or class and return the corresponding TimePar class """
+    if isinstance(unit, type) and issubclass(unit, ss.TimePar):
+        return unit
+    elif isinstance(unit, ss.TimePar):
+        if sc.isnumber(unit.value) and unit.value == 1:
+            return unit.__class__
+        else:
+            errormsg = f'TimePar instances can only be used as base classes when the value is one, e.g. ss.years(1), but you supplied {unit}. '
+            errormsg += 'Please convert to the equivalent base unit, e.g. instead of ss.Rate(value=4, unit=ss.weeks(2)), do ss.Rate(value=2, unit=ss.weeks).'
+            raise ValueError(errormsg)
+    elif isinstance(unit, str):
+        this_map = class_map[which]
+        if which == 'dur': # Only durations have multiple names
+            unit = normalize_unit(unit)
+        unit = this_map[unit]
+        return unit
+    elif unit is None:
+        return None
+    else:
+        errormsg = f'Unit must be str (e.g. "years") or TimePar (e.g. ss.years), not "{unit}"'
+        raise TypeError(errormsg)
+
+def get_dur_class(unit):
+    """ Helper function to get a Dur class """
+    return get_unit_class('dur', unit)
+
+def get_rate_class(unit):
+    """ Helper function to get a Rate class """
+    return get_unit_class('rate', unit)
+
+def get_timepar_class(unit):
+    """ Helper function to get any Timepar class (either Dur or Rate) """
+    return get_unit_class('full', unit)

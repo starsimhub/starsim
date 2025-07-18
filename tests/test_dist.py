@@ -273,10 +273,9 @@ def test_repeat_slot():
 def make_mock_modules():
     """ Create mock modules for the tests to use """
     mod = sc.objdict()
-    mod.year  = ss.mock_module(dt=ss.Dur(1))
-    # mod.month = ss.mock_module(dt=ss.Dur(months=1))
-    print('TODO: re-enable when "MonthDur" is enabled')
-    mod.week  = ss.mock_module(dt=ss.Dur(1/52))
+    mod.year  = ss.mock_module(dt=ss.year)
+    mod.month = ss.mock_module(dt=ss.month)
+    mod.week  = ss.mock_module(dt=ss.week)
     return mod
 
 
@@ -376,6 +375,27 @@ def test_timepar_dists():
     assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
     sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
 
+    print('Testing different syntaxes for adding timepars')
+    kw = dict(dt=ss.days(1))
+    mean = 10
+    std = 0.1
+
+    d = sc.objdict()
+    d.a = ss.normal(ss.years(mean), ss.years(std)).mock(**kw)
+    d.b = ss.normal(mean, std, unit=ss.years).mock(**kw)
+    d.c = ss.years(ss.normal(mean, std)).mock(**kw)
+
+    n = int(1e6)
+    rvs = sc.objdict()
+    for key,dist in d.items():
+        rvs.key = dist.rvs(n)
+
+    factor = ss.time.factors.years.days
+    expected = factor*mean
+
+    means = [rvs.mean() for rvs in rvs.values()]
+    assert all([np.isclose(expected, m) for m in means]), f'Expecting timepar scaling to match {expected = } and {means = }'
+
     return ber2
 
 
@@ -392,12 +412,14 @@ def test_timepar_callable():
     mock_mods = make_mock_modules()
 
     def call_scalar(module, sim, uids):
-        return ss.Dur(1)
+        return ss.years(5.0)
 
     for module in mock_mods.values():
-        d = ss.normal(call_scalar, ss.DateDur(days=1), module=module, strict=False)
+        d = ss.normal(call_scalar, ss.days(1), module=module, strict=False)
         d.init()
-        assert np.isclose(d.rvs(n).mean(), ss.Dur(1)/module.dt, rtol=rtol)
+        expected = ss.years(5.0)/module.dt
+        actual = d.rvs(n).mean()
+        assert np.isclose(actual, expected, rtol=rtol)
 
     print('Testing callable parameters with Bernoulli distributions')
     n = 1000
@@ -423,10 +445,9 @@ def test_timepar_callable():
 
     # Higher-performance option - perform the time conversion on the parameter here
     def age_prob(module, sim, uids):
-        out = np.zeros_like(uids, dtype=object)
+        out = np.zeros_like(uids)
         out[young] = ss.Rate(p_young)*module.t.dt
         out[old]   = ss.Rate(p_old)*module.t.dt
-
         return out
 
     sim = ss.mock_sim(n_agents=100_000)
