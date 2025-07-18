@@ -934,9 +934,16 @@ class Dist:
 
         # Handle unit if provided
         if self.unit is not None:
-            if scale_types.check_postdraw(self):
+            if scale_types.check_postdraw(self): # It can be scaled post-draw, proceed
                 rvs = self.unit(rvs)
-            else:
+                if isinstance(rvs, ss.Dur):
+                    rvs = rvs/self.module.dt
+                elif isinstance(rvs, ss.Rate):
+                    rvs = rvs*self.module.dt
+                else:
+                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Dur or ss.Rate'
+                    raise NotImplementedError(errormsg)
+            else:  # It can't, raise an error
                 errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
                 if scale_types.check_predraw(self):
                     errormsg += 'Since this distribution supports pre-draw scaling, please scale the individual input parameters instead. '
