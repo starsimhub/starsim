@@ -9,17 +9,22 @@ TimePar  # All time parameters
 │   ├── months
 │   ├── years
 │   └── DateDur  # Calendar durations
-└── Rate  # All rates, units of *per time*
-    ├── rateperday  # Number of events happening per day
-    ├── rateperweek
-    ├── ratepermonth
-    ├── rateperyear
-    ├── TimeProb  # Probability of an event happening in a given time
-    │   ├── perday # Probability of an event happening in a day
+└── Rate  # All rates, units of *per* (e.g. per time or per event)
+    ├── per  # Probability rates over time (e.g., death rate per year)
+    │   ├── perday
     │   ├── perweek
     │   ├── permonth
     │   └── peryear
-    └── RateProb  # Instantaneous probability of an event happening
+    ├── prob  # Unitless probability (e.g., probability of death per infection)
+    │   ├── probperday
+    │   ├── probperweek
+    │   ├── probpermonth
+    │   └── probperyear
+    └── events  # Number of events (e.g., number of acts per year)
+        ├── eventsperday
+        ├── eventsperweek
+        ├── eventspermonth
+        └── eventsperyear
 """
 import numbers
 import datetime as dt
