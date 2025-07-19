@@ -8,7 +8,7 @@ TimePar  # All time parameters
 │   ├── weeks
 │   ├── months
 │   ├── years
-│   └── DateDur  # Calendar durations
+│   └── datedur  # Calendar durations
 └── Rate  # All rates, units of *per* (e.g. per time or per event)
     ├── per  # Probability rates over time (e.g., death rate per year)
     │   ├── perday
@@ -34,7 +34,7 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb']
+__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'TimeProb', 'RateProb']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -71,7 +71,7 @@ class DateArray(np.ndarray):
         if isinstance(which, type(type)):
             types = which
         elif isinstance(which, str):
-            mapping = dict(date=ss.date, dur=ss.dur, datedur=ss.DateDur, float=numbers.Number, scalar=numbers.Number)
+            mapping = dict(date=ss.date, dur=ss.dur, datedur=ss.datedur, float=numbers.Number, scalar=numbers.Number)
             if which in mapping:
                 types = mapping[which]
             else:
@@ -155,7 +155,7 @@ class date(pd.Timestamp):
 
     Args:
         date (int/float/str/datetime): Any type of date input (ints and floats will be interpreted as years)
-        allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
+        allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
         kwargs (dict): passed to pd.Timestamp()
 
     **Examples**:
@@ -256,7 +256,7 @@ class date(pd.Timestamp):
         Args:
             year (float): the year to round
             day_round (bool): whether to round to the nearest day
-            allow_zero (bool): whether to allow year 0 (if so, return ss.DateDur instead)
+            allow_zero (bool): whether to allow year 0 (if so, return ss.datedur instead)
 
         **Examples**:
 
@@ -264,12 +264,12 @@ class date(pd.Timestamp):
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
         if year < 1:
-            warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
+            warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.datedur instead'
             if allow_zero is False:
                 raise ValueError(warnmsg)
             elif allow_zero is None:
                 ss.warn(warnmsg)
-            return ss.DateDur(years=year)
+            return ss.datedur(years=year)
         elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
@@ -333,7 +333,7 @@ class date(pd.Timestamp):
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
-        elif isinstance(other, ss.DateDur):
+        elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
         elif isinstance(other, years):
             return date(self.to_year() + other.value)
@@ -351,7 +351,7 @@ class date(pd.Timestamp):
     def __sub__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-        if isinstance(other, ss.DateDur):
+        if isinstance(other, ss.datedur):
             return date(self.to_pandas() - other.value)
         elif isinstance(other, years):
             return date(self.to_year() - other.value)
@@ -430,8 +430,8 @@ class date(pd.Timestamp):
         Args:
             array (array): An array of float years
             day_round (bool): Whether to round to the nearest day
-            allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
-            date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.DateDur`)
+            allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
+            date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.datedur`)
 
         Returns:
             An array of date instances
@@ -440,7 +440,7 @@ class date(pd.Timestamp):
             date_type = cls
         kwargs = {}
         if date_type is ss.date:
-            kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.DateDur
+            kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.datedur
         return DateArray(np.vectorize(date_type)(array, **kwargs))
 
     @classmethod
@@ -462,38 +462,38 @@ class date(pd.Timestamp):
         step (float/ss.dur): Assumes 1 calendar year steps by default
             inclusive (bool): Whether to include "stop" in the output
             day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
-            allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
+            allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
 
         Returns:
             An array of date instances
         """
         # Handle the special (but common) case of start < 1
-        if (sc.isnumber(start) or isinstance(start, ss.DateDur)) and start < 1.0:
-            date_type = ss.DateDur
+        if (sc.isnumber(start) or isinstance(start, ss.datedur)) and start < 1.0:
+            date_type = ss.datedur
             kw = {}
         else:
             date_type = cls
             kw = dict(day_round=day_round, allow_zero=allow_zero)
 
         # Convert this first
-        if isinstance(step, ss.dur) and not isinstance(step, ss.DateDur):
+        if isinstance(step, ss.dur) and not isinstance(step, ss.datedur):
             if step.value == int(step.value): # e.g. ss.days(2) not ss.days(2.5)
-                step = ss.DateDur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
+                step = ss.datedur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
-                step = step.years # Don't try to convert e.g. ss.years(0.1) to a DateDur, you get rounding errors
+                step = step.years # Don't try to convert e.g. ss.years(0.1) to a datedur, you get rounding errors
                 # start = float(start)
                 # stop = float(stop)
         elif isinstance(step, str):
             step_class = get_dur_class(step)
-            step = ss.DateDur(step_class(1.0)) # e.g. ss.DateDur(ss.years(1.0))
+            step = ss.datedur(step_class(1.0)) # e.g. ss.datedur(ss.years(1.0))
 
         # For handling floating point issues
         atol = 0.5 / factors.years.days # It's close if it's within half a day
         def within_day(y1, y2):
             return np.isclose(y1, y2, rtol=0, atol=atol)
 
-        # We're creating dates from DateDurs, step exactly
-        if isinstance(step, ss.DateDur):
+        # We're creating dates from datedurs, step exactly
+        if isinstance(step, ss.datedur):
             if not isinstance(start, date):
                 start = date_type(start, **kw)
             if not isinstance(stop, date):
@@ -802,7 +802,7 @@ class dur(TimePar):
             return dist
         elif cls is dur: # The dur class itself, not a subclass: return the correct subclass and initialize it
             if kwargs:
-                errormsg = f'Invalid arguments {kwargs} for ss.dur; valid arguments are "value" and "base". If you are trying to construct a DateDur, call it directly.'
+                errormsg = f'Invalid arguments {kwargs} for ss.dur; valid arguments are "value" and "base". If you are trying to construct a datedur, call it directly.'
                 raise ValueError(errormsg)
             new_cls = get_dur_class(base)
             self = super().__new__(new_cls)
@@ -969,7 +969,7 @@ class dur(TimePar):
         Construct an array of dur instances
 
         For this function, the start, stop, and step must ALL be specified, and they must
-        all be dur instances. Mixing dur types (years and DateDur) is permitted.
+        all be dur instances. Mixing dur types (years and datedur) is permitted.
 
         Args:
             start (ss.dur): Starting point, e.g., ss.years(0)
@@ -992,9 +992,9 @@ class dur(TimePar):
         return out
 
 
-class DateDur(dur):
+class datedur(dur):
     """ Date based duration e.g., if requiring a week to be 7 calendar days later """
-    base = 'years' # DateDur uses 'years' as the default unit for conversion
+    base = 'years' # datedur uses 'years' as the default unit for conversion
     timepar_type = 'dur'
     timepar_subtype = 'datedur'
 
@@ -1012,7 +1012,7 @@ class DateDur(dur):
                   supporting floating point values. If the value is not an integer, the values
                   will be cascaded to smaller units using `ss.time.factors`
 
-        If no arguments are specified, a DateDur with zero duration will be produced
+        If no arguments are specified, a datedur with zero duration will be produced
 
         Args:
             args:
@@ -1020,19 +1020,19 @@ class DateDur(dur):
         """
         super().__init__()
         if args:
-            assert not kwargs, 'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
-            assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
+            assert not kwargs, 'datedur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
+            assert len(args) == 1, f'datedur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
             arg = args[0]
             if isinstance(arg, pd.DateOffset):
                 self.value = self.round_duration(arg)
-            elif isinstance(arg, DateDur):
+            elif isinstance(arg, datedur):
                 self.value = sc.dcp(arg.value) # pd.DateOffset is immutable so this should be OK
             elif isinstance(arg, dur):
                 self.value = self.round_duration(years=arg.years)
             elif sc.isnumber(arg):
                 self.value = self.round_duration(years=arg)
             else:
-                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.DateDur, or pd.DateOffset'
+                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, or pd.DateOffset'
                 raise TypeError(errormsg)
         else:
             if 'value' in kwargs:
@@ -1066,7 +1066,7 @@ class DateDur(dur):
 
         This function takes in either a pd.DateOffset, or the result of `_as_array`, and returns
         a dictionary with the same keys as `ss.time.factors` and the values from the input. The
-        output of this function can be passed to the `dur()` constructor to create a new DateDur object.
+        output of this function can be passed to the `dur()` constructor to create a new datedur object.
 
         Args:
             x: A pd.DateOffset or an array with the same number of elements as `ss.time.factors`
@@ -1096,7 +1096,7 @@ class DateDur(dur):
         Return approximate conversion into years
 
         This allows interoperability with years objects (which would typically be expected to
-        occur if module parameters have been entered with `DateDur` durations, but the simulation
+        occur if module parameters have been entered with `datedur` durations, but the simulation
         timestep is in `years` units).
 
         The conversion is based on `ss.time.factors` which defines the conversion from each time unit
@@ -1190,11 +1190,11 @@ class DateDur(dur):
         return self.__class__(self.scale(self.value, other))
 
     def __truediv__(self, other):
-        if isinstance(other, DateDur):
+        if isinstance(other, datedur):
             # We need to convert both dates into a common timebase to do the division
             # We *can* just do self.years/other.years, however this can cause numerical precision losses
             # yet at the same time is not necessary, because the common timebase depends on the durations.
-            # For example, DateDur(weeks=1)/DateDur(days=1) should return 7, but we get 6.9999999 if we convert
+            # For example, datedur(weeks=1)/datedur(days=1) should return 7, but we get 6.9999999 if we convert
             # both to years. Instead though, we can just convert days into weeks instead of days into years, and
             # then divide 1 week by (1/7) days.
             # return self.years/other.years
@@ -1217,7 +1217,7 @@ class DateDur(dur):
 
     def __repr__(self):
         if self.years == 0:
-            return '<DateDur: 0>'
+            return '<datedur: 0>'
         else:
             labels = self.factor_keys
             vals = self.to_array().astype(float)
@@ -1225,7 +1225,7 @@ class DateDur(dur):
             time_portion = vals[4:]
             time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
 
-            return '<DateDur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
+            return '<datedur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
 
     def str(self):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
@@ -1243,7 +1243,7 @@ class DateDur(dur):
     def __add__(self, other):
         if isinstance(other, date):
             return other + self.value
-        elif isinstance(other, DateDur):
+        elif isinstance(other, datedur):
             return self.__class__(**self._as_args(self.to_array() + self._as_array(other.value)))
         elif isinstance(other, pd.DateOffset):
             return self.__class__(**self._as_args(self.to_array() + self._as_array(other)))
@@ -1254,7 +1254,7 @@ class DateDur(dur):
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
-            errormsg = f'For DateDur, it is only possible to add/subtract dates, dur objects, or pd.DateOffset objects, not {type(other)}'
+            errormsg = f'For datedur, it is only possible to add/subtract dates, dur objects, or pd.DateOffset objects, not {type(other)}'
             raise TypeError(errormsg)
 
     def __radd__(self, other):
@@ -1265,11 +1265,11 @@ class DateDur(dur):
 
     def __abs__(self):
         # Cannot implement this because it's ambiguous how to resolve cases like
-        # DateDur(months=-1,days=1) - this is a sensible DateDur interpreted as 'go back 1 month, then go forward 1 day'
+        # datedur(months=-1,days=1) - this is a sensible datedur interpreted as 'go back 1 month, then go forward 1 day'
         # but just taking the absolute value of all of the components wouldn't work because this would be on average 1 month + 1 day
         # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
         # (whereas abs(years) arises when comparing dates, which automatically return years)
-        raise NotImplementedError('The absolute value of a DateDur instance is undefined as components (e.g., months, days) may have different signs.')
+        raise NotImplementedError('The absolute value of a datedur instance is undefined as components (e.g., months, days) may have different signs.')
 
 
 class Rate(TimePar):

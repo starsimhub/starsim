@@ -342,7 +342,7 @@ class Timeline:
         # prioritise one or the other depending on what type of quantity the user has specified for start
         self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
 
-        if isinstance(self.dt, ss.DateDur):
+        if isinstance(self.dt, ss.datedur):
             if isinstance(self.start, ss.dur):
                 self.tvec = ss.dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
             else:

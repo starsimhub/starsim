@@ -16,15 +16,15 @@ sc.options(interactive=False)
 # %% Define the tests
 @sc.timer()
 def test_ratio():
-    sc.heading('Test DateDur time ratio calculation')
+    sc.heading('Test datedur time ratio calculation')
 
     assert ss.dur(1) / ss.dur(1) == 1
     assert ss.dur(1) / ss.dur(0.1) == 10
     assert ss.dur(0.5) / ss.dur(5) == 0.1
 
-    assert ss.DateDur(years=1) / ss.DateDur(days=1) == 365
-    assert np.isclose(ss.DateDur(years=1) / ss.DateDur(weeks=1) * 7, 365)
-    assert ss.DateDur(years=1) / ss.DateDur(months=1) == 12
+    assert ss.datedur(years=1) / ss.datedur(days=1) == 365
+    assert np.isclose(ss.datedur(years=1) / ss.datedur(weeks=1) * 7, 365)
+    assert ss.datedur(years=1) / ss.datedur(months=1) == 12
 
     return
 
@@ -56,10 +56,10 @@ def test_classes():
     assert r4 / 2 == ss.Rate(1.5/0.2)
 
     # Test duration units
-    d5 = ss.DateDur(years=2)
-    d6 = ss.DateDur(days=5)
+    d5 = ss.datedur(years=2)
+    d6 = ss.datedur(days=5)
     assert d5 + d6 == 2 + 5/365
-    assert (d5 + d6)/ss.DateDur(days=1) == 365*2+5
+    assert (d5 + d6)/ss.datedur(days=1) == 365*2+5
 
     # Test rate units
     rval = 0.7
@@ -124,25 +124,25 @@ def test_time_class():
     print('Testing durations 1')
     s4 = sim(start=0, stop=ss.dur(10), dt=1.0)
     assert s4.t.tvec[0] == ss.dur(0)
-    assert s4.t.datevec[-1] == ss.DateDur(years=10).years # Did not use to require .years
+    assert s4.t.datevec[-1] == ss.datedur(years=10).years # Did not use to require .years
     assert len(s4.t) == 11
 
     print('Testing durations 2')
-    s4 = sim(start=0, stop=ss.DateDur(months=10), dt=ss.DateDur(months=1))
+    s4 = sim(start=0, stop=ss.datedur(months=10), dt=ss.datedur(months=1))
     assert s4.t.datevec[0] == ss.dur(0)
-    assert s4.t.datevec[-1] == ss.DateDur(months=10)
+    assert s4.t.datevec[-1] == ss.datedur(months=10)
     assert len(s4.t) == 11
 
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
     assert s5.t.datevec[0] == ss.dur(0)
-    assert s5.t.datevec[-1] == ss.DateDur(years=30).years
+    assert s5.t.datevec[-1] == ss.datedur(years=30).years
     assert len(s5.t) == 31
 
     print('Testing numeric 2')
     s6 = sim(start=2, stop=None, dt=None)  # Will default to start=dur(2), dur=ss.dur(50), end=start+dur
     assert s6.t.tvec[0] == ss.dur(2)
-    assert s6.t.tvec[-1] == ss.DateDur(years=52).years
+    assert s6.t.tvec[-1] == ss.datedur(years=52).years
     assert len(s6.t) == 51
 
     return [s1, t1, s2, t2]
@@ -164,7 +164,7 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, dur, DateDur, years, rateperday, rateperweek, Rate, TimeProb, RateProb
+    from starsim import date, Timeline, dur, datedur, years, rateperday, rateperweek, Rate, TimeProb, RateProb
 
     assert float(date(1500))==1500
     assert np.isclose(float(date(1500.1)), 1500.1) # Not exactly equal, but very close
@@ -173,82 +173,82 @@ def test_syntax():
 
     tv = Timeline(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
-    assert np.isclose(DateDur(weeks=1)/DateDur(days=1), 7) # TODO: would be nice if this were exact, but maybe impossible
+    assert np.isclose(datedur(weeks=1)/datedur(days=1), 7) # TODO: would be nice if this were exact, but maybe impossible
 
-    assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)), 6/365)
+    assert np.isclose(float(datedur(weeks=1) - datedur(days=1)), 6/365)
 
     assert date(2050) - date(2020) == years(30)
 
     assert np.isclose((rateperweek(1)+rateperday(1)).value, rateperweek(8).value) # CKTODO: would be nice if this were exact
 
-    assert date('2020-01-01') + DateDur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
-    assert date('2020-01-01') + 52*DateDur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
+    assert date('2020-01-01') + datedur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
+    assert date('2020-01-01') + 52*datedur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
     assert date('2020-01-01') + 52*dur(1/52) == date('2021-01-01') # Should give us 1st Jan 2021
-    assert date('2020-01-01') + DateDur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
+    assert date('2020-01-01') + datedur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
     # These should all work - confirm the sizes
-    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), DateDur(days=1)).init()) == 153
-    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), DateDur(months=1)).init()) == 6
-    assert len(Timeline(DateDur(days=0), DateDur(days=30), DateDur(days=1)).init()) == 31
-    assert len(Timeline(DateDur(days=0), DateDur(months=1), DateDur(days=30)).init()) == 2
-    assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(weeks=1)).init()) == 53
-    assert len(Timeline(DateDur(days=0), DateDur(years=1), DateDur(months=1)).init()) == 13
+    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), datedur(days=1)).init()) == 153
+    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), datedur(months=1)).init()) == 6
+    assert len(Timeline(datedur(days=0), datedur(days=30), datedur(days=1)).init()) == 31
+    assert len(Timeline(datedur(days=0), datedur(months=1), datedur(days=30)).init()) == 2
+    assert len(Timeline(datedur(days=0), datedur(years=1), datedur(weeks=1)).init()) == 53
+    assert len(Timeline(datedur(days=0), datedur(years=1), datedur(months=1)).init()) == 13
     assert len(Timeline(dur(0), dur(1), dur(1/12)).init()) == 13
-    assert len(Timeline(date('2020-01-01'), date('2030-06-01'), DateDur(days=1)).init()) == 3805
+    assert len(Timeline(date('2020-01-01'), date('2030-06-01'), datedur(days=1)).init()) == 3805
     assert len(Timeline(date(2020), date(2030.5), dur(0.1)).init()) == 106
 
     # Operations on date vectors
     date.arange(2020,2030)+years(1) # add years to date array
-    date.arange(2020,2030)+DateDur(years=1) # add DateDur to date array
+    date.arange(2020,2030)+datedur(years=1) # add datedur to date array
 
     # Construction of various duration ranges and addition with durations and dates
     dur.arange(dur(0),dur(10),dur(1)) + years(1)
-    dur.arange(dur(0),dur(10), DateDur(years=1)) + years(1)
-    dur.arange(dur(0), DateDur(years=10), DateDur(years=1)) + years(1)
+    dur.arange(dur(0),dur(10), datedur(years=1)) + years(1)
+    dur.arange(dur(0), datedur(years=10), datedur(years=1)) + years(1)
 
-    # TODO: DateDur calculations no longer work due to using __array_ufunc__ for performance -- could consider enabling later
-    # dur.arange(dur(years=0), DateDur(years=10), DateDur(years=1)) + years(1)
-    # dur.arange(dur(0),dur(10),dur(1)) + DateDur(years=1)
-    # dur.arange(dur(0),dur(10), DateDur(years=1)) + DateDur(years=1)
-    # dur.arange(dur(0), DateDur(years=10), DateDur(years=1)) + DateDur(years=1)
-    # dur.arange(dur(years=0), DateDur(years=10), DateDur(years=1)) + DateDur(years=1)
+    # TODO: datedur calculations no longer work due to using __array_ufunc__ for performance -- could consider enabling later
+    # dur.arange(dur(years=0), datedur(years=10), datedur(years=1)) + years(1)
+    # dur.arange(dur(0),dur(10),dur(1)) + datedur(years=1)
+    # dur.arange(dur(0),dur(10), datedur(years=1)) + datedur(years=1)
+    # dur.arange(dur(0), datedur(years=10), datedur(years=1)) + datedur(years=1)
+    # dur.arange(dur(years=0), datedur(years=10), datedur(years=1)) + datedur(years=1)
     dur.arange(dur(0),dur(10),dur(1)) + date(2000)
-    dur.arange(dur(0),dur(10), DateDur(years=1)) + date(2000)
-    dur.arange(dur(0), DateDur(years=10), DateDur(years=1)) + date(2000)
-    dur.arange(DateDur(years=0), DateDur(years=10), DateDur(years=1)) + date(2000)
+    dur.arange(dur(0),dur(10), datedur(years=1)) + date(2000)
+    dur.arange(dur(0), datedur(years=10), datedur(years=1)) + date(2000)
+    dur.arange(datedur(years=0), datedur(years=10), datedur(years=1)) + date(2000)
 
     # Rates
     assert (1/years(1)) == ss.rateperyear(1)
     assert (2/years(1)) == ss.rateperyear(2)
     assert (4/years(1)) == ss.rateperyear(4)
-    assert (4/DateDur(1)) == ss.rateperyear(4)
-    assert (rateperday(5)*DateDur(days=1)) == 5
+    assert (4/datedur(1)) == ss.rateperyear(4)
+    assert (rateperday(5)*datedur(days=1)) == 5
     assert 2/Rate(0.25) == dur(8)
     assert 1/(2*Rate(0.25)) == dur(2)
     assert Rate(0.5)/Rate(1) == 0.5
 
     # Probabilities
-    p = TimeProb(0.1, DateDur(years=1))
+    p = TimeProb(0.1, datedur(years=1))
     f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
-    assert p*DateDur(years=2) == f(0.5)
+    assert p*datedur(years=2) == f(0.5)
     assert p * dur(0.5) == f(2)
-    assert p * DateDur(months=1) == f(12)
+    assert p * datedur(months=1) == f(12)
 
     p = TimeProb(0.1, dur(1))
-    assert p*DateDur(years=2) == f(0.5)
+    assert p*datedur(years=2) == f(0.5)
     assert p * dur(0.5 ) == f(2)
-    assert p * DateDur(months=1) == f(12)
+    assert p * datedur(months=1) == f(12)
 
-    p = RateProb(0.1, DateDur(years=1))
+    p = RateProb(0.1, datedur(years=1))
     f = lambda factor: 1 - np.exp(-p.value/factor)
-    assert p*DateDur(years=2) == f(0.5)
+    assert p*datedur(years=2) == f(0.5)
     assert p * dur(0.5) == f(2)
-    assert p * DateDur(months=1) == f(12)
+    assert p * datedur(months=1) == f(12)
 
     p = RateProb(0.1, dur(1))
-    assert p*DateDur(years=2) == f(0.5)
+    assert p*datedur(years=2) == f(0.5)
     assert p * dur(0.5) == f(2)
-    assert p * DateDur(months=1) == f(12)
+    assert p * datedur(months=1) == f(12)
 
     return tv
 
@@ -287,7 +287,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.DateDur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -326,7 +326,7 @@ def test_units(do_plot=False):
     sis = ss.SIS(
         beta = ss.TimeProb(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.DateDur(days=10)),
+        dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
         waning = ss.Rate(0.05, ss.days(1)),
         imm_boost = 1.0,
     )

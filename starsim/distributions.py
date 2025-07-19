@@ -740,7 +740,7 @@ class Dist:
     #     - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
     #     """
     #     # Nonscalar types have to be handled separately
-    #     nonscalar_types = [ss.DateDur]
+    #     nonscalar_types = [ss.datedur]
 
     #     # Check through and see if anything is a timepar
     #     timepar_dict = dict()
