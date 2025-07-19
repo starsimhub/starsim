@@ -14,13 +14,13 @@ class Timeline:
 
     Each module can have its own time instance, in the case where the time vector
     is defined by absolute dates, these time vectors are by definition aligned. Otherwise
-    they can be specified using Dur objects which express relative times (they can be added
+    they can be specified using dur objects which express relative times (they can be added
     to a date to get an absolute time)
 
     Args:
-        start (str/int/float/ss.date/ss.Dur): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
-        stop (str/int/float/ss.date/ss.Dur): when the simulation/module ends (note: if start is a date, stop must be too)
-        dt (int/float/ss.Dur): Simulation step size
+            start (str/int/float/ss.date/ss.dur): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
+    stop (str/int/float/ss.date/ss.dur): when the simulation/module ends (note: if start is a date, stop must be too)
+    dt (int/float/ss.dur): Simulation step size
         name (str): if provided, name the `Timeline` object
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop or start and dur are provided; otherwise no)
         sim (Sim): if provided, initialize the `Timeline` with this as the parent (i.e. populating missing values)
@@ -29,7 +29,7 @@ class Timeline:
 
     - `ti` (int): the current timestep
     - `npts` (int): the number of timesteps
-    - `tvec` (array): time either as absolute `ss.date` instances, or relative `ss.Dur` instances
+    - `tvec` (array): time either as absolute `ss.date` instances, or relative `ss.dur` instances
     - `yearvec` (array): time represented as floating-point years
 
     **Examples**:
@@ -60,7 +60,7 @@ class Timeline:
 
         # Populated later
         self.ti = 0 # The time index, e.g. 0, 1, 2
-        self.tvec    = None # The time vector for this instance in date or Dur format
+        self.tvec    = None # The time vector for this instance in date or dur format
         self.yearvec = None # Time vector as floating point years
         self.datevec = None # The time vector as date objects
         self.initialized = False # Call self.init(sim) to initialize the object
@@ -117,7 +117,7 @@ class Timeline:
         """
         Check whether the fundamental simulation unit is absolute
 
-        A time vector is absolute if the start is a date rather than a Dur
+        A time vector is absolute if the start is a date rather than a dur
         A relative time vector can be made absolute by adding a date to it.
         """
         try:
@@ -215,14 +215,14 @@ class Timeline:
 
         # Check to see if any inputs were provided as durations: if so, reset the default type
         for arg in [self.start, self.stop, self.dur, self.dt]:
-            if isinstance(arg, ss.Dur):
+            if isinstance(arg, ss.dur):
                 self.default_type = type(arg)
                 break # Stop at the first one
 
         # Ensure dur is valid
         if sc.isnumber(self.dur):
             self.dur = self.default_type(self.dur)
-        assert self.dur is None or isinstance(self.dur, ss.Dur), 'Timeline.dur must be a number, a Dur object or None'
+        assert self.dur is None or isinstance(self.dur, ss.dur), 'Timeline.dur must be a number, a dur object or None'
 
         # Now, figure out start, stop, and dur
         match (self.start, self.stop, self.dur):
@@ -232,24 +232,24 @@ class Timeline:
                 stop = start + dur
 
             case (start, None, None):
-                if isinstance(start, ss.Dur):
-                    pass  # Already a Dur which is fine
+                if isinstance(start, ss.dur):
+                    pass  # Already a dur which is fine
                 elif is_calendar_year(start):
                     start = ss.date(start)
                 else:
-                    start = ss.Dur(start)
+                    start = ss.dur(start)
                 dur = self.default_dur
                 stop = start + dur
 
             case (None, stop, None):
-                if isinstance(stop, ss.Dur):
+                if isinstance(stop, ss.dur):
                     start = stop.__class__(value=0)
                 elif is_calendar_year(stop):
                     stop = ss.date(stop)
                     start = ss.date(self.default_start)
                 else:
-                    stop = ss.Dur(stop)
-                    start = ss.Dur(0)
+                    stop = ss.dur(stop)
+                    start = ss.dur(0)
                 dur = stop - start
 
             case (None, None, dur):
@@ -257,21 +257,21 @@ class Timeline:
                 stop = start+dur
 
             case (start, None, dur):
-                if isinstance(start, ss.Dur):
+                if isinstance(start, ss.dur):
                     pass
                 elif is_calendar_year(start):
-                    start = ss.Dur(start)
+                    start = ss.dur(start)
                 else:
                     start = ss.date(start)
                 stop = start + dur
 
             case (None, stop, dur):
-                if isinstance(stop, ss.Dur):
+                if isinstance(stop, ss.dur):
                     pass
                 elif is_calendar_year(stop):
                     stop = ss.date(stop)
                 else:
-                    stop = ss.Dur(stop)
+                    stop = ss.dur(stop)
                 start = stop - dur
 
             case (start, stop, dur):
@@ -287,26 +287,26 @@ class Timeline:
                         start = ss.date(start)
                         stop = ss.date(stop)
                     else:
-                        start = ss.Dur(start)
-                        stop = ss.Dur(stop)
+                        start = ss.dur(start)
+                        stop = ss.dur(stop)
                 elif sc.isnumber(start):
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
                     stop = start.__class__(stop)
                 dur = stop - start
             case _:
-                errormsg = f'Failed to match {start = }, {stop = }, and {dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.Dur objects.'
+                errormsg = f'Failed to match {start = }, {stop = }, and {dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.dur objects.'
                 raise ValueError(errormsg) # This should not occur
 
         start_type = type(start)
         stop_type = type(start)
-        assert isinstance(start, (ss.date, ss.Dur)), f'Start must be ss.date or ss.Dur, not {start_type}'
-        assert isinstance(stop, (ss.date, ss.Dur)), f'Stop must be ss.date or ss.Dur, not {stop_type}'
+        assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
+        assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
         assert start_type is stop_type, f'Start and stop must be the same type, not {start_type} and {stop_type}'
         assert start <= stop, f'Start must be before stop, not {start} and {stop}'
 
         # Figure out type and store everything
-        if issubclass(start_type, ss.Dur):
+        if issubclass(start_type, ss.dur):
             self.default_type = start_type # Now that we've reconciled everything, reset the default type if needed
         self.start = start
         self.stop = stop
@@ -343,15 +343,15 @@ class Timeline:
         self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
 
         if isinstance(self.dt, ss.DateDur):
-            if isinstance(self.start, ss.Dur):
-                self.tvec = ss.Dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
+            if isinstance(self.start, ss.dur):
+                self.tvec = ss.dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
             else:
                 self.tvec = ss.date.arange(self.start, self.stop, self.dt)
             self.yearvec = np.array([x.years for x in self.tvec])
 
         else: # self.dt = ss.years, ss.days etc
 
-            if isinstance(self.start, ss.Dur): # Use durations
+            if isinstance(self.start, ss.dur): # Use durations
                 self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
                 self.tvec = np.empty(len(self.yearvec), dtype=object)
                 self.tvec[:] = [self.default_type(value=x) for x in self.yearvec] # TODO: refactor
@@ -359,7 +359,7 @@ class Timeline:
                 self.tvec = self.datevec
                 self.yearvec = np.array([x.years for x in self.datevec])
             else:
-                errormsg = f'Unexpected start {self.start}: expecting ss.Dur or ss.Date'
+                errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
         # Ensure everything is a DateArray

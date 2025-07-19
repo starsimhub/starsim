@@ -114,7 +114,7 @@ class RoutineDelivery(Intervention):
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        dt = sim.t.dt.years if isinstance(sim.t.dt, ss.Dur) else sim.t.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
+        dt = sim.t.dt.years if isinstance(sim.t.dt, ss.dur) else sim.t.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
         adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied

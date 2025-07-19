@@ -710,13 +710,13 @@ class Dist:
                 is_timepar = True
                 timepar_type = type(v.flat[0])
                 if v.size == 1:
-                    v = v.flat[0] # Case where we have an array wrapping a Dur wrapping an array # TODO: refactor
+                    v = v.flat[0] # Case where we have an array wrapping a dur wrapping an array # TODO: refactor
                 else:
                     warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
                     ss.warn(warnmsg)
 
             if is_timepar:
-                if issubclass(timepar_type, ss.Dur):
+                if issubclass(timepar_type, ss.dur):
                     self._pars[key] = v/self.module.dt
                 elif issubclass(timepar_type, ss.Rate):
                     self._pars[key] = v*self.module.dt
@@ -948,12 +948,12 @@ class Dist:
         if self.unit is not None:
             if scale_types.check_postdraw(self): # It can be scaled post-draw, proceed
                 rvs = self.unit(rvs)
-                if isinstance(rvs, ss.Dur):
+                if isinstance(rvs, ss.dur):
                     rvs = rvs/self.module.dt
                 elif isinstance(rvs, ss.Rate):
                     rvs = rvs*self.module.dt
                 else:
-                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Dur or ss.Rate'
+                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.dur or ss.Rate'
                     raise NotImplementedError(errormsg)
             else:  # It can't, raise an error
                 errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
@@ -1138,7 +1138,7 @@ class lognorm_im(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
@@ -1345,7 +1345,7 @@ class randint(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
@@ -1529,7 +1529,7 @@ class choice(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
