@@ -1270,12 +1270,18 @@ class beta_mean(Dist):
         max_var = mean*(1-mean)
         if not (0 < mean < 1):
             if force:
+                if ss.options.warn_convert:
+                    warnmsg = f'Clipping the mean from {mean:n} to 0 < mean < 1.'
+                    ss.warn(warnmsg)
                 mean = np.clip(mean, 0, 1)
             else:
-                errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean}'
+                errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean:n}'
                 raise ValueError(errormsg)
         if not (0 < var < max_var):
             if force:
+                if ss.options.warn_convert:
+                    warnmsg = f'Clipping the variance from {var} to 0 < var < {max_var:n}.'
+                    ss.warn(warnmsg)
                 var = np.clip(var, 0, max_var)
             else:
                 errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
