@@ -1739,7 +1739,7 @@ def get_timepar_class(unit):
 
 #%% Backwards compatibility functions
 
-__all__ += ['dur', 'rate', 'time_prob', 'rate_prob', 'rate', 'beta']
+__all__ += ['rate', 'time_prob', 'rate_prob']
 
 def warn_deprecation(old, value, unit, with_s=False):
     if ss.options.warn_convert:
@@ -1748,11 +1748,6 @@ def warn_deprecation(old, value, unit, with_s=False):
         warnmsg = f'The Starsim v2 class ss.{old}() is deprecated. Please use e.g. ss.{unitstr}({value}) instead.'
         ss.warn(warnmsg)
     return
-
-def dur(value, unit=None):
-    """ Backwards compatibility function for Dur """
-    warn_deprecation('dur', value, unit, with_s=True)
-    return ss.Dur(value, unit)
 
 def rate(value, unit=None):
     """ Backwards compatibility function for Rate """
@@ -1767,9 +1762,4 @@ def time_prob(value, unit=None):
 def rate_prob(value, unit=None):
     """ Backwards compatibility function for RateProb """
     warn_deprecation('rate_prob', value, unit)
-    return ss.per(value, unit)
-
-def beta(value, unit=None):
-    """ Backwards compatibility function for Beta """
-    warn_deprecation('beta', value, unit)
     return ss.per(value, unit)

@@ -167,7 +167,7 @@ class scale_types(sc.prettyobj):
     """ Define how distributions scale
 
     Distributions scale in different ways, such as converting between time units.
-    Some distributions can't be scaled at all (e.g. `ss.beta()` or `ss.choice()`).
+    Some distributions can't be scaled at all (e.g. `ss.beta_dist()` or `ss.choice()`).
     For distributions that can be scaled, some distributions can only be (linearly)
     scaled *before* the random numbers are generated (called "predraw"), some can only be
     scaled after (called "postdraw"), and some can be scaled in either way ("both").
@@ -186,7 +186,7 @@ class scale_types(sc.prettyobj):
         - 'postdraw' (after the random numbers are drawn, e.g. `ss.weibull()`)
         - 'predraw' (before the draw, e.g. `ss.poisson()`)
         - 'both' (either pre or post draw, e.g. `ss.normal()`)
-        - False (not at all, e.g. `ss.beta()`)
+        - False (not at all, e.g. `ss.beta_dist()`)
 
     Use `ss.distributions.scale_types.show()` to show how each distribution scales
     with time.
@@ -1047,7 +1047,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'nbinom', 'beta', 'beta_mean', 'weibull', 'gamma', 'constant',
+             'poisson', 'nbinom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
              'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
 __all__ += dist_list
 __all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. same tests would fail)
@@ -1239,7 +1239,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         return spars
 
 
-class beta(Dist):
+class beta_dist(Dist):
     """
     Beta distribution
 
@@ -1262,17 +1262,24 @@ class beta_mean(Dist):
     Args:
         mean (float): mean of distribution, must be 0 < a < 1 (default 0.5)
         var (float): variance of distribution, must be > 0 (default 0.05)
+        force (bool): if True, scale the parameters to the valid range
     """
     scaling = scale_types.false
-    def __init__(self, mean=0.5, var=0.05, **kwargs):  # Does not accept dtype
+    def __init__(self, mean=0.5, var=0.05, force=False, **kwargs):  # Does not accept dtype
         # Validation
         max_var = mean*(1-mean)
         if not (0 < mean < 1):
-            errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean}'
-            raise ValueError(errormsg)
+            if force:
+                mean = np.clip(mean, 0, 1)
+            else:
+                errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean}'
+                raise ValueError(errormsg)
         if not (0 < var < max_var):
-            errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
-            raise ValueError(errormsg)
+            if force:
+                var = np.clip(var, 0, max_var)
+            else:
+                errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
+                raise ValueError(errormsg)
 
         # We're good to go
         a = ((1 - mean)/var - 1/mean) * mean**2
