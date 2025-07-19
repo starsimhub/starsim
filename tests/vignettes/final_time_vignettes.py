@@ -4,28 +4,28 @@ import starsim as ss
 #%% A: ss.Timeline repr
 
 # 1. Explicit, days
-t1 = ss.Timeline(ss.date('2020-01-01'), ss.date('2020-06-01'), ss.Dur(days=1))
+t1 = ss.Timeline(ss.date('2020-01-01'), ss.date('2020-06-01'), ss.dur(days=1))
 # Old <Timeline t=2020.01.01, ti=0, 2020.01.01-2020.06.01 dt=<DateDur: days=1>>
 # × Timeline(2020.01.01—2020.06.01, dt=day; not initialized)
 # ✓ Timeline(2020.01.01—2020.06.01, dt=day)
 
 # 2. Explicit, months
-t2 = ss.Timeline(ss.date('2020-01-01'), ss.date('2020-06-01'), ss.Dur(months=1)) # Allowed
+t2 = ss.Timeline(ss.date('2020-01-01'), ss.date('2020-06-01'), ss.dur(months=1)) # Allowed
 # × <Timeline t=2020.01.01, ti=0, 2020.01.01-2020.06.01 dt=<DateDur: months=1>>
 # ✓ Timeline(2020.01.01—2020.06.01, dt=month)
 
 # 3. Days
-t3 = ss.Timeline(ss.Dur(days=0), ss.Dur(days=30), ss.Dur(days=1)).init()
+t3 = ss.Timeline(ss.dur(days=0), ss.dur(days=30), ss.dur(days=1)).init()
 # × <Timeline t=<DateDur: 0>, ti=0, <DateDur: 0>-<DateDur: days=30> dt=<DateDur: days=1>>
 # ✓ Timeline(0—30 days, dt=day)
 
 # 4. Years
-t4 = ss.Timeline(ss.Dur(years=0), ss.Dur(years=30), ss.Dur(years=1)).init()
+t4 = ss.Timeline(ss.dur(years=0), ss.dur(years=30), ss.dur(years=1)).init()
 # × <Timeline t=<DateDur: 0>, ti=0, <DateDur: 0>-<DateDur: days=30> dt=<DateDur: days=1>>
 # ✓ Timeline(0—30 years, dt=year)
 
 # 5. Fractional years
-t4 = ss.Timeline(ss.Dur(years=0), ss.Dur(years=30), ss.Dur(years=0.1)).init()
+t4 = ss.Timeline(ss.dur(years=0), ss.dur(years=30), ss.dur(years=0.1)).init()
 # × <Timeline t=<DateDur: 0>, ti=0, <DateDur: 0>-<DateDur: days=30> dt=<DateDur: days=1>>
 # ✓ Timeline(0—30 years, dt=years(0.1))
 

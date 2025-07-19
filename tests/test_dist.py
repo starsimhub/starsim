@@ -293,7 +293,7 @@ def test_timepar_dists():
     # Create time parameters
     v = sc.objdict()
     v.base = 30.0
-    v.dur = ss.Dur(30)
+    v.dur = ss.dur(30)
     v.rate = ss.Rate(30)
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
@@ -339,7 +339,7 @@ def test_timepar_dists():
 
     # Check that unitless distributions fail
     print('Testing unitless distributions ...')
-    par = ss.Dur(10)
+    par = ss.dur(10)
     unitless_dists = ['lognorm_im', 'randint', 'choice']
     for name in unitless_dists:
         dist_class = getattr(ss, name)

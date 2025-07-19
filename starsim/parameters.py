@@ -71,7 +71,7 @@ class Pars(sc.objdict):
                     self[key] = new
                 elif isinstance(old, dict):
                     self[key] = new # Take dictionaries directly, without warning the user
-                elif isinstance(old, (ss.Dur, ss.Rate)):
+                elif isinstance(old, (ss.dur, ss.Rate)):
                     self[key] = new
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
@@ -146,7 +146,7 @@ class Pars(sc.objdict):
                 self[key] = new
 
         # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
-        elif isinstance(new, (Number, ss.Dur, ss.Rate)):
+        elif isinstance(new, (Number, ss.dur, ss.Rate)):
             old.set(new)
 
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters

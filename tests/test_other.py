@@ -167,8 +167,8 @@ def test_results():
     sc.heading('Testing results export and plotting')
 
     # Make a sim with 2 SIS models with varying units and dt
-    d1 = ss.SIS(dt=ss.Dur(1/12), name='sis1')
-    d2 = ss.SIS(dt=ss.Dur(0.5), name='sis2')
+    d1 = ss.SIS(dt=ss.dur(1/12), name='sis1')
+    d2 = ss.SIS(dt=ss.dur(0.5), name='sis2')
     sim = ss.Sim(diseases=[d1, d2], networks='random')
 
     # Run sim and pull out disease results
