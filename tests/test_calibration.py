@@ -20,7 +20,7 @@ do_plot = True
 
 def make_sim():
     sir = ss.SIR(
-        beta = ss.TimeProb(0.075),
+        beta = ss.prob(0.075),
         init_prev = ss.bernoulli(0.02),
     )
     random = ss.RandomNet(n_contacts=ss.poisson(4))

@@ -34,7 +34,7 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'TimeProb', 'per']
+__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -1351,7 +1351,7 @@ class Rate(TimePar):
             if self.timepar_subtype == other.timepar_subtype:
                 return self.__class__(self.value+other*self.unit, self.unit)
             else:
-                errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, TimeProb+TimeProb); you added {self} + {other}'
+                errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, prob+prob); you added {self} + {other}'
                 raise TypeError(errormsg)
         else:
             if sc.isnumber(other) or isinstance(other, np.ndarray):
@@ -1372,7 +1372,7 @@ class Rate(TimePar):
             else:
                 raise TypeError('Only rates can be added to rates')
         else:
-            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
+            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, prob+prob)')
 
     def __eq__(self, other):
         return self.value == other.value/other.unit*self.unit
@@ -1398,16 +1398,16 @@ class Rate(TimePar):
         Calculate a time-specific probability value
 
         This function is mainly useful for subclasses where the multiplication by a duration is non-linear
-        (e.g., `TimeProb`) and therefore it is important to apply the factor prior to multiplication by duration.
+        (e.g., `prob`) and therefore it is important to apply the factor prior to multiplication by duration.
         This function avoids creating an intermediate array of rates, and is therefore much higher performance.
 
         e.g.
 
-        >>> p = ss.TimeProb(0.05)*self.cd4*self.t.dt
+        >>> p = ss.prob(0.05)*self.cd4*self.t.dt
 
         and
 
-        >>> p = ss.TimeProb(0.05).scale(self.cd4,self.t.dt)
+        >>> p = ss.prob(0.05).scale(self.cd4,self.t.dt)
 
         are equivalent, except that the second one is (much) faster.
 
@@ -1425,9 +1425,9 @@ class Rate(TimePar):
         return (self.value*v)*factor
 
 
-class TimeProb(Rate):
+class prob(Rate):
     """
-    `TimeProb` represents the probability of an event occurring during a
+    `prob` represents the probability of an event occurring during a
     specified period of time.
 
     The class is designed to allow conversion of a probability from one
@@ -1442,7 +1442,7 @@ class TimeProb(Rate):
     where `factor` is the ratio of the new duration to the original duration.
 
     For example,
-    >>> p = ss.TimeProb(0.8, ss.years(1))
+    >>> p = ss.prob(0.8, ss.years(1))
     indicates a 80% chance of an event occurring in one year.
 
     >>> p*ss.years(1)
@@ -1455,13 +1455,13 @@ class TimeProb(Rate):
     probability of 96% representing the chance of the event occurring at least
     once over the new duration of two years.
 
-    However, the behavior is different when a `TimeProb` object is multiplied
+    However, the behavior is different when a `prob` object is multiplied
     by a scalar or array. In this case, the probability is simply scaled. This scaling
     may result in a value greater than 1, which is not valid. For example,
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use `per` instead if `TimeProb` if you would prefer to directly
+    Use `per` instead if `prob` if you would prefer to directly
     specify the instantaneous rate.
     """
     base = None # Can inherit, but clearer to specify
@@ -1541,13 +1541,13 @@ class TimeProb(Rate):
             vectorize = np.vectorize(to_prob)
             return vectorize(arr, dur)
 
-        elif isinstance(arr[0], TimeProb):
+        elif isinstance(arr[0], prob):
             factor = np.array([dur / a.unit for a in arr])
             scaled_vals = np.array([a.value * v for a in arr])
             rate = - np.log(1 - scaled_vals)
             return 1-np.exp(-rate*factor)
 
-        else: # Assume arr is an array of values, that would be the values of a TimeProb with unit=ss.years(1)
+        else: # Assume arr is an array of values, that would be the values of a prob with unit=ss.years(1)
             factor = dur / ss.years(1)
             scaled_vals = arr * v
             rate = - np.log(1 - scaled_vals)
@@ -1587,11 +1587,11 @@ class per(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between `TimeProb` and `per` is subtle, but important. `per` works directly
-    with the instantaneous rate of an event occurring. In contrast, `TimeProb` starts with a probability and a duration,
+    The difference between `prob` and `per` is subtle, but important. `per` works directly
+    with the instantaneous rate of an event occurring. In contrast, `prob` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
     * per: rate -> probability
-    * TimeProb: probability -> rate -> probability
+    * prob: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
     """
@@ -1633,8 +1633,8 @@ class per(Rate):
 
 #%% Convenience classes
 __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
-            'perday', 'perweek', 'permonth', 'peryear', # TimeProbs
-            'probperday', 'probperweek', 'probpermonth', 'probperyear', # TimeProb aliases
+            'perday', 'perweek', 'permonth', 'peryear', # probs
+            'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
             'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear'] # Rates
 
 # Durations
@@ -1657,11 +1657,11 @@ class perweek(per):  base = 'weeks'
 class permonth(per): base = 'months'
 class peryear(per):  base = 'years'
 
-# TimeProbs
-class probperday(TimeProb):   base = 'days'
-class probperweek(TimeProb):  base = 'weeks'
-class probpermonth(TimeProb): base = 'months'
-class probperyear(TimeProb):  base = 'years'
+# probs
+class probperday(prob):   base = 'days'
+class probperweek(prob):  base = 'weeks'
+class probpermonth(prob): base = 'months'
+class probperyear(prob):  base = 'years'
 
 # EventRates
 class rateperday(Rate):   base = 'days'
@@ -1755,7 +1755,7 @@ def rate(value, unit=None):
     return ss.events(value, unit)
 
 def time_prob(value, unit=None):
-    """ Backwards compatibility function for TimeProb """
+    """ Backwards compatibility function for prob """
     warn_deprecation('time_prob', value, unit)
     return ss.prob(value, unit)
 
