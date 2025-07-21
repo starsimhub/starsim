@@ -20,7 +20,7 @@ TimePar  # All time parameters
     │   ├── probperweek
     │   ├── probpermonth
     │   └── probperyear
-    └── events  # Number of events (e.g., number of acts per year)
+    └── eventrate  # Number of events (e.g., number of acts per year)
         ├── eventsperday
         ├── eventsperweek
         ├── eventspermonth
@@ -34,7 +34,7 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per']
+__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'eventrate']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -1629,6 +1629,11 @@ class per(Rate):
         return super().__truediv__(other)  # Fixed the call to super().__truediv__
 
     def __rtruediv__(self, other): raise NotImplementedError()
+
+
+class eventrate(Rate):
+    """ Class for the number of events (rather than probability) in a specified period. """
+    pass
 
 
 #%% Convenience classes
