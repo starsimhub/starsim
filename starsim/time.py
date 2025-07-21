@@ -1424,6 +1424,10 @@ class Rate(TimePar):
             factor = dur/self.unit
         return (self.value*v)*factor
 
+    def n_events(self, other):
+        """ Simple multiplication """
+        pass
+
 
 class prob(Rate):
     """
