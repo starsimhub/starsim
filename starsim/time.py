@@ -627,7 +627,7 @@ class TimePar:
     """ Parent class for all TimePars -- dur, Rate, etc. """
     base = None # e.g. 'years', 'days', etc
     timepar_type = None # 'dur' or 'rate'
-    timepar_subtype = None # e.g. 'datedur' or 'timeprob'
+    timepar_subtype = None # e.g. 'datedur' or 'prob'
 
     def __new__(cls, *args, **kwargs):
         """Special handling for ss.Dist
@@ -1466,7 +1466,7 @@ class prob(Rate):
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
-    timepar_subtype = 'timeprob'
+    timepar_subtype = 'prob'
 
     def __init__(self, value, unit=None):
         try:
