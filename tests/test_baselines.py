@@ -2,8 +2,6 @@
 Test that the current version of Starsim exactly matches
 the baseline results.
 """
-
-import numpy as np
 import sciris as sc
 import starsim as ss
 

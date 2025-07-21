@@ -20,7 +20,7 @@ TimePar  # All time parameters
     │   ├── probperweek
     │   ├── probpermonth
     │   └── probperyear
-    └── eventrate  # Number of events (e.g., number of acts per year)
+    └── freq  # Number of events (e.g., number of acts per year)
         ├── eventsperday
         ├── eventsperweek
         ├── eventspermonth
@@ -34,7 +34,7 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'eventrate']
+__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -956,9 +956,9 @@ class dur(TimePar):
         if self.years == 0:
             raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
         elif (sc.isnumber(other) and other == 0) or isinstance(other, dur) and other.years == 0:
-            return Rate(0)
+            return ss.freq(0)
         else:
-            return Rate(other, self)
+            return ss.freq(other, self)
 
     def __abs__(self):
         return self.__class__(abs(self.value))
@@ -1336,12 +1336,12 @@ class Rate(TimePar):
         return float(self.value)
 
     def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            return self*other
-        elif isinstance(other, dur):
-            return self.value*other/self.unit
-        else:
-            return self.__class__(self.value*other, self.unit)
+        errormsg = 'ss.Rate() does not implement multiplication; this is implemented differently by its subclasses ss.prob, ss.per, and ss.freq'
+        raise NotImplementedError(errormsg)
+
+    def __rmul__(self, other):
+        """ e.g. 3*rate """
+        return self.__mul__(other)
 
     def __neg__(self):
         return -1*self
@@ -1361,7 +1361,8 @@ class Rate(TimePar):
                 errormsg = 'Only rates can be added to rates, not {other}'
                 raise TypeError(errormsg)
 
-    def __radd__(self, other): return self.__add__(other)
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __sub__(self, other):
         if self.__class__ == other.__class__:
@@ -1377,10 +1378,8 @@ class Rate(TimePar):
     def __eq__(self, other):
         return self.value == other.value/other.unit*self.unit
 
-    def __rmul__(self, other): return self.__mul__(other)
-
     def __truediv__(self, other):
-        # This is for <rate>/<other>
+        """ This is for <rate>/<other> """
         if isinstance(other, Rate):
             # Convert the other rate onto our dt, then divide the value
             return self.value/(other.value/other.unit*self.unit)
@@ -1390,7 +1389,7 @@ class Rate(TimePar):
             return self.__class__(self.value/other, self.unit)
 
     def __rtruediv__(self, other):
-        # If a float is divided by a rate
+        """ This is for <other>/<rate>, e.g. if a float is divided by a rate """
         return other * (self.unit/self.value)
 
     def to_prob(self, dur, v=1):
@@ -1426,7 +1425,20 @@ class Rate(TimePar):
 
     def n_events(self, other):
         """ Simple multiplication """
-        pass
+        if isinstance(other, np.ndarray):
+            return self*other
+        elif isinstance(other, dur):
+            return self.value*other/self.unit
+        else:
+            return self.__class__(self.value*other, self.unit)
+
+    def p(self, other):
+        """ Alias to to_prob() """
+        return self.to_prob(other)
+
+    def n(self, other):
+        """ Alias to n_events """
+        return self.n_events(other)
 
 
 class prob(Rate):
@@ -1635,9 +1647,10 @@ class per(Rate):
     def __rtruediv__(self, other): raise NotImplementedError()
 
 
-class eventrate(Rate):
+class freq(Rate):
     """ Class for the number of events (rather than probability) in a specified period. """
-    pass
+    def __mul__(self, other):
+        return self.n_events(other)
 
 
 #%% Convenience classes
@@ -1660,23 +1673,23 @@ day = days(1)
 for obj in [year, month, week, day]:
     object.__setattr__(obj, '_locked', True) # Make immutable
 
-# Rates
+# per
 class perday(per):   base = 'days'
 class perweek(per):  base = 'weeks'
 class permonth(per): base = 'months'
 class peryear(per):  base = 'years'
 
-# probs
+# prob
 class probperday(prob):   base = 'days'
 class probperweek(prob):  base = 'weeks'
 class probpermonth(prob): base = 'months'
 class probperyear(prob):  base = 'years'
 
-# EventRates
-class rateperday(Rate):   base = 'days'
-class rateperweek(Rate):  base = 'weeks'
-class ratepermonth(Rate): base = 'months'
-class rateperyear(Rate):  base = 'years'
+# freq
+class rateperday(freq):   base = 'days'
+class rateperweek(freq):  base = 'weeks'
+class ratepermonth(freq): base = 'months'
+class rateperyear(freq):  base = 'years'
 
 #%% Class mappings
 
