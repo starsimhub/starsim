@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badgen.net/pypi/v/starsim/?color=blue)](https://pypi.org/project/starsim)
 [![Downloads](https://static.pepy.tech/personalized-badge/starsim?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/starsim)
-[![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml/badge.svg)](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml?query=workflow)
+[![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml)
 
 Starsim is an agent-based modeling framework designed for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Additionally, users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. To enable the study of birth-related diseases, Starsim allows detailed modeling of mother-child relationships starting from conception. Finally, Starsim lets users compare different intervention strategies, such as vaccines or treatments, to examine their impact through various delivery methods such as mass campaigns or targeted outreach.
 
