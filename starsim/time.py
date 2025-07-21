@@ -1651,19 +1651,19 @@ day = days(1)
 for obj in [year, month, week, day]:
     object.__setattr__(obj, '_locked', True) # Make immutable
 
-# TimeProbs
-class perday(TimeProb):   base = 'days'
-class perweek(TimeProb):  base = 'weeks'
-class permonth(TimeProb): base = 'months'
-class peryear(TimeProb):  base = 'years'
-
-# Aliases
-probperday = perday
-probperweek = perweek
-probpermonth = permonth
-probperyear = peryear
-
 # Rates
+class perday(per):   base = 'days'
+class perweek(per):  base = 'weeks'
+class permonth(per): base = 'months'
+class peryear(per):  base = 'years'
+
+# TimeProbs
+class probperday(TimeProb):   base = 'days'
+class probperweek(TimeProb):  base = 'weeks'
+class probpermonth(TimeProb): base = 'months'
+class probperyear(TimeProb):  base = 'years'
+
+# EventRates
 class rateperday(Rate):   base = 'days'
 class rateperweek(Rate):  base = 'weeks'
 class ratepermonth(Rate): base = 'months'
