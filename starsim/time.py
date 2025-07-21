@@ -34,7 +34,7 @@ import pandas as pd
 import starsim as ss
 
 # General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'TimeProb', 'RateProb']
+__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'TimeProb', 'per']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -1461,7 +1461,7 @@ class TimeProb(Rate):
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use `RateProb` instead if `TimeProb` if you would prefer to directly
+    Use `per` instead if `TimeProb` if you would prefer to directly
     specify the instantaneous rate.
     """
     base = None # Can inherit, but clearer to specify
@@ -1557,21 +1557,21 @@ class TimeProb(Rate):
     def __rtruediv__(self, other): raise NotImplementedError()
 
 
-class RateProb(Rate):
+class per(Rate):
     """
-    A `RateProb` represents an instantaneous rate of an event occurring. Rates
+    A `per` represents an instantaneous rate of an event occurring. Rates
     must be non-negative, but need not be less than 1.
 
     Through multiplication, rate can be modified or converted to a probability,
     depending on the data type of the object being multiplied.
 
-    When a `RateProb` is multiplied by a scalar or array, the rate is simply
+    When a `per` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
     represent agents experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
-    Alternatively, when a `RateProb` is multiplied by a duration (type
+    Alternatively, when a `per` is multiplied by a duration (type
     ss.dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
         `1 - np.exp(-rate/factor)`,
@@ -1579,7 +1579,7 @@ class RateProb(Rate):
     period (denominator).
 
     For example, consider
-    >>> p = ss.RateProb(0.8, ss.years(1))
+    >>> p = ss.per(0.8, ss.years(1))
     When multiplied by a duration of 1 year, the calculated probability is
         `1 - np.exp(-0.8)`, which is approximately 55%.
     >>> p*ss.years(1)
@@ -1587,10 +1587,10 @@ class RateProb(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between `TimeProb` and `RateProb` is subtle, but important. `RateProb` works directly
+    The difference between `TimeProb` and `per` is subtle, but important. `per` works directly
     with the instantaneous rate of an event occurring. In contrast, `TimeProb` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
-    * RateProb: rate -> probability
+    * per: rate -> probability
     * TimeProb: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
@@ -1760,6 +1760,6 @@ def time_prob(value, unit=None):
     return ss.prob(value, unit)
 
 def rate_prob(value, unit=None):
-    """ Backwards compatibility function for RateProb """
+    """ Backwards compatibility function for per """
     warn_deprecation('rate_prob', value, unit)
     return ss.per(value, unit)
