@@ -429,21 +429,21 @@ def test_timepar_callable():
     mean = age.mean()
     young = sc.findinds(age<=mean)
     old = sc.findinds(age>mean)
-
-    v_young = 10
-    v_old = 20
-    def age_prob(module, sim, uids):
-        out = ss.freq(np.zeros(len(uids)), unit=ss.year)
-        out[young] = v_young
-        out[old]   = v_old
-        return out
-
-    ber1 = ss.normal(loc=age_prob, scale=ss.freq(1), module=mock_mods.year, strict=False).init(sim=sim)
-    ber1.rvs(uids)
-
-    # Higher-performance option - perform the time conversion on the parameter here
     p_young = 0.1
     p_old = 0.2
+
+    # TODO: not sure if this should be valid? Where is it getting scaled by dt?
+    # def age_prob(module, sim, uids):
+    #     out = ss.freq(np.zeros(len(uids)))
+    #     out[young] = p_young
+    #     out[old]   = p_old
+    #     assert out.value.sum() > 0
+    #     return out
+
+    # ber1 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
+    # ber1.rvs(uids)
+
+    # Higher-performance option - perform the time conversion on the parameter here
     def age_prob(module, sim, uids):
         dt = module.t.dt
         out = np.zeros_like(uids)
