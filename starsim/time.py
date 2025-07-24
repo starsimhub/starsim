@@ -1356,7 +1356,7 @@ class Rate(TimePar):
                 raise TypeError(errormsg)
         else:
             if sc.isnumber(other) or isinstance(other, np.ndarray):
-                errormsg = 'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
+                errormsg = f'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
                 raise TypeError(errormsg)
             else:
                 errormsg = 'Only rates can be added to rates, not {other}'

@@ -294,7 +294,7 @@ def test_timepar_dists():
     v = sc.objdict()
     v.base = 30.0
     v.dur = ss.dur(30)
-    v.rate = ss.Rate(30)
+    v.freq = ss.freq(30)
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
 
@@ -332,7 +332,7 @@ def test_timepar_dists():
             expected_dur = expected*ratio
             expected_rate = expected/ratio
             actual_dur = rvs.dur.mean()
-            actual_rate = rvs.rate.mean()
+            actual_rate = rvs.freq.mean()
             assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
             assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
             sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
@@ -429,25 +429,26 @@ def test_timepar_callable():
     mean = age.mean()
     young = sc.findinds(age<=mean)
     old = sc.findinds(age>mean)
-    p_young = 0.1
-    p_old = 0.2
 
-    # TODO: Shape mismatch, not sure why
-    # def age_prob(module, sim, uids):
-    #     out = ss.Rate(np.zeros(len(uids)))
-    #     out[young] = p_young
-    #     out[old]   = p_old
-    #     assert out.value.sum() > 0
-    #     return out
+    v_young = 10
+    v_old = 20
+    def age_prob(module, sim, uids):
+        out = ss.freq(np.zeros(len(uids)), unit=ss.year)
+        out[young] = v_young
+        out[old]   = v_old
+        return out
 
-    # ber1 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
-    # ber1.rvs(uids)
+    ber1 = ss.normal(loc=age_prob, scale=ss.freq(1), module=mock_mods.year, strict=False).init(sim=sim)
+    ber1.rvs(uids)
 
     # Higher-performance option - perform the time conversion on the parameter here
+    p_young = 0.1
+    p_old = 0.2
     def age_prob(module, sim, uids):
+        dt = module.t.dt
         out = np.zeros_like(uids)
-        out[young] = ss.Rate(p_young)*module.t.dt
-        out[old]   = ss.Rate(p_old)*module.t.dt
+        out[young] = ss.freq(p_young)*dt
+        out[old]   = ss.freq(p_old)*dt
         return out
 
     sim = ss.mock_sim(n_agents=100_000)
@@ -461,11 +462,11 @@ def test_timepar_callable():
     a = ber2.rvs(uids).mean()
 
     # TODO: waiting for implementing ss.months()
-    # ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
-    # b = ber3.rvs(uids).mean()
+    ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
+    b = ber3.rvs(uids).mean()
 
-    # rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
-    # assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {a} ≠ {b*12}'
+    rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
+    assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {a} ≠ {b*12}'
 
     return
 
