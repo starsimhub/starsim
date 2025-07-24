@@ -45,15 +45,15 @@ def test_classes():
     assert d3 / 2 == 2/0.1/2
 
     # Test rate dt
-    r1 = ss.Rate(2)
-    r2 = ss.Rate(3)
-    r3 = ss.Rate(2/0.1)
-    r4 = ss.Rate(3/0.2)
+    r1 = ss.freq(2)
+    r2 = ss.freq(3)
+    r3 = ss.freq(2/0.1)
+    r4 = ss.freq(3/0.2)
 
-    assert r1 + r2 == ss.Rate(5)
-    assert r3 + r4 == ss.Rate(20+15)
-    assert r3 * 2 == ss.Rate(4/0.1)
-    assert r4 / 2 == ss.Rate(1.5/0.2)
+    assert r1 + r2 == ss.freq(5)
+    assert r3 + r4 == ss.freq(20+15)
+    assert r3 * 2 == ss.freq(4/0.1)
+    assert r4 / 2 == ss.freq(1.5/0.2)
 
     # Test duration units
     d5 = ss.datedur(years=2)
@@ -63,7 +63,7 @@ def test_classes():
 
     # Test rate units
     rval = 0.7
-    r5 = ss.Rate(rval, ss.week)
+    r5 = ss.freq(rval, ss.week)
     assert np.isclose(r5*ss.days(1), rval/7) # These should be close, but not match exactly
     assert np.isclose(r5*ss.weeks(0.1), rval/10)
     assert r5*ss.days(1) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
@@ -287,7 +287,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.prob(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.prob(0.01, ss.days(1)), waning=ss.freq(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -327,7 +327,7 @@ def test_units(do_plot=False):
         beta = ss.prob(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
-        waning = ss.Rate(0.05, ss.days(1)),
+        waning = ss.freq(0.05, ss.days(1)),
         imm_boost = 1.0,
     )
 

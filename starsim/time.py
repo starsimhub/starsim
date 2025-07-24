@@ -1336,7 +1336,8 @@ class Rate(TimePar):
         return float(self.value)
 
     def __mul__(self, other):
-        errormsg = 'ss.Rate() does not implement multiplication; this is implemented differently by its subclasses ss.prob, ss.per, and ss.freq'
+        errormsg = 'ss.Rate() does not implement multiplication; this is implemented differently by its subclasses. '
+        errormsg += warn_deprecation(output=True)
         raise NotImplementedError(errormsg)
 
     def __rmul__(self, other):
@@ -1763,18 +1764,27 @@ def get_timepar_class(unit):
 
 __all__ += ['rate', 'time_prob', 'rate_prob']
 
-def warn_deprecation(old, value, unit, with_s=False):
+def warn_deprecation(old=None, value=None, unit=None, with_s=False, output=False):
+    msg = 'The subclasses of ss.Rate() are: '
+    msg += '\n• ss.per() (rate at which an event happens, e.g. mortality rate), '
+    msg += '\n• ss.prob() (unitless probability, e.g. symptomatic infection), and '
+    msg += '\n• ss.freq() (number of events per time, e.g. acts per year). '
+    msg += '\nAlthough ss.freq() is the closest equivalent to ss.rate() in Starsim 2.0, '
+    msg += 'in most cases (e.g. birth, death, or infection rates) you actually want ss.per().'
     if ss.options.warn_convert:
         unitstr = str(unit) if unit is not None else 'year'
         if with_s: unitstr = unitstr + 's'
-        warnmsg = f'The Starsim v2 class ss.{old}() is deprecated. Please use e.g. ss.{unitstr}({value}) instead.'
+        warnmsg = f'The Starsim v2 class ss.{old}() is deprecated. Please use an ss.Rate() subclass, e.g. ss.{unitstr}({value}) instead. '
+        warnmsg += msg
         ss.warn(warnmsg)
+    if output:
+        return msg
     return
 
 def rate(value, unit=None):
     """ Backwards compatibility function for Rate """
     warn_deprecation('rate', value, unit)
-    return ss.events(value, unit)
+    return ss.freq(value, unit)
 
 def time_prob(value, unit=None):
     """ Backwards compatibility function for prob """
