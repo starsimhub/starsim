@@ -8,6 +8,7 @@ import numpy as np
 import starsim as ss
 import starsim_examples as sse
 import scipy.stats as sps
+import matplotlib.pyplot as plt
 
 sc.options(interactive=False) # Assume not running interactively
 
@@ -180,18 +181,13 @@ def test_disk():
 
     # Visualize the path of agents
     nw1 = sse.DiskNet()
-    s1 = ss.Sim(n_agents=5, dur=ss.years(50), networks=nw1, copy_inputs=False).init() # This initializes the network
+    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
-        # Visualize motion:
-        import matplotlib.pyplot as plt
-        import matplotlib as mpl
-
         fig, ax = plt.subplots()
         vdt = nw1.pars.v * s1.t.dt
 
-        cmap = mpl.colormaps['plasma']
-        colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
+        colors = sc.vectocolor(np.linspace(0, 1, s1.pars.n_agents))
         ax.scatter(nw1.x, nw1.y, s=50, c=colors)
         for i in range(s1.t.npts):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
@@ -200,7 +196,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = sse.DiskNet(r=0.15, v=ss.Rate(0.05))
+    nw2 = sse.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
