@@ -122,7 +122,7 @@ def test_connectors(do_plot=False):
         plt.figure()
 
         plt.subplot(2,1,1)
-        x = sims.con.timevec
+        x = sims.con.t.yearvec
         for label,res in results.items():
             plt.plot(x, res.syphilis, label=label)
         plt.title('Syphilis infections')
