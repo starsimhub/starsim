@@ -131,8 +131,8 @@ def test_complex_api():
             dict(type='random', name='random2', n_contacts=4)
         ],
         diseases = [
-            dict(type='sir',  dur_inf=dict(type='expon', scale=ss.dur(6.0))),
-            dict(type='sis', beta=ss.prob(0.07), init_prev=0.1),
+            dict(type='sir',  dur_inf=dict(type='expon', scale=ss.years(6.0))),
+            dict(type='sis', beta=ss.probperyear(0.07), init_prev=0.1),
         ],
         demographics = [
             ss.Births(birth_rate=ss.freqperyear(20)),
@@ -148,8 +148,8 @@ def test_complex_api():
     net2 = ss.RandomNet(name='random2', n_contacts=4)
     networks = ss.ndict(net1, net2)
 
-    dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.dur(6.0)))
-    dis2 = ss.SIS(beta=ss.prob(0.07), init_prev=ss.bernoulli(0.1))
+    dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.years(6.0)))
+    dis2 = ss.SIS(beta=ss.probperyear(0.07), init_prev=ss.bernoulli(0.1))
     diseases = ss.ndict(dis1, dis2)
 
     dem1 = ss.Births(birth_rate=ss.freqperyear(20))

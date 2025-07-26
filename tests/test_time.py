@@ -258,7 +258,7 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
     pars = dict(
-        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.prob(0.01)),
+        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.peryear(0.01)),
         demographics = ss.Births(dt=0.25),
         networks = ss.RandomNet(dt=ss.weeks(1)),
         n_agents = small,
@@ -287,7 +287,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.prob(0.01, ss.days(1)), waning=ss.freq(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -324,10 +324,10 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
     sis = ss.SIS(
-        beta = ss.prob(0.05, ss.days(1)),
+        beta = ss.probperday(0.05),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
-        waning = ss.freq(0.05, ss.days(1)),
+        waning = ss.perday(0.05),
         imm_boost = 1.0,
     )
 
