@@ -14,7 +14,7 @@ class HIV(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.prob(1.0), # Placeholder value
+            beta = 0.0, # Placeholder value; replaced with a dict for acts
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
