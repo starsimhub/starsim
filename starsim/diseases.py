@@ -509,7 +509,7 @@ class SIR(Infection):
     results.
 
     Args:
-        beta (float/`ss.per`): the infectiousness
+        beta (float/`ss.prob`): the infectiousness
         init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
         p_death (float/`ss.bernoulli`): the probability of death from infection
@@ -517,7 +517,7 @@ class SIR(Infection):
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.peryear(0.1),
+            beta = ss.prob(0.1),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.years(6)),
             p_death = ss.bernoulli(p=0.01),
@@ -605,16 +605,16 @@ class SIS(Infection):
     is no death in this case.
 
     Args:
-        beta (float/`ss.per`): the infectiousness
+        beta (float/`ss.prob`): the infectiousness
         init_prev (float/`ss.bernoulli`): the fraction of people to start of being infected
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
+        dur_inf (float/`ss.du`r/`ss.Dist`): how long (in years) people are infected for
         waning (float/`ss.rate`): how quickly immunity wanes
         imm_boost (float): how much an infection boosts immunity
     """
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.peryear(0.05),
+            beta = ss.prob(0.05),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.years(10)),
             waning = ss.per(0.05, 'year'), # TODO: replace with ss.peryear() in the new system

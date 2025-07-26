@@ -21,10 +21,10 @@ TimePar  # All time parameters
     │   ├── probpermonth
     │   └── probperyear
     └── freq  # Number of events (e.g., number of acts per year)
-        ├── eventsperday
-        ├── eventsperweek
-        ├── eventspermonth
-        └── eventsperyear
+        ├── freqperday
+        ├── freqperweek
+        ├── freqpermonth
+        └── freqperyear
 """
 import numbers
 import datetime as dt
@@ -1379,13 +1379,28 @@ class Rate(TimePar):
             raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, prob+prob)')
 
     def __eq__(self, other):
-        return self.value == other.value/other.unit*self.unit
+        if self.unit is None:
+            try:
+                assert other.unit == None
+                self.value == other.value
+                return True
+            except:
+                return False
+        else:
+            try:
+                assert self.value == other.value/other.unit*self.unit
+                return True
+            except:
+                return False
 
     def __truediv__(self, other):
         """ This is for <rate>/<other> """
         if isinstance(other, Rate):
             # Convert the other rate onto our dt, then divide the value
-            return self.value/(other.value/other.unit*self.unit)
+            if self.unit is None and other.unit is None:
+                return self.value/other.value
+            else:
+                return self.value/(other.value/other.unit*self.unit)
         elif isinstance(other, dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
@@ -1393,7 +1408,10 @@ class Rate(TimePar):
 
     def __rtruediv__(self, other):
         """ This is for <other>/<rate>, e.g. if a float is divided by a rate """
-        return other * (self.unit/self.value)
+        if self.unit is not None:
+            return other * (self.unit/self.value)
+        else:
+            return other/self.value
 
     def to_prob(self, other=None):
         """
@@ -1432,6 +1450,8 @@ class Rate(TimePar):
             return self*other
         elif isinstance(other, ss.dur):
             return self.value*other/self.unit
+        elif other is None and self.unit is None:
+            return self.value
         else:
             return self.__class__(self.value*other, self.unit)
 
@@ -1716,7 +1736,7 @@ class freq(Rate):
 __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
             'perday', 'perweek', 'permonth', 'peryear', # probs
             'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
-            'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear'] # Rates
+            'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear'] # Rates
 
 # Durations
 class years(dur):  base = 'years'
@@ -1745,10 +1765,10 @@ class probpermonth(prob): base = 'months'
 class probperyear(prob):  base = 'years'
 
 # freq
-class rateperday(freq):   base = 'days'
-class rateperweek(freq):  base = 'weeks'
-class ratepermonth(freq): base = 'months'
-class rateperyear(freq):  base = 'years'
+class freqperday(freq):   base = 'days'
+class freqperweek(freq):  base = 'weeks'
+class freqpermonth(freq): base = 'months'
+class freqperyear(freq):  base = 'years'
 
 #%% Class mappings
 
@@ -1764,10 +1784,10 @@ reverse_class_map = {
     permonth: ['permonth', 'probpermonth', permonth],
     peryear:  ['peryear', 'probperyear', peryear],
 
-    rateperday:   ['rateperday', rateperday],
-    rateperweek:  ['rateperweek', rateperweek],
-    ratepermonth: ['ratepermonth', ratepermonth],
-    rateperyear:  ['rateperyear', rateperyear],
+    freqperday:   ['freqperday', freqperday],
+    freqperweek:  ['freqperweek', freqperweek],
+    freqpermonth: ['freqpermonth', freqpermonth],
+    freqperyear:  ['freqperyear', freqperyear],
 }
 
 # Convert to the actual class map

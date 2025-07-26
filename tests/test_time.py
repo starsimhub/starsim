@@ -71,8 +71,8 @@ def test_classes():
 
     # Test prob
     tpval = 0.1
-    tp0 = ss.prob(tpval)
-    assert tp0*ss.dur(1) == tpval, 'Multiplication by the base denominator should not change the value'
+    tp0 = ss.probperyear(tpval)
+    assert np.isclose(tp0*ss.years(1), tpval), 'Multiplication by the base denominator should not change the value'
     assert np.isclose(tp0*ss.dur(0.5), tpval/2, rtol=0.1) # These should be close, but not match exactly
     assert np.isclose(tp0*ss.dur(2), tpval*2, rtol=0.1)
     assert tp0*ss.dur(0.5) == 1 - np.exp(np.log(1-0.1) * ss.dur(0.5)/ss.dur(1)) # These should be close, but not match exactly
@@ -164,7 +164,7 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, dur, datedur, years, rateperday, rateperweek, prob, per
+    from starsim import date, Timeline, dur, datedur, years, prob, per
 
     assert float(date(1500))==1500
     assert np.isclose(float(date(1500.1)), 1500.1) # Not exactly equal, but very close
@@ -179,7 +179,7 @@ def test_syntax():
 
     assert date(2050) - date(2020) == years(30)
 
-    assert np.isclose((rateperweek(1)+rateperday(1)).value, rateperweek(8).value) # CKTODO: would be nice if this were exact
+    assert np.isclose((ss.freqperweek(1)+ss.freqperday(1)).value, ss.freqperweek(8).value) # CKTODO: would be nice if this were exact
 
     assert date('2020-01-01') + datedur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
     assert date('2020-01-01') + 52*datedur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
@@ -218,11 +218,11 @@ def test_syntax():
     dur.arange(datedur(years=0), datedur(years=10), datedur(years=1)) + date(2000)
 
     # Rates
-    assert (1/years(1)) == ss.rateperyear(1)
-    assert (2/years(1)) == ss.rateperyear(2)
-    assert (4/years(1)) == ss.rateperyear(4)
-    assert (4/datedur(1)) == ss.rateperyear(4)
-    assert (rateperday(5)*datedur(days=1)) == 5
+    assert (1/years(1)) == ss.freqperyear(1)
+    assert (2/years(1)) == ss.freqperyear(2)
+    assert (4/years(1)) == ss.freqperyear(4)
+    assert (4/datedur(1)) == ss.freqperyear(4)
+    assert (ss.freqperday(5)*datedur(days=1)) == 5
     assert 2/ss.freq(0.25) == dur(8)
     assert 1/(2*ss.freq(0.25)) == dur(2)
     assert ss.freq(0.5)/ss.freq(1) == 0.5
