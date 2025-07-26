@@ -350,7 +350,7 @@ def test_timepar_dists():
 
     # Check special distributions
     print('Testing Poisson distribution ...')
-    lam1 = ss.rateperyear(1)
+    lam1 = ss.freqperyear(1)
     lam2 = ss.perday(1)
     for module in mock_mods.values():
         poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
