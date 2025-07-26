@@ -1518,8 +1518,10 @@ class prob(Rate):
     def __mul__(self, other):
         return self.to_prob(other)
 
-    def to_prob(self, other, scale=1.0):
-        if isinstance(other, np.ndarray):
+    def to_prob(self, other=None, scale=1.0):
+        if other is None:
+            return self.value
+        elif isinstance(other, np.ndarray):
             self.array_mul_error()
         elif isinstance(other, ss.dur):
             if self.value == 0:
@@ -1533,7 +1535,9 @@ class prob(Rate):
                 rate = -np.log(1 - self.value) #!! TODO: Dan suggests storing the rate, and doing operations on it, only converting back to a prob at the final step
                 return 1 - np.exp(-rate/factor)
         elif sc.isnumber(other):
-            return self.__class__(self.value*other*scale, self.unit)
+            errormsg = f'It is ambiguous to multiply a probability {self} by a number {other} since it is unclear if e.g. (p=0.5)*2 should be 1.0 or 0.75. Multiply by ss.dur, or set .value explicitly.'
+            raise ValueError(errormsg)
+            # return self.__class__(self.value*other*scale, self.unit)
         else:
             errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
             raise TypeError(errormsg)
@@ -1613,24 +1617,37 @@ class per(Rate):
         return super().__init__(value, unit)
 
     def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(other, dur):
-            if self.value == 0:
-                return 0
-            else:
-                factor = self.unit/other
-                return 1 - np.exp(-self.value/factor)
-        else:
-            return self.__class__(self.value*other, self.unit)
+        return self.to_prob(other)
 
-    def to_prob(self, dur, v=1):
-        if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(float)
+    def to_prob(self, other=None, scale=1.0):
+        rate = self.value
+        if other is None:
+            return 1 - np.exp(-rate)
+        elif isinstance(other, np.ndarray):
+            self.array_mul_error()
+        elif isinstance(other, ss.dur):
+            # Handle 0 or 1
+            if sc.isnumber(rate):
+                if rate in (0, 1):
+                    return rate
+            # We have to calculate the factor
+            factor = self.unit / other * scale
+            if sc.isnumber(factor) and factor == 1:
+                return rate  # Avoid expensive calculation and precision issues
+            # Handle everything else
+            return 1 - np.exp(-rate / factor)
+        elif sc.isnumber(other):
+            return self.__class__(rate*other*scale, self.unit)
         else:
-            factor = dur/self.unit
-        rate = self.value*v
-        return 1-np.exp(-rate*factor)
+            errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
+            raise TypeError(errormsg)
+
+        # if isinstance(dur, np.ndarray):
+        #     factor = (dur/self.unit).astype(float)
+        # else:
+        #     factor = dur/self.unit
+        # rate = self.value*v
+        # return 1-np.exp(-rate*factor)
 
     def __truediv__(self, other):
         if isinstance(other, dur):
