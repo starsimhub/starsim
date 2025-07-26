@@ -1516,29 +1516,27 @@ class prob(Rate):
         return sc.pr(self)
 
     def __mul__(self, other):
+        return self.to_prob(other)
+
+    def to_prob(self, other, scale=1.0):
         if isinstance(other, np.ndarray):
             self.array_mul_error()
-        elif isinstance(other, dur):
+        elif isinstance(other, ss.dur):
             if self.value == 0:
                 return 0
             elif self.value == 1:
                 return 1
             else:
-                factor = self.unit/other
+                factor = self.unit/other*scale
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
                 rate = -np.log(1 - self.value) #!! TODO: Dan suggests storing the rate, and doing operations on it, only converting back to a prob at the final step
                 return 1 - np.exp(-rate/factor)
+        elif sc.isnumber(other):
+            return self.__class__(self.value*other*scale, self.unit)
         else:
-            return self.__class__(self.value*other, self.unit)
-
-    def to_prob(self, dur, v=1):
-        if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(float)
-        else:
-            factor = dur/self.unit
-        rate = -np.log(1-(self.value*v))
-        return 1-np.exp(-rate*factor)
+            errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
+            raise TypeError(errormsg)
 
     @classmethod
     def array_to_prob(cls, arr, dur, v=1):
@@ -1547,7 +1545,7 @@ class prob(Rate):
         if isinstance(dur, np.ndarray):
             assert arr.shape == dur.shape, 'dur must be either a scalar, or the same size as arr'
             def to_prob(a, b, _v=v):
-                return a.to_prob(dur=b, v=_v)
+                return a.to_prob(b, v=_v)
 
             vectorize = np.vectorize(to_prob)
             return vectorize(arr, dur)

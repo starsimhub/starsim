@@ -105,7 +105,7 @@ class Births(Demographics):
         else:
             this_birth_rate = p.birth_rate
             if isinstance(this_birth_rate, ss.Rate):
-                this_birth_rate = ss.prob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(dur=ss.years(1))
+                this_birth_rate = ss.prob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
             else: # number
                 this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_birth
 
@@ -227,7 +227,7 @@ class Deaths(Demographics):
                 death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
             else:
                 # Convert from prob per drd.unit to prob per year, ss.prob.array_to_prob will convert to prob per timestep later
-                death_rate = np.array([ss.prob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(dur=ss.years(1))])
+                death_rate = np.array([ss.prob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(ss.years(1))])
 
         # Process data
         else:
@@ -380,7 +380,7 @@ class Pregnancy(Demographics):
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
-            fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(dur=ss.years(1))
+            fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
         else:
             year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
             nearest_year = frd.index[year_ind]
