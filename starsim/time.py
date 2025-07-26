@@ -32,6 +32,7 @@ import sciris as sc
 import numpy as np
 import pandas as pd
 import starsim as ss
+ss_float = ss.dtypes.float
 
 # General classes; specific classes are listed below
 __all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
@@ -1292,15 +1293,15 @@ class Rate(TimePar):
 
         if unit is None:
             if self.base is not None:
-                dur = get_dur_class(self.base)
-                self.unit = dur(1)
+                dur_class = get_dur_class(self.base)
+                self.unit = dur_class(1)
             else:
                 self.unit = years(1)
         elif isinstance(unit, ss.dur):
             self.unit = unit
         elif isinstance(unit, str):
-            dur = get_dur_class(unit)
-            self.unit = dur(1)
+            dur_class = get_dur_class(unit)
+            self.unit = dur_class(1)
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
 
@@ -1393,7 +1394,7 @@ class Rate(TimePar):
         """ This is for <other>/<rate>, e.g. if a float is divided by a rate """
         return other * (self.unit/self.value)
 
-    def to_prob(self, dur, v=1):
+    def to_prob(self, other=None):
         """
         Calculate a time-specific probability value
 
@@ -1419,25 +1420,25 @@ class Rate(TimePar):
             A numpy float array of values
         """
         if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(float)
+            factor = (dur/self.unit).astype(ss_float)
         else:
             factor = dur/self.unit
-        return (self.value*v)*factor
+        return self.value*factor
 
-    def n_events(self, other):
+    def n_events(self, other=None):
         """ Simple multiplication """
         if isinstance(other, np.ndarray):
             return self*other
-        elif isinstance(other, dur):
+        elif isinstance(other, ss.dur):
             return self.value*other/self.unit
         else:
             return self.__class__(self.value*other, self.unit)
 
-    def p(self, other):
+    def p(self, other=None):
         """ Alias to to_prob() """
         return self.to_prob(other)
 
-    def n(self, other):
+    def n(self, other=None):
         """ Alias to n_events """
         return self.n_events(other)
 
@@ -1501,20 +1502,13 @@ class prob(Rate):
                 valstr = f'Values provided:\n{value}'
                 lt0 = np.any(value<0)
                 gt1 = np.any(value>1)
+
             if lt0:
                 errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
             elif gt1:
-                if self.base is not None:
-                    correct_base = self.base.removesuffix('s') # e.g. years -> year
-                    correct_class = f'rateper{correct_base}' # e.g. rateperyear
-                    correct = f'ss.{correct_class}()' # e.g. ss.rateperyear()
-                    self.__class__ = get_rate_class(correct_class) # Mutate the class to the correct class
-                    if ss.options.warn_convert:
-                        warnmsg = f'Probabilities cannot be greater than one, so converting to a rate. Please use {correct} instead, or set ss.options.warn_convert=false. {valstr}'
-                        ss.warn(warnmsg)
-                else:
-                    errormsg = 'Probabilities are >1, and no base was unit provided. Please use e.g. ss.rateperyear() instead of doing whatever you did. {valstr}'
-                    raise ValueError(errormsg)
+                errormsg = f'Values greater than 1 are not permitted for probabilities, please use ss.per() or ss.freq() instead. {valstr}'
+
+            raise ValueError(errormsg)
         Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
         return
 
@@ -1614,7 +1608,7 @@ class per(Rate):
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
-    timepar_subtype = 'rateprob'
+    timepar_subtype = 'per'
 
     def __init__(self, value, unit=None):
         assert value >= 0, 'Value must be >= 0'
@@ -1650,6 +1644,10 @@ class per(Rate):
 
 class freq(Rate):
     """ Class for the number of events (rather than probability) in a specified period. """
+    base = None
+    timepar_type = 'rate'
+    timepar_subtype = 'freq'
+
     def __mul__(self, other):
         return self.n_events(other)
 
