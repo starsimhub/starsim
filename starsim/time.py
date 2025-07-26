@@ -1296,7 +1296,7 @@ class Rate(TimePar):
                 dur_class = get_dur_class(self.base)
                 self.unit = dur_class(1)
             else:
-                self.unit = years(1)
+                self.unit = None#years(1)
         elif isinstance(unit, ss.dur):
             self.unit = unit
         elif isinstance(unit, str):
@@ -1309,9 +1309,10 @@ class Rate(TimePar):
             value = value.value
             ss.warn('Converting TimePars in this way is inadvisable and will become an exception in future')
 
-        if not (sc.isnumber(value) or isinstance(value, np.ndarray)):
+        if not (sc.isnumber(value) or isinstance(value, np.ndarray)) and value is not None:
             errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)
+
         self.value = value
         self._set_base()
         return
@@ -1320,7 +1321,7 @@ class Rate(TimePar):
         """ Rates can have either unit or base set; handle either """
         if self.base is None and isinstance(self.unit, ss.TimePar):
             self.base = self.unit.base
-        elif self.base != self.unit.base: # Should not be possible, but check just in case
+        elif self.unit is not None and self.base != self.unit.base: # Should not be possible, but check just in case
             errormsg = f'Inconsistent definition: base = {self.base} but unit = {self.unit.base}'
             raise ValueError(errormsg)
         return
@@ -1486,30 +1487,65 @@ class prob(Rate):
     timepar_type = 'rate'
     timepar_subtype = 'prob'
 
-    def __init__(self, value, unit=None):
-        try:
-            assert 0 <= value <= 1, 'Value must be between 0 and 1'
-        except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
-            if sc.isnumber(value):
-                valstr = f'Value provided: {value}'
-                lt0 = value < 0
-                gt1 = value > 1
-            else:
-                if isinstance(value, ss.TimePar):
-                    value = value.value
+    def __init__(self, value=None, unit=None, rate=None):
+        if value is not None:
+            try:
+                assert 0 <= value <= 1, 'Value must be between 0 and 1'
+            except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
+                if sc.isnumber(value):
+                    valstr = f'Value provided: {value}'
+                    lt0 = value < 0
+                    gt1 = value > 1
                 else:
-                    value = sc.toarray(value)
-                valstr = f'Values provided:\n{value}'
-                lt0 = np.any(value<0)
-                gt1 = np.any(value>1)
+                    if isinstance(value, ss.TimePar):
+                        value = value.value
+                    else:
+                        value = sc.toarray(value)
+                    valstr = f'Values provided:\n{value}'
+                    lt0 = np.any(value<0)
+                    gt1 = np.any(value>1)
 
-            if lt0:
-                errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
-            elif gt1:
-                errormsg = f'Values greater than 1 are not permitted for probabilities, please use ss.per() or ss.freq() instead. {valstr}'
+                if lt0:
+                    errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
+                elif gt1:
+                    errormsg = f'Values greater than 1 are not permitted for probabilities, please use ss.per() or ss.freq() instead. {valstr}'
 
-            raise ValueError(errormsg)
+                raise ValueError(errormsg)
         Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
+        if rate is not None:
+            self.rate = rate
+        return
+
+    @property
+    def value(self):
+        """ Store the rate rather than the actual value """
+        if np.isfinite(self._rate):
+            return 1.0 - np.exp(-self._rate)
+        else:
+            return 1.0
+
+    @value.setter
+    def value(self, v):
+        """ Set the rate, not the value """
+        if v<0 or v>1:
+            errormsg = f'Probabilities must be in [0, 1], not {v}'
+            raise ValueError(errormsg)
+        elif v == 1:
+            self._rate = np.inf
+        else:
+            self._rate = -np.log(1 - v)
+        return
+
+    @property
+    def rate(self):
+        return self._rate
+
+    @rate.setter
+    def rate(self, v):
+        if sc.isnumber(v) and v<0:
+            errormsg = f'Cannot set a negative rate/probability ({v})'
+            raise ValueError(errormsg)
+        self._rate = v
         return
 
     def disp(self):
@@ -1524,20 +1560,21 @@ class prob(Rate):
         elif isinstance(other, np.ndarray):
             self.array_mul_error()
         elif isinstance(other, ss.dur):
-            if self.value == 0:
+            if self._rate == 0:
                 return 0
-            elif self.value == 1:
+            elif not np.isfinite(self._rate):
                 return 1
-            else:
+            else: # Main use case
                 factor = self.unit/other*scale
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
-                rate = -np.log(1 - self.value) #!! TODO: Dan suggests storing the rate, and doing operations on it, only converting back to a prob at the final step
-                return 1 - np.exp(-rate/factor)
+                return 1 - np.exp(-self._rate/factor) # Main use case
         elif sc.isnumber(other):
-            errormsg = f'It is ambiguous to multiply a probability {self} by a number {other} since it is unclear if e.g. (p=0.5)*2 should be 1.0 or 0.75. Multiply by ss.dur, or set .value explicitly.'
-            raise ValueError(errormsg)
-            # return self.__class__(self.value*other*scale, self.unit)
+            out = self.__class__(value=0, unit=self.unit) # Placeholder
+            out._rate = self._rate*other*scale # Scale the rate rather than the value
+            return out
+            # errormsg = f'It is ambiguous to multiply a probability {self} by a number {other} since it is unclear if e.g. (p=0.5)*2 should be 1.0 or 0.75. Multiply by ss.dur, or set .value explicitly.'
+            # raise ValueError(errormsg)
         else:
             errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
             raise TypeError(errormsg)
@@ -1566,8 +1603,16 @@ class prob(Rate):
             rate = - np.log(1 - scaled_vals)
             return 1 - np.exp(-rate * factor)
 
-    def __truediv__(self, other): raise NotImplementedError()
-    def __rtruediv__(self, other): raise NotImplementedError()
+    def __truediv__(self, other):
+        try:
+            return self.__mul__(1.0/other)
+        except Exception as e:
+            errormsg = f'It is only valid to divide a probability by a quantity that can be inverted, e.g. a scalar, i.e. p/2 = p*(1/2). But this did not work with {other}.'
+            raise ValueError(errormsg) from e
+
+    def __rtruediv__(self, other):
+        errormsg = f'You cannot divide anything by a probability ({self})'
+        raise NotImplementedError(errormsg)
 
 
 class per(Rate):
