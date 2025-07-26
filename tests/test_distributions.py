@@ -474,7 +474,7 @@ def test_timepar_callable():
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-    # ss.options.warnings = 'error'
+    # ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
 
     T = sc.timer()
 

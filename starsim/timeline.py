@@ -237,7 +237,7 @@ class Timeline:
                 elif is_calendar_year(start):
                     start = ss.date(start)
                 else:
-                    start = ss.dur(start)
+                    start = ss.years(start)
                 dur = self.default_dur
                 stop = start + dur
 
@@ -248,8 +248,8 @@ class Timeline:
                     stop = ss.date(stop)
                     start = ss.date(self.default_start)
                 else:
-                    stop = ss.dur(stop)
-                    start = ss.dur(0)
+                    stop = ss.years(stop)
+                    start = ss.years(0)
                 dur = stop - start
 
             case (None, None, dur):
@@ -260,7 +260,7 @@ class Timeline:
                 if isinstance(start, ss.dur):
                     pass
                 elif is_calendar_year(start):
-                    start = ss.dur(start)
+                    start = ss.years(start)
                 else:
                     start = ss.date(start)
                 stop = start + dur
@@ -271,7 +271,7 @@ class Timeline:
                 elif is_calendar_year(stop):
                     stop = ss.date(stop)
                 else:
-                    stop = ss.dur(stop)
+                    stop = ss.years(stop)
                 start = stop - dur
 
             case (start, stop, dur):
@@ -287,8 +287,8 @@ class Timeline:
                         start = ss.date(start)
                         stop = ss.date(stop)
                     else:
-                        start = ss.dur(start)
-                        stop = ss.dur(stop)
+                        start = ss.years(start)
+                        stop = ss.years(stop)
                 elif sc.isnumber(start):
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
