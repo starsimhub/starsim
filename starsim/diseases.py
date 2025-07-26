@@ -517,7 +517,7 @@ class SIR(Infection):
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.prob(0.1),
+            beta = ss.peryear(0.1),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.years(6)),
             p_death = ss.bernoulli(p=0.01),
