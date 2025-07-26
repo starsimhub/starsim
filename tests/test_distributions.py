@@ -293,8 +293,8 @@ def test_timepar_dists():
     # Create time parameters
     v = sc.objdict()
     v.base = 30.0
-    v.dur = ss.dur(30)
-    v.freq = ss.freq(30)
+    v.dur = ss.years(30)
+    v.freq = ss.freqperyear(30)
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
 
@@ -339,7 +339,7 @@ def test_timepar_dists():
 
     # Check that unitless distributions fail
     print('Testing unitless distributions ...')
-    par = ss.dur(10)
+    par = ss.dur(10, 'years')
     unitless_dists = ['lognorm_im', 'randint', 'choice']
     for name in unitless_dists:
         dist_class = getattr(ss, name)
@@ -364,15 +364,14 @@ def test_timepar_dists():
         sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
         sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
 
-
     print('Testing Bernoulli distribution ...')
-    p1 = 0.01
+    p1 = ss.probperday(0.1/365)
     p2 = ss.probperyear(0.1)
     ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
     ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
     mean1 = ber1.rvs(n).mean()
     mean2 = ber2.rvs(n).mean()
-    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
+    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {ber1} and {ber2}: {mean1:n} ≠ {mean2:n}'
     sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
 
     print('Testing different syntaxes for adding timepars')
@@ -447,8 +446,8 @@ def test_timepar_callable():
     def age_prob(module, sim, uids):
         dt = module.t.dt
         out = np.zeros_like(uids)
-        out[young] = ss.freq(p_young)*dt
-        out[old]   = ss.freq(p_old)*dt
+        out[young] = ss.peryear(p_young)*dt
+        out[old]   = ss.peryear(p_old)*dt
         return out
 
     sim = ss.mock_sim(n_agents=100_000)
@@ -475,6 +474,7 @@ def test_timepar_callable():
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
+    # ss.options.warnings = 'error'
 
     T = sc.timer()
 

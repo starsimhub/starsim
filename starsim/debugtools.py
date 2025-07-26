@@ -382,7 +382,7 @@ def mock_sim(n_agents=100, **kwargs):
         label = 'mock_sim',
         people = mock_people(n_agents),
         t = t,
-        dt = kwargs.get('dt', ss.dur(1.0)),
+        dt = kwargs.get('dt', ss.years(1.0)),
         pars = t,
         results = sc.objdict(),
         networks = sc.objdict(),
@@ -407,6 +407,6 @@ def mock_module(dur=10, **kwargs):
     mod = sc.objdict(
         name = 'mock_module',
         t = mock_time(**kwargs),
-        dt = kwargs.get('dt', ss.dur(1.0)),
+        dt = kwargs.get('dt', ss.years(1.0)),
     )
     return mod
