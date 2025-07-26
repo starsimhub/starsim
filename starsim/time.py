@@ -796,7 +796,7 @@ class dur(TimePar):
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    def __new__(cls, value=None, base='years', **kwargs):
+    def __new__(cls, value=None, base=None, **kwargs):
         """ Return the correct type based on the inputs """
         dist = cls._check_dist_arg(value)
         if dist is not None:
@@ -805,7 +805,13 @@ class dur(TimePar):
             if kwargs:
                 errormsg = f'Invalid arguments {kwargs} for ss.dur; valid arguments are "value" and "base". If you are trying to construct a datedur, call it directly.'
                 raise ValueError(errormsg)
-            new_cls = get_dur_class(base)
+            if base is not None: # e.g. ss.dur(3, 'years'
+                new_cls = get_dur_class(base)
+            else: # e.g. ss.dur(3)
+                new_cls = ss.years # Default
+                if ss.options.warn_convert:
+                    warnmsg = f'Creating {cls} with no unit specified is valid, but defaults to {new_cls}. Set ss.options.warn_convert = False to disable this warning.'
+                    ss.warn(warnmsg)
             self = super().__new__(new_cls)
             self.__init__(value=value)
             return self
@@ -1296,7 +1302,13 @@ class Rate(TimePar):
                 dur_class = get_dur_class(self.base)
                 self.unit = dur_class(1)
             else:
-                self.unit = None#years(1)
+                if isinstance(self, ss.prob): # ss.prob is the only one for which not having a unit is fine
+                    self.unit = None
+                else:
+                    self.unit = ss.years(1)
+                    if ss.options.warn_convert:
+                        warnmsg = f'Creating {type(self)} with no unit specified is valid, but defaults to {self.unit}. Set ss.options.warn_convert = False to disable this warning.'
+                        ss.warn(warnmsg)
         elif isinstance(unit, ss.dur):
             self.unit = unit
         elif isinstance(unit, str):
@@ -1328,11 +1340,17 @@ class Rate(TimePar):
 
     def __repr__(self):
         name = self.__class__.__name__
-        if name == 'Rate': # If it's a plain rate, show the unit, e.g. Rate(3/years())
-            valstr = f'{self.value:n}/{self.unit}' if self.is_scalar else f'{self.value}/{self.unit}'
+        if name in ['Rate', 'prob', 'per', 'freq']: # If it's a base class, show the unit, e.g. Rate(3/years())
+            valstr = f'{self.value:g}' if self.is_scalar else f'{self.value}' # Can't use g format with arrays
+            unitstr = f'/{self.unit}' if self.unit is not None else '' # For unitless probabilities
+            out = f'{name}({valstr}{unitstr})'
         else: # Otherwise, it's in the class name, e.g. peryear(3)
-            valstr = f'{self.value}'
-        return f'{name}({valstr})'
+            if self.is_scalar:
+                valstr = f'{self.value:g}'  # e.g. 2031.35
+            else:
+                valstr = f'{self.value}' # e.g. 2000, or an array
+            out = f'{name}({valstr})'
+        return out
 
     def __float__(self):
         return float(self.value)
@@ -1585,6 +1603,9 @@ class prob(Rate):
             elif not np.isfinite(self._rate):
                 return 1
             else: # Main use case
+                if self.unit is None: # Final check before we proceed.
+                    errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{other}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
+                    raise TypeError(errormsg)
                 factor = self.unit/other*scale
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues

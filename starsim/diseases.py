@@ -614,10 +614,10 @@ class SIS(Infection):
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.prob(0.05),
+            beta = ss.peryear(0.05),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.years(10)),
-            waning = ss.per(0.05, 'year'), # TODO: replace with ss.peryear() in the new system
+            waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )
         self.update_pars(pars, **kwargs)
