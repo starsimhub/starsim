@@ -1431,36 +1431,53 @@ class Rate(TimePar):
         else:
             return other/self.value
 
-    def to_prob(self, dur=None):
-        """
-        Calculate a time-specific probability value
+    @property
+    def _base_prob(self):
+        """ Define the default conversion to probability; used in `to_prob()` """
+        errormsg = 'ss.Rate() does not implement _base_prob; see ss.prob, ss.per, or ss.freq'
+        raise NotImplementedError(errormsg)
 
-        This function is mainly useful for subclasses where the multiplication by a duration is non-linear
-        (e.g., `prob`) and therefore it is important to apply the factor prior to multiplication by duration.
-        This function avoids creating an intermediate array of rates, and is therefore much higher performance.
-
-        e.g.
-
-        >>> p = ss.prob(0.05)*self.cd4*self.t.dt
-
-        and
-
-        >>> p = ss.prob(0.05).scale(self.cd4,self.t.dt)
-
-        are equivalent, except that the second one is (much) faster.
+    def to_prob(self, dur=None, scale=1.0):
+        """ Convert from one time probability to another
 
         Args:
-            v: The factor to scale the rate by. This factor is applied before multiplication by the duration
-            dur: An ss.dur instance to scale the rate by (often this is `dt`)
+            dur (`ss.dur`): the duration over which to convert the probability to
+            scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
 
-        Returns:
-            A numpy float array of values
+        **Example**:
+
+            p_month = ss.probpermonth(0.05)
+            p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
         """
-        if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(ss_float)
+        if dur is None:
+            if scale == 1.0:
+                return self._base_prob
+            else:
+                errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
+                raise ValueError(errormsg)
+        elif isinstance(dur, np.ndarray):
+            self.array_mul_error()
+        elif isinstance(dur, ss.dur): # Main use case
+            if self.rate == 0:
+                return 0
+            elif not np.isfinite(self.rate):
+                return 1
+            else: # Main use case
+                if self.unit is None: # Final check before we proceed.
+                    errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{dur}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
+                    raise TypeError(errormsg)
+                factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
+                if factor == 1:
+                    return self._base_prob # Avoid expensive calculation and precision issues
+                return 1 - np.exp(-self.rate*factor) # Main use case
+        elif sc.isnumber(dur):
+            rate = self.rate*dur*scale # Scale the rate rather than the value
+            rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
+            out = self.__class__(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
+            return out
         else:
-            factor = dur/self.unit
-        return self.value*factor
+            errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
+            raise TypeError(errormsg)
 
     def n_events(self, dur=None):
         """ Simple multiplication """
@@ -1592,6 +1609,11 @@ class prob(Rate):
         self._value = 1.0 - np.exp(-self._rate) if np.isfinite(self._rate) else 1.0
         return
 
+    @property
+    def _base_prob(self):
+        """ Used by to_prob() """
+        return self.value
+
     def disp(self):
         return sc.pr(self)
 
@@ -1712,6 +1734,10 @@ class per(Rate):
     * prob: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
+
+    `ss.per` is identical to `ss.freq`, except by default multiplication returns
+    a probability rather than a number of events. Use `ss.per` for probabilities
+    (e.g., probability of death per year), and `ss.freq` for events (e.g., number of acts per year).
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
@@ -1731,42 +1757,30 @@ class per(Rate):
         self.value = rate
         return
 
+    @property
+    def _base_prob(self):
+        """ Used by to_prob() """
+        return 1.0 - np.exp(-self.rate)
+
     def __mul__(self, other):
         return self.to_prob(other)
-
-    def to_prob(self, other=None, scale=1.0):
-        rate = self.value
-        if other is None:
-            return 1 - np.exp(-rate)
-        elif isinstance(other, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(other, ss.dur):
-            # Handle 0 or 1
-            if sc.isnumber(rate):
-                if rate in (0, 1):
-                    return rate
-            # We have to calculate the factor
-            factor = self.unit / other * scale
-            if sc.isnumber(factor) and factor == 1:
-                return rate  # Avoid expensive calculation and precision issues
-            # Handle everything else
-            return 1 - np.exp(-rate / factor)
-        elif sc.isnumber(other):
-            return self.__class__(rate*other*scale, self.unit)
-        else:
-            errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
-            raise TypeError(errormsg)
 
     def __truediv__(self, other):
         if isinstance(other, dur):
             raise NotImplementedError()
-        return super().__truediv__(other)  # Fixed the call to super().__truediv__
+        return super().__truediv__(other)
 
-    def __rtruediv__(self, other): raise NotImplementedError()
+    def __rtruediv__(self, other):
+        raise NotImplementedError()
 
 
 class freq(Rate):
-    """ Class for the number of events (rather than probability) in a specified period. """
+    """ Class for the number of events (rather than probability) in a specified period
+
+    Identical to `ss.per`, except by default multiplication returns a number of events
+    rather than a probability. Use `ss.freq` for events (e.g., number of acts per year)
+    and `ss.per` for probabilities (e.g., probability of death per year).
+    """
     base = None
     timepar_type = 'rate'
     timepar_subtype = 'freq'
@@ -1780,6 +1794,11 @@ class freq(Rate):
     def rate(self, rate):
         self.value = rate
         return
+
+    @property
+    def _base_prob(self):
+        """ Used by to_prob() """
+        return 1.0 - np.exp(-self.rate)
 
     def __mul__(self, other):
         return self.n_events(other)
