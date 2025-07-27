@@ -102,8 +102,8 @@ def test_arrs():
 
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')
-    p1 = sc.mergedicts(pars, birth_rate=ss.rateperyear(10))
-    p2 = sc.mergedicts(pars, death_rate=ss.rateperyear(10))
+    p1 = sc.mergedicts(pars, birth_rate=ss.freqperyear(10))
+    p2 = sc.mergedicts(pars, death_rate=ss.freqperyear(10))
     s1 = ss.Sim(pars=p1).run()
     s2 = ss.Sim(pars=p2).run()
 
@@ -167,8 +167,8 @@ def test_results():
     sc.heading('Testing results export and plotting')
 
     # Make a sim with 2 SIS models with varying units and dt
-    d1 = ss.SIS(dt=ss.Dur(1/12), name='sis1')
-    d2 = ss.SIS(dt=ss.Dur(0.5), name='sis2')
+    d1 = ss.SIS(dt=ss.dur(1/12), name='sis1')
+    d2 = ss.SIS(dt=ss.dur(0.5), name='sis2')
     sim = ss.Sim(diseases=[d1, d2], networks='random')
 
     # Run sim and pull out disease results

@@ -293,8 +293,8 @@ def test_timepar_dists():
     # Create time parameters
     v = sc.objdict()
     v.base = 30.0
-    v.dur = ss.Dur(30)
-    v.rate = ss.Rate(30)
+    v.dur = ss.years(30)
+    v.freq = ss.freqperyear(30)
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
 
@@ -332,14 +332,14 @@ def test_timepar_dists():
             expected_dur = expected*ratio
             expected_rate = expected/ratio
             actual_dur = rvs.dur.mean()
-            actual_rate = rvs.rate.mean()
+            actual_rate = rvs.freq.mean()
             assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
             assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
             sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
 
     # Check that unitless distributions fail
     print('Testing unitless distributions ...')
-    par = ss.Dur(10)
+    par = ss.dur(10, 'years')
     unitless_dists = ['lognorm_im', 'randint', 'choice']
     for name in unitless_dists:
         dist_class = getattr(ss, name)
@@ -350,7 +350,7 @@ def test_timepar_dists():
 
     # Check special distributions
     print('Testing Poisson distribution ...')
-    lam1 = ss.rateperyear(1)
+    lam1 = ss.freqperyear(1)
     lam2 = ss.perday(1)
     for module in mock_mods.values():
         poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
@@ -364,15 +364,14 @@ def test_timepar_dists():
         sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
         sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
 
-
     print('Testing Bernoulli distribution ...')
-    p1 = 0.01
-    p2 = ss.TimeProb(0.1, ss.years(10))
+    p1 = ss.probperday(0.1/365)
+    p2 = ss.probperyear(0.1)
     ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
     ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
     mean1 = ber1.rvs(n).mean()
     mean2 = ber2.rvs(n).mean()
-    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
+    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {ber1} and {ber2}: {mean1:n} ≠ {mean2:n}'
     sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
 
     print('Testing different syntaxes for adding timepars')
@@ -432,9 +431,9 @@ def test_timepar_callable():
     p_young = 0.1
     p_old = 0.2
 
-    # TODO: Shape mismatch, not sure why
+    # TODO: not sure if this should be valid? Where is it getting scaled by dt?
     # def age_prob(module, sim, uids):
-    #     out = ss.Rate(np.zeros(len(uids)))
+    #     out = ss.freq(np.zeros(len(uids)))
     #     out[young] = p_young
     #     out[old]   = p_old
     #     assert out.value.sum() > 0
@@ -445,9 +444,10 @@ def test_timepar_callable():
 
     # Higher-performance option - perform the time conversion on the parameter here
     def age_prob(module, sim, uids):
+        dt = module.t.dt
         out = np.zeros_like(uids)
-        out[young] = ss.Rate(p_young)*module.t.dt
-        out[old]   = ss.Rate(p_old)*module.t.dt
+        out[young] = ss.peryear(p_young)*dt
+        out[old]   = ss.peryear(p_old)*dt
         return out
 
     sim = ss.mock_sim(n_agents=100_000)
@@ -461,11 +461,11 @@ def test_timepar_callable():
     a = ber2.rvs(uids).mean()
 
     # TODO: waiting for implementing ss.months()
-    # ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
-    # b = ber3.rvs(uids).mean()
+    ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
+    b = ber3.rvs(uids).mean()
 
-    # rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
-    # assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {a} ≠ {b*12}'
+    rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
+    assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {a} ≠ {b*12}'
 
     return
 
@@ -474,6 +474,7 @@ def test_timepar_callable():
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
+    # ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
 
     T = sc.timer()
 

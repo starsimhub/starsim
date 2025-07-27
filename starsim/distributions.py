@@ -167,7 +167,7 @@ class scale_types(sc.prettyobj):
     """ Define how distributions scale
 
     Distributions scale in different ways, such as converting between time units.
-    Some distributions can't be scaled at all (e.g. `ss.beta()` or `ss.choice()`).
+    Some distributions can't be scaled at all (e.g. `ss.beta_dist()` or `ss.choice()`).
     For distributions that can be scaled, some distributions can only be (linearly)
     scaled *before* the random numbers are generated (called "predraw"), some can only be
     scaled after (called "postdraw"), and some can be scaled in either way ("both").
@@ -186,7 +186,7 @@ class scale_types(sc.prettyobj):
         - 'postdraw' (after the random numbers are drawn, e.g. `ss.weibull()`)
         - 'predraw' (before the draw, e.g. `ss.poisson()`)
         - 'both' (either pre or post draw, e.g. `ss.normal()`)
-        - False (not at all, e.g. `ss.beta()`)
+        - False (not at all, e.g. `ss.beta_dist()`)
 
     Use `ss.distributions.scale_types.show()` to show how each distribution scales
     with time.
@@ -710,13 +710,13 @@ class Dist:
                 is_timepar = True
                 timepar_type = type(v.flat[0])
                 if v.size == 1:
-                    v = v.flat[0] # Case where we have an array wrapping a Dur wrapping an array # TODO: refactor
+                    v = v.flat[0] # Case where we have an array wrapping a dur wrapping an array # TODO: refactor
                 else:
                     warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
                     ss.warn(warnmsg)
 
             if is_timepar:
-                if issubclass(timepar_type, ss.Dur):
+                if issubclass(timepar_type, ss.dur):
                     self._pars[key] = v/self.module.dt
                 elif issubclass(timepar_type, ss.Rate):
                     self._pars[key] = v*self.module.dt
@@ -740,7 +740,7 @@ class Dist:
     #     - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
     #     """
     #     # Nonscalar types have to be handled separately
-    #     nonscalar_types = [ss.DateDur]
+    #     nonscalar_types = [ss.datedur]
 
     #     # Check through and see if anything is a timepar
     #     timepar_dict = dict()
@@ -948,12 +948,12 @@ class Dist:
         if self.unit is not None:
             if scale_types.check_postdraw(self): # It can be scaled post-draw, proceed
                 rvs = self.unit(rvs)
-                if isinstance(rvs, ss.Dur):
+                if isinstance(rvs, ss.dur):
                     rvs = rvs/self.module.dt
                 elif isinstance(rvs, ss.Rate):
                     rvs = rvs*self.module.dt
                 else:
-                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Dur or ss.Rate'
+                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.dur or ss.Rate'
                     raise NotImplementedError(errormsg)
             else:  # It can't, raise an error
                 errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
@@ -1047,7 +1047,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'nbinom', 'beta', 'beta_mean', 'weibull', 'gamma', 'constant',
+             'poisson', 'nbinom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
              'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
 __all__ += dist_list
 __all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. same tests would fail)
@@ -1138,7 +1138,7 @@ class lognorm_im(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
@@ -1239,7 +1239,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         return spars
 
 
-class beta(Dist):
+class beta_dist(Dist):
     """
     Beta distribution
 
@@ -1262,17 +1262,30 @@ class beta_mean(Dist):
     Args:
         mean (float): mean of distribution, must be 0 < a < 1 (default 0.5)
         var (float): variance of distribution, must be > 0 (default 0.05)
+        force (bool): if True, scale the parameters to the valid range
     """
     scaling = scale_types.false
-    def __init__(self, mean=0.5, var=0.05, **kwargs):  # Does not accept dtype
+    def __init__(self, mean=0.5, var=0.05, force=False, **kwargs):  # Does not accept dtype
         # Validation
         max_var = mean*(1-mean)
         if not (0 < mean < 1):
-            errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean}'
-            raise ValueError(errormsg)
+            if force:
+                if ss.options.warn_convert:
+                    warnmsg = f'Clipping the mean from {mean:n} to 0 < mean < 1.'
+                    ss.warn(warnmsg)
+                mean = np.clip(mean, 0, 1)
+            else:
+                errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean:n}'
+                raise ValueError(errormsg)
         if not (0 < var < max_var):
-            errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
-            raise ValueError(errormsg)
+            if force:
+                if ss.options.warn_convert:
+                    warnmsg = f'Clipping the variance from {var} to 0 < var < {max_var:n}.'
+                    ss.warn(warnmsg)
+                var = np.clip(var, 0, max_var)
+            else:
+                errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
+                raise ValueError(errormsg)
 
         # We're good to go
         a = ((1 - mean)/var - 1/mean) * mean**2
@@ -1332,7 +1345,7 @@ class randint(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
@@ -1516,7 +1529,7 @@ class choice(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('lognormal_im parameters must be nondimensional')

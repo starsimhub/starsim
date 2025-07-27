@@ -3,23 +3,28 @@ Functions and classes for handling time
 
 Hierarchy of TimePars:
 TimePar  # All time parameters
-├── Dur  # All durations, units of *time*
+├── dur  # All durations, units of *time*
 │   ├── days  # Duration with units of days
 │   ├── weeks
 │   ├── months
 │   ├── years
-│   └── DateDur  # Calendar durations
-└── Rate  # All rates, units of *per time*
-    ├── rateperday  # Number of events happening per day
-    ├── rateperweek
-    ├── ratepermonth
-    ├── rateperyear
-    ├── TimeProb  # Probability of an event happening in a given time
-    │   ├── perday # Probability of an event happening in a day
+│   └── datedur  # Calendar durations
+└── Rate  # All rates, units of *per* (e.g. per time or per event)
+    ├── per  # Probability rates over time (e.g., death rate per year)
+    │   ├── perday
     │   ├── perweek
     │   ├── permonth
     │   └── peryear
-    └── RateProb  # Instantaneous probability of an event happening
+    ├── prob  # Unitless probability (e.g., probability of death per infection)
+    │   ├── probperday
+    │   ├── probperweek
+    │   ├── probpermonth
+    │   └── probperyear
+    └── freq  # Number of events (e.g., number of acts per year)
+        ├── freqperday
+        ├── freqperweek
+        ├── freqpermonth
+        └── freqperyear
 """
 import numbers
 import datetime as dt
@@ -27,9 +32,10 @@ import sciris as sc
 import numpy as np
 import pandas as pd
 import starsim as ss
+ss_float = ss.dtypes.float
 
 # General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'Dur', 'DateDur', 'Rate', 'TimeProb', 'RateProb']
+__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -66,7 +72,7 @@ class DateArray(np.ndarray):
         if isinstance(which, type(type)):
             types = which
         elif isinstance(which, str):
-            mapping = dict(date=ss.date, dur=ss.Dur, datedur=ss.DateDur, float=numbers.Number, scalar=numbers.Number)
+            mapping = dict(date=ss.date, dur=ss.dur, datedur=ss.datedur, float=numbers.Number, scalar=numbers.Number)
             if which in mapping:
                 types = mapping[which]
             else:
@@ -150,7 +156,7 @@ class date(pd.Timestamp):
 
     Args:
         date (int/float/str/datetime): Any type of date input (ints and floats will be interpreted as years)
-        allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
+        allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
         kwargs (dict): passed to pd.Timestamp()
 
     **Examples**:
@@ -172,7 +178,7 @@ class date(pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
                 single_year_arg = True
-            elif isinstance(arg, ss.Dur): # e.g. ss.years(2020)
+            elif isinstance(arg, ss.dur): # e.g. ss.years(2020)
                 arg = arg.years
                 single_year_arg = True
 
@@ -251,7 +257,7 @@ class date(pd.Timestamp):
         Args:
             year (float): the year to round
             day_round (bool): whether to round to the nearest day
-            allow_zero (bool): whether to allow year 0 (if so, return ss.DateDur instead)
+            allow_zero (bool): whether to allow year 0 (if so, return ss.datedur instead)
 
         **Examples**:
 
@@ -259,12 +265,12 @@ class date(pd.Timestamp):
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
         if year < 1:
-            warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.DateDur instead'
+            warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.datedur instead'
             if allow_zero is False:
                 raise ValueError(warnmsg)
             elif allow_zero is None:
                 ss.warn(warnmsg)
-            return ss.DateDur(years=year)
+            return ss.datedur(years=year)
         elif isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
@@ -298,7 +304,7 @@ class date(pd.Timestamp):
         return self.to_year()
 
     @staticmethod
-    def subdaily(years): # TODO: add to Dur as well? Could define a DateTime class that both inherit from, with this and any other duplicate methods
+    def subdaily(years): # TODO: add to dur as well? Could define a DateTime class that both inherit from, with this and any other duplicate methods
         """ Check if a subdaily timestep is used
 
         A date has no concept of a timestep, but add this as a convienence method since
@@ -328,7 +334,7 @@ class date(pd.Timestamp):
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
-        elif isinstance(other, ss.DateDur):
+        elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
         elif isinstance(other, years):
             return date(self.to_year() + other.value)
@@ -346,7 +352,7 @@ class date(pd.Timestamp):
     def __sub__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-        if isinstance(other, ss.DateDur):
+        if isinstance(other, ss.datedur):
             return date(self.to_pandas() - other.value)
         elif isinstance(other, years):
             return date(self.to_year() - other.value)
@@ -425,8 +431,8 @@ class date(pd.Timestamp):
         Args:
             array (array): An array of float years
             day_round (bool): Whether to round to the nearest day
-            allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
-            date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.DateDur`)
+            allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
+            date_type (type): Optionally convert to a class other than `ss.date` (e.g. `ss.datedur`)
 
         Returns:
             An array of date instances
@@ -435,7 +441,7 @@ class date(pd.Timestamp):
             date_type = cls
         kwargs = {}
         if date_type is ss.date:
-            kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.DateDur
+            kwargs = dict(day_round=day_round, allow_zero=allow_zero) # These arguments are only valid for ss.date, not ss.datedur
         return DateArray(np.vectorize(date_type)(array, **kwargs))
 
     @classmethod
@@ -452,43 +458,43 @@ class date(pd.Timestamp):
                    <2024.01.01>, <2025.01.01>], dtype=object)
 
         Args:
-            start (float/ss.date/ss.Dur): Lower bound - can be a date or a numerical year
-            stop (float/ss.date/ss.Dur): Upper bound - can be a date or a numerical year
-            step (float/ss.Dur): Assumes 1 calendar year steps by default
+                    start (float/ss.date/ss.dur): Lower bound - can be a date or a numerical year
+        stop (float/ss.date/ss.dur): Upper bound - can be a date or a numerical year
+        step (float/ss.dur): Assumes 1 calendar year steps by default
             inclusive (bool): Whether to include "stop" in the output
             day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
-            allow_zero (bool): if True, allow a year 0 by creating a DateDur instead; if False, raise an exception; if None, give a warning
+            allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
 
         Returns:
             An array of date instances
         """
         # Handle the special (but common) case of start < 1
-        if (sc.isnumber(start) or isinstance(start, ss.DateDur)) and start < 1.0:
-            date_type = ss.DateDur
+        if (sc.isnumber(start) or isinstance(start, ss.datedur)) and start < 1.0:
+            date_type = ss.datedur
             kw = {}
         else:
             date_type = cls
             kw = dict(day_round=day_round, allow_zero=allow_zero)
 
         # Convert this first
-        if isinstance(step, ss.Dur) and not isinstance(step, ss.DateDur):
+        if isinstance(step, ss.dur) and not isinstance(step, ss.datedur):
             if step.value == int(step.value): # e.g. ss.days(2) not ss.days(2.5)
-                step = ss.DateDur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
+                step = ss.datedur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
-                step = step.years # Don't try to convert e.g. ss.years(0.1) to a DateDur, you get rounding errors
+                step = step.years # Don't try to convert e.g. ss.years(0.1) to a datedur, you get rounding errors
                 # start = float(start)
                 # stop = float(stop)
         elif isinstance(step, str):
             step_class = get_dur_class(step)
-            step = ss.DateDur(step_class(1.0)) # e.g. ss.DateDur(ss.years(1.0))
+            step = ss.datedur(step_class(1.0)) # e.g. ss.datedur(ss.years(1.0))
 
         # For handling floating point issues
         atol = 0.5 / factors.years.days # It's close if it's within half a day
         def within_day(y1, y2):
             return np.isclose(y1, y2, rtol=0, atol=atol)
 
-        # We're creating dates from DateDurs, step exactly
-        if isinstance(step, ss.DateDur):
+        # We're creating dates from datedurs, step exactly
+        if isinstance(step, ss.datedur):
             if not isinstance(start, date):
                 start = date_type(start, **kw)
             if not isinstance(stop, date):
@@ -506,8 +512,8 @@ class date(pd.Timestamp):
         # We're converting them from float years, do it approximately
         elif sc.isnumber(step):
             day_round = sc.ifelse(day_round, not(cls.subdaily(step)))
-            start = start.years if isinstance(start, (date, ss.Dur)) else start
-            stop = stop.years if isinstance(stop, (date, ss.Dur)) else stop
+            start = start.years if isinstance(start, (date, ss.dur)) else start
+            stop = stop.years if isinstance(stop, (date, ss.dur)) else stop
             n_steps = (stop - start) / step
             if not n_steps.is_integer():
                 rounded_steps = round(n_steps)
@@ -517,7 +523,7 @@ class date(pd.Timestamp):
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
             return cls.from_array(arr, day_round=day_round, allow_zero=allow_zero, date_type=date_type)
         else:
-            errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.Dur(), or numbers as inputs.'
+            errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.dur(), or numbers as inputs.'
             raise TypeError(errormsg)
 
     def to_json(self):
@@ -619,10 +625,10 @@ factors = Factors()
 #%% Define TimePars
 
 class TimePar:
-    """ Parent class for all TimePars -- Dur, Rate, etc. """
+    """ Parent class for all TimePars -- dur, Rate, etc. """
     base = None # e.g. 'years', 'days', etc
     timepar_type = None # 'dur' or 'rate'
-    timepar_subtype = None # e.g. 'datedur' or 'timeprob'
+    timepar_subtype = None # e.g. 'datedur' or 'prob'
 
     def __new__(cls, *args, **kwargs):
         """Special handling for ss.Dist
@@ -775,31 +781,37 @@ Examples:
         return self
 
 
-class Dur(TimePar):
+class dur(TimePar):
     """
     Base class for durations
 
     Note: this class should not be used by the user directly; instead, use ss.years(),
     ss.days(), etc.
 
-    Note that although they are different classes, `ss.Dur` objects can be modified
-    in place if needed via the `ss.Dur.mutate()` method.
+    Note that although they are different classes, `ss.dur` objects can be modified
+    in place if needed via the `ss.dur.mutate()` method.
     """
     base = None
     factors = None
     timepar_type = 'dur'
     timepar_subtype = 'dur'
 
-    def __new__(cls, value=None, base='years', **kwargs):
+    def __new__(cls, value=None, base=None, **kwargs):
         """ Return the correct type based on the inputs """
         dist = cls._check_dist_arg(value)
         if dist is not None:
             return dist
-        elif cls is Dur: # The Dur class itself, not a subclass: return the correct subclass and initialize it
+        elif cls is dur: # The dur class itself, not a subclass: return the correct subclass and initialize it
             if kwargs:
-                errormsg = f'Invalid arguments {kwargs} for ss.Dur; valid arguments are "value" and "base". If you are trying to construct a DateDur, call it directly.'
+                errormsg = f'Invalid arguments {kwargs} for ss.dur; valid arguments are "value" and "base". If you are trying to construct a datedur, call it directly.'
                 raise ValueError(errormsg)
-            new_cls = get_dur_class(base)
+            if base is not None: # e.g. ss.dur(3, 'years'
+                new_cls = get_dur_class(base)
+            else: # e.g. ss.dur(3)
+                new_cls = ss.years # Default
+                if ss.options.warn_convert:
+                    warnmsg = f'Creating {cls} with no unit specified is valid, but defaults to {new_cls}. Set ss.options.warn_convert = False to disable this warning.'
+                    ss.warn(warnmsg)
             self = super().__new__(new_cls)
             self.__init__(value=value)
             return self
@@ -811,7 +823,7 @@ class Dur(TimePar):
         Construct a value-based duration
 
         Args:
-            value (float/`ss.Dur`): the value to use
+            value (float/`ss.dur`): the value to use
             base (str): the base unit, e.g. 'years'
         """
         super().__init__()
@@ -824,9 +836,9 @@ class Dur(TimePar):
                     self.base = base
                     self._set_factors()
                 else:
-                    errormsg = f'Cannot change the base of `ss.Dur` from {self.base} to {base}; use `Dur.mutate()` instead'
+                    errormsg = f'Cannot change the base of `ss.dur` from {self.base} to {base}; use `dur.mutate()` instead'
                     raise AttributeError(errormsg)
-        elif isinstance(value, Dur):
+        elif isinstance(value, dur):
             if self.base is not None:
                 self.value = self.to_base(value)
             else:
@@ -845,7 +857,7 @@ class Dur(TimePar):
             return f'{self.base}({valstr})'
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
-    # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
+    # That would mean that dur(years=1)==dur(1) returns True - probably less confusing than having it return False?
     def __hash__(self):
         return hash(self.years)
 
@@ -869,7 +881,7 @@ class Dur(TimePar):
         return self.value*self.factors.day # Needs to return float so matplotlib can plot it correctly
 
     def __add__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, dur):
             return self.__class__(self.value + self.to_base(other))
         elif isinstance(other, date): # If adding to a date, convert to years
             return date.from_year(other.to_year() + self.years)
@@ -882,7 +894,7 @@ class Dur(TimePar):
         return self.__add__(other)
 
     def __sub__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, dur):
             out = self.__class__(self.value - self.to_base(other))
         elif isinstance(other, date):
             return date.from_year(other.to_year() - self.years)
@@ -896,7 +908,7 @@ class Dur(TimePar):
     def __mul__(self, other):
         if isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
-        elif isinstance(other, Dur):
+        elif isinstance(other, dur):
             raise Exception('Cannot multiply a duration by a duration')
         elif isinstance(other, date):
             raise Exception('Cannot multiply a duration by a date')
@@ -906,7 +918,7 @@ class Dur(TimePar):
         return self.__mul__(other)
 
     def __truediv__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, dur):
             return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
@@ -933,7 +945,7 @@ class Dur(TimePar):
         except: return self.years >= other
 
     def __eq__(self, other):
-        if isinstance(other, ss.Dur):
+        if isinstance(other, ss.dur):
             return self.years == other.years
         elif sc.isnumber(other):
             return self.years == other
@@ -944,36 +956,36 @@ class Dur(TimePar):
         except: return self.years != other
 
     def __rtruediv__(self, other):
-        # If a Dur is divided by a Dur then we will call __truediv__
-        # If a float is divided by a Dur, then we should return a rate
-        # If a rate is divided by a Dur, then we will call Rate.__truediv__
+        # If a dur is divided by a dur then we will call __truediv__
+        # If a float is divided by a dur, then we should return a rate
+        # If a rate is divided by a dur, then we will call Rate.__truediv__
         # We also need divide the duration by the numerator when calculating the rate
         if self.years == 0:
-            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(Dur(np.inf))
-        elif (sc.isnumber(other) and other == 0) or isinstance(other, Dur) and other.years == 0:
-            return Rate(0)
+            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
+        elif (sc.isnumber(other) and other == 0) or isinstance(other, dur) and other.years == 0:
+            return ss.freq(0)
         else:
-            return Rate(other, self)
+            return ss.freq(other, self)
 
     def __abs__(self):
         return self.__class__(abs(self.value))
 
     @classmethod
-    def arange(cls, start, stop, step, inclusive=True): # TODO: remove? ss.Dur(arr) is preferable to array(ss.Dur) for performance
+    def arange(cls, start, stop, step, inclusive=True): # TODO: remove? ss.dur(arr) is preferable to array(ss.dur) for performance
         """
-        Construct an array of Dur instances
+        Construct an array of dur instances
 
         For this function, the start, stop, and step must ALL be specified, and they must
-        all be Dur instances. Mixing Dur types (years and DateDur) is permitted.
+        all be dur instances. Mixing dur types (years and datedur) is permitted.
 
         Args:
-            start (ss.Dur): Starting point, e.g., ss.years(0)
-            stop (ss.Dur): Ending point, e.g. ss.years(20)
-            step (ss.Dur): Step size, e.g. ss.years(2)
+            start (ss.dur): Starting point, e.g., ss.years(0)
+            stop (ss.dur): Ending point, e.g. ss.years(20)
+            step (ss.dur): Step size, e.g. ss.years(2)
         """
         args = [start, stop, step]
-        if not all([isinstance(arg, ss.Dur) for arg in args]):
-            errormsg = f'All inputs must be ss.Dur, not {args}'
+        if not all([isinstance(arg, ss.dur) for arg in args]):
+            errormsg = f'All inputs must be ss.dur, not {args}'
             raise TypeError(errormsg)
 
         tvec = []
@@ -987,9 +999,9 @@ class Dur(TimePar):
         return out
 
 
-class DateDur(Dur):
+class datedur(dur):
     """ Date based duration e.g., if requiring a week to be 7 calendar days later """
-    base = 'years' # DateDur uses 'years' as the default unit for conversion
+    base = 'years' # datedur uses 'years' as the default unit for conversion
     timepar_type = 'dur'
     timepar_subtype = 'datedur'
 
@@ -1001,13 +1013,13 @@ class DateDur(Dur):
             - Single positional argument
                 - A float number of years
                 - A pd.DateOffset
-                - A Dur instance
+                - A dur instance
             - Keyword arguments
                 - Argument names that match time periods in `ss.time.factors` e.g., 'years', 'months'
                   supporting floating point values. If the value is not an integer, the values
                   will be cascaded to smaller units using `ss.time.factors`
 
-        If no arguments are specified, a DateDur with zero duration will be produced
+        If no arguments are specified, a datedur with zero duration will be produced
 
         Args:
             args:
@@ -1015,19 +1027,19 @@ class DateDur(Dur):
         """
         super().__init__()
         if args:
-            assert not kwargs, 'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
-            assert len(args) == 1, f'DateDur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
+            assert not kwargs, 'datedur must be instantiated with only 1 arg (which is in years), or keyword arguments.'
+            assert len(args) == 1, f'datedur must be instantiated with only 1 arg (which is in years), or keyword arguments. {len(args)} args were given.'
             arg = args[0]
             if isinstance(arg, pd.DateOffset):
                 self.value = self.round_duration(arg)
-            elif isinstance(arg, DateDur):
+            elif isinstance(arg, datedur):
                 self.value = sc.dcp(arg.value) # pd.DateOffset is immutable so this should be OK
-            elif isinstance(arg, Dur):
+            elif isinstance(arg, dur):
                 self.value = self.round_duration(years=arg.years)
             elif sc.isnumber(arg):
                 self.value = self.round_duration(years=arg)
             else:
-                errormsg = f'Unsupported input {args}.\nExpecting number, ss.Dur, ss.DateDur, or pd.DateOffset'
+                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, or pd.DateOffset'
                 raise TypeError(errormsg)
         else:
             if 'value' in kwargs:
@@ -1061,7 +1073,7 @@ class DateDur(Dur):
 
         This function takes in either a pd.DateOffset, or the result of `_as_array`, and returns
         a dictionary with the same keys as `ss.time.factors` and the values from the input. The
-        output of this function can be passed to the `Dur()` constructor to create a new DateDur object.
+        output of this function can be passed to the `dur()` constructor to create a new datedur object.
 
         Args:
             x: A pd.DateOffset or an array with the same number of elements as `ss.time.factors`
@@ -1091,7 +1103,7 @@ class DateDur(Dur):
         Return approximate conversion into years
 
         This allows interoperability with years objects (which would typically be expected to
-        occur if module parameters have been entered with `DateDur` durations, but the simulation
+        occur if module parameters have been entered with `datedur` durations, but the simulation
         timestep is in `years` units).
 
         The conversion is based on `ss.time.factors` which defines the conversion from each time unit
@@ -1180,16 +1192,16 @@ class DateDur(Dur):
     def __mul__(self, other):
         if isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
-        elif isinstance(other, Dur):
+        elif isinstance(other, dur):
             raise Exception('Cannot multiply a duration by a duration')
         return self.__class__(self.scale(self.value, other))
 
     def __truediv__(self, other):
-        if isinstance(other, DateDur):
+        if isinstance(other, datedur):
             # We need to convert both dates into a common timebase to do the division
             # We *can* just do self.years/other.years, however this can cause numerical precision losses
             # yet at the same time is not necessary, because the common timebase depends on the durations.
-            # For example, DateDur(weeks=1)/DateDur(days=1) should return 7, but we get 6.9999999 if we convert
+            # For example, datedur(weeks=1)/datedur(days=1) should return 7, but we get 6.9999999 if we convert
             # both to years. Instead though, we can just convert days into weeks instead of days into years, and
             # then divide 1 week by (1/7) days.
             # return self.years/other.years
@@ -1204,7 +1216,7 @@ class DateDur(Dur):
                 a += self_array[i] / v
                 b += other_array[i] / v
             return a/b
-        elif isinstance(other, Dur):
+        elif isinstance(other, dur):
             return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
@@ -1212,7 +1224,7 @@ class DateDur(Dur):
 
     def __repr__(self):
         if self.years == 0:
-            return '<DateDur: 0>'
+            return '<datedur: 0>'
         else:
             labels = self.factor_keys
             vals = self.to_array().astype(float)
@@ -1220,7 +1232,7 @@ class DateDur(Dur):
             time_portion = vals[4:]
             time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
 
-            return '<DateDur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
+            return '<datedur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
 
     def str(self):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
@@ -1238,18 +1250,18 @@ class DateDur(Dur):
     def __add__(self, other):
         if isinstance(other, date):
             return other + self.value
-        elif isinstance(other, DateDur):
+        elif isinstance(other, datedur):
             return self.__class__(**self._as_args(self.to_array() + self._as_array(other.value)))
         elif isinstance(other, pd.DateOffset):
             return self.__class__(**self._as_args(self.to_array() + self._as_array(other)))
-        elif isinstance(other, Dur):
+        elif isinstance(other, dur):
             kwargs = {k: v for k, v in zip(self.factor_keys, self.to_array())}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
-            errormsg = f'For DateDur, it is only possible to add/subtract dates, Dur objects, or pd.DateOffset objects, not {type(other)}'
+            errormsg = f'For datedur, it is only possible to add/subtract dates, dur objects, or pd.DateOffset objects, not {type(other)}'
             raise TypeError(errormsg)
 
     def __radd__(self, other):
@@ -1260,18 +1272,18 @@ class DateDur(Dur):
 
     def __abs__(self):
         # Cannot implement this because it's ambiguous how to resolve cases like
-        # DateDur(months=-1,days=1) - this is a sensible DateDur interpreted as 'go back 1 month, then go forward 1 day'
+        # datedur(months=-1,days=1) - this is a sensible datedur interpreted as 'go back 1 month, then go forward 1 day'
         # but just taking the absolute value of all of the components wouldn't work because this would be on average 1 month + 1 day
         # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
         # (whereas abs(years) arises when comparing dates, which automatically return years)
-        raise NotImplementedError('The absolute value of a DateDur instance is undefined as components (e.g., months, days) may have different signs.')
+        raise NotImplementedError('The absolute value of a datedur instance is undefined as components (e.g., months, days) may have different signs.')
 
 
 class Rate(TimePar):
     """
     Store a value per unit time e.g., 2 per day
     - self.value - the numerator (e.g., 2) - a scalar float
-    - self.unit - the denominator (e.g., 1 day) - a Dur object
+    - self.unit - the denominator (e.g., 1 day) - a dur object
     """
     base = None
     factors = None
@@ -1287,15 +1299,21 @@ class Rate(TimePar):
 
         if unit is None:
             if self.base is not None:
-                dur = get_dur_class(self.base)
-                self.unit = dur(1)
+                dur_class = get_dur_class(self.base)
+                self.unit = dur_class(1)
             else:
-                self.unit = years(1)
-        elif isinstance(unit, Dur):
+                if isinstance(self, ss.prob): # ss.prob is the only one for which not having a unit is fine
+                    self.unit = None
+                else:
+                    self.unit = ss.years(1)
+                    if ss.options.warn_convert:
+                        warnmsg = f'Creating {type(self)} with no unit specified is valid, but defaults to {self.unit}. Set ss.options.warn_convert = False to disable this warning.'
+                        ss.warn(warnmsg)
+        elif isinstance(unit, ss.dur):
             self.unit = unit
         elif isinstance(unit, str):
-            dur = get_dur_class(unit)
-            self.unit = dur(1)
+            dur_class = get_dur_class(unit)
+            self.unit = dur_class(1)
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
 
@@ -1303,9 +1321,10 @@ class Rate(TimePar):
             value = value.value
             ss.warn('Converting TimePars in this way is inadvisable and will become an exception in future')
 
-        if not (sc.isnumber(value) or isinstance(value, np.ndarray)):
+        if not (sc.isnumber(value) or isinstance(value, np.ndarray)) and value is not None:
             errormsg = f'Value must be a scalar number or array, not {type(value)}'
             raise TypeError(errormsg)
+
         self.value = value
         self._set_base()
         return
@@ -1314,29 +1333,36 @@ class Rate(TimePar):
         """ Rates can have either unit or base set; handle either """
         if self.base is None and isinstance(self.unit, ss.TimePar):
             self.base = self.unit.base
-        elif self.base != self.unit.base: # Should not be possible, but check just in case
+        elif self.unit is not None and self.base != self.unit.base: # Should not be possible, but check just in case
             errormsg = f'Inconsistent definition: base = {self.base} but unit = {self.unit.base}'
             raise ValueError(errormsg)
         return
 
     def __repr__(self):
         name = self.__class__.__name__
-        if name == 'Rate': # If it's a plain rate, show the unit, e.g. Rate(3/years())
-            valstr = f'{self.value:n}/{self.unit}' if self.is_scalar else f'{self.value}/{self.unit}'
+        if name in ['Rate', 'prob', 'per', 'freq']: # If it's a base class, show the unit, e.g. Rate(3/years())
+            valstr = f'{self.value:g}' if self.is_scalar else f'{self.value}' # Can't use g format with arrays
+            unitstr = f'/{self.unit}' if self.unit is not None else '' # For unitless probabilities
+            out = f'{name}({valstr}{unitstr})'
         else: # Otherwise, it's in the class name, e.g. peryear(3)
-            valstr = f'{self.value}'
-        return f'{name}({valstr})'
+            if self.is_scalar:
+                valstr = f'{self.value:g}'  # e.g. 2031.35
+            else:
+                valstr = f'{self.value}' # e.g. 2000, or an array
+            out = f'{name}({valstr})'
+        return out
 
     def __float__(self):
         return float(self.value)
 
     def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            return self*other
-        elif isinstance(other, Dur):
-            return self.value*other/self.unit
-        else:
-            return self.__class__(self.value*other, self.unit)
+        errormsg = 'ss.Rate() does not implement multiplication; this is implemented differently by its subclasses. '
+        errormsg += warn_deprecation(output=True)
+        raise NotImplementedError(errormsg)
+
+    def __rmul__(self, other):
+        """ e.g. 3*rate """
+        return self.__mul__(other)
 
     def __neg__(self):
         return -1*self
@@ -1346,17 +1372,18 @@ class Rate(TimePar):
             if self.timepar_subtype == other.timepar_subtype:
                 return self.__class__(self.value+other*self.unit, self.unit)
             else:
-                errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, TimeProb+TimeProb); you added {self} + {other}'
+                errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, prob+prob); you added {self} + {other}'
                 raise TypeError(errormsg)
         else:
             if sc.isnumber(other) or isinstance(other, np.ndarray):
-                errormsg = 'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
+                errormsg = f'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
                 raise TypeError(errormsg)
             else:
                 errormsg = 'Only rates can be added to rates, not {other}'
                 raise TypeError(errormsg)
 
-    def __radd__(self, other): return self.__add__(other)
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __sub__(self, other):
         if self.__class__ == other.__class__:
@@ -1367,69 +1394,121 @@ class Rate(TimePar):
             else:
                 raise TypeError('Only rates can be added to rates')
         else:
-            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
+            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, prob+prob)')
 
     def __eq__(self, other):
-        return self.value == other.value/other.unit*self.unit
-
-    def __rmul__(self, other): return self.__mul__(other)
+        if self.unit is None:
+            try:
+                assert other.unit == None
+                self.value == other.value
+                return True
+            except:
+                return False
+        else:
+            try:
+                assert self.value == other.value/other.unit*self.unit
+                return True
+            except:
+                return False
 
     def __truediv__(self, other):
-        # This is for <rate>/<other>
+        """ This is for <rate>/<other> """
         if isinstance(other, Rate):
             # Convert the other rate onto our dt, then divide the value
-            return self.value/(other.value/other.unit*self.unit)
-        elif isinstance(other, Dur):
+            if self.unit is None and other.unit is None:
+                return self.value/other.value
+            else:
+                return self.value/(other.value/other.unit*self.unit)
+        elif isinstance(other, dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
             return self.__class__(self.value/other, self.unit)
 
     def __rtruediv__(self, other):
-        # If a float is divided by a rate
-        return other * (self.unit/self.value)
+        """ This is for <other>/<rate>, e.g. if a float is divided by a rate """
+        if self.unit is not None:
+            return other * (self.unit/self.value)
+        else:
+            return other/self.value
 
-    def to_prob(self, dur, v=1):
-        """
-        Calculate a time-specific probability value
+    @property
+    def _base_prob(self):
+        """ Define the default conversion to probability; used in `to_prob()` """
+        errormsg = 'ss.Rate() does not implement _base_prob; see ss.prob, ss.per, or ss.freq'
+        raise NotImplementedError(errormsg)
 
-        This function is mainly useful for subclasses where the multiplication by a duration is non-linear
-        (e.g., `TimeProb`) and therefore it is important to apply the factor prior to multiplication by duration.
-        This function avoids creating an intermediate array of rates, and is therefore much higher performance.
-
-        e.g.
-
-        >>> p = ss.TimeProb(0.05)*self.cd4*self.t.dt
-
-        and
-
-        >>> p = ss.TimeProb(0.05).scale(self.cd4,self.t.dt)
-
-        are equivalent, except that the second one is (much) faster.
+    def to_prob(self, dur=None, scale=1.0):
+        """ Convert from one time probability to another
 
         Args:
-            v: The factor to scale the rate by. This factor is applied before multiplication by the duration
-            dur: An ss.Dur instance to scale the rate by (often this is `dt`)
+            dur (`ss.dur`): the duration over which to convert the probability to
+            scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
 
-        Returns:
-            A numpy float array of values
+        **Example**:
+
+            p_month = ss.probpermonth(0.05)
+            p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
         """
-        if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(float)
+        if dur is None:
+            if scale == 1.0:
+                return self._base_prob
+            else:
+                errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
+                raise ValueError(errormsg)
+        elif isinstance(dur, np.ndarray):
+            self.array_mul_error()
+        elif isinstance(dur, ss.dur): # Main use case
+            if self.rate == 0:
+                return 0
+            elif not np.isfinite(self.rate):
+                return 1
+            else: # Main use case
+                if self.unit is None: # Final check before we proceed.
+                    errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{dur}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
+                    raise TypeError(errormsg)
+                factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
+                if sc.isnumber(factor) and factor == 1:
+                    return self._base_prob # Avoid expensive calculation and precision issues
+                return 1 - np.exp(-self.rate*factor) # Main use case
+        elif sc.isnumber(dur):
+            rate = self.rate*dur*scale # Scale the rate rather than the value
+            rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
+            out = self.__class__(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
+            return out
         else:
-            factor = dur/self.unit
-        return (self.value*v)*factor
+            errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
+            raise TypeError(errormsg)
+
+    def n_events(self, dur=None):
+        """ Simple multiplication """
+        if isinstance(dur, np.ndarray):
+            return self*dur
+        elif isinstance(dur, ss.dur):
+            return self.value*(dur/self.unit)
+        elif dur is None and self.unit is None:
+            return self.value
+        else:
+            return self.__class__(self.value*dur, self.unit)
+
+    def p(self, dur=None):
+        """ Alias to to_prob() """
+        return self.to_prob(dur)
+
+    def n(self, dur=None):
+        """ Alias to n_events """
+        return self.n_events(dur)
 
 
-class TimeProb(Rate):
+class prob(Rate):
     """
-    `TimeProb` represents the probability of an event occurring during a
+    `prob` represents the probability of an event occurring during a
     specified period of time.
 
     The class is designed to allow conversion of a probability from one
     duration to another through multiplication. However, the behavior of this
     conversion depends on the data type of the the object being multiplied.
 
-    When multiplied by a duration (type ss.Dur), the underlying constant rate is
+    When multiplied by a duration (type ss.dur), the underlying constant rate is
     calculated as
         `rate = -np.log(1 - self.value)`.
     Then, the probability over the new duration is
@@ -1437,7 +1516,7 @@ class TimeProb(Rate):
     where `factor` is the ratio of the new duration to the original duration.
 
     For example,
-    >>> p = ss.TimeProb(0.8, ss.years(1))
+    >>> p = ss.prob(0.8, ss.years(1))
     indicates a 80% chance of an event occurring in one year.
 
     >>> p*ss.years(1)
@@ -1450,79 +1529,141 @@ class TimeProb(Rate):
     probability of 96% representing the chance of the event occurring at least
     once over the new duration of two years.
 
-    However, the behavior is different when a `TimeProb` object is multiplied
+    However, the behavior is different when a `prob` object is multiplied
     by a scalar or array. In this case, the probability is simply scaled. This scaling
     may result in a value greater than 1, which is not valid. For example,
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use `RateProb` instead if `TimeProb` if you would prefer to directly
+    Use `per` instead if `prob` if you would prefer to directly
     specify the instantaneous rate.
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
-    timepar_subtype = 'timeprob'
+    timepar_subtype = 'prob'
 
-    def __init__(self, value, unit=None):
-        try:
-            assert 0 <= value <= 1, 'Value must be between 0 and 1'
-        except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
-            if sc.isnumber(value):
-                valstr = f'Value provided: {value}'
-                lt0 = value < 0
-                gt1 = value > 1
-            else:
-                if isinstance(value, ss.TimePar):
-                    value = value.value
+    def __init__(self, value=None, unit=None, rate=None):
+        self._value = None
+        self._rate = None
+        if value is not None:
+            if rate is not None:
+                errormsg = f'You can supply value or rate, but not both ({value = } and {rate = })'
+                raise ValueError(errormsg)
+            try:
+                assert 0 <= value <= 1, 'Value must be between 0 and 1'
+            except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
+                if sc.isnumber(value):
+                    valstr = f'Value provided: {value}'
+                    lt0 = value < 0
+                    gt1 = value > 1
                 else:
-                    value = sc.toarray(value)
-                valstr = f'Values provided:\n{value}'
-                lt0 = np.any(value<0)
-                gt1 = np.any(value>1)
-            if lt0:
-                errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
-            elif gt1:
-                if self.base is not None:
-                    correct_base = self.base.removesuffix('s') # e.g. years -> year
-                    correct_class = f'rateper{correct_base}' # e.g. rateperyear
-                    correct = f'ss.{correct_class}()' # e.g. ss.rateperyear()
-                    self.__class__ = get_rate_class(correct_class) # Mutate the class to the correct class
-                    if ss.options.warn_convert:
-                        warnmsg = f'Probabilities cannot be greater than one, so converting to a rate. Please use {correct} instead, or set ss.options.warn_convert=false. {valstr}'
-                        ss.warn(warnmsg)
-                else:
-                    errormsg = 'Probabilities are >1, and no base was unit provided. Please use e.g. ss.rateperyear() instead of doing whatever you did. {valstr}'
-                    raise ValueError(errormsg)
+                    if isinstance(value, ss.TimePar):
+                        value = value.value
+                    else:
+                        value = sc.toarray(value)
+                    valstr = f'Values provided:\n{value}'
+                    lt0 = np.any(value<0)
+                    gt1 = np.any(value>1)
+
+                if lt0:
+                    errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
+                elif gt1:
+                    errormsg = f'Values greater than 1 are not permitted for probabilities, please use ss.per() or ss.freq() instead. {valstr}'
+
+                raise ValueError(errormsg)
         Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
+        if rate is not None:
+            self.rate = rate
         return
+
+    @property
+    def value(self):
+        return self._value
+
+    @property
+    def rate(self):
+        return self._rate
+
+    @value.setter
+    def value(self, v):
+        """ Set the rate as well as the value """
+        if v is None:
+            self._value = None
+            self._rate = None
+        else:
+            if (sc.isnumber(v) and (v<0 or v>1)) or isinstance(v, np.ndarray) and (np.any(v<0) or np.any(v>1)):
+                errormsg = f'Probabilities must be in [0, 1], not {v}'
+                raise ValueError(errormsg)
+            elif sc.isnumber(v) and v == 1: # Don't handle arrays, just raise the warning in the next step if it comes to it
+                self._rate = np.inf
+            else:
+                self._rate = -np.log(1 - v) # Will raise a NumPy warning if it's an array with 1.0 values
+            self._value = v # Store the raw value as well
+        return
+
+    @rate.setter
+    def rate(self, rate):
+        """ Set both the rate and the value """
+        if sc.isnumber(v) and v<0:
+            errormsg = f'Cannot set a negative rate/probability ({v})'
+            raise ValueError(errormsg)
+        self._rate = rate
+
+        # Set the value
+        self._value = 1.0 - np.exp(-self._rate) if np.isfinite(self._rate) else 1.0
+        return
+
+    @property
+    def _base_prob(self):
+        """ Used by to_prob() """
+        return self.value
 
     def disp(self):
         return sc.pr(self)
 
     def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(other, Dur):
-            if self.value == 0:
-                return 0
-            elif self.value == 1:
-                return 1
+        return self.to_prob(other)
+
+    def to_prob(self, dur=None, scale=1.0):
+        """ Convert from one time probability to another
+
+        Args:
+            dur (`ss.dur`): the duration over which to convert the probability to
+            scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
+
+        **Example**:
+
+            p_month = ss.probpermonth(0.05)
+            p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+        """
+        if dur is None:
+            if scale == 1.0:
+                return self.value
             else:
-                factor = self.unit/other
+                errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
+                raise ValueError(errormsg)
+        elif isinstance(dur, np.ndarray):
+            self.array_mul_error()
+        elif isinstance(dur, ss.dur): # Main use case
+            if self._rate == 0:
+                return 0
+            elif not np.isfinite(self._rate):
+                return 1
+            else: # Main use case
+                if self.unit is None: # Final check before we proceed.
+                    errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{dur}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
+                    raise TypeError(errormsg)
+                factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
-                rate = -np.log(1 - self.value) #!! TODO: Dan suggests storing the rate, and doing operations on it, only converting back to a prob at the final step
-                return 1 - np.exp(-rate/factor)
+                return 1 - np.exp(-self._rate*factor) # Main use case
+        elif sc.isnumber(dur):
+            rate = self._rate*dur*scale # Scale the rate rather than the value
+            out = self.__class__(rate=rate, unit=self.unit) # Placeholder
+            return out
         else:
-            return self.__class__(self.value*other, self.unit)
-
-    def to_prob(self, dur, v=1):
-        if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(float)
-        else:
-            factor = dur/self.unit
-        rate = -np.log(1-(self.value*v))
-        return 1-np.exp(-rate*factor)
+            errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
+            raise TypeError(errormsg)
 
     @classmethod
     def array_to_prob(cls, arr, dur, v=1):
@@ -1531,50 +1672,58 @@ class TimeProb(Rate):
         if isinstance(dur, np.ndarray):
             assert arr.shape == dur.shape, 'dur must be either a scalar, or the same size as arr'
             def to_prob(a, b, _v=v):
-                return a.to_prob(dur=b, v=_v)
+                return a.to_prob(b, v=_v)
 
             vectorize = np.vectorize(to_prob)
             return vectorize(arr, dur)
 
-        elif isinstance(arr[0], TimeProb):
+        elif isinstance(arr[0], prob):
             factor = np.array([dur / a.unit for a in arr])
             scaled_vals = np.array([a.value * v for a in arr])
             rate = - np.log(1 - scaled_vals)
             return 1-np.exp(-rate*factor)
 
-        else: # Assume arr is an array of values, that would be the values of a TimeProb with unit=ss.years(1)
+        else: # Assume arr is an array of values, that would be the values of a prob with unit=ss.years(1)
             factor = dur / ss.years(1)
             scaled_vals = arr * v
             rate = - np.log(1 - scaled_vals)
             return 1 - np.exp(-rate * factor)
 
-    def __truediv__(self, other): raise NotImplementedError()
-    def __rtruediv__(self, other): raise NotImplementedError()
+    def __truediv__(self, other):
+        try:
+            return self.__mul__(1.0/other)
+        except Exception as e:
+            errormsg = f'It is only valid to divide a probability by a quantity that can be inverted, e.g. a scalar, i.e. p/2 = p*(1/2). But this did not work with {other}.'
+            raise ValueError(errormsg) from e
+
+    def __rtruediv__(self, other):
+        errormsg = f'You cannot divide anything by a probability ({self})'
+        raise NotImplementedError(errormsg)
 
 
-class RateProb(Rate):
+class per(Rate):
     """
-    A `RateProb` represents an instantaneous rate of an event occurring. Rates
+    A `per` represents an instantaneous rate of an event occurring. Rates
     must be non-negative, but need not be less than 1.
 
     Through multiplication, rate can be modified or converted to a probability,
     depending on the data type of the object being multiplied.
 
-    When a `RateProb` is multiplied by a scalar or array, the rate is simply
+    When a `per` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
     represent agents experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
-    Alternatively, when a `RateProb` is multiplied by a duration (type
-    ss.Dur), a probability is calculated. The conversion from rate to
+    Alternatively, when a `per` is multiplied by a duration (type
+    ss.dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
         `1 - np.exp(-rate/factor)`,
     where `factor` is the ratio of the multiplied duration to the original
     period (denominator).
 
     For example, consider
-    >>> p = ss.RateProb(0.8, ss.years(1))
+    >>> p = ss.per(0.8, ss.years(1))
     When multiplied by a duration of 1 year, the calculated probability is
         `1 - np.exp(-0.8)`, which is approximately 55%.
     >>> p*ss.years(1)
@@ -1582,61 +1731,94 @@ class RateProb(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between `TimeProb` and `RateProb` is subtle, but important. `RateProb` works directly
-    with the instantaneous rate of an event occurring. In contrast, `TimeProb` starts with a probability and a duration,
+    The difference between `prob` and `per` is subtle, but important. `per` works directly
+    with the instantaneous rate of an event occurring. In contrast, `prob` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
-    * RateProb: rate -> probability
-    * TimeProb: probability -> rate -> probability
+    * per: rate -> probability
+    * prob: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
+
+    `ss.per` is identical to `ss.freq`, except by default multiplication returns
+    a probability rather than a number of events. Use `ss.per` for probabilities
+    (e.g., probability of death per year), and `ss.freq` for events (e.g., number of acts per year).
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
-    timepar_subtype = 'rateprob'
+    timepar_subtype = 'per'
 
     def __init__(self, value, unit=None):
         assert value >= 0, 'Value must be >= 0'
         return super().__init__(value, unit)
 
-    def __mul__(self, other):
-        if isinstance(other, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(other, Dur):
-            if self.value == 0:
-                return 0
-            else:
-                factor = self.unit/other
-                return 1 - np.exp(-self.value/factor)
-        else:
-            return self.__class__(self.value*other, self.unit)
+    @property
+    def rate(self):
+        """ Alias to self.value """
+        return self.value
 
-    def to_prob(self, dur, v=1):
-        if isinstance(dur, np.ndarray):
-            factor = (dur/self.unit).astype(float)
-        else:
-            factor = dur/self.unit
-        rate = self.value*v
-        return 1-np.exp(-rate*factor)
+    @rate.setter
+    def rate(self, rate):
+        self.value = rate
+        return
+
+    @property
+    def _base_prob(self):
+        """ Used by to_prob() """
+        return 1.0 - np.exp(-self.rate)
+
+    def __mul__(self, other):
+        return self.to_prob(other)
 
     def __truediv__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, dur):
             raise NotImplementedError()
-        return super().__truediv__(other)  # Fixed the call to super().__truediv__
+        return super().__truediv__(other)
 
-    def __rtruediv__(self, other): raise NotImplementedError()
+    def __rtruediv__(self, other):
+        raise NotImplementedError()
+
+
+class freq(Rate):
+    """ Class for the number of events (rather than probability) in a specified period
+
+    Identical to `ss.per`, except by default multiplication returns a number of events
+    rather than a probability. Use `ss.freq` for events (e.g., number of acts per year)
+    and `ss.per` for probabilities (e.g., probability of death per year).
+    """
+    base = None
+    timepar_type = 'rate'
+    timepar_subtype = 'freq'
+
+    @property
+    def rate(self):
+        """ Alias to self.value """
+        return self.value
+
+    @rate.setter
+    def rate(self, rate):
+        self.value = rate
+        return
+
+    @property
+    def _base_prob(self):
+        """ Used by to_prob() """
+        return 1.0 - np.exp(-self.rate)
+
+    def __mul__(self, other):
+        return self.n_events(other)
 
 
 #%% Convenience classes
 __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
-            'perday', 'perweek', 'permonth', 'peryear', # TimeProbs
-            'probperday', 'probperweek', 'probpermonth', 'probperyear', # TimeProb aliases
-            'rateperday', 'rateperweek', 'ratepermonth', 'rateperyear'] # Rates
+            'perday', 'perweek', 'permonth', 'peryear', # probs
+            'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
+            'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear'] # Rates
 
 # Durations
-class years(Dur):  base = 'years'
-class months(Dur): base = 'months'
-class weeks(Dur):  base = 'weeks'
-class days(Dur):   base = 'days'
+class years(dur):  base = 'years'
+class months(dur): base = 'months'
+class weeks(dur):  base = 'weeks'
+class days(dur):   base = 'days'
 
 # Duration shortcuts
 year = years(1)
@@ -1646,23 +1828,23 @@ day = days(1)
 for obj in [year, month, week, day]:
     object.__setattr__(obj, '_locked', True) # Make immutable
 
-# TimeProbs
-class perday(TimeProb):   base = 'days'
-class perweek(TimeProb):  base = 'weeks'
-class permonth(TimeProb): base = 'months'
-class peryear(TimeProb):  base = 'years'
+# per
+class perday(per):   base = 'days'
+class perweek(per):  base = 'weeks'
+class permonth(per): base = 'months'
+class peryear(per):  base = 'years'
 
-# Aliases
-probperday = perday
-probperweek = perweek
-probpermonth = permonth
-probperyear = peryear
+# prob
+class probperday(prob):   base = 'days'
+class probperweek(prob):  base = 'weeks'
+class probpermonth(prob): base = 'months'
+class probperyear(prob):  base = 'years'
 
-# Rates
-class rateperday(Rate):   base = 'days'
-class rateperweek(Rate):  base = 'weeks'
-class ratepermonth(Rate): base = 'months'
-class rateperyear(Rate):  base = 'years'
+# freq
+class freqperday(freq):   base = 'days'
+class freqperweek(freq):  base = 'weeks'
+class freqpermonth(freq): base = 'months'
+class freqperyear(freq):  base = 'years'
 
 #%% Class mappings
 
@@ -1678,17 +1860,17 @@ reverse_class_map = {
     permonth: ['permonth', 'probpermonth', permonth],
     peryear:  ['peryear', 'probperyear', peryear],
 
-    rateperday:   ['rateperday', rateperday],
-    rateperweek:  ['rateperweek', rateperweek],
-    ratepermonth: ['ratepermonth', ratepermonth],
-    rateperyear:  ['rateperyear', rateperyear],
+    freqperday:   ['freqperday', freqperday],
+    freqperweek:  ['freqperweek', freqperweek],
+    freqpermonth: ['freqpermonth', freqpermonth],
+    freqperyear:  ['freqperyear', freqperyear],
 }
 
 # Convert to the actual class map
 class_map = sc.objdict(dur=sc.objdict(), rate=sc.objdict()) # TODO: make a class with an informative error message for invalid lookups (e.g. dur vs rate)
 for v, keylist in reverse_class_map.items():
     for key in keylist:
-        if issubclass(v, Dur):
+        if issubclass(v, dur):
             class_map.dur[key] = v
         elif issubclass(v, Rate):
             class_map.rate[key] = v
@@ -1731,3 +1913,39 @@ def get_rate_class(unit):
 def get_timepar_class(unit):
     """ Helper function to get any Timepar class (either Dur or Rate) """
     return get_unit_class('full', unit)
+
+#%% Backwards compatibility functions
+
+__all__ += ['rate', 'time_prob', 'rate_prob']
+
+def warn_deprecation(old=None, value=None, unit=None, with_s=False, output=False):
+    msg = 'The subclasses of ss.Rate() are: '
+    msg += '\n• ss.per() (rate at which an event happens, e.g. mortality rate), '
+    msg += '\n• ss.prob() (unitless probability, e.g. symptomatic infection), and '
+    msg += '\n• ss.freq() (number of events per time, e.g. acts per year). '
+    msg += '\nAlthough ss.freq() is the closest equivalent to ss.rate() in Starsim 2.0, '
+    msg += 'in most cases (e.g. birth, death, or infection rates) you actually want ss.per().'
+    if ss.options.warn_convert:
+        unitstr = str(unit) if unit is not None else 'year'
+        if with_s: unitstr = unitstr + 's'
+        warnmsg = f'The Starsim v2 class ss.{old}() is deprecated. Please use an ss.Rate() subclass, e.g. ss.{unitstr}({value}) instead. '
+        warnmsg += msg
+        ss.warn(warnmsg)
+    if output:
+        return msg
+    return
+
+def rate(value, unit=None):
+    """ Backwards compatibility function for Rate """
+    warn_deprecation('rate', value, unit)
+    return ss.freq(value, unit)
+
+def time_prob(value, unit=None):
+    """ Backwards compatibility function for prob """
+    warn_deprecation('time_prob', value, unit)
+    return ss.prob(value, unit)
+
+def rate_prob(value, unit=None):
+    """ Backwards compatibility function for per """
+    warn_deprecation('rate_prob', value, unit)
+    return ss.per(value, unit)

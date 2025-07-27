@@ -2,8 +2,6 @@
 Test that the current version of Starsim exactly matches
 the baseline results.
 """
-
-import numpy as np
 import sciris as sc
 import starsim as ss
 
@@ -156,6 +154,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
+    ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
+
     T = sc.timer()
 
     json = test_benchmark() # Run this first so benchmarking is available even if results are different

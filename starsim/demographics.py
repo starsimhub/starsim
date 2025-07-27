@@ -39,7 +39,7 @@ class Births(Demographics):
         """
         super().__init__()
         self.define_pars(
-            birth_rate = ss.rateperyear(20),
+            birth_rate = ss.peryear(20),
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
@@ -77,7 +77,7 @@ class Births(Demographics):
             # If the user has provided a bare number, assume it is per year
             msg = f'Birth rate was specified as a number rather than a rate - assuming it is {birth_rate} per year'
             ss.warn(msg)
-            return ss.rateperyear(birth_rate)
+            return ss.peryear(birth_rate)
         return birth_rate
 
     def init_results(self):
@@ -101,15 +101,15 @@ class Births(Demographics):
             year_ind = sc.findnearest(available_years, sim.t.now('year'))
             nearest_year = available_years[year_ind]
             this_birth_rate = p.birth_rate.loc[nearest_year]
-            scaled_birth_prob = ss.TimeProb.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
+            scaled_birth_prob = ss.prob.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
         else:
             this_birth_rate = p.birth_rate
             if isinstance(this_birth_rate, ss.Rate):
-                this_birth_rate = ss.TimeProb(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(dur=ss.years(1))
+                this_birth_rate = ss.prob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
             else: # number
                 this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_birth
 
-            scaled_birth_prob = ss.TimeProb.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
+            scaled_birth_prob = ss.prob.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
 
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         self.dist.set(p=scaled_birth_prob) # Update the distribution with the probabilities for this timestep
@@ -181,7 +181,7 @@ class Deaths(Demographics):
         super().__init__()
         self.define_pars(
             rel_death = 1,
-            death_rate = ss.rateperyear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -212,22 +212,22 @@ class Deaths(Demographics):
             # If the user has provided a bare number, assume it is per year
             msg = f'Death rate was specified as a number rather than a rate - assuming it is {death_rate} per year'
             ss.warn(msg)
-            return ss.rateperyear(death_rate)
+            return ss.peryear(death_rate)
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
     def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
         drd = self.death_rate_data
-        # We are going to set up death_rate as a TimeProb with unit=ss.years(1). That is the probability of death in 1 year
+        # We are going to set up death_rate as a prob with unit=ss.years(1). That is the probability of death in 1 year
         if sc.isnumber(drd):
-            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a TimeProb with unit=ss.years(1) by ss.TimeProb.array_to_prob
+            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a prob with unit=ss.years(1) by ss.prob.array_to_prob
         elif isinstance(drd, ss.Rate):
             if drd.unit == 1: # drd is already in years so don't need to translate
                 death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
             else:
-                # Convert from prob per drd.unit to prob per year, ss.TimeProb.array_to_prob will convert to prob per timestep later
-                death_rate = np.array([ss.TimeProb(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(dur=ss.years(1))])
+                # Convert from prob per drd.unit to prob per year, ss.prob.array_to_prob will convert to prob per timestep later
+                death_rate = np.array([ss.prob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(ss.years(1))])
 
         # Process data
         else:
@@ -257,7 +257,7 @@ class Deaths(Demographics):
             death_rate *= self.pars.rate_units * self.pars.rel_death
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = ss.TimeProb.array_to_prob(death_rate, self.t.dt)
+        death_prob = ss.prob.array_to_prob(death_rate, self.t.dt)
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         if sc.isnumber(drd) or isinstance(drd, ss.Rate):
@@ -325,7 +325,7 @@ class Pregnancy(Demographics):
         self.define_pars(
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = ss.rateperyear(100), # Can be a number of Pandas DataFrame
+            fertility_rate = ss.peryear(100), # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             p_maternal_death = ss.bernoulli(0),
             p_neonatal_death = ss.bernoulli(0),
@@ -380,7 +380,7 @@ class Pregnancy(Demographics):
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
-            fertility_rate[uids] = ss.TimeProb(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(dur=ss.years(1))
+            fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
         else:
             year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
             nearest_year = frd.index[year_ind]
@@ -409,7 +409,7 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = ss.TimeProb.array_to_prob(fertility_rate, self.t.dt)
+        fertility_prob = ss.prob.array_to_prob(fertility_rate, self.t.dt)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
@@ -430,7 +430,7 @@ class Pregnancy(Demographics):
         if sc.isnumber(fertility_rate):
             msg = f'Fertility rate was specified as a number rather than a rate - assuming it is {fertility_rate} per year'
             ss.warn(msg)
-            return ss.rateperyear(fertility_rate)
+            return ss.peryear(fertility_rate)
         return fertility_rate
 
     def init_pre(self, sim):

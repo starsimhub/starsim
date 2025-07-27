@@ -5,7 +5,7 @@ that may result in differences in model output, or are required in order
 to run an old parameter set with the current version, are flagged with
 the term "Regression information".
 
-## Version 3.0.0 (2025-07-18)
+## Version 3.0.0 (2025-07-26)
 
 ### Summary
 
