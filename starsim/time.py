@@ -1586,15 +1586,19 @@ class prob(Rate):
 
     @value.setter
     def value(self, v):
-        """ Set the rate, not the value """
-        if v<0 or v>1:
-            errormsg = f'Probabilities must be in [0, 1], not {v}'
-            raise ValueError(errormsg)
-        elif v == 1:
-            self._rate = np.inf
+        """ Set the rate as well as the value """
+        if v is None:
+            self._value = None
+            self._rate = None
         else:
-            self._rate = -np.log(1 - v)
-        self._value = v # Store the raw value as well
+            if (sc.isnumber(v) and (v<0 or v>1)) or isinstance(v, np.ndarray) and (np.any(v<0) or np.any(v>1)):
+                errormsg = f'Probabilities must be in [0, 1], not {v}'
+                raise ValueError(errormsg)
+            elif sc.isnumber(v) and v == 1: # Don't handle arrays, just raise the warning in the next step if it comes to it
+                self._rate = np.inf
+            else:
+                self._rate = -np.log(1 - v) # Will raise a NumPy warning if it's an array with 1.0 values
+            self._value = v # Store the raw value as well
         return
 
     @rate.setter
