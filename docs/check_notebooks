@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Run all the Jupyter notebook tutorials. Usage:
-  ./run_tutorials
+Run all the Jupyter notebook tutorials and user guide entries. Usage:
+  ./check_notebooks
 
 It will execute all notebooks in parallel, print out any errors
 encountered, and print a summary of results.

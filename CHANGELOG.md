@@ -9,7 +9,7 @@ the term "Regression information".
 
 ### Summary
 
-Full changelog coming soon!
+Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version.
 
 ### Time
 
@@ -21,7 +21,8 @@ TBC
 
 ### Other changes
 
-TBC
+- All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`.
+- Starsim now has an extensive user guide in addition to the tutorials.
 
 
 ## Version 2.3.2 (2025-07-16)
