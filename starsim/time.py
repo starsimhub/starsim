@@ -1431,7 +1431,7 @@ class Rate(TimePar):
         else:
             return other/self.value
 
-    def to_prob(self, other=None):
+    def to_prob(self, dur=None):
         """
         Calculate a time-specific probability value
 
@@ -1462,24 +1462,24 @@ class Rate(TimePar):
             factor = dur/self.unit
         return self.value*factor
 
-    def n_events(self, other=None):
+    def n_events(self, dur=None):
         """ Simple multiplication """
-        if isinstance(other, np.ndarray):
-            return self*other
-        elif isinstance(other, ss.dur):
-            return self.value*other/self.unit
-        elif other is None and self.unit is None:
+        if isinstance(dur, np.ndarray):
+            return self*dur
+        elif isinstance(dur, ss.dur):
+            return self.value*(dur/self.unit)
+        elif dur is None and self.unit is None:
             return self.value
         else:
-            return self.__class__(self.value*other, self.unit)
+            return self.__class__(self.value*dur, self.unit)
 
-    def p(self, other=None):
+    def p(self, dur=None):
         """ Alias to to_prob() """
-        return self.to_prob(other)
+        return self.to_prob(dur)
 
-    def n(self, other=None):
+    def n(self, dur=None):
         """ Alias to n_events """
-        return self.n_events(other)
+        return self.n_events(dur)
 
 
 class prob(Rate):
@@ -1526,7 +1526,12 @@ class prob(Rate):
     timepar_subtype = 'prob'
 
     def __init__(self, value=None, unit=None, rate=None):
+        self._value = None
+        self._rate = None
         if value is not None:
+            if rate is not None:
+                errormsg = f'You can supply value or rate, but not both ({value = } and {rate = })'
+                raise ValueError(errormsg)
             try:
                 assert 0 <= value <= 1, 'Value must be between 0 and 1'
             except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
@@ -1556,11 +1561,11 @@ class prob(Rate):
 
     @property
     def value(self):
-        """ Store the rate rather than the actual value """
-        if np.isfinite(self._rate):
-            return 1.0 - np.exp(-self._rate)
-        else:
-            return 1.0
+        return self._value
+
+    @property
+    def rate(self):
+        return self._rate
 
     @value.setter
     def value(self, v):
@@ -1572,18 +1577,19 @@ class prob(Rate):
             self._rate = np.inf
         else:
             self._rate = -np.log(1 - v)
+        self._value = v # Store the raw value as well
         return
 
-    @property
-    def rate(self):
-        return self._rate
-
     @rate.setter
-    def rate(self, v):
+    def rate(self, rate):
+        """ Set both the rate and the value """
         if sc.isnumber(v) and v<0:
             errormsg = f'Cannot set a negative rate/probability ({v})'
             raise ValueError(errormsg)
-        self._rate = v
+        self._rate = rate
+
+        # Set the value
+        self._value = 1.0 - np.exp(-self._rate) if np.isfinite(self._rate) else 1.0
         return
 
     def disp(self):
@@ -1592,32 +1598,45 @@ class prob(Rate):
     def __mul__(self, other):
         return self.to_prob(other)
 
-    def to_prob(self, other=None, scale=1.0):
-        if other is None:
-            return self.value
-        elif isinstance(other, np.ndarray):
+    def to_prob(self, dur=None, scale=1.0):
+        """ Convert from one time probability to another
+
+        Args:
+            dur (`ss.dur`): the duration over which to convert the probability to
+            scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
+
+        **Example**:
+
+            p_month = ss.probpermonth(0.05)
+            p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+        """
+        if dur is None:
+            if scale == 1.0:
+                return self.value
+            else:
+                errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
+                raise ValueError(errormsg)
+        elif isinstance(dur, np.ndarray):
             self.array_mul_error()
-        elif isinstance(other, ss.dur):
+        elif isinstance(dur, ss.dur): # Main use case
             if self._rate == 0:
                 return 0
             elif not np.isfinite(self._rate):
                 return 1
             else: # Main use case
                 if self.unit is None: # Final check before we proceed.
-                    errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{other}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
+                    errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{dur}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
                     raise TypeError(errormsg)
-                factor = self.unit/other*scale
+                factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
-                return 1 - np.exp(-self._rate/factor) # Main use case
-        elif sc.isnumber(other):
-            out = self.__class__(value=0, unit=self.unit) # Placeholder
-            out._rate = self._rate*other*scale # Scale the rate rather than the value
+                return 1 - np.exp(-self._rate*factor) # Main use case
+        elif sc.isnumber(dur):
+            rate = self._rate*dur*scale # Scale the rate rather than the value
+            out = self.__class__(rate=rate, unit=self.unit) # Placeholder
             return out
-            # errormsg = f'It is ambiguous to multiply a probability {self} by a number {other} since it is unclear if e.g. (p=0.5)*2 should be 1.0 or 0.75. Multiply by ss.dur, or set .value explicitly.'
-            # raise ValueError(errormsg)
         else:
-            errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
+            errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
             raise TypeError(errormsg)
 
     @classmethod
@@ -1702,6 +1721,16 @@ class per(Rate):
         assert value >= 0, 'Value must be >= 0'
         return super().__init__(value, unit)
 
+    @property
+    def rate(self):
+        """ Alias to self.value """
+        return self.value
+
+    @rate.setter
+    def rate(self, rate):
+        self.value = rate
+        return
+
     def __mul__(self, other):
         return self.to_prob(other)
 
@@ -1728,13 +1757,6 @@ class per(Rate):
             errormsg = f'Cannot multiply {type(self)} by {type(other)}: expecting ss.dur, scalar, or array'
             raise TypeError(errormsg)
 
-        # if isinstance(dur, np.ndarray):
-        #     factor = (dur/self.unit).astype(float)
-        # else:
-        #     factor = dur/self.unit
-        # rate = self.value*v
-        # return 1-np.exp(-rate*factor)
-
     def __truediv__(self, other):
         if isinstance(other, dur):
             raise NotImplementedError()
@@ -1748,6 +1770,16 @@ class freq(Rate):
     base = None
     timepar_type = 'rate'
     timepar_subtype = 'freq'
+
+    @property
+    def rate(self):
+        """ Alias to self.value """
+        return self.value
+
+    @rate.setter
+    def rate(self, rate):
+        self.value = rate
+        return
 
     def __mul__(self, other):
         return self.n_events(other)
