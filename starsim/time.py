@@ -1467,7 +1467,7 @@ class Rate(TimePar):
                     errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{dur}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
                     raise TypeError(errormsg)
                 factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
-                if factor == 1:
+                if sc.isnumber(factor) and factor == 1:
                     return self._base_prob # Avoid expensive calculation and precision issues
                 return 1 - np.exp(-self.rate*factor) # Main use case
         elif sc.isnumber(dur):
