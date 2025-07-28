@@ -13,14 +13,37 @@ Starsim v3 includes a reimplementation of how time is handled, an extensive new 
 
 ### Time
 
-TBC
+ **#TODOMIGRATION**
+- `ss.beta()` has been removed; use `ss.per()` instead, e.g. `ss.peryear()`.
+- `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.
+- ss.dur, ss.years
 
-### Debug tools
+### Debugging tools
 
-TBC
+Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): both understanding simulations and what is happening at different points in time, and understanding and profiling code performance to find possible improvements to efficiency. These include
+
+- `sim.profile()`: profiles a run of a sim, showing module by module (and optionally line by line) where most of the time is being spent. See `ss.Profile()` for details.
+- `ss.Debugger()`: steps through one or more simulations, and raises an exception when a particular condition is met (e.g., if the results from two sims start to diverge).
+- `ss.check_requires():` use this function to check if a sim contains a required module (e.g., an HIV-syphilis connector would require both HIV and syphilis modules to be present in the sim).
+- `ss.check_version()`: for checking which version of Starsim is installed.
+
+#### Profiling tests
+
+- In the tests folder, there is a `benchmark_tests.py` script for benchmarking the performance of the tests. Each test is also now timed (via the `@sc.timer` decorator).
+- There are also various profiling scripts, e.g. `profile_sim.py`.
+
+#### Mock functions
+
+Starsim components are intended to work together as part of an `ss.Sim` object, which handles initialization and coordination across modules, distributions, time parameters, etc. But sometimes, it's useful to build a very simple example to test a component in isolation. Starsim v3 comes with "mock" components, which allow you to work with e.g. a module without incorporating it into a full sim. These have the essential structure of the real thing (e.g., `sim.t.dt`), but without the complexity of the full object. These mock objects are:
+
+- `ss.mock_sim()`: generates a mock sim; useful for testing modules
+- `ss.mock_module()`: generates a mock module; useful for testing distributions
+- `ss.mock_people()`: generates a mock `ss.People` object; used by `ss.mock_sim()`
+- `ss.mock_time()`: generates a mock `ss.Timeline` object; used by `ss.mock_sim()` and  `ss.mock_module()`
 
 ### Other changes
 
+- Starsim now has an extensive user guide in addition to the tutorials.
 - All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`.
 - Files have been reorganized: `calibration.py` and `calib_components.py` have been combined into `calibration.py`; `disease.py` has been renamed `diseases.py` and `diseases/sir.py` and `diseases/ncd.py` have been incorporated into it; `analyzers.py` and `connectors.py` have been created (split out from `modules.py`), etc.
 - There is a new example analyzer `ss.dynamics_by_age()`, and a new example connector `ss.seasonality()`.
@@ -28,7 +51,13 @@ TBC
 - Array indexing has been reimplemented, using Numba instead of NumPy for large operations; this should be about 30% faster. An unnecessary array copy operation was also removed, for a further ~50% efficiency gain. (Note that although array indexing is now much faster, it was not typically the slowest step, so "real world" performance gains are closer to 10-20%.)
 - There is a new class, `ss.IntArr`, although in most cases `ss.FloatArr` is still preferred due to better handling of NaNs.
 - `ss.State` has been renamed to `ss.BoolState`.
-- Starsim now has an extensive user guide in addition to the tutorials.
+- `ss.Births()` is now random-number safe.
+- `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
+- Built-in modules now have function signatures that look like (for `ss.Births()`) this: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although the `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual value is set by the `define_pars()` method.
+- `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
+- Baseline and performance benchmark files have been converted from JSON to YAML.
+
+
 
 
 ## Version 2.3.2 (2025-07-16)
