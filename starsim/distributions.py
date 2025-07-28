@@ -1687,7 +1687,7 @@ class DistNotInitializedError(RuntimeError):
     """ Raised when Dist object is called when not initialized. """
     def __init__(self, dist=None, msg=None):
         if msg is None:
-            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.init()'
+            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.mock() or dist.init().'
         super().__init__(msg)
         return
 

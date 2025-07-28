@@ -22,6 +22,10 @@ Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In 
 - `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
 - `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
 
+#### Distributions and time
+- Distributions now have a `scale_type` attribute, which determines how they scale with time: some distributions, like `ss.normal()`, can be scaled either before or after random numbers are drawn; others, like `ss.poisson()`, can only be scaled before. See `ss.scale_types` for details.
+- Distributions that can be scaled post-draw now take an `unit` argument, e.g. `ss.normal(mean=5, std=2, unit=ss.years(1))`. This is equivalent to `ss.years(ss.normal(mean=5, std=2))` or `ss.normal(mean=ss.years(5), std=ss.years(2))`. Note that not all distributions can be scaled this way (you will get an error if you try to scale a non-scalable distribution.)
+
 For full details, see the migration guide.
 
 ### Debugging tools
@@ -64,6 +68,7 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 - `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
 - `ss.sir_vaccine()` has been renamed `ss.simple_vx()`. **#TODOMIGRATION**
 - There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
+- `ss.options._centralized` has been renamed `ss.options.single_rng`. Although there is a very small performance benefit, use of this option is not recommended.
 - Baseline and performance benchmark files have been converted from JSON to YAML.
 
 
