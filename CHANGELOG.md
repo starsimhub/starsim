@@ -20,6 +20,7 @@ Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In 
 - `unit` has been removed as an argument; use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).  **#TODOMIGRATION**
 - Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.  **#TODOMIGRATION**
 - `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
+- `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
 
 For full details, see the migration guide.
 
@@ -61,6 +62,8 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 - `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
 - Built-in modules now have function signatures that look like this example for `ss.Births()`: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the `define_pars()` method.
 - `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
+- `ss.sir_vaccine()` has been renamed `ss.simple_vx()`. **#TODOMIGRATION**
+- There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
 - Baseline and performance benchmark files have been converted from JSON to YAML.
 
 
