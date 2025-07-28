@@ -4,7 +4,6 @@ Check that the migration script examples work (written mostly by ChatGPT)
 """
 
 import shutil
-import subprocess
 import tempfile
 import difflib
 import sciris as sc
@@ -21,7 +20,7 @@ for input_file in root.rglob("*__input.py"):
         triplets.append((base, input_file, output_file, script_file))
 
 for i, (base, input_file, output_file, script_file) in enumerate(triplets):
-    sc.heading(f"Checking example {base} ({i+1} of {len(triplets)})...")
+    print(sc.ansi.green(f"Checking example {base} ({i+1} of {len(triplets)})..."))
     expected = output_file.read_text().splitlines(keepends=True)
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = sc.path(tmpdir)
@@ -33,7 +32,8 @@ for i, (base, input_file, output_file, script_file) in enumerate(triplets):
         shutil.copy(script_file, tmp_script)
 
         # Run the script
-        subprocess.run(["python", str(tmp_script)], cwd=tmpdir, check=True)
+        cmd = f'python {tmp_script} {tmp_example}'
+        sc.runcommand(cmd, cwd=tmpdir)
 
         # Compare the transformed input with the expected output
         actual = tmp_example.read_text().splitlines(keepends=True)
