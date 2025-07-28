@@ -1404,31 +1404,6 @@ class bernoulli(Dist):
         """ Alias to filter(uids, both=True) """
         return self.filter(uids=uids, both=True)
 
-    # This order (callable then timepar conversion) is now used by default?
-    # def call_par(self, key, val, size, uids):
-    #     """ Reverse the usual order of processing so callable is processed first, and then the timepar conversion """
-    #     is_timepar = isinstance(val, ss.TimePar)
-    #
-    #     if is_timepar: # If it's a time parameter, pull out the value
-    #         timepar = sc.dcp(val) # Rename to make more sense within the context of this method
-    #         val = timepar.v # Pull out the base value; we'll deal with the transformation later
-    #         self._timepar = timepar # This is used, then destroyed, by postprocess_timepar() below
-    #         if isinstance(timepar, ss.Dur): # Validation
-    #             errormsg = f'Bernoulli distributions can only be used with ss.time_prob() or ss.rate(), not {timepar}'
-    #             raise TypeError(errormsg)
-    #
-    #     # As normal: if the parameter is callable, then call it (types can appear as callable)
-    #     if callable(val) and not isinstance(val, type):
-    #         val = self.convert_callable(key, val, size, uids)
-    #
-    #     # Process as a timepar
-    #     if is_timepar:
-    #         val = self.postprocess_timepar(val) # Note: this is processing the parameter rather than the rvs as usual
-    #
-    #     # Store in the parameters and return
-    #     self._pars[key] = val
-    #     return val
-
 
 class choice(Dist):
     """
