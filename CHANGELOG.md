@@ -8,17 +8,21 @@ the term "Regression information".
 ## Version 3.0.0 (2025-07-26)
 
 ### Summary
-Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version. If a point below says "See the migration guide", that indicates that additional information (and a conversion script where possible) is provided in that guide. Otherwise, it is a non-breaking change.
+Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes, including an extensive user guide in addition to the tutorials. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version. If a point below says "See the migration guide", that indicates that additional information (and a conversion script where possible) is provided in that guide. Otherwise, it is (generally) a non-breaking change.
 
 ### Time
 Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In Starsim v3.0, the supported time units are days, weeks, months, and years. Days or years are always handled exactly and weeks and months are defined in terms of them, i.e. a week is exactly 7 days and a month is exactly 1/12th of a year. The following changes have been made to the API:
 
+- While durations work similarly as in Starsim v2, rates work differently. The base class, `ss.Rate`, cannot be used directly. Instead, you must use one of the three derived classes. `ss.freq()` is the closest to `ss.rate()` in Starsim v2, and is a simple inverse of `ss.dur()`. `ss.per()` is the equivalent of `ss.rate_prob()` in Starsim v2, but is the primary probability-based rate that should be used (e.g. for beta, birth rates, death rates, etc.). Finally, `ss.prob()` is the equivalent to `ss.time_prob()` in Starsim v2, but whereas `time_prob` was preferred in v2, `per` (equivalent to `rate_prob` in v2) is preferred in v3.
+- In addition to these base classes, each of them is available for each time unit. For durations, singletons are available (`ss.day`), as well as e.g. `ss.days()`, `ss.years()` etc. For rates, `ss.peryear()` is derived from `ss.per`, while `ss.probperyear()` is the equivalent for `ss.prob` and `ss.freqperyear()` is the equivalent for `ss.freq`. `ss.prob` can also be unitless (`ss.per` and `ss.freq` cannot be).
 - `ss.beta()` has been removed; use `ss.prob()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
 - `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
 - `unit` has been removed as an argument; use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).  **#TODOMIGRATION**
 - Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.  **#TODOMIGRATION**
 - `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
 - `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
+- `t.abstvec` has been removed; in most cases, `t.yearvec` should be used instead (although `t.datevec` or `t.timevec` may be preferable in some cases).
+- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead). **#TODOMIGRATION**
 
 For full details, see the migration guide.
 
@@ -28,11 +32,33 @@ For full details, see the migration guide.
 - Distributions now have a random-number-safe `randround()` method
 - There are two new distributions, `ss.beta_dist()` and `ss.beta_mean()` (not called `ss.beta()` to distinguish from the beta transmissibility parameter).
 
-### Sim and module changes
+### Sim and People changes
 - Sims now take an optional `modules` argument. These are run first, before anything else in the integration loop. If you want, you can supply everything directly as a module, e.g. `ss.Sim(modules=[ss.Births(), ss.RandomNet(), ss.SIR()])` is equivalent to `ss.Sim(demographics=ss.Births(), networks=ss.RandomNet(), diseases=ss.SIR())`. You can also add your own custom modules, not based on an existing Starsim module type, and specify the order they are called in.
-- `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
 - `sim.modules` has been renamed `sim.module_list`. **#TODOMIGRATION**
+- `ss.People` has a new `filter()` method, which lets you chain operations, e.g.: `ppl = sim.people; f = ppl.filter(ppl.female & (ppl.age>5) & ~ppl.sir.infected)`
+- `ss.People` has new methods `plot()` (all variables) and `plot_ages()` (age pyramid by sex).
+
+### Module changes
+
+#### Base module updates
+- Module methods have a new decorator, `@ss.required()`, which flag that it is an error for the method not to be called. This is used to prevent the user from accidentally forgetting to call `super().method()`.
+- Modules can now be used like dictionaries for accessing user-defined states, e.g. `module['my_custom_state']` is an alias for `module.my_custom_state`.
+- `module.states` has been renamed `module.state_list`. `module.statesdict` has been renamed `module.state_dict`. There is also a `module.auto_state_list` property, referring specifically to `ss.BoolState` attributes.  **#TODOMIGRATION**
 - Built-in modules now have function signatures that look like this example for `ss.Births()`: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the `define_pars()` method.
+
+#### Changes to networks
+- `key_dict` has been removed from `ss.Network()`; modify the `network.meta` dictionary directly instead, e.g. `ss.DynamicNetwork` has `self.meta.dur = ss_float` in its `__init__()` method, while `ss.SexualNetwork` has `self.meta.acts = ss_int`.
+- `ss.Network()` now has `plot()` and `to_edgelist()` methods.
+- `ss.RandomNet()` now only adds "missing" edges, fixing a bug in which the longer the edge duration, the more edges the network had.
+- There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
+- For `ss.MixingPool`, the argument `contacts` has been renamed `n_contacts`. **TODOMIGRATION**
+
+#### Changes to other modules
+- There is a new built-in analyzer `ss.dynamics_by_age()`.
+- There is a new built-in connector `ss.seasonality()`.
+- `ss.Births()` is now random-number safe.
+- `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
+- `ss.sir_vaccine()` has been renamed `ss.simple_vx()`.
 
 ### Debugging tools
 Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): both understanding simulations and what is happening at different points in time, and understanding and profiling code performance to find possible improvements to efficiency. These include:
@@ -77,27 +103,15 @@ Distributions now have a `mock()` method, that allows you to immediately start u
 - `ss.MultiSim()` plotting has been improved to display legends correctly.
 - Plotting arguments are now handled by `ss.plot_args()`, which will parse different arguments among figure, plot, scatter, and other functions, e.g. `ss.plot_args(dpi=150, linewidth=3)` will set the figure DPI and the plot line width.
 
-#### Module updates
-- There is a new built-in analyzer `ss.dynamics_by_age()`.
-- There is a new built-in connector `ss.seasonality()`.
-- `ss.Births()` is now random-number safe.
-- `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
-- `ss.sir_vaccine()` has been renamed `ss.simple_vx()`. **#TODOMIGRATION**
-- There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
-
-#### Array updates
+#### Array and results updates
 - Array indexing has been reimplemented, using Numba instead of NumPy for large operations; this should be about 30% faster. An unnecessary array copy operation was also removed, for a further ~50% efficiency gain. (Note that although array indexing is now much faster, it was not typically the slowest step, so "real world" performance gains are closer to 10-20%.)
 - There is a new class, `ss.IntArr`, although in most cases `ss.FloatArr` is still preferred due to better handling of NaNs.
 - `ss.State` has been renamed to `ss.BoolState`. See the migration guide for details.
 - `ss.options._centralized` has been renamed `ss.options.single_rng`. Although there is a very small performance benefit, use of this option is not recommended.
 - `ss.set_seed()` has been removed; the seed should be set automatically by the distributions. If you want to set the seed for a custom (not random-number-safe) non-distribution random number, call `np.random.seed()` manually.
 - Distributions and modules now define their own `shrink()` methods (for saving small files). Note that if you define a custom module that stores a lot of data, you may want to define your own `shrink()` method to remove this data.
-
-#### Miscellaneous
-- Starsim now has an extensive user guide in addition to the tutorials.
 - `ss.Result()` objects now have `disp()` and `to_str()` methods, and they can also be treated as dicts (e.g. `res['low']` instead of `res.low`).
 - You can now create an `ss.MultiSim` comprised of sims of different lengths; however, the sims will be truncated to be of the same length, and they are _not_ temporally aligned. In general, it is still inadvisable to use `msim.reduce()` with sims of different lengths.
-
 
 
 ## Version 2.3.2 (2025-07-16)

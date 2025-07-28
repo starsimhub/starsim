@@ -571,7 +571,7 @@ class Person(sc.objdict):
 
 class Filter(sc.prettyobj):
     """
-    A filter on states
+    A filter on states; see `ss.People.filter()` for details.
     """
     def __init__(self, people, uids=None):
         self.people = people
@@ -666,6 +666,22 @@ class Filter(sc.prettyobj):
             criteria (bool array): a boolean array for the filtering critria
             uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate filter objects matching both True and False
+
+        **Example**:
+
+            sim = ss.Sim(n_agents=100e3, dur=10, networks='random', diseases='sir', verbose=0)
+            sim.run()
+            ppl = sim.people
+
+            # Traditional filtering
+            f1 = ppl.female == True
+            f2 = f1 * (ppl.age>5)
+            f3 = f2 * (~ppl.sir.infected)
+
+            # Equivalent using filter
+            f1 = ppl.filter('female')
+            f2 = f1('age')>5
+            f3 = ~f2('sir.infected')
         """
         if new is True:
             filtered = Filter(self)

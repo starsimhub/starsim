@@ -1479,7 +1479,7 @@ class Rate(TimePar):
             errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
             raise TypeError(errormsg)
 
-    def n_events(self, dur=None):
+    def to_events(self, dur=None):
         """ Simple multiplication """
         if isinstance(dur, np.ndarray):
             return self*dur
@@ -1495,8 +1495,8 @@ class Rate(TimePar):
         return self.to_prob(dur)
 
     def n(self, dur=None):
-        """ Alias to n_events """
-        return self.n_events(dur)
+        """ Alias to to_events """
+        return self.to_events(dur)
 
 
 class prob(Rate):
@@ -1805,7 +1805,7 @@ class freq(Rate):
         return 1.0 - np.exp(-self.rate)
 
     def __mul__(self, other):
-        return self.n_events(other)
+        return self.to_events(other)
 
 
 #%% Convenience classes
