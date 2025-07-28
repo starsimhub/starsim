@@ -28,17 +28,27 @@ For full details, see the migration guide.
 - Distributions now have a random-number-safe `randround()` method
 - There are two new distributions, `ss.beta_dist()` and `ss.beta_mean()` (not called `ss.beta()` to distinguish from the beta transmissibility parameter).
 
-### Debugging tools
-Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): both understanding simulations and what is happening at different points in time, and understanding and profiling code performance to find possible improvements to efficiency. These include
+### Sim and module changes
+- Sims now take an optional `modules` argument. These are run first, before anything else in the integration loop. If you want, you can supply everything directly as a module, e.g. `ss.Sim(modules=[ss.Births(), ss.RandomNet(), ss.SIR()])` is equivalent to `ss.Sim(demographics=ss.Births(), networks=ss.RandomNet(), diseases=ss.SIR())`. You can also add your own custom modules, not based on an existing Starsim module type, and specify the order they are called in.
+- `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
+- `sim.modules` has been renamed `sim.module_list`. **#TODOMIGRATION**
+- Built-in modules now have function signatures that look like this example for `ss.Births()`: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the `define_pars()` method.
 
+### Debugging tools
+Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): both understanding simulations and what is happening at different points in time, and understanding and profiling code performance to find possible improvements to efficiency. These include:
 - `sim.profile()`: profiles a run of a sim, showing module by module (and optionally line by line) where most of the time is being spent. See `ss.Profile()` for details.
 - `ss.Debugger()`: steps through one or more simulations, and raises an exception when a particular condition is met (e.g., if the results from two sims start to diverge).
 - `ss.check_requires():` use this function to check if a sim contains a required module (e.g., an HIV-syphilis connector would require both HIV and syphilis modules to be present in the sim).
 - `ss.check_version()`: for checking which version of Starsim is installed.
 
+#### Loop debugging tools
+- `ss.Loop` now has an `insert()` method that lets you manually insert functions at an arbitrary point in the simulation loop.
+- `ss.Loop` now has a `plot_step_order()` method that lets you validate that the steps are being called in the expected order.
+
 #### Profiling tests
 - In the tests folder, there is a `benchmark_tests.py` script for benchmarking the performance of the tests. Each test is also now timed (via the `@sc.timer` decorator).
 - There are also various profiling scripts, e.g. `profile_sim.py`.
+- Baseline and performance benchmark files have been converted from JSON to YAML.
 
 #### Mock functions
 Starsim components are intended to work together as part of an `ss.Sim` object, which handles initialization and coordination across modules, distributions, time parameters, etc. But sometimes, it's useful to build a very simple example to test a component in isolation. Starsim v3 comes with "mock" components, which allow you to work with e.g. a module without incorporating it into a full sim. These have the essential structure of the real thing (e.g., `sim.t.dt`), but without the complexity of the full object. These mock objects are:
@@ -51,24 +61,43 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 Distributions now have a `mock()` method, that allows you to immediately start using them to generate random numbers, e.g. `ss.normal(5,2).mock().rvs(10)`.
 
 ### Other changes
-- Starsim now has an extensive user guide in addition to the tutorials.
+
+#### File structure
 - All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`. See the migration guide for details.
 - `ss.register_modules()` lets you register external modules as Starsim modules, to allow calling by string; e.g. `ss.register_modules(sse)` (from above) will let you do `ss.Sim(diseases='hiv')`, since `sse.HIV` is registered as a known Starsim module.
-- Files have been reorganized: `calibration.py` and `calib_components.py` have been combined into `calibration.py`; `disease.py` has been renamed `diseases.py` and `diseases/sir.py` and `diseases/ncd.py` have been incorporated into it; `analyzers.py` and `connectors.py` have been created (split out from `modules.py`), etc.
-- There is a new example analyzer `ss.dynamics_by_age()`, and a new example connector `ss.seasonality()`.
+- Files have been reorganized:
+    - `analyzers.py` and `connectors.py` have been created (split out from `modules.py`);
+    - `calibration.py` and `calib_components.py` have been combined into `calibration.py`;
+    - `disease.py` has been renamed `diseases.py` and `diseases/sir.py` and `diseases/ncd.py` have been incorporated into it;
+    - `timeline.py` has been split out from `time.py`.
+
+#### Plotting
 - Plotting defaults have been updated; you can use these defaults via `with ``ss.style()`.
+- Result plotting has been improved, in terms of module labels and correct x-axis labels.
+- `ss.MultiSim()` plotting has been improved to display legends correctly.
+- Plotting arguments are now handled by `ss.plot_args()`, which will parse different arguments among figure, plot, scatter, and other functions, e.g. `ss.plot_args(dpi=150, linewidth=3)` will set the figure DPI and the plot line width.
+
+#### Module updates
+- There is a new built-in analyzer `ss.dynamics_by_age()`.
+- There is a new built-in connector `ss.seasonality()`.
+- `ss.Births()` is now random-number safe.
+- `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
+- `ss.sir_vaccine()` has been renamed `ss.simple_vx()`. **#TODOMIGRATION**
+- There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
+
+#### Array updates
 - Array indexing has been reimplemented, using Numba instead of NumPy for large operations; this should be about 30% faster. An unnecessary array copy operation was also removed, for a further ~50% efficiency gain. (Note that although array indexing is now much faster, it was not typically the slowest step, so "real world" performance gains are closer to 10-20%.)
 - There is a new class, `ss.IntArr`, although in most cases `ss.FloatArr` is still preferred due to better handling of NaNs.
 - `ss.State` has been renamed to `ss.BoolState`. See the migration guide for details.
-- `ss.Births()` is now random-number safe.
-- `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
-- Built-in modules now have function signatures that look like this example for `ss.Births()`: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the `define_pars()` method.
-- `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
-- `ss.sir_vaccine()` has been renamed `ss.simple_vx()`. **#TODOMIGRATION**
-- There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
 - `ss.options._centralized` has been renamed `ss.options.single_rng`. Although there is a very small performance benefit, use of this option is not recommended.
-- Baseline and performance benchmark files have been converted from JSON to YAML.
+- `ss.set_seed()` has been removed; the seed should be set automatically by the distributions. If you want to set the seed for a custom (not random-number-safe) non-distribution random number, call `np.random.seed()` manually.
 - Distributions and modules now define their own `shrink()` methods (for saving small files). Note that if you define a custom module that stores a lot of data, you may want to define your own `shrink()` method to remove this data.
+
+#### Miscellaneous
+- Starsim now has an extensive user guide in addition to the tutorials.
+- `ss.Result()` objects now have `disp()` and `to_str()` methods, and they can also be treated as dicts (e.g. `res['low']` instead of `res.low`).
+- You can now create an `ss.MultiSim` comprised of sims of different lengths; however, the sims will be truncated to be of the same length, and they are _not_ temporally aligned. In general, it is still inadvisable to use `msim.reduce()` with sims of different lengths.
+
 
 
 ## Version 2.3.2 (2025-07-16)
