@@ -175,6 +175,15 @@ interlinks:
       url: https://docs.scipy.org/doc/scipy/
     matplotlib:
       url: https://matplotlib.org/stable/
+    sciris:
+      url: https://docs.sciris.org/
+  autolink: true
+  aliases:
+    numpy: [np]
+    pandas: [pd]
+    matplotlib: [plt]
+    sciris: [sc]
+    starsim: [null, ss]
 
 quartodoc:
   package: starsim
