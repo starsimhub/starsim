@@ -9,7 +9,7 @@ the term "Regression information".
 
 ### Summary
 
-Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version.
+Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version. If a point below says "See the migration guide", that indicates that additional information (and a conversion script where possible) is provided in that guide. Otherwise, it is a non-breaking change.
 
 ### Time
 
@@ -17,6 +17,8 @@ Starsim v3 includes a reimplementation of how time is handled, an extensive new 
 - `ss.beta()` has been removed; use `ss.per()` instead, e.g. `ss.peryear()`.
 - `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.
 - ss.dur, ss.years
+
+For full details, see the migration guide.
 
 ### Debugging tools
 
@@ -44,16 +46,16 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 ### Other changes
 
 - Starsim now has an extensive user guide in addition to the tutorials.
-- All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`.
+- All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`. See the migration guide for details.
 - Files have been reorganized: `calibration.py` and `calib_components.py` have been combined into `calibration.py`; `disease.py` has been renamed `diseases.py` and `diseases/sir.py` and `diseases/ncd.py` have been incorporated into it; `analyzers.py` and `connectors.py` have been created (split out from `modules.py`), etc.
 - There is a new example analyzer `ss.dynamics_by_age()`, and a new example connector `ss.seasonality()`.
 - Plotting defaults have been updated; you can use these defaults via `with ``ss.style()`.
 - Array indexing has been reimplemented, using Numba instead of NumPy for large operations; this should be about 30% faster. An unnecessary array copy operation was also removed, for a further ~50% efficiency gain. (Note that although array indexing is now much faster, it was not typically the slowest step, so "real world" performance gains are closer to 10-20%.)
 - There is a new class, `ss.IntArr`, although in most cases `ss.FloatArr` is still preferred due to better handling of NaNs.
-- `ss.State` has been renamed to `ss.BoolState`.
+- `ss.State` has been renamed to `ss.BoolState`. See the migration guide for details.
 - `ss.Births()` is now random-number safe.
 - `ss.Deaths()` now has a default rate of 10 per 1000 people per year (instead of 20). Births is still 20. This means that with `demographics=True`, the population grows at roughly the correct global average rate.
-- Built-in modules now have function signatures that look like (for `ss.Births()`) this: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although the `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual value is set by the `define_pars()` method.
+- Built-in modules now have function signatures that look like this example for `ss.Births()`: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the `define_pars()` method.
 - `module.statesdict` has been renamed `module.state_dict`. **#TODOMIGRATION**
 - Baseline and performance benchmark files have been converted from JSON to YAML.
 
