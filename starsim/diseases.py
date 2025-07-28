@@ -256,7 +256,7 @@ class Infection(Disease):
                     p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
                     for src, trg, beta in [p1p2b0, p2p1b1]:
                         if beta: # Skip networks with no transmission
-                            beta_per_dt = route.net_beta(disease_beta=beta*self.t.dt if isinstance(beta, ss.Rate) else beta, disease=self) # Compute beta for this network and timestep
+                            beta_per_dt = route.net_beta(disease_beta=beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta, disease=self) # Compute beta for this network and timestep
                             randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
                             args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
                             target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
@@ -267,7 +267,7 @@ class Infection(Disease):
             # Handle everything else: mixing pools, environmental transmission, etc.
             elif isinstance(route, ss.Route):
                 # Mixing pools are unidirectional, only use the first beta value
-                disease_beta = betamap[nk][0]*self.t.dt if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
+                disease_beta = betamap[nk][0].to_prob(self.t.dt) if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
                 target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta)
                 new_cases.append(target_uids)
                 sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
@@ -637,7 +637,7 @@ class SIS(Infection):
         return
 
     def update_immunity(self):
-        waning = self.pars.waning*self.t.dt # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)
+        waning = self.pars.waning.to_prob() # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)
         has_imm = (self.immunity > 0).uids
         self.immunity[has_imm] *= waning
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
