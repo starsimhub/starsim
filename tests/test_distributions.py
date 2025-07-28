@@ -448,7 +448,6 @@ def test_timepar_callable():
     ber2 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
     a = ber2.rvs(uids).mean()
 
-    # TODO: waiting for implementing ss.months()
     ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
     b = ber3.rvs(uids).mean()
 
