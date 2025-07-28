@@ -13,10 +13,13 @@ Starsim v3 includes a reimplementation of how time is handled, an extensive new 
 
 ### Time
 
- **#TODOMIGRATION**
-- `ss.beta()` has been removed; use `ss.per()` instead, e.g. `ss.peryear()`.
-- `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.
-- ss.dur, ss.years
+Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In Starsim v3.0, the supported time units are days, weeks, months, and years. Days or years are always handled exactly and weeks and months are defined in terms of them, i.e. a week is exactly 7 days and a month is exactly 1/12th of a year. The following changes have been made to the API:
+
+- `ss.beta()` has been removed; use `ss.prob()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
+- `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
+- `unit` has been removed as an argument; use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).  **#TODOMIGRATION**
+- Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.  **#TODOMIGRATION**
+- `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
 
 For full details, see the migration guide.
 
@@ -47,6 +50,7 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 
 - Starsim now has an extensive user guide in addition to the tutorials.
 - All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`. See the migration guide for details.
+- `ss.register_modules()` lets you register external modules as Starsim modules, to allow calling by string; e.g. `ss.register_modules(sse)` (from above) will let you do `ss.Sim(diseases='hiv')`, since `sse.HIV` is registered as a known Starsim module.
 - Files have been reorganized: `calibration.py` and `calib_components.py` have been combined into `calibration.py`; `disease.py` has been renamed `diseases.py` and `diseases/sir.py` and `diseases/ncd.py` have been incorporated into it; `analyzers.py` and `connectors.py` have been created (split out from `modules.py`), etc.
 - There is a new example analyzer `ss.dynamics_by_age()`, and a new example connector `ss.seasonality()`.
 - Plotting defaults have been updated; you can use these defaults via `with ``ss.style()`.
