@@ -20,11 +20,11 @@ Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In 
 - `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
 - `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
 
-#### Distributions and time
+For full details, see the migration guide.
+
+### Distributions
 - Distributions now have a `scale_type` attribute, which determines how they scale with time: some distributions, like `ss.normal()`, can be scaled either before or after random numbers are drawn; others, like `ss.poisson()`, can only be scaled before. See `ss.scale_types` for details.
 - Distributions that can be scaled post-draw now take an `unit` argument, e.g. `ss.normal(mean=5, std=2, unit=ss.years(1))`. This is equivalent to `ss.years(ss.normal(mean=5, std=2))` or `ss.normal(mean=ss.years(5), std=ss.years(2))`. Note that not all distributions can be scaled this way (you will get an error if you try to scale a non-scalable distribution.)
-
-For full details, see the migration guide.
 
 ### Debugging tools
 Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): both understanding simulations and what is happening at different points in time, and understanding and profiling code performance to find possible improvements to efficiency. These include
