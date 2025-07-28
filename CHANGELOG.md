@@ -22,6 +22,12 @@ TBC
 ### Other changes
 
 - All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`.
+- Files have been reorganized: `calibration.py` and `calib_components.py` have been combined into `calibration.py`; `disease.py` has been renamed `diseases.py` and `diseases/sir.py` and `diseases/ncd.py` have been incorporated into it; `analyzers.py` and `connectors.py` have been created (split out from `modules.py`), etc.
+- There is a new example analyzer `ss.dynamics_by_age()`, and a new example connector `ss.seasonality()`.
+- Plotting defaults have been updated; you can use these defaults via `with ``ss.style()`.
+- Array indexing has been reimplemented, using Numba instead of NumPy for large operations; this should be about 30% faster. An unnecessary array copy operation was also removed, for a further ~50% efficiency gain. (Note that although array indexing is now much faster, it was not typically the slowest step, so "real world" performance gains are closer to 10-20%.)
+- There is a new class, `ss.IntArr`, although in most cases `ss.FloatArr` is still preferred due to better handling of NaNs.
+- `ss.State` has been renamed to `ss.BoolState`.
 - Starsim now has an extensive user guide in addition to the tutorials.
 
 
