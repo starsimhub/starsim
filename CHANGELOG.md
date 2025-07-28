@@ -8,11 +8,9 @@ the term "Regression information".
 ## Version 3.0.0 (2025-07-26)
 
 ### Summary
-
 Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version. If a point below says "See the migration guide", that indicates that additional information (and a conversion script where possible) is provided in that guide. Otherwise, it is a non-breaking change.
 
 ### Time
-
 Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In Starsim v3.0, the supported time units are days, weeks, months, and years. Days or years are always handled exactly and weeks and months are defined in terms of them, i.e. a week is exactly 7 days and a month is exactly 1/12th of a year. The following changes have been made to the API:
 
 - `ss.beta()` has been removed; use `ss.prob()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
@@ -29,7 +27,6 @@ Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In 
 For full details, see the migration guide.
 
 ### Debugging tools
-
 Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): both understanding simulations and what is happening at different points in time, and understanding and profiling code performance to find possible improvements to efficiency. These include
 
 - `sim.profile()`: profiles a run of a sim, showing module by module (and optionally line by line) where most of the time is being spent. See `ss.Profile()` for details.
@@ -38,12 +35,10 @@ Starsim v3 comes with a new set of tools for debugging (in `debugtools.py`): bot
 - `ss.check_version()`: for checking which version of Starsim is installed.
 
 #### Profiling tests
-
 - In the tests folder, there is a `benchmark_tests.py` script for benchmarking the performance of the tests. Each test is also now timed (via the `@sc.timer` decorator).
 - There are also various profiling scripts, e.g. `profile_sim.py`.
 
 #### Mock functions
-
 Starsim components are intended to work together as part of an `ss.Sim` object, which handles initialization and coordination across modules, distributions, time parameters, etc. But sometimes, it's useful to build a very simple example to test a component in isolation. Starsim v3 comes with "mock" components, which allow you to work with e.g. a module without incorporating it into a full sim. These have the essential structure of the real thing (e.g., `sim.t.dt`), but without the complexity of the full object. These mock objects are:
 
 - `ss.mock_sim()`: generates a mock sim; useful for testing modules
@@ -51,8 +46,9 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 - `ss.mock_people()`: generates a mock `ss.People` object; used by `ss.mock_sim()`
 - `ss.mock_time()`: generates a mock `ss.Timeline` object; used by `ss.mock_sim()` and  `ss.mock_module()`
 
-### Other changes
+Distributions now have a `mock()` method, that allows you to immediately start using them to generate random numbers, e.g. `ss.normal(5,2).mock().rvs(10)`.
 
+### Other changes
 - Starsim now has an extensive user guide in addition to the tutorials.
 - All diseases except for SIR, SIS, and NCD have been moved to a separate `starsim_examples` folder. This is installed together with Starsim, but must be imported separately, e.g. `import starsim_examples as sse; hiv = sse.HIV()` instead of `import starsim as ss; hiv = ss.HIV()`. See the migration guide for details.
 - `ss.register_modules()` lets you register external modules as Starsim modules, to allow calling by string; e.g. `ss.register_modules(sse)` (from above) will let you do `ss.Sim(diseases='hiv')`, since `sse.HIV` is registered as a known Starsim module.
@@ -70,8 +66,6 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 - There is a new network, `ss.RandomSafe()`, whch is similar to `ss.Random()` but random-number safe (at the cost of being slightly slower).
 - `ss.options._centralized` has been renamed `ss.options.single_rng`. Although there is a very small performance benefit, use of this option is not recommended.
 - Baseline and performance benchmark files have been converted from JSON to YAML.
-
-
 
 
 ## Version 2.3.2 (2025-07-16)
@@ -109,6 +103,7 @@ Starsim components are intended to work together as part of an `ss.Sim` object, 
 - Improves `sim.shrink()`, with typical size reductions of &gt;99%.
 - Adds additional plotting options `show_module` (include the module name in the plot title), `show_label` (use the simulation label as the figure title), and `show_skipped` (shows results even if `auto_plot=False`).
 - *GitHub info*: PR [745](https://github.com/starsimhub/starsim/pull/745)
+
 
 ## Version 2.1.0 (2024-11-07)
 

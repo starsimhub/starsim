@@ -729,65 +729,6 @@ class Dist:
                 except:
                     pass
 
-    # def convert_timepars2(self):
-    #     """
-    #     Convert time parameters (durations and rates) to scalars
-
-    #     This function converts time parameters into bare numbers that will be returned by rvs() depending
-    #     on the timestep of the parent module for this `Dist`. The conversion for these types is
-
-    #     - Durations are divided by `dt` (so the eresult will be a number of timesteps)
-    #     - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
-    #     """
-    #     # Nonscalar types have to be handled separately
-    #     nonscalar_types = [ss.datedur]
-
-    #     # Check through and see if anything is a timepar
-    #     timepar_dict = dict()
-    #     for key,val in self._pars.items():
-    #         if isinstance(val, ss.TimePar):
-    #             timepar_type = type(val)
-    #             timepar_dict[key] = timepar_type
-    #             if self.unit is None:
-    #                 if timepar_type in nonscalar_types:
-    #                     # warnmsg = f'Trying to use a nonscalar timepar, {timepar_type}, as the Dist unit; automatically converting to ss.years instead'
-    #                     # ss.warn(warnmsg) # Don't think we actually need this warning, should always be safe to convert to ss.years?
-    #                     timepar_type = ss.years # Fallback for working with dates
-    #                 self.unit = timepar_type # Reset with the first found timepar
-
-    #     # Convert timepars, if any found
-    #     for key in timepar_dict.keys():
-    #         val = self._pars[key]
-
-    #         # Incompatible types: fail
-    #         self_type = self.unit.timepar_type # TODO: are different subtypes (prob vs rate) ok?
-    #         other_type = val.timepar_type
-    #         if self_type != other_type:
-    #             errormsg = f'Cannot convert timepars of incompatible types: dist={self_type} vs. {key}={other_type}'
-    #             raise TypeError(errormsg)
-
-    #         # Same type, different base: convert
-    #         if self.unit.base != val.base or self.unit.timepar_subtype != val.timepar_subtype:
-    #             val = self.unit(val) # e.g. ss.weeks(ss.years(2))
-
-    #         # Now that they're all consistent, replace the timepar with its value, and then postprocess
-    #         # self._pars[key] = val.value # TODO: try to make this work -- it's fine for e.g. normal, but fails for Poisson since dt changes the shape of the distribution. Need is_scalable parameter!
-
-    #         # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
-    #         print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
-    #         print('BEFORE', val)
-    #         if isinstance(val, ss.Dur):
-    #             val = val/self.module.dt
-    #         elif isinstance(val, ss.Rate):
-    #             val = val*self.module.dt
-    #         else:
-    #             raise NotImplementedError
-    #         self._pars[key] = val
-
-    #         print('AFTER', val)
-    #     return
-
-
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
         size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
