@@ -1326,6 +1326,7 @@ class Rate(TimePar):
             raise TypeError(errormsg)
 
         self.value = value
+        self.default_dur = None # Used by modules to set dt
         self._set_base()
         return
 
@@ -1336,7 +1337,12 @@ class Rate(TimePar):
         elif self.unit is not None and self.base != self.unit.base: # Should not be possible, but check just in case
             errormsg = f'Inconsistent definition: base = {self.base} but unit = {self.unit.base}'
             raise ValueError(errormsg)
-        return
+        return self
+
+    def set_default_dur(self, dur):
+        """ Set the default duration, e.g. module.dt, so .to_prob() can be used with no input """
+        self.default_dur = dur
+        return self
 
     def __repr__(self):
         name = self.__class__.__name__
@@ -1450,6 +1456,9 @@ class Rate(TimePar):
             p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
         """
         if dur is None:
+            dur = self.default_dur # May also be None
+
+        if dur is None:
             if scale == 1.0:
                 return self._base_prob
             else:
@@ -1480,7 +1489,10 @@ class Rate(TimePar):
             raise TypeError(errormsg)
 
     def to_events(self, dur=None):
-        """ Simple multiplication """
+        """ Simple multiplication: calculate the number of events over the time period """
+        if dur is None:
+            dur = self.default_dur # May also be None
+
         if isinstance(dur, np.ndarray):
             return self*dur
         elif isinstance(dur, ss.dur):
@@ -1491,11 +1503,11 @@ class Rate(TimePar):
             return self.__class__(self.value*dur, self.unit)
 
     def p(self, dur=None):
-        """ Alias to to_prob() """
+        """ Alias to to_prob() (probability of event happening) """
         return self.to_prob(dur)
 
     def n(self, dur=None):
-        """ Alias to to_events """
+        """ Alias to to_events (number of events) """
         return self.to_events(dur)
 
 

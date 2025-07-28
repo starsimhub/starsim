@@ -522,11 +522,23 @@ class Module(Base):
             self.setattribute('sim', sim) # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
             self.t.init(sim=self.sim) # Initialize time vector
+            self.link_rates() # Add module dt to the timepars
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()
             self.pre_initialized = True
+        return
+
+    @required()
+    def link_rates(self, force=False):
+        """ Find all time parameters in the module and link them to the module's dt """
+        rates = sc.search(self, type=ss.Rate, skip=dict(keys=['sim', 'module'])) # Should it be self or self.pars?
+
+        # Initialize them with the parent module
+        for rate in rates.values():
+            if force or rate.default_dur is None:
+                rate.set_default_dur(self.t.dt)
         return
 
     @required()
