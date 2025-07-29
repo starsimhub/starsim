@@ -223,7 +223,7 @@ for path in files:
     # Replace unit='x' → dt='x' (assumes dt=1)
     def repl_unit_only(m):
         unit = m.group(1)
-        return f'dt="{unit}"'
+        return f"dt='{unit}'"
 
     text = pattern_unit_dt.sub(repl_unit_dt, text)
     text = pattern_dt_unit.sub(repl_dt_unit, text)

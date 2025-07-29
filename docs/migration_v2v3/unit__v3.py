@@ -1,7 +1,7 @@
 import starsim as ss
 
 pars = dict(
-    diseases = ss.SIS(dt=ss.days(1), init_prev=0.1),
+    diseases = ss.SIS(dt=ss.days(1.0), init_prev=0.1),
     demographics = ss.Births(dt=ss.years(0.25)),
     networks = ss.RandomNet(dt='week'),
 )
