@@ -1,9 +1,6 @@
 # What's new
 
-All notable changes to the codebase are documented in this file. Changes
-that may result in differences in model output, or are required in order
-to run an old parameter set with the current version, are flagged with
-the term "Regression information".
+All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 ## Version 3.0.0 (2025-07-26)
 
@@ -124,6 +121,10 @@ Starsim v3 comes with several new options, set via `ss.options`:
 - `ss.options.warn_convert`: whether to warn when automatically converting time parameters
 
 `ss.options` also now has a `help` method that will print detailed help on a given option or all options, e.g. `ss.options.help(detailed=True)`.
+
+#### Migration summary
+- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then `docs/migration_v2v3/README.md`. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
+- *GitHub info*: PR [1008](https://github.com/starsimhub/starsim/pull/1008)
 
 
 ## Version 2.3.2 (2025-07-16)
@@ -541,14 +542,9 @@ is now:
 
 ## Version 0.2.9 (2024-03-18)
 - Renames and extends the multirng option in settings, now called 'rng', which set how random numbers are handled in Starsim with three options:
-
-    > -   "centralized" uses the centralized numpy random number
-    >     generator for all distributions.
-    > -   "single" uses a separate (SingleRNG) random number generator
-    >     for each distribution.
-    > -   "multi" uses a separate (MultiRNG) random number generator for
-    >     each distribution.
-
+    - "centralized" uses the centralized numpy random number generator for all distributions.
+    - "single" uses a separate (SingleRNG) random number generator for each distribution.
+    - "multi" uses a separate (MultiRNG) random number generator for each distribution.
 - *GitHub info*: PR [349](https://github.com/amath-idm/stisim/pull/349)
 
 ## Version 0.2.8 (2024-03-13)

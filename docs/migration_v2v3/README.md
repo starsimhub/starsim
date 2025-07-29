@@ -14,181 +14,16 @@ The main change is regarding time parameters (timepars). These are described in 
 
 TBC
 
-### Example 1: Old
-```py
-sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
-```
+- `ss.beta()` has been removed; use `ss.prob()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
+- `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
+- `unit` has been removed as an argument; use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).  **#TODOMIGRATION**
+- Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.  **#TODOMIGRATION**
+- `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
+- `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
+- `t.abstvec` has been removed; in most cases, `t.yearvec` should be used instead (although `t.datevec` or `t.timevec` may be preferable in some cases).
+- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead). **#TODOMIGRATION**
 
-### Example 1: New
-```py
-sis = ss.SIS(
-    beta = dict(
-        random = [ss.permonth(0.005)]*2,
-        prenatal = [ss.permonth(0.1), 0],
-        postnatal = [ss.permonth(0.1), 0]
-    )
-)
-```
 
-### Example 2: Old
-```py
-sim = ss.Sim(
-    n_agents = 1000,
-    pars = dict(
-      networks = dict(
-            type = 'random',
-            n_contacts = 4
-      ),
-      diseases = dict(
-            type      = 'sir',
-            init_prev = 0.01,
-            dur_inf   = ss.dur(10),
-            p_death   = 0,
-            beta      = ss.beta(0.06),
-      )
-    ),
-    dur = 10,
-    dt  = 0.01
-)
-```
-
-### Example 2: New
-```py
-sim = ss.Sim(
-    n_agents = 1000,
-    pars = dict(
-      networks = dict(
-            type = 'random',
-            n_contacts = 4
-      ),
-      diseases = dict(
-            type      = 'sir',
-            init_prev = 0.01,
-            dur_inf   = ss.years(10),
-            p_death   = 0,
-            beta      = ss.peryear(0.06),
-      )
-    ),
-    dur = ss.years(10),
-    dt  = ss.years(0.05)
-)
-```
-
-### Example 3: Old
-```py
-pars = dict(
-    diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
-    demographics = ss.Births(unit='year', dt=0.25),
-    networks = ss.RandomNet(unit='week'),
-    n_agents = small,
-    verbose = 0,
-)
-```
-
-### Example 3: New
-```py
-pars = dict(
-    diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.peryear(0.01)),
-    demographics = ss.Births(dt=0.25),
-    networks = ss.RandomNet(dt=ss.weeks(1)),
-    n_agents = small,
-    verbose = 0,
-)
-```
-
-### Example 4: Old
-```py
-siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
-kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
-
-print('Year-year')
-sis1 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
-sim1 = ss.Sim(unit='year', dt=1/365, diseases=sis1, label='year-year', **kw)
-
-print('Day-day')
-sis2 = ss.SIS(unit='day', dt=1.0, **sc.dcp(siskw))
-sim2 = ss.Sim(unit='day', dt=1.0, diseases=sis2, label='day-day', **kw)
-
-print('Day-year')
-sis3 = ss.SIS(unit='day', dt=1.0, **sc.dcp(siskw))
-sim3 = ss.Sim(unit='year', dt=1/365, diseases=sis3, label='day-year', **kw)
-
-print('Year-day')
-sis4 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
-sim4 = ss.Sim(unit='day', dt=1.0, diseases=sis4, label='year-day', **kw)
-```
-
-### Example 4: New
-```py
-siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
-kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
-
-print('Year-year')
-sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
-
-print('Day-day')
-sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
-
-print('Day-year')
-sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
-
-print('Year-day')
-sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
-```
-
-### Example 5: Old
-```py
-    def __init__(self, pars=None, **kwargs):
-        super().__init__()
-        self.define_pars(
-            beta = ss.beta(0.1),
-            init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
-            p_death = ss.bernoulli(p=0.01),
-        )
-        self.update_pars(pars, **kwargs)
-
-        self.define_states(
-            ss.State('susceptible', default=True, label='Susceptible'),
-            ss.State('infected', label='Infectious'),
-            ss.State('recovered', label='Recovered'),
-            ss.FloatArr('ti_infected', label='Time of infection'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
-            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-        )
-        return
-```
-
-### Example 5: New
-```py
-    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
-        super().__init__()
-        self.define_pars(
-            beta = ss.peryear(0.1),
-            init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
-            p_death = ss.bernoulli(p=0.01),
-        )
-        self.update_pars(pars, **kwargs)
-
-        self.define_states(
-            ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infectious'),
-            ss.BoolState('recovered', label='Recovered'),
-            ss.FloatArr('ti_infected', label='Time of infection'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
-            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-        )
-        return
-```
 
 
 ## Other changes
@@ -297,6 +132,198 @@ class MySIR:
         self.define_states(
             ss.FloatArr('my_attr'),
             ss.BoolState('mystate', label='My new state'),
+        )
+        return
+```
+
+## Additional code examples
+
+This section contains additional examples of code before and after porting from v2 to v3.
+
+### Example 1, beta definition
+
+#### v2 (old)
+```py
+sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
+```
+
+#### v3 (new)
+```py
+sis = ss.SIS(
+    beta = dict(
+        random = [ss.permonth(0.005)]*2,
+        prenatal = [ss.permonth(0.1), 0],
+        postnatal = [ss.permonth(0.1), 0]
+    )
+)
+```
+
+### Example 2, sim definition
+
+#### v2 (old)
+```py
+sim = ss.Sim(
+    n_agents = 1000,
+    pars = dict(
+      networks = dict(
+        type = 'random',
+        n_contacts = 4
+      ),
+      diseases = dict(
+        type      = 'sir',
+        init_prev = 0.01,
+        dur_inf   = ss.dur(10),
+        p_death   = 0,
+        beta      = ss.beta(0.06),
+      )
+    ),
+    dur = 10,
+    dt  = 0.01
+)
+```
+
+#### v3 (new)
+```py
+sim = ss.Sim(
+    n_agents = 1000,
+    pars = dict(
+      networks = dict(
+        type = 'random',
+        n_contacts = 4
+      ),
+      diseases = dict(
+        type      = 'sir',
+        init_prev = 0.01,
+        dur_inf   = ss.years(10),
+        p_death   = 0,
+        beta      = ss.peryear(0.06),
+      )
+    ),
+    dur = ss.years(10),
+    dt  = ss.years(0.05)
+)
+```
+
+### Example 3, parameters definition
+
+#### v2 (old)
+```py
+pars = dict(
+    diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
+    demographics = ss.Births(unit='year', dt=0.25),
+    networks = ss.RandomNet(unit='week'),
+    n_agents = small,
+    verbose = 0,
+)
+```
+
+#### v3 (new)
+```py
+pars = dict(
+    diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.peryear(0.01)),
+    demographics = ss.Births(dt=0.25),
+    networks = ss.RandomNet(dt=ss.weeks(1)),
+    n_agents = small,
+    verbose = 0,
+)
+```
+
+### Example 4, time units
+
+#### v2 (old)
+```py
+siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
+kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+
+print('Year-year')
+sis1 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
+sim1 = ss.Sim(unit='year', dt=1/365, diseases=sis1, label='year-year', **kw)
+
+print('Day-day')
+sis2 = ss.SIS(unit='day', dt=1.0, **sc.dcp(siskw))
+sim2 = ss.Sim(unit='day', dt=1.0, diseases=sis2, label='day-day', **kw)
+
+print('Day-year')
+sis3 = ss.SIS(unit='day', dt=1.0, **sc.dcp(siskw))
+sim3 = ss.Sim(unit='year', dt=1/365, diseases=sis3, label='day-year', **kw)
+
+print('Year-day')
+sis4 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
+sim4 = ss.Sim(unit='day', dt=1.0, diseases=sis4, label='year-day', **kw)
+```
+
+#### v3 (new)
+```py
+siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
+kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+
+print('Year-year')
+sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
+
+print('Day-day')
+sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
+
+print('Day-year')
+sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
+
+print('Year-day')
+sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
+```
+
+### Example 5, custom disease module
+
+#### v2 (old)
+```py
+class MySIR(ss.Infection):
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.define_pars(
+            beta = ss.beta(0.1),
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
+            p_death = ss.bernoulli(p=0.01),
+        )
+        self.update_pars(pars, **kwargs)
+
+        self.define_states(
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
+            ss.State('recovered', label='Recovered'),
+            ss.FloatArr('ti_infected', label='Time of infection'),
+            ss.FloatArr('ti_recovered', label='Time of recovery'),
+            ss.FloatArr('ti_dead', label='Time of death'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+        )
+        return
+```
+
+#### v3 (new)
+```py
+class MySIR(ss.Infection):
+    def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            beta = ss.peryear(0.1),
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
+            p_death = ss.bernoulli(p=0.01),
+        )
+        self.update_pars(pars, **kwargs)
+
+        self.define_states(
+            ss.BoolState('susceptible', default=True, label='Susceptible'),
+            ss.BoolState('infected', label='Infectious'),
+            ss.BoolState('recovered', label='Recovered'),
+            ss.FloatArr('ti_infected', label='Time of infection'),
+            ss.FloatArr('ti_recovered', label='Time of recovery'),
+            ss.FloatArr('ti_dead', label='Time of death'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
         )
         return
 ```
