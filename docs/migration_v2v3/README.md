@@ -58,11 +58,13 @@ def migrate_beta(text):
             }
             
             if unit not in unit_mapping:
-                # Unknown unit, keep as peryear but add TODO comment
-                return f"ss.peryear({value})  # TODO: CHECK AUTOMATIC MIGRATION CHANGE - unknown unit '{unit}'"
+                out = f"ss.peryear({value})"
+            else:
+                function_name = unit_mapping[unit]
+                out = f"ss.{function_name}({value})"
             
-            function_name = unit_mapping[unit]
-            return f"ss.{function_name}({value})"
+            out += '  # TODO: CHECK AUTOMATIC MIGRATION CHANGE'
+            return out
         
         # Apply the pattern with unit first
         line = re.sub(pattern_with_unit, replace_beta_with_unit, line)
@@ -104,8 +106,8 @@ sim = ss.Sim(diseases=[sir, sis], networks='random')
 ```py
 import starsim as ss
 
-sir = ss.SIR(beta=ss.peryear(0.1))
-sis = ss.SIS(beta=ss.perday(0.001))
+sir = ss.SIR(beta=ss.peryear(0.1))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE
+sis = ss.SIS(beta=ss.perday(0.001))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE
 sim = ss.Sim(diseases=[sir, sis], networks='random')
 ```
 

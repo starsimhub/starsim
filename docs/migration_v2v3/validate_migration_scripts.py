@@ -22,9 +22,10 @@ for script_file in root.rglob("*__script.py"):
         raise FileNotFoundError(f'Expecting {input_file} and {output_file}')
 
 for i, (base, input_file, output_file, script_file) in enumerate(triplets):
-    print(sc.ansi.green(f"Checking example {base} ({i+1} of {len(triplets)})..."))
     expected = output_file.read_text().splitlines(keepends=True)
     with tempfile.TemporaryDirectory() as tmpdir:
+        print(sc.ansi.green(f"Checking example {base} ({i+1} of {len(triplets)}) in {tmpdir}..."))
+
         tmpdir = sc.path(tmpdir)
         tmp_example = tmpdir / f"{base}__example.py"
         tmp_script = tmpdir / f"{base}__script.py"
