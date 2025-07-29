@@ -18,7 +18,40 @@ The main change is regarding time parameters (timepars). These are described in 
 `ss.beta()` has been removed; use `ss.probperyear()` for an exact replacement of `ss.beta()`, and e.g. `ss.probperday(x)` for an equivalent of `ss.beta(x, 'days')`.
 
 Although `ss.prob()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.beta()` with `ss.peryear()`, and e.g. `ss.beta(x, 'days')` with `ss.perday(x)`.
-**TODO!!!!!!!!!**
+
+#### Migration script (`beta__script.py`)
+```py
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+files = [Path(arg) for arg in sys.argv[1:]] if len(sys.argv) > 1 else Path('.').rglob('*.py')
+
+for path in files:
+    text = path.read_text()
+    new_text = text.replace('ss.beta', 'ss.peryear')
+    if new_text != text:
+        path.write_text(new_text)
+        print(f"Updated {path}")
+```
+
+#### v2 (old) (`beta__v2.py`)
+```py
+import starsim as ss
+
+sir = ss.SIR(beta=ss.beta(0.1))
+sis = ss.SIS(beta=ss.beta(0.001, 'days'))
+sim = ss.Sim(diseases=[sir, sis], networks='random')
+```
+
+#### v3 (new) (`beta__v3.py`)
+```py
+import starsim as ss
+
+sir = ss.SIR(beta=ss.peryear(0.1))
+sis = ss.SIS(beta=ss.perday(0.001))
+sim = ss.Sim(diseases=[sir, sis], networks='random')
+```
 
 ### 2. `ss.rate()` has been removed
 `ss.rate()` has been removed; use `ss.freqperyear()` for an exact replacement of `ss.rate()`, and e.g. `ss.freqperday()` for an equivalent of `ss.rate(x, 'days')`.
@@ -166,7 +199,7 @@ class MySIR:
 ```
 
 ### 3. `ss.MixingPool(contacts=)` has been renamed `n_contacts`
-*Note: no automatic migration script is available for this change.*
+*Note: no automatic migration script is available for this change since "contacts" is too ambiguous a name.*
 
 For `ss.MixingPool()` and `ss.MixingPools()`, the argument `contacts` has been renamed `n_contacts`.
 
