@@ -18,7 +18,7 @@ def migrate_beta(text):
     new_lines = []
     warnmsg = '  # TODO: CHECK AUTOMATIC MIGRATION CHANGE'
     
-    for line in lines:
+    for orig_line in lines:
         # Pattern for ss.beta(x, 'unit')
         pattern_with_unit = r'ss\.beta\s*\(\s*([^,]+)\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)'
         
@@ -40,21 +40,24 @@ def migrate_beta(text):
                 function_name = unit_mapping[unit]
                 out = f"ss.{function_name}({value})"
             
-            out += warnmsg
             return out
         
         # Apply the pattern with unit first
-        line = re.sub(pattern_with_unit, replace_beta_with_unit, line)
+        line = re.sub(pattern_with_unit, replace_beta_with_unit, orig_line)
         
         # Then handle cases without time units (ss.beta(x))
         pattern_without_unit = r'ss\.beta\s*\(\s*([^)]+)\s*\)'
         
         def replace_beta_without_unit(match):
             value = match.group(1).strip()
-            return f"ss.peryear({value}){warnmsg}"
+            return f"ss.peryear({value})"
         
         # Apply the pattern without unit
         line = re.sub(pattern_without_unit, replace_beta_without_unit, line)
+
+        # Append warning message
+        if line != orig_line:
+            line += warnmsg
         
         new_lines.append(line)
     

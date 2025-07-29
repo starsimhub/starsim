@@ -12,7 +12,7 @@ root = sc.path(".")
 
 # Find all base names that have __script.py, which should have matching __v2.py and __v3.py files
 triplets = []
-for script_file in root.rglob("*__script.py"):
+for script_file in sorted(root.rglob("*__script.py")):
     base = script_file.stem.replace("__script", "")
     input_file = script_file.with_name(f"{base}__v2.py")
     output_file = input_file.with_name(f"{base}__v3.py")
@@ -24,7 +24,7 @@ for script_file in root.rglob("*__script.py"):
 for i, (base, input_file, output_file, script_file) in enumerate(triplets):
     expected = output_file.read_text().splitlines(keepends=True)
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(sc.ansi.green(f"Checking example {base} ({i+1} of {len(triplets)}) in {tmpdir}..."))
+        print(sc.ansi.green(f"Checking example {base} ({i+1} of {len(triplets)}) in {tmpdir}/..."))
 
         tmpdir = sc.path(tmpdir)
         tmp_example = tmpdir / f"{base}__example.py"
@@ -46,3 +46,9 @@ for i, (base, input_file, output_file, script_file) in enumerate(triplets):
             print(f"  ❌ {base} differs from expected output.")
             diff = "".join(difflib.unified_diff(actual, expected, fromfile="actual", tofile="expected"))
             print(diff)
+            print('\n\nRaw strings:')
+            print('<<<')
+            print(f'"{expected}"')
+            print('≠≠≠≠≠≠≠≠≠')
+            print(f'"{actual}"')
+            print('>>>')
