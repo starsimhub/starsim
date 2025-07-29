@@ -170,6 +170,34 @@ If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
 - If `dt=<y>`, change `unit=<x>, dt=<y>` to `dt=ss.<x>(<y>)`, e.g. `dt=2, unit='days'` to `dt=ss.days(2)`
 **TODO!!!!!!!!!**
 
+#### v2 (old) (`unit__v2.py`)
+```py
+import starsim as ss
+
+pars = dict(
+    diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1),
+    demographics = ss.Births(unit='year', dt=0.25),
+    networks = ss.RandomNet(unit='week'),
+)
+
+sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', stop='2002-01-01')
+sim.run()
+```
+
+#### v3 (new) (`unit__v3.py`)
+```py
+import starsim as ss
+
+pars = dict(
+    diseases = ss.SIS(dt=ss.days(1), init_prev=0.1),
+    demographics = ss.Births(dt=ss.years(0.25)),
+    networks = ss.RandomNet(dt='week'),
+)
+
+sim = ss.Sim(pars, dt=ss.days(2), start='2000-01-01', stop='2002-01-01')
+sim.run()
+```
+
 ### 4. `ss.time_ratio()` has been removed
 *Note: no automatic migration script is provided for this change as the code is likely to need refactoring in unpredicable ways.*
 
