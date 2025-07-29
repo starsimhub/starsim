@@ -18,14 +18,17 @@ The main change is regarding time parameters (timepars). These are described in 
 `ss.beta()` has been removed; use `ss.probperyear()` for an exact replacement of `ss.beta()`, and e.g. `ss.probperday(x)` for an equivalent of `ss.beta(x, 'days')`.
 
 Although `ss.prob()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.beta()` with `ss.peryear()`, and e.g. `ss.beta(x, 'days')` with `ss.perday(x)`.
+**TODO!!!!!!!!!**
 
 ### 2. `ss.rate()` has been removed
 `ss.rate()` has been removed; use `ss.freqperyear()` for an exact replacement of `ss.rate()`, and e.g. `ss.freqperday()` for an equivalent of `ss.rate(x, 'days')`.
 
 Although `ss.freq()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.rate()` with `ss.peryear()`, and e.g. `ss.rate(x, 'days')` with `ss.perday(x)`.
+**TODO!!!!!!!!!**
 
 ### 3. `ss.dur()` should be replaced with specific classes
 Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.
+**TODO!!!!!!!!!**
 
 ### 4. The `'unit'` argument has been removed
 `unit` has been removed as an argument for sims and modules (and `ss.Timeline()`); use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).
@@ -33,23 +36,30 @@ Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named 
 If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
 - If `dt` is not defined or `dt=1`: change `unit=<x>` to `dt=<x>`, e.g. `unit='years'` to `dt='years'`
 - If `dt=<y>`, change `unit=<x>, dt=<y>` to `dt=ss.<x>(<y>)`, e.g. `dt=2, unit='days'` to `dt=ss.days(2)`
+**TODO!!!!!!!!!**
 
-### 5. `ss.time_ratio()` has been removed
+### 5. Multiplication by `dt` is no longer automatic
+- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
+**TODO!!!!!!!!!**
+
+### 6. `ss.time_ratio()` has been removed
 `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
+**TODO!!!!!!!!!**
 
-### 6. `ss.Time()` has been renamed
+### 7. `ss.Time()` has been renamed
+*Note: no automatic migration script is provided for this change as it is unlikely to affect many users.*
+
 `ss.Time()` is now called `ss.Timeline()`. Its internal calculations are also handled differently, although this should not affect the user.
 
-### 7. `ss.Time.abstvec` has been removed
+### 8. `ss.Time.abstvec` has been removed
+*Note: no automatic migration script is provided for this change as it is unlikely to affect many users.*
+
 `t.abstvec` has been removed; in most cases, `t.tvec` should be used instead (although `t.yearvec`, `t.datevec` or `t.timevec` may be preferable in some cases).
 
-### 8. Multiplication by `dt` is no longer automatic
-- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
 
 ## Other changes
 
 ### 1. Example diseases and networks have moved
-
 These classes have been moved from the `starsim` namespace to the `starsim_examples` namespace:
 ```
 ['ART', 'CD4_analyzer', 'Cholera', 'DiskNet', 'Ebola', 'EmbeddingNet', 'ErdosRenyiNet', 'Gonorrhea', 'HIV', 'Measles', 'NullNet', 'Syphilis', 'syph_screening', 'syph_treatment']
@@ -109,7 +119,6 @@ sim = ss.Sim(diseases=hiv, networks=net).run()
 ```
 
 ### 2. `ss.State` has been renamed to `ss.BoolState`
-
 The class `ss.State` has been renamed `ss.BoolState`, with no significant change in functionality.
 
 #### Migration script (`boolstate__script.py`)
@@ -157,7 +166,6 @@ class MySIR:
 ```
 
 ### 3. `ss.MixingPool(contacts=)` has been renamed `n_contacts`
-
 *Note: no automatic migration script is available for this change.*
 
 For `ss.MixingPool()` and `ss.MixingPools()`, the argument `contacts` has been renamed `n_contacts`.
