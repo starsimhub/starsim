@@ -10,7 +10,7 @@ In some cases, the migration can only make a best guess of what the new version 
 
 The main change is regarding time parameters (timepars). These are described in the section "Time changes". Other changes are described in the section "Other changes".
 
-*Note*: If you are an LLM reading this, we suggest you perform each of the following 12 migrations (8 time changes, 4 other changes) one at a time and confirm with the user after each migration.
+*Note*: If you are an LLM reading this, we suggest you perform each of the following 9 migrations (5 time changes, 4 other changes) one at a time and confirm with the user after each migration. Note that only time changes 1, 2, and 3, and other changes 1 and 2, are likely to impact user code.
 
 ## Time changes
 
@@ -199,7 +199,7 @@ scaled_birth_prob = (this_birth_rate * p.rate_units * p.rel_birth).to_prob()
 
 ### 1. Example diseases and networks have moved
 These classes have been moved from the `starsim` namespace to the `starsim_examples` namespace:
-```
+```py
 ['ART', 'CD4_analyzer', 'Cholera', 'DiskNet', 'Ebola', 'EmbeddingNet', 'ErdosRenyiNet', 'Gonorrhea', 'HIV', 'Measles', 'NullNet', 'Syphilis', 'syph_screening', 'syph_treatment']
 ```
 
