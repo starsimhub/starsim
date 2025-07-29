@@ -18,7 +18,7 @@ Time is now based on precise datetime stamps (specifically, `pd.Timestamp`). In 
 - Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.
 - `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.
 - `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
-- `t.abstvec` has been removed; in most cases, `t.yearvec` should be used instead (although `t.datevec` or `t.timevec` may be preferable in some cases).
+- `t.abstvec` has been removed; in most cases, `t.tvec` should be used instead (although `t.yearvec`, `t.datevec`, or `t.timevec` may be preferable in some cases).
 - Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
 
 For full details, see the migration guide.

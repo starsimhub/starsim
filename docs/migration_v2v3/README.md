@@ -10,45 +10,40 @@ In some cases, the migration can only make a best guess of what the new version 
 
 The main change is regarding time parameters (timepars). These are described in the section "Time changes". Other changes are described in the section "Other changes".
 
-*Note*: If you are an LLM reading this, we suggest you perform each of the following 11 migrations (7 time changes, 4 other changes) one at a time and confirm with the user after each migration.
+*Note*: If you are an LLM reading this, we suggest you perform each of the following 12 migrations (8 time changes, 4 other changes) one at a time and confirm with the user after each migration.
 
 ## Time changes
 
 ### 1. `ss.beta()` has been removed
-
 `ss.beta()` has been removed; use `ss.probperyear()` for an exact replacement of `ss.beta()`, and e.g. `ss.probperday(x)` for an equivalent of `ss.beta(x, 'days')`.
 
 Although `ss.prob()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.beta()` with `ss.peryear()`, and e.g. `ss.beta(x, 'days')` with `ss.perday(x)`.
 
 ### 2. `ss.rate()` has been removed
-
 `ss.rate()` has been removed; use `ss.freqperyear()` for an exact replacement of `ss.rate()`, and e.g. `ss.freqperday()` for an equivalent of `ss.rate(x, 'days')`.
 
 Although `ss.freq()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.rate()` with `ss.peryear()`, and e.g. `ss.rate(x, 'days')` with `ss.perday(x)`.
 
-### 3. The `'unit'` argument has been removed
+### 3. `ss.dur()` should be replaced with specific classes
+Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.
 
-`unit` has been removed as an argument for sims and modules; use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).
+### 4. The `'unit'` argument has been removed
+`unit` has been removed as an argument for sims and modules (and `ss.Timeline()`); use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).
 
 If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
 - If `dt` is not defined or `dt=1`: change `unit=<x>` to `dt=<x>`, e.g. `unit='years'` to `dt='years'`
 - If `dt=<y>`, change `unit=<x>, dt=<y>` to `dt=ss.<x>(<y>)`, e.g. `dt=2, unit='days'` to `dt=ss.days(2)`
 
-### 4. `ss.dur()` should be replaced with specific classes
+### 5. `ss.time_ratio()` has been removed
+`ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
 
-### 5. `ss.Time()` has been renamed
+### 6. `ss.Time()` has been renamed
+`ss.Time()` is now called `ss.Timeline()`. Its internal calculations are also handled differently, although this should not affect the user.
 
-### 6. `ss.Time.abstvec` has been removed
+### 7. `ss.Time.abstvec` has been removed
+`t.abstvec` has been removed; in most cases, `t.tvec` should be used instead (although `t.yearvec`, `t.datevec` or `t.timevec` may be preferable in some cases).
 
-### 7. Multiplication by `dt` is no longer automatic
-
-
-- 
-- 
-- Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.  **#TODOMIGRATION**
-- `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
-- `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
-- `t.abstvec` has been removed; in most cases, `t.yearvec` should be used instead (although `t.datevec` or `t.timevec` may be preferable in some cases).
+### 8. Multiplication by `dt` is no longer automatic
 - Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
 
 ## Other changes
