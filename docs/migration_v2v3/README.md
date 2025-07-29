@@ -400,30 +400,25 @@ class MySIR:
 
 For `ss.MixingPool()` and `ss.MixingPools()`, the argument `contacts` has been renamed `n_contacts`.
 
-#### v2 (old) (`mixingpool__v2.py`)
+This means that code such as this:
 ```py
 import starsim as ss
 
 mp_pars = dict(
     src = ss.AgeGroup(0, 15),
     dst = ss.AgeGroup(15, None),
-    beta = 1,
     contacts = ss.poisson(lam=5),
-    diseases = 'ncd'
 )
 mp = ss.MixingPool(**mp_pars)
 ```
-
-#### v3 (new) (`mixingpool__v3.py`)
+should be refactored as this:
 ```py
 import starsim as ss
 
 mp_pars = dict(
     src = ss.AgeGroup(0, 15),
     dst = ss.AgeGroup(15, None),
-    beta = 1,
     n_contacts = ss.poisson(lam=5),
-    diseases = 'ncd'
 )
 mp = ss.MixingPool(**mp_pars)
 ```
