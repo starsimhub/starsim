@@ -14,9 +14,9 @@ def migrate_beta(text):
     - ss.beta(x, 'months') -> ss.permonth(x)
     - ss.beta(x, 'years') -> ss.peryear(x)
     """
-    
     lines = text.split('\n')
     new_lines = []
+    warnmsg = '  # TODO: CHECK AUTOMATIC MIGRATION CHANGE'
     
     for line in lines:
         # Pattern for ss.beta(x, 'unit')
@@ -35,11 +35,13 @@ def migrate_beta(text):
             }
             
             if unit not in unit_mapping:
-                # Unknown unit, keep as peryear but add TODO comment
-                return f"ss.peryear({value})  # TODO: CHECK AUTOMATIC MIGRATION CHANGE - unknown unit '{unit}'"
+                out = f"ss.peryear({value})"
+            else:
+                function_name = unit_mapping[unit]
+                out = f"ss.{function_name}({value})"
             
-            function_name = unit_mapping[unit]
-            return f"ss.{function_name}({value})"
+            out += warnmsg
+            return out
         
         # Apply the pattern with unit first
         line = re.sub(pattern_with_unit, replace_beta_with_unit, line)
@@ -49,7 +51,7 @@ def migrate_beta(text):
         
         def replace_beta_without_unit(match):
             value = match.group(1).strip()
-            return f"ss.peryear({value})"
+            return f"ss.peryear({value}){warnmsg}"
         
         # Apply the pattern without unit
         line = re.sub(pattern_without_unit, replace_beta_without_unit, line)
@@ -65,4 +67,4 @@ for path in files:
     new_text = migrate_beta(text)
     if new_text != text:
         path.write_text(new_text)
-        print(f"Updated {path}") 
+        print(f"Updated {path}")

@@ -37,9 +37,9 @@ def migrate_beta(text):
     - ss.beta(x, 'months') -> ss.permonth(x)
     - ss.beta(x, 'years') -> ss.peryear(x)
     """
-    
     lines = text.split('\n')
     new_lines = []
+    warnmsg = '  # TODO: CHECK AUTOMATIC MIGRATION CHANGE'
     
     for line in lines:
         # Pattern for ss.beta(x, 'unit')
@@ -63,7 +63,7 @@ def migrate_beta(text):
                 function_name = unit_mapping[unit]
                 out = f"ss.{function_name}({value})"
             
-            out += '  # TODO: CHECK AUTOMATIC MIGRATION CHANGE'
+            out += warnmsg
             return out
         
         # Apply the pattern with unit first
@@ -74,7 +74,7 @@ def migrate_beta(text):
         
         def replace_beta_without_unit(match):
             value = match.group(1).strip()
-            return f"ss.peryear({value})"
+            return f"ss.peryear({value}){warnmsg}"
         
         # Apply the pattern without unit
         line = re.sub(pattern_without_unit, replace_beta_without_unit, line)
