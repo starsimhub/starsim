@@ -212,12 +212,12 @@ This section contains additional examples of code before and after porting from 
 
 ### Example 1, beta definition
 
-#### v2 (old) (`beta__v2.py`)
+#### v2 (old) (`example_beta__v2.py`)
 ```py
 sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
 ```
 
-#### v3 (new) (`beta__v3.py`)
+#### v3 (new) (`example_beta__v3.py`)
 ```py
 sis = ss.SIS(
     beta = dict(
@@ -230,7 +230,7 @@ sis = ss.SIS(
 
 ### Example 2, sim definition
 
-#### v2 (old) (`sim__v2.py`)
+#### v2 (old) (`example_sim__v2.py`)
 ```py
 sim = ss.Sim(
     n_agents = 1000,
@@ -252,7 +252,7 @@ sim = ss.Sim(
 )
 ```
 
-#### v3 (new) (`sim__v3.py`)
+#### v3 (new) (`example_sim__v3.py`)
 ```py
 sim = ss.Sim(
     n_agents = 1000,
@@ -276,7 +276,7 @@ sim = ss.Sim(
 
 ### Example 3, parameters definition
 
-#### v2 (old) (`parameters__v2.py`)
+#### v2 (old) (`example_parameters__v2.py`)
 ```py
 pars = dict(
     diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
@@ -287,7 +287,7 @@ pars = dict(
 )
 ```
 
-#### v3 (new) (`parameters__v3.py`)
+#### v3 (new) (`example_parameters__v3.py`)
 ```py
 pars = dict(
     diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.peryear(0.01)),
@@ -300,7 +300,7 @@ pars = dict(
 
 ### Example 4, time units
 
-#### v2 (old) (`time_units__v2.py`)
+#### v2 (old) (`example_time_units__v2.py`)
 ```py
 siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
 kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
@@ -322,7 +322,7 @@ sis4 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
 sim4 = ss.Sim(unit='day', dt=1.0, diseases=sis4, label='year-day', **kw)
 ```
 
-#### v3 (new) (`time_units__v3.py`)
+#### v3 (new) (`example_time_units__v3.py`)
 ```py
 siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
 kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
@@ -346,7 +346,7 @@ sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
 ### Example 5, custom disease module
 
-#### v2 (old) (`custom_module__v2.py`)
+#### v2 (old) (`example_custom_module__v2.py`)
 ```py
 class MySIR(ss.Infection):
     def __init__(self, pars=None, **kwargs):
@@ -372,7 +372,7 @@ class MySIR(ss.Infection):
         return
 ```
 
-#### v3 (new) (`custom_module__v3.py`)
+#### v3 (new) (`example_custom_module__v3.py`)
 ```py
 class MySIR(ss.Infection):
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
