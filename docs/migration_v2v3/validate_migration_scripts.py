@@ -10,12 +10,12 @@ import sciris as sc
 
 root = sc.path(".")
 
-# Find all base names that have __input.py, __output.py, and __script.py
+# Find all base names that have __script.py, which should have matching __v2.py and __v3.py files
 triplets = []
 for script_file in root.rglob("*__script.py"):
     base = input_file.stem.replace("__script", "")
-    input_file = input_file.with_name(f"{base}__input.py")
-    output_file = input_file.with_name(f"{base}__output.py")
+    input_file = input_file.with_name(f"{base}__v2.py")
+    output_file = input_file.with_name(f"{base}__v3.py")
     if input_file.exists() and output_file.exists():
         triplets.append((base, input_file, output_file, script_file))
     else:
