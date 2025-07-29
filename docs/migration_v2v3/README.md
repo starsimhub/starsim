@@ -2,7 +2,7 @@
 
 This guide describes the steps required to migrate code from Starsim v2 (e.g. v2.3.1, the last v2 release) to Starsim v3. It is written for both humans and LLMs.
 
-If possible, a Python migration script is provided to automatically make the change, under the heading "Migration script". The next two headings are "Example input" and "Example output", which show the intended result of the migration script. All migration scripts, including intended input and output, are included in this folder as well. See `validate_migration_scripts.py` for testing.
+If possible, a Python migration script is provided to automatically make the change, under the heading "Migration script". The next two headings are "Example v2" and "Example output", which show the intended result of the migration script. All migration scripts, including intended input (v2) and output (v3), are included in this folder as well. See `validate_migration_scripts.py` for testing.
 
 If immediately below the migration script you find the text "Additional changes", please make those (non-automated) changes too.
 
@@ -12,7 +12,19 @@ The main change is regarding time parameters (timepars). These are described in 
 
 ## Time changes
 
-TBC
+### 1. `ss.beta()` has been removed
+
+### 2. `ss.rate()` has been removed
+
+### 3. The `'unit'` argument has been removed
+
+### 4. `ss.dur()` should be replaced with specific classes
+
+### 5. `ss.Time()` has been renamed
+
+### 6. `ss.Time.abstvec` has been removed
+
+### 7. Multiplication by `dt` is no longer automatic
 
 - `ss.beta()` has been removed; use `ss.prob()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
 - `ss.rate()` has been removed; use `ss.freq()` instead for a literal equivalent, although in most cases `ss.per()` is preferable, e.g. `ss.peryear()`.  **#TODOMIGRATION**
@@ -21,14 +33,11 @@ TBC
 - `ss.Time()` is now called `ss.Timeline()` and its internal calculations are handled differently.  **#TODOMIGRATION**
 - `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
 - `t.abstvec` has been removed; in most cases, `t.yearvec` should be used instead (although `t.datevec` or `t.timevec` may be preferable in some cases).
-- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead). **#TODOMIGRATION**
-
-
-
+- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
 
 ## Other changes
 
-### Example diseases and networks have moved
+### 1. Example diseases and networks have moved
 
 These classes have been moved from the `starsim` namespace to the `starsim_examples` namespace:
 ```
@@ -69,7 +78,7 @@ for path in files:
         print(f"Updated {path}")
 ```
 
-#### Example input (`starsim_examples__input.py`)
+#### v2 (old) (`starsim_examples__v2.py`)
 ```py
 import starsim as ss
 
@@ -78,7 +87,7 @@ net = ss.DiskNet()
 sim = ss.Sim(diseases=hiv, networks=net).run()
 ```
 
-#### Example output (`starsim_examples__output.py`)
+#### v3 (new) (`starsim_examples__v3.py`)
 ```py
 import starsim as ss
 import starsim_examples as sse
@@ -88,7 +97,7 @@ net = sse.DiskNet()
 sim = ss.Sim(diseases=hiv, networks=net).run()
 ```
 
-### `ss.State` has been renamed to `ss.BoolState`
+### 2. `ss.State` has been renamed to `ss.BoolState`
 
 The class `ss.State` has been renamed `ss.BoolState`, with no significant change in functionality.
 
@@ -108,7 +117,7 @@ for path in files:
         print(f"Updated {path}")
 ```
 
-#### Example input (`boolstate__input.py`)
+#### v2 (old) (`boolstate__v2.py`)
 ```py
 import starsim as ss
 
@@ -122,7 +131,7 @@ class MySIR:
         return
 ```
 
-#### Example output (`boolstate__output.py`)
+#### v3 (new) (`boolstate__v3.py`)
 ```py
 import starsim as ss
 
@@ -136,22 +145,64 @@ class MySIR:
         return
 ```
 
+### 3. `ss.MixingPool(contacts=)` has been renamed `n_contacts`
+
+*Note: no automatic migration script is available for this change.*
+
+For `ss.MixingPool()` and `ss.MixingPools()`, the argument `contacts` has been renamed `n_contacts`.
+
+#### v2 (old) (`mixingpool__v2.py`)
+```py
+import starsim as ss
+
+mp_pars = dict(
+    src = ss.AgeGroup(0, 15),
+    dst = ss.AgeGroup(15, None),
+    beta = 1,
+    contacts = ss.poisson(lam=5),
+    diseases = 'ncd'
+)
+mp = ss.MixingPool(**mp_pars)
+```
+
+#### v3 (new) (`mixingpool__v3.py`)
+```py
+import starsim as ss
+
+mp_pars = dict(
+    src = ss.AgeGroup(0, 15),
+    dst = ss.AgeGroup(15, None),
+    beta = 1,
+    n_contacts = ss.poisson(lam=5),
+    diseases = 'ncd'
+)
+mp = ss.MixingPool(**mp_pars)
+```
+
+### 4. `sim.modules` and `module.states` have been renamed
+
+*Note: no automatic migration script is available for this change.*
+
+- `ss.Sim.modules` has been renamed `ss.Sim.module_list`. (Note: `ss.Sim.modules` is now something _different_, so be especially careful with this change.)
+- `ss.Module.states` has been renamed `ss.Module.state_list`. `module.statesdict` has been renamed `module.state_dict`.
+- These attributes are used in Starsim Core but are rarely used in user code, so are unlikely to need to be migrated.
+
 ## Additional code examples
 
 This section contains additional examples of code before and after porting from v2 to v3.
 
 ### Example 1, beta definition
 
-#### v2 (old)
+#### v2 (old) (`beta__v2.py`)
 ```py
 sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
 ```
 
-#### v3 (new)
+#### v3 (new) (`beta__v3.py`)
 ```py
 sis = ss.SIS(
     beta = dict(
-        random = [ss.permonth(0.005)]*2,
+        random = ss.permonth([0.005, 0.001]),
         prenatal = [ss.permonth(0.1), 0],
         postnatal = [ss.permonth(0.1), 0]
     )
@@ -160,7 +211,7 @@ sis = ss.SIS(
 
 ### Example 2, sim definition
 
-#### v2 (old)
+#### v2 (old) (`sim__v2.py`)
 ```py
 sim = ss.Sim(
     n_agents = 1000,
@@ -182,7 +233,7 @@ sim = ss.Sim(
 )
 ```
 
-#### v3 (new)
+#### v3 (new) (`sim__v3.py`)
 ```py
 sim = ss.Sim(
     n_agents = 1000,
@@ -206,7 +257,7 @@ sim = ss.Sim(
 
 ### Example 3, parameters definition
 
-#### v2 (old)
+#### v2 (old) (`parameters__v2.py`)
 ```py
 pars = dict(
     diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
@@ -217,7 +268,7 @@ pars = dict(
 )
 ```
 
-#### v3 (new)
+#### v3 (new) (`parameters__v3.py`)
 ```py
 pars = dict(
     diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.peryear(0.01)),
@@ -230,7 +281,7 @@ pars = dict(
 
 ### Example 4, time units
 
-#### v2 (old)
+#### v2 (old) (`time_units__v2.py`)
 ```py
 siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
 kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
@@ -252,7 +303,7 @@ sis4 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
 sim4 = ss.Sim(unit='day', dt=1.0, diseases=sis4, label='year-day', **kw)
 ```
 
-#### v3 (new)
+#### v3 (new) (`time_units__v3.py`)
 ```py
 siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
 kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
@@ -276,7 +327,7 @@ sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
 ### Example 5, custom disease module
 
-#### v2 (old)
+#### v2 (old) (`custom_module__v2.py`)
 ```py
 class MySIR(ss.Infection):
     def __init__(self, pars=None, **kwargs):
@@ -302,7 +353,7 @@ class MySIR(ss.Infection):
         return
 ```
 
-#### v3 (new)
+#### v3 (new) (`custom_module__v3.py`)
 ```py
 class MySIR(ss.Infection):
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
