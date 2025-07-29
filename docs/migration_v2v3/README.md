@@ -40,9 +40,16 @@ import re
 import sys
 from pathlib import Path
 
-def migrate_rate(text):
+def is_prob(value: str) -> bool:
+    """Determine if a value is probably a probability (<1)."""
+    try:
+        return float(value) < 1
+    except:
+        return True  # Default to per() if unsure
+
+def migrate_rates(text):
     """
-    Migrate v2 ss.rate() and derived calls to appropriate v3 functions based on time units.
+    Migrate v2 ss.rate() and derived classes to appropriate v3 classes based on time units.
     
     - ss.beta:
         - ss.beta(x) -> ss.peryear(x)
@@ -64,60 +71,63 @@ def migrate_rate(text):
             - ss.rate(x) -> ss.freqperyear(x)
             - ss.rate(x, 'days') -> ss.freqperday(x)
     """
-    lines = text.split('\n')
+    lines = text.splitlines()
     new_lines = []
-    warnmsg = '  # TODO: CHECK AUTOMATIC MIGRATION CHANGE'
-    
-    for orig_line in lines:
-        # Pattern for ss.beta(x, 'unit')
-        pattern_with_unit = r'ss\.beta\s*\(\s*([^,]+)\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)'
-        
-        def replace_beta_with_unit(match):
-            value = match.group(1).strip()
-            unit = match.group(2)
-            
-            # Map time units to appropriate ss.per* functions
-            unit_mapping = {
-                'days': 'perday',
-                'weeks': 'perweek', 
-                'months': 'permonth',
-                'years': 'peryear'
-            }
-            
-            if unit not in unit_mapping:
-                out = f"ss.peryear({value})"
-            else:
-                function_name = unit_mapping[unit]
-                out = f"ss.{function_name}({value})"
-            
-            return out
-        
-        # Apply the pattern with unit first
-        line = re.sub(pattern_with_unit, replace_beta_with_unit, orig_line)
-        
-        # Then handle cases without time units (ss.beta(x))
-        pattern_without_unit = r'ss\.beta\s*\(\s*([^)]+)\s*\)'
-        
-        def replace_beta_without_unit(match):
-            value = match.group(1).strip()
-            return f"ss.peryear({value})"
-        
-        # Apply the pattern without unit
-        line = re.sub(pattern_without_unit, replace_beta_without_unit, line)
 
-        # Append warning message
-        if line != orig_line:
-            line += warnmsg
-        
+    unit_map = {
+        'days': 'perday',
+        'weeks': 'perweek',
+        'months': 'permonth',
+        'years': 'peryear',
+    }
+
+    freq_map = {
+        'days': 'freqperday',
+        'weeks': 'freqperweek',
+        'months': 'freqpermonth',
+        'years': 'freqperyear',
+    }
+
+    # Patterns to match calls with optional time unit
+    # Each entry is (pattern, replacement_func, token_name)
+    patterns = [
+        (r'ss\.beta\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})", 'ss.beta'), # ss.beta(x)
+        (r'ss\.time_prob\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.probperyear({v})", 'ss.time_prob'), # ss.time_prob(x)
+        (r'ss\.rate_prob\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})", 'ss.rate_prob'), # ss.rate_prob(x)
+        (r'ss\.rate\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})" if is_prob(v) else f"ss.freqperyear({v})", 'ss.rate'), # ss.rate(x)
+        (r'ss\.beta\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.{unit_map.get(u, 'peryear')}({v})", 'ss.beta'), # ss.beta(x, 'unit')
+        (r'ss\.time_prob\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.prob{unit_map.get(u, 'peryear')}({v})", 'ss.time_prob'), # ss.time_prob(x, 'unit')
+        (r'ss\.rate_prob\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.per{unit_map.get(u, 'year')}({v})", 'ss.rate_prob'), # ss.rate_prob(x, 'unit')
+        (r'ss\.rate\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.{unit_map[u] if is_prob(v) else freq_map[u]}({v})", 'ss.rate'), # ss.rate(x, 'unit')
+    ]
+
+    for orig_line in lines:
+        line = orig_line
+        for pattern, repl_func, token in patterns:
+            match = re.search(pattern, line)
+            if not match:
+                continue
+            try:
+                groups = match.groups()
+                new_expr = repl_func(*[g.strip() for g in groups])
+                line = re.sub(pattern, new_expr, line, count=1)
+                # Only apply first successful match per line
+                if line != orig_line:
+                    line += f"  # TODO: Check automatic migration change for {token}"
+                break
+            except Exception:
+                continue
         new_lines.append(line)
-    
+
     return '\n'.join(new_lines)
 
+# Entry point
 files = [Path(arg) for arg in sys.argv[1:]] if len(sys.argv) > 1 else Path('.').rglob('*.py')
-
 for path in files:
+    if not path.is_file():
+        continue
     text = path.read_text()
-    new_text = migrate_beta(text)
+    new_text = migrate_rates(text)
     if new_text != text:
         path.write_text(new_text)
         print(f"Updated {path}")
