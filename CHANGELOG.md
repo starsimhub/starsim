@@ -113,6 +113,18 @@ Distributions now have a `mock()` method, that allows you to immediately start u
 - `ss.Result()` objects now have `disp()` and `to_str()` methods, and they can also be treated as dicts (e.g. `res['low']` instead of `res.low`).
 - You can now create an `ss.MultiSim` comprised of sims of different lengths; however, the sims will be truncated to be of the same length, and they are _not_ temporally aligned. In general, it is still inadvisable to use `msim.reduce()` with sims of different lengths.
 
+#### New options
+
+Starsim v3 comes with several new options, set via `ss.options`:
+
+- `ss.options.check_method_calls`: whether to check that required module methods are called (default `True`)
+- `ss.options.install_fonts`: whether to install custom fonts for plotting (default `True`)
+- `ss.options.numba_indexing`: threshold at which to switch from NumPy to Numba indexing (default 5000 indices)
+- `ss.options.style`: plotting style to use; options are "starsim", "fancy", "simple", or any Matplotlib style
+- `ss.options.warn_convert`: whether to warn when automatically converting time parameters
+
+`ss.options` also now has a `help` method that will print detailed help on a given option or all options, e.g. `ss.options.help(detailed=True)`.
+
 
 ## Version 2.3.2 (2025-07-16)
 - Fix argument passing in `Infection.infect`. This will be the final Starsim v2.x release.

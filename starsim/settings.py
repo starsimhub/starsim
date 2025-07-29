@@ -192,11 +192,12 @@ class Options(sc.objdict):
         print(output)
         return
 
-    def help(self, detailed=False, output=False):
+    def help(self, *args, detailed=False, output=False):
         """
         Print information about options.
 
         Args:
+            *args (list): if provided, print out detailed help on one or more specific options
             detailed (bool): whether to print out full help
             output (bool): whether to return a list of the options
 
@@ -205,13 +206,14 @@ class Options(sc.objdict):
             ss.options.help(detailed=True)
         """
         # If not detailed, just print the docstring for sc.options
-        if not detailed:
+        if not detailed and not len(args):
             print(self.__doc__)
             return
 
         n = 15 # Size of indent
         optdict = sc.objdict()
-        for key in self.orig_options.keys():
+        orig_keys = self.orig_options.keys()
+        for key in orig_keys:
             entry = sc.objdict()
             entry.key = key
             entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
@@ -220,7 +222,13 @@ class Options(sc.objdict):
             entry.desc = sc.indent(n=n, text=self.optdesc[key])
             optdict[key] = entry
 
-        # Convert to a dataframe for nice printing
+        if len(args):
+            try:
+                optdict = sc.objdict({k:optdict[k] for k in args})
+            except Exception as e:
+                errormsg = f'Cannot provide help on invalid setting(s) "{sc.strjoin(args)}"; valid keys are:\n{sc.newlinejoin(sorted(orig_keys))}'
+                raise sc.KeyNotFoundError(errormsg) from e
+
         print('Starsim global options ("Environment" = name of corresponding environment variable):')
         for k, key, entry in optdict.enumitems():
             sc.heading(f'{k}. {key}', spaces=0, spacesafter=0)
@@ -231,8 +239,9 @@ class Options(sc.objdict):
             print(f'  Environment: {entry.variable}')
             print(f'  Description: {entry.desc}')
 
-        sc.heading('Methods:', spacesafter=0)
-        print("""
+        if detailed:
+            sc.heading('Methods:', spacesafter=0)
+            print("""
     ss.options(key=value) -- set key to value
     ss.options[key] -- get or set key
     ss.options.set() -- set option(s)
