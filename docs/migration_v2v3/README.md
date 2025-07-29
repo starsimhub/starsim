@@ -171,8 +171,21 @@ If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
 **TODO!!!!!!!!!**
 
 ### 4. `ss.time_ratio()` has been removed
-`ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
-**TODO!!!!!!!!!**
+*Note: no automatic migration script is provided for this change as the code is likely to need refactoring in unpredicable ways.*
+
+`ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars. Code such as this (from `demographics.py`):
+```py
+if isinstance(this_birth_rate, ss.TimePar):
+    factor = 1.0
+else:
+    factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
+
+scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * factor
+```
+should be refactored as:
+```py
+scaled_birth_prob = (this_birth_rate * p.rate_units * p.rel_birth).to_prob()
+```
 
 ### 5. `ss.Time()` has been renamed, and `abstvec` has been removed
 *Note: no automatic migration script is provided for these changes as they are unlikely to affect many users.*

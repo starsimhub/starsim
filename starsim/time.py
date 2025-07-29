@@ -1502,14 +1502,6 @@ class Rate(TimePar):
         else:
             return self.__class__(self.value*dur, self.unit)
 
-    def p(self, dur=None):
-        """ Alias to to_prob() (probability of event happening) """
-        return self.to_prob(dur)
-
-    def n(self, dur=None):
-        """ Alias to to_events (number of events) """
-        return self.to_events(dur)
-
 
 class prob(Rate):
     """
