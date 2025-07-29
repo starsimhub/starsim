@@ -168,7 +168,22 @@ sim = ss.Sim(demographics=bir, diseases=[sir, sis], networks=net)
 If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
 - If `dt` is not defined or `dt=1`: change `unit=<x>` to `dt=<x>`, e.g. `unit='years'` to `dt='years'`
 - If `dt=<y>`, change `unit=<x>, dt=<y>` to `dt=ss.<x>(<y>)`, e.g. `dt=2, unit='days'` to `dt=ss.days(2)`
-**TODO!!!!!!!!!**
+
+#### Migration script (`unit__script.py`)
+```py
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+files = [Path(arg) for arg in sys.argv[1:]] if len(sys.argv) > 1 else Path('.').rglob('*.py')
+
+for path in files:
+    text = path.read_text()
+    new_text = text.replace('ss.State', 'ss.BoolState')
+    if new_text != text:
+        path.write_text(new_text)
+        print(f"Updated {path}")
+```
 
 #### v2 (old) (`unit__v2.py`)
 ```py
