@@ -145,11 +145,11 @@ net = ss.MFNet(acts=ss.freqperyear(80))  # TODO: CHECK AUTOMATIC MIGRATION CHANG
 sim = ss.Sim(demographics=bir, diseases=[sir, sis], networks=net)
 ```
 
-### 3. `ss.dur()` should be replaced with specific classes
-Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.
+### 2. Multiplication by `dt` is no longer automatic
+- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
 **TODO!!!!!!!!!**
 
-### 4. The `'unit'` argument has been removed
+### 3. The `'unit'` argument has been removed
 `unit` has been removed as an argument for sims and modules (and `ss.Timeline()`); use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).
 
 If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
@@ -157,23 +157,16 @@ If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
 - If `dt=<y>`, change `unit=<x>, dt=<y>` to `dt=ss.<x>(<y>)`, e.g. `dt=2, unit='days'` to `dt=ss.days(2)`
 **TODO!!!!!!!!!**
 
-### 5. Multiplication by `dt` is no longer automatic
-- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
-**TODO!!!!!!!!!**
-
-### 6. `ss.time_ratio()` has been removed
+### 4. `ss.time_ratio()` has been removed
 `ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
 **TODO!!!!!!!!!**
 
-### 7. `ss.Time()` has been renamed
-*Note: no automatic migration script is provided for this change as it is unlikely to affect many users.*
+### 5. `ss.Time()` has been renamed, and `abstvec` has been removed
+*Note: no automatic migration script is provided for these changes as they are unlikely to affect many users.*
 
 `ss.Time()` is now called `ss.Timeline()`. Its internal calculations are also handled differently, although this should not affect the user.
 
-### 8. `ss.Time.abstvec` has been removed
-*Note: no automatic migration script is provided for this change as it is unlikely to affect many users.*
-
-`t.abstvec` has been removed; in most cases, `t.tvec` should be used instead (although `t.yearvec`, `t.datevec` or `t.timevec` may be preferable in some cases).
+`ss.Timeline.abstvec` (commonly accessed as `t.abstvec`) has been removed; in most cases, `t.tvec` should be used instead (although `t.yearvec`, `t.datevec` or `t.timevec` may be preferable in some cases).
 
 
 ## Other changes
