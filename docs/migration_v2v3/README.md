@@ -14,10 +14,24 @@ The main change is regarding time parameters (timepars). These are described in 
 
 ## Time changes
 
-### 1. `ss.beta()` has been removed
-`ss.beta()` has been removed; use `ss.probperyear()` for an exact replacement of `ss.beta()`, and e.g. `ss.probperday(x)` for an equivalent of `ss.beta(x, 'days')`.
+### 1. Rates have been removed and/or renamed
+`ss.beta()` has been removed; use `ss.probperyear()` for an exact replacement of `ss.beta()`, and e.g. `ss.probperday(x)` for an equivalent of `ss.beta(x, 'days')`. `ss.time_prob()` has been renamed `ss.prob()`.
 
-Although `ss.prob()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.beta()` with `ss.peryear()`, and e.g. `ss.beta(x, 'days')` with `ss.perday(x)`.
+`ss.rate()` has also been removed; use `ss.freqperyear()` for an exact replacement of `ss.rate()`, and e.g. `ss.freqperday()` for an equivalent of `ss.rate(x, 'days')`. `ss.rate_prob()` has been renamed `ss.per()`.
+
+Although `ss.prob()` is an exact equivalent of `ss.beta()` and `ss.time_prob()`, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In this case, replace `ss.beta()` with `ss.peryear()`, and e.g. `ss.beta(x, 'days')` with `ss.perday(x)`. 
+
+Here is how to decide how to migrate `ss.beta()`:
+- Are you using a parameter adapted from an ODE (rate-based model)? → Use `ss.per()`, e.g. `ss.peryear()`
+- Are you using a parameter that is described as an infection *rate*? → Use `ss.per()`
+- Are you using an approximate, theoretical, or calibrated value for beta? → Use `ss.per()`
+- Are you using a parameter described as a *probability of infection per unit time*, e.b. "probability of infection after one year"? → Use `ss.prob()`
+
+Likewise, although `ss.freq()` is an exact equivalent of `ss.rate()`, in most cases you will actually want `ss.per()` (as with `ss.beta()`/`ss.time_prob()`). This will also give different results to before. In that case, replace `ss.rate()` with `ss.peryear()`, and e.g. `ss.rate(x, 'days')` with `ss.perday(x)`. Note that in Starsim v2, birth rates and death rates were defined as numbers of events per unit time (`ss.rate()`), whereas in v3 they are defined as probability rates per unit time (`ss.per()`). This gives slightly different -- but more accurate! -- results. (Note that in most cases the difference is very small: e.g. for a crude birth rate of 20 per 1000 per year, the difference between these two approaches is only about 1%.)
+
+Here is how to decide how to migrate `ss.rate()`:
+- Are you using a parameter for a *probability* of an event occuring, such as probability of death (death rate) or probability of birth (birth rate)? → Use `ss.per()`, e.g. `ss.peryear()`
+- Are you using a parameter for a *number* of events occurring, such as number of sexual acts in a year? → Use `ss.freq()`, e.g. `ss.freqperyear()`
 
 #### Migration script (`beta__script.py`)
 ```py
@@ -113,12 +127,6 @@ sir = ss.SIR(beta=ss.peryear(0.1))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE
 sis = ss.SIS(beta=ss.perday(0.001))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE
 sim = ss.Sim(diseases=[sir, sis], networks='random')
 ```
-
-### 2. `ss.rate()` has been removed
-`ss.rate()` has been removed; use `ss.freqperyear()` for an exact replacement of `ss.rate()`, and e.g. `ss.freqperday()` for an equivalent of `ss.rate(x, 'days')`.
-
-Although `ss.freq()` is an exact equivalent, in most cases you will actually want `ss.per()`. This will give different results to before -- but hopefully more accurate ones! In that case, replace `ss.rate()` with `ss.peryear()`, and e.g. `ss.rate(x, 'days')` with `ss.perday(x)`.
-**TODO!!!!!!!!!**
 
 ### 3. `ss.dur()` should be replaced with specific classes
 Although `ss.dur()` still exists in Starsim v3.0, it is preferable to use named classes instead, e.g. `ss.years(3)` instead of `ss.dur(3, 'years')`.
