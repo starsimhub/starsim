@@ -54,14 +54,17 @@ def migrate_rates(text):
     # Patterns to match calls with optional time unit
     # Each entry is (pattern, replacement_func, token_name)
     patterns = [
-        (r'ss\.beta\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})", 'ss.beta'), # ss.beta(x)
-        (r'ss\.time_prob\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.probperyear({v})", 'ss.time_prob'), # ss.time_prob(x)
-        (r'ss\.rate_prob\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})", 'ss.rate_prob'), # ss.rate_prob(x)
-        (r'ss\.rate\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})" if is_prob(v) else f"ss.freqperyear({v})", 'ss.rate'), # ss.rate(x)
+        # Two-arg patterns first (must come first to prevent premature matching)
         (r'ss\.beta\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.{unit_map.get(u, 'peryear')}({v})", 'ss.beta'), # ss.beta(x, 'unit')
         (r'ss\.time_prob\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.prob{unit_map.get(u, 'peryear')}({v})", 'ss.time_prob'), # ss.time_prob(x, 'unit')
         (r'ss\.rate_prob\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.per{unit_map.get(u, 'year')}({v})", 'ss.rate_prob'), # ss.rate_prob(x, 'unit')
         (r'ss\.rate\s*\(\s*([^,]+)\s*,\s*[\'"](\w+)[\'"]\s*\)', lambda v, u: f"ss.{unit_map[u] if is_prob(v) else freq_map[u]}({v})", 'ss.rate'), # ss.rate(x, 'unit')
+
+        # One-arg patterns second
+        (r'ss\.beta\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})", 'ss.beta'), # ss.beta(x)
+        (r'ss\.time_prob\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.probperyear({v})", 'ss.time_prob'), # ss.time_prob(x)
+        (r'ss\.rate_prob\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})", 'ss.rate_prob'), # ss.rate_prob(x)
+        (r'ss\.rate\s*\(\s*([^)]+?)\s*\)', lambda v: f"ss.peryear({v})" if is_prob(v) else f"ss.freqperyear({v})", 'ss.rate'), # ss.rate(x)
     ]
 
     for orig_line in lines:
