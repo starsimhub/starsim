@@ -27,29 +27,42 @@ Here is how to decide how to migrate `ss.beta()`:
 - Are you using an approximate, theoretical, or calibrated value for beta? → Use `ss.per()`
 - Are you using a parameter described as a *probability of infection per unit time*, e.b. "probability of infection after one year"? → Use `ss.prob()`
 
-Likewise, although `ss.freq()` is an exact equivalent of `ss.rate()`, in most cases you will actually want `ss.per()` (as with `ss.beta()`/`ss.time_prob()`). This will also give different results to before. In that case, replace `ss.rate()` with `ss.peryear()`, and e.g. `ss.rate(x, 'days')` with `ss.perday(x)`. Note that in Starsim v2, birth rates and death rates were defined as numbers of events per unit time (`ss.rate()`), whereas in v3 they are defined as probability rates per unit time (`ss.per()`). This gives slightly different -- but more accurate! -- results. (Note that in most cases the difference is very small: e.g. for a crude birth rate of 20 per 1000 per year, the difference between these two approaches is only about 1%.)
+Likewise, although `ss.freq()` is an exact equivalent of `ss.rate()`, in most cases you will actually want `ss.per()` (as with `ss.beta()`/`ss.time_prob()`). This will also give different results to before. In that case, replace `ss.rate()` with `ss.peryear()`, and e.g. `ss.rate(x, 'days')` with `ss.perday(x)`. Note that in Starsim v2, birth rates and death rates were defined as numbers of events per unit time (`ss.rate()`), whereas in v3 they are defined as probability rates per unit time (`ss.per()`). This gives slightly different -- but more accurate! -- results. (Note that in most cases the difference is very small: e.g. for a crude birth rate of 20 per 1000 per year, the difference between these two approaches is only about 1%.) The automatic migration script makes an assumption that if the provided rate is <1, then `ss.per()` is intended; if the rate is >1, it assumes `ss.freq()` is intended.
 
 Here is how to decide how to migrate `ss.rate()`:
 - Are you using a parameter for a *probability* of an event occuring, such as probability of death (death rate) or probability of birth (birth rate)? → Use `ss.per()`, e.g. `ss.peryear()`
 - Are you using a parameter for a *number* of events occurring, such as number of sexual acts in a year? → Use `ss.freq()`, e.g. `ss.freqperyear()`
 
-#### Migration script (`beta__script.py`)
+#### Migration script (`rates__script.py`)
 ```py
 #!/usr/bin/env python3
 import re
 import sys
 from pathlib import Path
 
-def migrate_beta(text):
+def migrate_rate(text):
     """
-    Migrate ss.beta() calls to appropriate ss.per*() functions based on time units.
+    Migrate v2 ss.rate() and derived calls to appropriate v3 functions based on time units.
     
-    Handles:
-    - ss.beta(x) -> ss.peryear(x)
-    - ss.beta(x, 'days') -> ss.perday(x)
-    - ss.beta(x, 'weeks') -> ss.perweek(x)
-    - ss.beta(x, 'months') -> ss.permonth(x)
-    - ss.beta(x, 'years') -> ss.peryear(x)
+    - ss.beta:
+        - ss.beta(x) -> ss.peryear(x)
+        - ss.beta(x, 'days') -> ss.perday(x)
+        - ss.beta(x, 'weeks') -> ss.perweek(x)
+        - ss.beta(x, 'months') -> ss.permonth(x)
+        - ss.beta(x, 'years') -> ss.peryear(x)
+    - ss.rate_prob:
+        - ss.rate_prob(x) -> ss.peryear(x)
+        - ss.rate_prob(x, 'days') -> ss.perday(x)
+    - ss.time_prob:
+        - ss.time_prob(x) -> ss.probperyear(x)
+        - ss.time_prob(x, 'days') -> ss.probperday(x) 
+    - ss.rate:
+        - For x<1:
+            - ss.rate(x) -> ss.peryear(x)
+            - ss.rate(x, 'days') -> ss.perday(x)
+        - For x>=1:
+            - ss.rate(x) -> ss.freqperyear(x)
+            - ss.rate(x, 'days') -> ss.freqperday(x)
     """
     lines = text.split('\n')
     new_lines = []
@@ -110,22 +123,26 @@ for path in files:
         print(f"Updated {path}")
 ```
 
-#### v2 (old) (`beta__v2.py`)
+#### v2 (old) (`rates__v2.py`)
 ```py
 import starsim as ss
 
 sir = ss.SIR(beta=ss.beta(0.1))
-sis = ss.SIS(beta=ss.beta(0.001, 'days'))
-sim = ss.Sim(diseases=[sir, sis], networks='random')
+sis = ss.SIS(beta=ss.beta(0.001, 'days'), waning=ss.rate(0.05))
+bir = ss.Births(birth_rate=ss.rate(0.02))
+net = ss.MFNet(acts=ss.rate(80))
+sim = ss.Sim(demographics=bir, diseases=[sir, sis], networks=net)
 ```
 
-#### v3 (new) (`beta__v3.py`)
+#### v3 (new) (`rates__v3.py`)
 ```py
 import starsim as ss
 
-sir = ss.SIR(beta=ss.peryear(0.1))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE
-sis = ss.SIS(beta=ss.perday(0.001))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE
-sim = ss.Sim(diseases=[sir, sis], networks='random')
+sir = ss.SIR(beta=ss.peryear(0.1))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE FOR BETA
+sis = ss.SIS(beta=ss.perday(0.001), waning=ss.peryear(0.05))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE FOR RATE
+bir = ss.Births(birth_rate=ss.peryear(0.02))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE FOR RATE
+net = ss.MFNet(acts=ss.freqperyear(80))  # TODO: CHECK AUTOMATIC MIGRATION CHANGE FOR RATE
+sim = ss.Sim(demographics=bir, diseases=[sir, sis], networks=net)
 ```
 
 ### 3. `ss.dur()` should be replaced with specific classes
