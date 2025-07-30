@@ -376,33 +376,32 @@ class MultiSim:
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
-            with ss.options.context(jupyter=False): # Always return the figure
-                res_keys = None
-                for sim in self.sims:
-                    sim_keys = set(sim.results.flatten().keys()) # Check if keys match
-                    if res_keys is None:
-                        res_keys = sim_keys
-                    else:
-                        if res_keys != sim_keys:
-                            missing = res_keys - sim_keys
-                            extra = sim_keys - res_keys
-                            extratxt = f'\nExtra: {sc.strjoin(extra)}'
-                            missingtxt = f'\nMissing: {sc.strjoin(missing)}'
-                            warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
-                            ss.warn(warnmsg)
-                    alpha = 0.7 if len(self) < 5 else 0.5
-                    fig = sim.plot(key=key, fig=fig, alpha=alpha, **kwargs)
+            res_keys = None
+            kw = ss.plot_args(kwargs)
+            for sim in self.sims:
+                sim_keys = set(sim.results.flatten().keys()) # Check if keys match
+                if res_keys is None:
+                    res_keys = sim_keys
+                else:
+                    if res_keys != sim_keys:
+                        missing = res_keys - sim_keys
+                        extra = sim_keys - res_keys
+                        extratxt = f'\nExtra: {sc.strjoin(extra)}'
+                        missingtxt = f'\nMissing: {sc.strjoin(missing)}'
+                        warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
+                        ss.warn(warnmsg)
+                alpha = 0.7 if len(self) < 5 else 0.5
+                fig = sim.plot(key=key, fig=fig, alpha=alpha, is_jupyter=False, do_show=False, **kwargs)
             if legend:
-                lkw = ss.plot_args(kwargs).legend
                 leg = None
                 shape = getattr(fig, '_subplots_shape', None) # Sciris-generated figure
                 if shape: # If we have empty space on the bottom right, put the legend there
                     n = np.prod(shape)
                     if len(fig.axes) != n: # Bottom-right axes is empty
                         ax = fig.add_subplot(shape[0], shape[1], n)
-                        leg = sc.movelegend(fig.axes[0], ax, **lkw)
+                        leg = sc.movelegend(fig.axes[0], ax, **kw.legend)
                 if leg is None: # Otherwise, just put it in the last axes anyway
-                    fig.axes[-1].legend(**lkw)
+                    fig.axes[-1].legend(**kw.legend)
 
         # Has been reduced, plot with uncertainty bounds
         else:
@@ -434,7 +433,7 @@ class MultiSim:
                     ax.plot(res.timevec, res, **kw.plot)
                     ss.utils.format_axes(ax, res, n_ticks, show_module)
 
-        return ss.return_fig(fig)
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,
