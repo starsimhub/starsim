@@ -33,7 +33,7 @@ def execute(path):
         return f'{boo} Error processing {path}: {str(e)}'
 
 
-def main():
+def main(folders=folders):
     """ Executes the notebooks in parallel and prints the results """
     cwd = sc.thispath(__file__)
     results = sc.objdict()
