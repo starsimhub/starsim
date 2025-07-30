@@ -114,8 +114,8 @@ class Cholera(ss.Infection):
         n_asymptomatic = self.asymptomatic.sum()
         old_prev = self.results.env_prev[ti-1]
 
-        new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic) * self.t.dt
-        old_bacteria = old_prev * np.exp(-(p.decay_rate * self.t.dt))
+        new_bacteria = (p.shedding_rate * n_symptomatic + p.asymp_trans * n_asymptomatic).to_prob()
+        old_bacteria = old_prev * np.exp(-p.decay_rate.to_prob())
 
         r.env_prev[ti] = new_bacteria + old_bacteria
         r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
@@ -159,7 +159,7 @@ class Cholera(ss.Infection):
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-        p_transmit = res.env_conc[self.ti] * pars.beta_env * self.t.dt
+        p_transmit = (res.env_conc[self.ti] * pars.beta_env).to_prob()
         pars.p_env_transmit.set(p=p_transmit)
         new_cases_env = pars.p_env_transmit.filter(self.susceptible)
 

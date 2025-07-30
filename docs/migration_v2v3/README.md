@@ -261,15 +261,23 @@ sim.run()
 ### 3. Multiplication by `dt` is no longer automatic
 *Note: no automatic migration script is provided for this change as the code is likely to need refactoring in unpredicable ways.*
 
-Multiplication by `dt` no longer happens automatically; call `to_prob()` to convert from a timepar to a unitless quantity (or `to_events()` to convert to a number of events instead).
+Multiplication by `dt` no longer happens automatically; call `to_prob()` to explicitly convert from a timepar to a unitless quantity (or `to_events()` to convert to a number of events instead). This is done so that the correct intermediate calculations are carried through until the final step, preventing probabilities from going <0 or >1.
 
-For example, code such as this (from `diseases.py`):
+Note: although you _can_ supply `dt` as an explicit argument to `to_prob()`, if the rate is part of a module (which is almost always the case), then it will already be initialized with a `default_dur` equal to the module's `dt`. In this case, calling `par.to_prob()` and `par.to_prob(self.dt)` are identical.
+
+For example, code such as this:
 ```py
-beta_per_dt = route.net_beta(disease_beta=beta)
+beta_per_dt = route.net_beta(disease_beta=beta) # From disease.py
+new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic) # From starsim/diseases/cholera.py
+old_bacteria = old_prev * (1 - p.decay_rate) # From starsim/diseases/cholera.py
+p_transmit = res.env_conc[self.ti] * pars.beta_env # From starsim/diseases/cholera.py
 ```
 should be migrated to this:
 ```py
-beta_per_dt = route.net_beta(disease_beta=beta.to_prob(self.t.dt)
+beta_per_dt = route.net_beta(disease_beta=beta.to_prob(self.t.dt) # From diseases.py
+new_bacteria = (p.shedding_rate * n_symptomatic + p.asymp_trans * n_asymptomatic).to_prob() # From starsim_examples/diseases/cholera.py
+old_bacteria = old_prev * np.exp(-p.decay_rate.to_prob()) # From starsim_examples/diseases/cholera.py
+p_transmit = (res.env_conc[self.ti] * pars.beta_env).to_prob() # From starsim_examples/diseases/cholera.py
 ```
 
 ### 4. `ss.time_ratio()` has been removed
