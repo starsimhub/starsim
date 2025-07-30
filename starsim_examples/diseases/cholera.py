@@ -114,7 +114,7 @@ class Cholera(ss.Infection):
         n_asymptomatic = self.asymptomatic.sum()
         old_prev = self.results.env_prev[ti-1]
 
-        new_bacteria = (p.shedding_rate * n_symptomatic + p.asymp_trans * n_asymptomatic).to_prob()
+        new_bacteria = (p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)).to_prob()
         old_bacteria = old_prev * np.exp(-p.decay_rate.to_prob())
 
         r.env_prev[ti] = new_bacteria + old_bacteria
