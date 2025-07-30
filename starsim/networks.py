@@ -1235,7 +1235,7 @@ class MixingPool(Route):
         beta = self.pars.beta
         if isinstance(beta, ss.Rate):
             ss.warn('In mixing pools, beta should typically be a float')
-            beta = beta * self.t.dt
+            beta = beta.to_prob(self.t.dt)
         if sc.isnumber(beta) and beta == 0:
             return []
 

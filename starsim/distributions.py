@@ -719,7 +719,7 @@ class Dist:
                 if issubclass(timepar_type, ss.dur):
                     self._pars[key] = v/self.module.dt
                 elif issubclass(timepar_type, ss.Rate):
-                    self._pars[key] = v*self.module.dt
+                    self._pars[key] = v*self.module.dt # Usually to_prob, but may be n_events
                 else:
                     errormsg = f'Unknown timepar type {v}'
                     raise NotImplementedError(errormsg)

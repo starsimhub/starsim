@@ -158,11 +158,7 @@ net = ss.MFNet(acts=ss.freqperyear(80))  # TODO: Check automatic migration chang
 sim = ss.Sim(demographics=bir, diseases=[sir, sis], networks=net)
 ```
 
-### 2. Multiplication by `dt` is no longer automatic
-- Multiplication by `dt` no longer happens automatically; call `to_prob()` or `p()` to convert from a timepar to a unitless quantity (or `to_events()` or `n()` to convert to a number of events instead).
-**TODO!!!!!!!!!**
-
-### 3. The `'unit'` argument has been removed
+### 2. The `'unit'` argument has been removed
 `unit` has been removed as an argument for sims and modules (and `ss.Timeline()`); use `dt` instead, e.g. `ss.Sim(dt=1, unit='years')` is now `ss.Sim(dt=ss.year)` (or `ss.Sim(dt='years')` or `ss.Sim(dt=ss.years(1))`).
 
 If you have `unit=<x>` in v2 code, migrate it to v3 code as follows:
@@ -262,10 +258,26 @@ sim = ss.Sim(pars, dt=ss.days(2), start='2000-01-01', stop='2002-01-01')
 sim.run()
 ```
 
+### 3. Multiplication by `dt` is no longer automatic
+*Note: no automatic migration script is provided for this change as the code is likely to need refactoring in unpredicable ways.*
+
+Multiplication by `dt` no longer happens automatically; call `to_prob()` to convert from a timepar to a unitless quantity (or `to_events()` to convert to a number of events instead).
+
+For example, code such as this (from `diseases.py`):
+```py
+beta_per_dt = route.net_beta(disease_beta=beta)
+```
+should be migrated to this:
+```py
+beta_per_dt = route.net_beta(disease_beta=beta.to_prob(self.t.dt)
+```
+
 ### 4. `ss.time_ratio()` has been removed
 *Note: no automatic migration script is provided for this change as the code is likely to need refactoring in unpredicable ways.*
 
-`ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars. Code such as this (from `demographics.py`):
+`ss.time_ratio()` has been removed; time unit ratio calculations (e.g. months to years) are now handled internally by timepars.
+
+For example, code such as this (from `demographics.py`):
 ```py
 if isinstance(this_birth_rate, ss.TimePar):
     factor = 1.0
@@ -274,7 +286,7 @@ else:
 
 scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * factor
 ```
-should be refactored as:
+should be migrated to this:
 ```py
 scaled_birth_prob = (this_birth_rate * p.rate_units * p.rel_birth).to_prob()
 ```
@@ -400,7 +412,7 @@ class MySIR:
 
 For `ss.MixingPool()` and `ss.MixingPools()`, the argument `contacts` has been renamed `n_contacts`.
 
-This means that code such as this:
+For example, code such as this:
 ```py
 import starsim as ss
 
@@ -411,7 +423,7 @@ mp_pars = dict(
 )
 mp = ss.MixingPool(**mp_pars)
 ```
-should be refactored as this:
+should be migrated to this:
 ```py
 import starsim as ss
 
