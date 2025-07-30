@@ -8,6 +8,7 @@ encountered, and print a summary of results.
 """
 
 import os
+import sys
 import sciris as sc
 import nbformat
 import nbconvert.preprocessors as nbp
@@ -33,21 +34,35 @@ def execute(path):
         return f'{boo} Error processing {path}: {str(e)}'
 
 
-def main(folders=folders):
-    """ Executes the notebooks in parallel and prints the results """
+def main(*args, folders=folders):
+    """Executes the notebooks in parallel and prints the results.
+
+    Uses sys.argv[1:] if provided; otherwise uses folders to find notebooks.
+    """
     cwd = sc.thispath(__file__)
     results = sc.objdict()
     string = ''
-    for folder in folders:
-        os.chdir(cwd / folder)
-        notebooks = sc.getfilepaths(pattern='*.ipynb')
-        sc.heading(f'Running {len(notebooks)} notebooks in {folder}...')
-        out = sc.parallelize(execute, notebooks, maxcpu=0.9, interval=0.3) # Wait before starting each one to allow the server port to assign
-        string += sc.strjoin(out, sep=f'\n\n\n{"—"*90}\n')
-        for nb,res in zip(notebooks, out):
-            key = f'{folder}/{nb}'
-            results[key] = res
-        
+
+    # Determine which notebooks to run
+    if args:
+        notebooks = [sc.path(notebook).resolve() for notebook in args]
+    else:
+        notebooks = []
+        for folder in folders:
+            folder_path = cwd / folder
+            notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.ipynb')]
+
+    # Wrapper to chdir before execution
+    def execute_with_chdir(path):
+        os.chdir(path.parent)
+        return execute(path.name)
+
+    sc.heading(f'Running {len(notebooks)} notebooks...')
+    out = sc.parallelize(execute_with_chdir, notebooks, maxcpu=0.9, interval=0.3)
+    string += sc.strjoin(out, sep=f'\n\n\n{"—"*90}\n')
+    for nb, res in zip(notebooks, out):
+        results[str(nb)] = res
+
     sc.heading('Results')
     print(string)
     
@@ -65,5 +80,5 @@ def main(folders=folders):
 
 
 if __name__ == '__main__':
-    results = main()
+    results = main(*sys.argv[1:])
 
