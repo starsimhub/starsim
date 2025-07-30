@@ -524,7 +524,7 @@ def get_result_plot_label(res, show_module=None):
     # Sanitize
     if show_module is None:
         show_module = 26 # Default maximum length
-    elif isinstance(show_module):
+    elif isinstance(show_module, bool):
         if show_module is True:
             show_module = 999
         else:
