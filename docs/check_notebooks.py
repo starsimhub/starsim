@@ -23,11 +23,12 @@ def execute(path):
     """ Executes a single Jupyter notebook and returns success/failure """
     try:
         with open(path) as f:
-            print(f'Executing {path}...')
-            nb = nbformat.read(f, as_version=4)
-            ep = nbp.ExecutePreprocessor(timeout=timeout, kernel_name='python3')
-            ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
-        return f'{yay} {path} executed successfully.'
+            with sc.timer(label=f'Execution time for {path}') as T:
+                print(f'Executing {path}...')
+                nb = nbformat.read(f, as_version=4)
+                ep = nbp.ExecutePreprocessor(timeout=timeout, kernel_name='python3')
+                ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
+        return f'{yay} {path} executed successfully in {T.total:n} s.'
     except nbp.CellExecutionError as e:
         return f'{boo} Execution failed for {path}: {str(e)}'
     except Exception as e:
@@ -39,6 +40,7 @@ def main(*args, folders=folders):
 
     Uses sys.argv[1:] if provided; otherwise uses folders to find notebooks.
     """
+    T = sc.timer()
     cwd = sc.thispath(__file__)
     results = sc.objdict()
     string = ''
@@ -75,6 +77,8 @@ def main(*args, folders=folders):
             if boo in res:
                 summary += f'\nFailed: {nb}'
     print(summary)
+
+    T.toc()
     
     return results
 
