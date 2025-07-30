@@ -488,8 +488,12 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
         return key.replace('.','_').lower()
 
-    # Get results
-    flat = results if flattened else results.flatten()
+    # Handle accessing subdicts
+    if key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
+        flat = results[key].flatten() # e.g. sim.results['sis']
+        key = None # We've already used the key, so reset it
+    else: # Main use case: flatten the dict, e.g. sim.plot()
+        flat = results if flattened else results.flatten()
 
     # Configuration
     flat_orig = flat # Copy reference before we modify in place
