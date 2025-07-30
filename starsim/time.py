@@ -336,8 +336,8 @@ class date(pd.Timestamp):
             return np.vectorize(self.__add__)(other)
         elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
-        elif isinstance(other, years):
-            return date(self.to_year() + other.value)
+        elif isinstance(other, ss.dur):
+            return date(self.to_year() + other.years)
         elif isinstance(other, pd.DateOffset):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
@@ -354,8 +354,8 @@ class date(pd.Timestamp):
             return np.vectorize(self.__sub__)(other)
         if isinstance(other, ss.datedur):
             return date(self.to_pandas() - other.value)
-        elif isinstance(other, years):
-            return date(self.to_year() - other.value)
+        elif isinstance(other, ss.dur):
+            return date(self.to_year() - other.years)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() - other)
         elif isinstance(other, (ss.date, dt.date, dt.datetime)):
@@ -485,8 +485,8 @@ class date(pd.Timestamp):
                 # start = float(start)
                 # stop = float(stop)
         elif isinstance(step, str):
-            step_class = get_dur_class(step)
-            step = ss.datedur(step_class(1.0)) # e.g. ss.datedur(ss.years(1.0))
+            dur_class = get_dur_class(step)
+            step = ss.datedur(dur_class(1)) # e.g. ss.datedur(ss.years(1.0))
 
         # For handling floating point issues
         atol = 0.5 / factors.years.days # It's close if it's within half a day

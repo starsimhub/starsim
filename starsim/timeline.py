@@ -18,9 +18,10 @@ class Timeline:
     to a date to get an absolute time)
 
     Args:
-            start (str/int/float/ss.date/ss.dur): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
-    stop (str/int/float/ss.date/ss.dur): when the simulation/module ends (note: if start is a date, stop must be too)
-    dt (int/float/ss.dur): Simulation step size
+        start (str/int/float/`ss.date`/`ss.dur`): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
+        stop (str/int/float/`ss.date`/`ss.dur`): when the simulation/module ends (note: if start is a date, stop must be too)
+        dt (int/float/`ss.dur`): Simulation step size
+        dur (int/float/`ss.dur`): If "stop" is not provided, run for this duration
         name (str): if provided, name the `Timeline` object
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop or start and dur are provided; otherwise no)
         sim (Sim): if provided, initialize the `Timeline` with this as the parent (i.e. populating missing values)
@@ -214,10 +215,15 @@ class Timeline:
             self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
         # Check to see if any inputs were provided as durations: if so, reset the default type
-        for arg in [self.start, self.stop, self.dur, self.dt]:
-            if isinstance(arg, ss.dur):
-                self.default_type = type(arg)
-                break # Stop at the first one
+        if isinstance(self.dt, str): # e.g. dt='year'
+            dur_class = ss.time.get_dur_class(self.dt)
+            self.dt = dur_class(1)
+            self.default_type = dur_class
+        else:
+            for arg in [self.start, self.stop, self.dur, self.dt]:
+                if isinstance(arg, ss.dur):
+                    self.default_type = type(arg)
+                    break # Stop at the first one
 
         # Ensure dur is valid
         if sc.isnumber(self.dur):
@@ -319,7 +325,7 @@ class Timeline:
             self.dt = self.default_type(self.dt)
         return
 
-    def init(self, sim=None):
+    def init(self, sim=None, max_steps=20_000):
         """ Initialize all vectors """
 
         # Handle start, stop, dt, dur
@@ -341,6 +347,10 @@ class Timeline:
         # don't convert consistently into fractional years due to varying month/year lengths. We will
         # prioritise one or the other depending on what type of quantity the user has specified for start
         self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
+        n_steps = len(self.datevec)
+        if n_steps > max_steps:
+            warnmsg = f'You are creating a simulation with {n_steps:n} timesteps, which is above the recommended maximum of {max_steps:n}. This is valid, but inadvisable.'
+            ss.warn(warnmsg)
 
         if isinstance(self.dt, ss.datedur):
             if isinstance(self.start, ss.dur):
