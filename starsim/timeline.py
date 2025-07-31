@@ -396,24 +396,26 @@ class Timeline:
                 errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
-        # # Ensure everything is a DateArray
-        # for attr in self._time_vecs:
-        #     if attr != 'timevec': # We make this in a moment
-        #         vec = getattr(self, attr)
-        #         if not isinstance(vec, ss.DateArray):
-        #             setattr(self, attr, ss.DateArray(vec))
-
         # Ensure tvec is a DateArray
         self.tvec = ss.DateArray(self.tvec)
 
         # The most human-friendly version of the dates: dates if possible, else floats
-        # if self.is_numeric:
-        #     self.timevec = self.tvec.to_float()
-        # else:
         self.timevec = self.tvec.to_human()
 
+        # Simple time indices
+        self.tivec = np.arange(self.npts)
+
         # Finally, create a vector of relative times in the sim's time unit (if available)
-        # self.relvec =
+        if sim is not None:
+            date0 = sim.t.datevec[0]
+            dt = sim.t.dt
+        else:
+            date0 = self.datevec[0]
+            dt = self.dt
+        date_durs = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
+        dur_class = type(dt) # Not ss.time.get_dur_class since we're not keeping the unit
+        dur_vec = dur_class(date_durs)
+        self.relvec = dur_vec.to_array() # Only keep the array
 
         self.initialized = True
         return self

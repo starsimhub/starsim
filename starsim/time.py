@@ -67,6 +67,15 @@ class DateArray(np.ndarray):
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
 
+    def __add__(self, other):
+        cls = self.__class__
+        if self.is_date:
+            return cls([np.vectorize()])
+            np.vectorize(ss.date.__add__)(other)
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
     def is_(self, which):
         """ Checks if the DateArray is comprised of ss.date objects """
         if isinstance(which, type(type)):
@@ -356,25 +365,40 @@ class date(pd.Timestamp):
             errormsg = f'Attempted to add an instance of {type(other)} to a date, which is not supported. Only durations can be added to dates.'
             raise TypeError(errormsg)
 
+    def __radd__(self, other):
+        return self.__add__(other)
+
     def __sub__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-        if isinstance(other, ss.datedur):
-            return date(self.to_pandas() - other.value)
+        elif isinstance(other, ss.datedur):
+            return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.dur):
-            return date(self.to_year() - other.years)
+            return ss.date(self.to_year() - other.years)
         elif isinstance(other, pd.DateOffset):
-            return date(self.to_pandas() - other)
+            return ss.date(self.to_pandas() - other)
         elif isinstance(other, (ss.date, dt.date, dt.datetime)):
-            if not isinstance(other, ss.date): # Convert e.g. dt.date to ss.date
-                other = ss.date(other)
-            return years(self.years-other.years)
+            if not isinstance(other, pd.Timestamp):
+                other = pd.Timestamp(other)
+            return ss.datedur(self.to_pandas() - other)
         else:
             errormsg = f'Attempted to subtract "{other}" ({type(other)}) from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
             raise TypeError(errormsg)
 
-    def __radd__(self, other): return self.__add__(other)
-    def __rsub__(self, other): return self.__sub__(other) # TODO: check if this should be reversed
+    def __rsub__(self, other):
+        if isinstance(other, np.ndarray):
+            return other.__class__([o-self for o in other]) # TODO: is this right?
+        elif isinstance(other, ss.datedur):
+            return ss.date(other.value - self.to_pandas())
+        elif isinstance(other, ss.dur):
+            return ss.date(other.years - self.to_year())
+        elif isinstance(other, (ss.date, dt.date, dt.datetime)):
+            if not isinstance(other, pd.Timestamp):
+                other = pd.Timestamp(other)
+            return ss.datedur(other - self.to_pandas())
+        else:
+            errormsg = f'Attempted to subtract "{self}" from "{other}" ({type(other)}), which is not supported. Only dates can be subtracted from dates e.g., datetime.date(2020, 1, 1) - ss.date(2010), which will return ss.datedur.'
+            raise TypeError(errormsg)
 
     def __lt__(self, other):
         if sc.isnumber(other):
@@ -568,31 +592,32 @@ def normalize_unit(base): # TODO: use lookup on class_map instead of this manual
 
 
 class UnitFactors(sc.dictobj):
+    """ Define conversion factors for a given unit, e.g. 'years' """
     def __init__(self, base_factors, unit):
         unit_items = base_factors.copy()
         for k,v in unit_items.items():
             unit_items[k] /= base_factors[unit]
         self.unit = unit
-        self.items = unit_items
-        self.unit_values = np.array(list(unit_items.values())) # Precompute for computational efficiency
+        self.unit_items = unit_items # Precompute for computational efficiency
+        self.unit_values = np.array(list(unit_items.values()))
         self.unit_keys = list(unit_items.keys())
         return
 
     def __getattr__(self, attr):
-        return self.items[attr]
+        return self.unit_items[attr]
 
     def __getitem__(self, key):
-        return self.items[key]
+        return self.unit_items[key]
 
     def __repr__(self):
-        return f'factors.{self.unit}:\n{repr(sc.objdict(self.items))}'
+        return f'factors.{self.unit}:\n{repr(sc.objdict(self.unit_items))}'
 
     def disp(self):
         return sc.pr(self)
 
 
 class Factors(sc.dictobj):
-    """ Define time unit conversion factors """
+    """ Define time unit conversion factors for all factors """
     def __init__(self):
         base_factors = sc.dictobj( # Use dictobj since slightly faster than objdict
             years   = 1, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
@@ -668,7 +693,7 @@ class TimePar:
         years=365.0 and days=1.0.
         """
         if cls.base is not None:
-            cls.factors = factors[cls.base].items
+            cls.factors = factors[cls.base].unit_items
             cls.factor_keys = factors[cls.base].unit_keys
             cls.factor_vals = factors[cls.base].unit_values
         return
@@ -1054,6 +1079,8 @@ class datedur(dur):
                 self.value = self.round_duration(years=arg.years)
             elif sc.isnumber(arg):
                 self.value = self.round_duration(years=arg)
+            elif isinstance(arg, pd.Timedelta):
+                self.value = self.round_duration(days=arg.days)
             else:
                 errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, or pd.DateOffset'
                 raise TypeError(errormsg)
@@ -1113,25 +1140,44 @@ class datedur(dur):
         """ Convert to a dictionary """
         return self._as_args(self.to_array())
 
-    @property
-    def years(self):
+    def to(self, unit):
         """
-        Return approximate conversion into years
+        Return approximate conversion into the provided quantity
 
         This allows interoperability with years objects (which would typically be expected to
         occur if module parameters have been entered with `datedur` durations, but the simulation
         timestep is in `years` units).
 
         The conversion is based on `ss.time.factors` which defines the conversion from each time unit
-        to the next
+        to the next.
+
+        Args:
+            unit (str): the unit to convert to: years, months, weeks, or days
 
         Returns:
-            A float representing the duration in years
+            A float representing the duration in that unit
         """
-        years = 0
-        for k, v in self.factors.items():
-            years += self.value.kwds.get(k, 0)/v
-        return years
+        return sum([self.value.kwds.get(k, 0)/v for k, v in ss.time.factors[unit].unit_items.items()])
+
+    @property
+    def years(self):
+        """ Shortcut to datedur.to('years') """
+        return self.to('years')
+
+    @property
+    def months(self):
+        """ Shortcut to datedur.to('months') """
+        return self.to('months')
+
+    @property
+    def weeks(self):
+        """ Shortcut to datedur.to('weeks') """
+        return self.to('weeks')
+
+    @property
+    def days(self):
+        """ Shortcut to datedur.to('days') """
+        return self.to('days')
 
     @property
     def is_variable(self):
@@ -1284,6 +1330,9 @@ class datedur(dur):
 
     def __sub__(self, other):
         return self.__add__(-1*other)
+
+    def __rsub__(self, other):
+        return other.__add__(-1*self)
 
     def __abs__(self):
         # Cannot implement this because it's ambiguous how to resolve cases like
