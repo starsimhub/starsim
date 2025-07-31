@@ -67,21 +67,6 @@ class DateArray(np.ndarray):
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
 
-    # def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-    #     """ To handle all numpy operations, e.g. arr1*arr2 """
-    #     print('OH HIIdkfjdkjfIII', ufunc, method, inputs, kwargs)
-    #     # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
-    #     inputs = [x.to_array() if isinstance(x, ss.DateArray) else x for x in inputs]
-    #     # kwargs = {k:self._arr(v) for k,v in kwargs.items()}
-    #     result = getattr(ufunc, method)(*inputs, **kwargs)
-
-    #     # # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
-    #     # if isinstance(result, tuple):
-    #     #     return tuple(self.convert(x) for x in result)
-
-    #     # result = self.convert(result)
-    #     return result
-
     def is_(self, which):
         """ Checks if the DateArray is comprised of ss.date objects """
         if isinstance(which, type(type)):
@@ -167,9 +152,9 @@ class DateArray(np.ndarray):
     def to_numpy(self):
         return self.to_array()
 
-    def to_array(self):
+    def to_array(self, *args, **kwargs):
         """ Force conversion to an array """
-        return np.array(self)
+        return np.array(self, *args, **kwargs)
 
 
 class date(pd.Timestamp):
@@ -716,9 +701,6 @@ class TimePar:
     def __bool__(self):
         return True
 
-    # def __array__(self, *args, **kwargs):
-    #     return self.to_array(*args, **kwargs)
-
     def __len__(self):
         if self.is_scalar:
             errormsg = f'{self} is a scalar' # This error is needed so NumPy doesn't try to iterate over the array
@@ -742,7 +724,6 @@ class TimePar:
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
-        print('OH HI', ufunc, method, inputs, kwargs)
         if len(inputs) == 1: # With a single input, operate on the value # TODO: check if this is always safe
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
@@ -1311,9 +1292,6 @@ class datedur(dur):
         # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
         # (whereas abs(years) arises when comparing dates, which automatically return years)
         raise NotImplementedError('The absolute value of a datedur instance is undefined as components (e.g., months, days) may have different signs.')
-
-    # def __eq__(self, other):
-    #     return np.array_equal(self.to_array(), sc.toarray(other))
 
 
 class Rate(TimePar):

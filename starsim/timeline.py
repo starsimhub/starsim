@@ -79,7 +79,6 @@ class Timeline:
         self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.initialized = False # Call self.init(sim) to initialize the object
 
-
         # Decide whether to initialized: we're asked, a sim is provided, or arguments are supplied directly
         if init or sim or init is None and sum([x is not None for x in [start, stop, dur]]) >= 2:
             self.init(sim)
