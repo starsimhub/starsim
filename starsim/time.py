@@ -154,7 +154,7 @@ class DateArray(np.ndarray):
 
     def to_array(self):
         """ Force conversion to an array """
-        return np.array(self.value)
+        return np.array(self)
 
 
 class date(pd.Timestamp):

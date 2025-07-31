@@ -26,12 +26,21 @@ class Timeline:
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop or start and dur are provided; otherwise no)
         sim (Sim): if provided, initialize the `Timeline` with this as the parent (i.e. populating missing values)
 
-    The `Timeline` object, after initialization, has the following attributes:
+    The `Timeline` object, after initialization, has the following time vectors,
+    each representing a different way of representing time:
+
+    - `tvec`: ground truth simulation time, either as absolute `ss.date` instances, or relative `ss.dur` instances, e.g. `DateArray([<2021.01.01>, <2021.01.03>, <2021.01.05>, <2021.01.07>])`
+    - `tivec`: the vector of time indices (`np.arange(len(tvec))`)
+    - `timevec`: the "human-friendly" representation of `tvec`: same as `tvec` if using `ss.date`, else floats if using `ss.dur`
+    - `yearvec`: time represented as floating-point years
+    - `datevec`: time represented as `ss.date` instances
+    - `relvec`: relative time, in the sim's time units
+
+    The `Timeline` object also has the following attributes/methods:
 
     - `ti` (int): the current timestep
-    - `npts` (int): the number of timesteps
-    - `tvec` (array): time either as absolute `ss.date` instances, or relative `ss.dur` instances
-    - `yearvec` (array): time represented as floating-point years
+    - `npts` (int): the total number of timesteps
+    - `now()` (`ss.date`/float/str): the current time, based on the timevec by default or a different vector if specified
 
     **Examples**:
 
@@ -41,7 +50,7 @@ class Timeline:
 
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
-    _time_vecs = ['tvec', 'yearvec', 'datevec', 'timevec']
+    _time_vecs = ['tvec', 'tivec', 'timevec', 'yearvec', 'datevec', 'relvec']
 
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=None, sim=None):
         # Store inputs
@@ -62,9 +71,14 @@ class Timeline:
         # Populated later
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.tvec    = None # The time vector for this instance in date or dur format
+        self.tivec   = None # The time index vector
+        self.timevec = None # The human-friendly time representation
         self.yearvec = None # Time vector as floating point years
-        self.datevec = None # The time vector as date objects
+        self.datevec = None # Time vector as date objects
+        self.relvec  = None # Time vector in sim time units
+        self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.initialized = False # Call self.init(sim) to initialize the object
+
 
         # Decide whether to initialized: we're asked, a sim is provided, or arguments are supplied directly
         if init or sim or init is None and sum([x is not None for x in [start, stop, dur]]) >= 2:
@@ -131,7 +145,7 @@ class Timeline:
         Get the current simulation time
 
         Args:
-            key (str): which type of time to get: default (None), "year", "date", "tvec", or "str"
+            key (str): which type of time to get: "time" (default), "year", "date", "tvec", or "str"
 
         **Examples**:
 
@@ -142,16 +156,22 @@ class Timeline:
             t.now('year') # Returns 2021.479
             t.now('str') # Returns '2021-06-25'
         """
-        if key in [None, 'none', 'time', 'str']:
-            vec = self.timevec
-        elif key == 'tvec':
-            vec = self.tvec
-        elif key == 'year':
-            vec = self.yearvec
-        elif key == 'date':
-            vec = self.datevec
+        # Preprocessing
+        to_str = False
+        if key in [None, 'none', 'str']: # All of these are the default
+            if key == 'str':
+                to_str = True
+            key = 'time'
+        if not isinstance(key, str):
+            errormsg = f'Key must be a string, not {key}'
+            raise TypeError(errormsg)
+        key = key.removesuffix('vec') + 'vec' # Allow either e.g. 'yearvec' or 'year'
+
+        # Get the right keyvec
+        if key in self._time_vecs:
+            vec = getattr(self, key)
         else:
-            errormsg = f'Invalid key "{key}": must be None, date, or year'
+            errormsg = f'Invalid key "{key}": must be one of {sc.strjoin(self._time_vecs)}'
             raise ValueError(errormsg)
 
         if 0 <= self.ti < len(vec):
@@ -161,7 +181,7 @@ class Timeline:
             if key == 'year':
                 now = float(now)
 
-        if key == 'str':
+        if to_str:
             now = str(now)
 
         return now
@@ -206,7 +226,7 @@ class Timeline:
 
         def is_calendar_year(val):
             """ Whether a number should be interpreted as a calendar year -- by default, a number greater than 1900 """
-            return sc.isnumber(val) and val > self.calendar_year_threshold
+            return sc.isnumber(val) and val >= self.calendar_year_threshold
 
         if sim is not None:
             self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
@@ -215,15 +235,21 @@ class Timeline:
             self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
         # Check to see if any inputs were provided as durations: if so, reset the default type
+        args = [self.start, self.stop, self.dur, self.dt]
         if isinstance(self.dt, str): # e.g. dt='year'
             dur_class = ss.time.get_dur_class(self.dt)
             self.dt = dur_class(1)
             self.default_type = dur_class
         else:
-            for arg in [self.start, self.stop, self.dur, self.dt]:
+            for arg in args:
                 if isinstance(arg, ss.dur):
                     self.default_type = type(arg)
                     break # Stop at the first one
+
+        # Check to see if all inputs are numeric
+        all_none_or_num = all(arg is None or sc.isnumber(arg) for arg in args)
+        at_least_one_num = any(sc.isnumber(arg) for arg in args)
+        self.is_numeric = all_none_or_num and at_least_one_num
 
         # Ensure dur is valid
         if sc.isnumber(self.dur):
@@ -362,9 +388,8 @@ class Timeline:
         else: # self.dt = ss.years, ss.days etc
 
             if isinstance(self.start, ss.dur): # Use durations
-                self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
-                self.tvec = np.empty(len(self.yearvec), dtype=object)
-                self.tvec[:] = [self.default_type(value=x) for x in self.yearvec] # TODO: refactor
+                self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), decimals=12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+                self.tvec = ss.DateArray(self.default_type(ss.years(self.yearvec))) # TODO: refactor
             elif isinstance(self.start, ss.date):
                 self.tvec = self.datevec
                 self.yearvec = np.array([x.years for x in self.datevec])
@@ -372,18 +397,21 @@ class Timeline:
                 errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
-        # Ensure everything is a DateArray
-        for attr in self._time_vecs:
-            if attr != 'timevec': # We make this in a moment
-                vec = getattr(self, attr)
-                if not isinstance(vec, ss.DateArray):
-                    setattr(self, attr, ss.DateArray(vec))
+        # # Ensure everything is a DateArray
+        # for attr in self._time_vecs:
+        #     if attr != 'timevec': # We make this in a moment
+        #         vec = getattr(self, attr)
+        #         if not isinstance(vec, ss.DateArray):
+        #             setattr(self, attr, ss.DateArray(vec))
 
         # The most human-friendly version of the dates: either dates or floats
-        self.timevec = self.tvec.to_human()
+        if self.is_numeric:
+            self.timevec = self.tvec.to_float()
+        else:
+            self.timevec = self.tvec
 
         # Finally, create a vector of relative times in the sim's time unit (if available)
-        self.relvec =
+        # self.relvec =
 
         self.initialized = True
         return self
