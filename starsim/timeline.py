@@ -406,16 +406,17 @@ class Timeline:
         self.tivec = np.arange(self.npts)
 
         # Finally, create a vector of relative times in the sim's time unit (if available)
-        if sim is not None:
+        try:
             date0 = sim.t.datevec[0]
             dt = sim.t.dt
-        else:
+        except:
             date0 = self.datevec[0]
             dt = self.dt
-        date_durs = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
-        dur_class = type(dt) # Not ss.time.get_dur_class since we're not keeping the unit
-        dur_vec = dur_class(date_durs)
-        self.relvec = dur_vec.to_array() # Only keep the array
+        if isinstance(date0, ss.date) and not sc.isnumber(dt): # Checks to avoid this step for mock modules -- TODO, make tidier
+            date_durs = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
+            dur_class = type(dt) # Not ss.time.get_dur_class since we're not keeping the unit
+            dur_vec = dur_class(date_durs)
+            self.relvec = dur_vec.to_array() # Only keep the array
 
         self.initialized = True
         return self

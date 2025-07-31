@@ -177,7 +177,7 @@ def test_syntax():
 
     assert np.isclose(float(datedur(weeks=1) - datedur(days=1)), 6/365)
 
-    assert date(2050) - date(2020) == years(30)
+    assert np.isclose(date(2050) - date(2020), years(30), rtol=1/365) # Not exact due to leap years
 
     assert np.isclose((ss.freqperweek(1)+ss.freqperday(1)).value, ss.freqperweek(8).value) # CKTODO: would be nice if this were exact
 

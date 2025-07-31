@@ -765,6 +765,8 @@ class TimePar:
         elif ufunc == np.multiply: return self.__mul__(b)
         elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
         elif ufunc == np.equal:    return self.__eq__(b) if a_b else self.__eq__(a)
+        elif ufunc == np.less_equal:    return self.__le__(b) if a_b else a.__le__(self.value) # TODO: check
+        elif ufunc == np.greater_equal: return self.__ge__(b) if a_b else a.__ge__(self.value) # TODO: check
         else: # Fall back to standard ufunc
             if any([isinstance(inp, TimePar) for inp in inputs]): # This is likely to be a confusing error, so let's go into detail about it
                 errormsg = f'''
@@ -1335,12 +1337,8 @@ class datedur(dur):
         return other.__add__(-1*self)
 
     def __abs__(self):
-        # Cannot implement this because it's ambiguous how to resolve cases like
-        # datedur(months=-1,days=1) - this is a sensible datedur interpreted as 'go back 1 month, then go forward 1 day'
-        # but just taking the absolute value of all of the components wouldn't work because this would be on average 1 month + 1 day
-        # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
-        # (whereas abs(years) arises when comparing dates, which automatically return years)
-        raise NotImplementedError('The absolute value of a datedur instance is undefined as components (e.g., months, days) may have different signs.')
+        # TODO: think about whether this is sufficiently accurate
+        return abs(self.years)
 
 
 class Rate(TimePar):
