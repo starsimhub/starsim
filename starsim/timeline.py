@@ -382,5 +382,8 @@ class Timeline:
         # The most human-friendly version of the dates: either dates or floats
         self.timevec = self.tvec.to_human()
 
+        # Finally, create a vector of relative times in the sim's time unit (if available)
+        self.relvec =
+
         self.initialized = True
         return self

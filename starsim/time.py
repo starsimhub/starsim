@@ -149,6 +149,13 @@ class DateArray(np.ndarray):
         """
         return self.to_date(die=False)
 
+    def to_numpy(self):
+        return self.to_array()
+
+    def to_array(self):
+        """ Force conversion to an array """
+        return np.array(self.value)
+
 
 class date(pd.Timestamp):
     """
@@ -878,7 +885,7 @@ class dur(TimePar):
 
     @property
     def days(self):
-        return self.value*self.factors.day # Needs to return float so matplotlib can plot it correctly
+        return self.value*self.factors.days # Needs to return float so matplotlib can plot it correctly
 
     def __add__(self, other):
         if isinstance(other, dur):
