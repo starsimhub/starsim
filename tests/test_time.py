@@ -122,9 +122,9 @@ def test_time_class():
     assert s3.t.npts == 21
 
     print('Testing durations 1')
-    s4 = sim(start=0, stop=ss.dur(10), dt=1.0)
-    assert s4.t.tvec[0] == ss.dur(0)
-    assert s4.t.datevec[-1] == ss.datedur(years=10).years # Did not use to require .years
+    s4 = sim(start=0, stop=ss.years(10), dt=1.0)
+    assert s4.t.tvec[0] == ss.years(0)
+    assert np.array_equal(s4.t.datevec[-1], ss.datedur(years=10).to_array())
     assert len(s4.t) == 11
 
     print('Testing durations 2')
@@ -136,7 +136,7 @@ def test_time_class():
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
     assert s5.t.datevec[0] == ss.dur(0)
-    assert s5.t.datevec[-1] == ss.datedur(years=30).years
+    assert np.array_equal(s5.t.datevec[-1], ss.datedur(years=30).to_array())
     assert len(s5.t) == 31
 
     print('Testing numeric 2')
@@ -193,7 +193,7 @@ def test_syntax():
     assert len(Timeline(datedur(days=0), datedur(months=1), datedur(days=30)).init()) == 2
     assert len(Timeline(datedur(days=0), datedur(years=1), datedur(weeks=1)).init()) == 53
     assert len(Timeline(datedur(days=0), datedur(years=1), datedur(months=1)).init()) == 13
-    assert len(Timeline(dur(0), dur(1), dur(1/12)).init()) == 13
+    assert len(Timeline(start=ss.years(0), stop=ss.years(1), dt=ss.years(1/12)).init()) == 13
     assert len(Timeline(date('2020-01-01'), date('2030-06-01'), datedur(days=1)).init()) == 3805
     assert len(Timeline(date(2020), date(2030.5), dur(0.1)).init()) == 106
 

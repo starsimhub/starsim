@@ -67,6 +67,21 @@ class DateArray(np.ndarray):
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
 
+    # def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+    #     """ To handle all numpy operations, e.g. arr1*arr2 """
+    #     print('OH HIIdkfjdkjfIII', ufunc, method, inputs, kwargs)
+    #     # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
+    #     inputs = [x.to_array() if isinstance(x, ss.DateArray) else x for x in inputs]
+    #     # kwargs = {k:self._arr(v) for k,v in kwargs.items()}
+    #     result = getattr(ufunc, method)(*inputs, **kwargs)
+
+    #     # # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
+    #     # if isinstance(result, tuple):
+    #     #     return tuple(self.convert(x) for x in result)
+
+    #     # result = self.convert(result)
+    #     return result
+
     def is_(self, which):
         """ Checks if the DateArray is comprised of ss.date objects """
         if isinstance(which, type(type)):
@@ -701,6 +716,9 @@ class TimePar:
     def __bool__(self):
         return True
 
+    def __array__(self, *args, **kwargs):
+        return self.to_array(*args, **kwargs)
+
     def __len__(self):
         if self.is_scalar:
             errormsg = f'{self} is a scalar' # This error is needed so NumPy doesn't try to iterate over the array
@@ -718,23 +736,29 @@ class TimePar:
     def to_numpy(self):
         return self.to_array()
 
-    def to_array(self):
+    def to_array(self, *args, **kwargs):
         """ Force conversion to an array """
-        return np.array(self.value)
+        return sc.toarray(self.value, *args, **kwargs)
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
+        print('OH HI', ufunc, method, inputs, kwargs)
+        if len(inputs) == 1: # With a single input, operate on the value # TODO: check if this is always safe
+            value = inputs[0].value
+            return getattr(ufunc, method)(value, **kwargs)
+
         if len(inputs) == 2: # TODO: check if this is needed
             a,b = inputs
             a_b = True # Are inputs in this order?
             if b is self: # Opposite order than expected
                 b,a = a,b
-                a_b = False # NB, the functions reverse the
+                a_b = False # NB, the functions reverse the expected order
 
         if   ufunc == np.add:      return self.__add__(b)
         elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)
         elif ufunc == np.multiply: return self.__mul__(b)
         elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
+        elif ufunc == np.equal:    return self.__eq__(b) if a_b else self.__eq__(a)
         else: # Fall back to standard ufunc
             if any([isinstance(inp, TimePar) for inp in inputs]): # This is likely to be a confusing error, so let's go into detail about it
                 errormsg = f'''
@@ -834,7 +858,14 @@ class dur(TimePar):
             base (str): the base unit, e.g. 'years'
         """
         super().__init__()
-        if sc.isnumber(value) or isinstance(value, np.ndarray):
+        if isinstance(value, dur):
+            if self.base is not None:
+                self.value = self.to_base(value)
+            else:
+                self.mutate(value.base)
+        elif sc.isnumber(value) or isinstance(value, np.ndarray) or isinstance(value, list):
+            if isinstance(value, list):
+                value = np.array(value)
             self.value = value
             if base is not None:
                 if self.base == base:
@@ -845,13 +876,10 @@ class dur(TimePar):
                 else:
                     errormsg = f'Cannot change the base of `ss.dur` from {self.base} to {base}; use `dur.mutate()` instead'
                     raise AttributeError(errormsg)
-        elif isinstance(value, dur):
-            if self.base is not None:
-                self.value = self.to_base(value)
-            else:
-                self.mutate(value.base)
         else:
-            self.value = value
+            errormsg = f'Expecting scalar, array, or ss.dur as value, not {value}'
+            raise TypeError(errormsg)
+        return
 
     def __repr__(self):
         if self.is_scalar and self.value == 1:
@@ -1058,7 +1086,7 @@ class datedur(dur):
         return float(self.years)
 
     @classmethod
-    def _as_array(cls, dateoffset):
+    def _as_array(cls, dateoffset, *args, **kwargs):
         """
         Return array representation of a pd.DateOffset
 
@@ -1071,7 +1099,7 @@ class datedur(dur):
         Returns:
             A numpy array with as many elements as `ss.time.factors`
         """
-        return np.array([dateoffset.kwds.get(k, 0) for k in cls.factor_keys])
+        return np.array([dateoffset.kwds.get(k, 0) for k in cls.factor_keys], *args, **kwargs)
 
     @classmethod
     def _as_args(cls, x):
@@ -1092,9 +1120,9 @@ class datedur(dur):
             x = cls._as_array(x)
         return {k: v for k, v in zip(cls.factor_keys, x)}
 
-    def to_array(self):
+    def to_array(self, *args, **kwargs):
         """ Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years """
-        return self._as_array(self.value)
+        return self._as_array(self.value, *args, **kwargs)
 
     def to_numpy(self):
         # TODO: This is a quick fix to get plotting to work, but this should do something more sensible
@@ -1327,6 +1355,9 @@ class Rate(TimePar):
         if isinstance(value, ss.TimePar):
             value = value.value
             ss.warn('Converting TimePars in this way is inadvisable and will become an exception in future')
+
+        if isinstance(value, list):
+            value = np.array(value)
 
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)) and value is not None:
             errormsg = f'Value must be a scalar number or array, not {type(value)}'

@@ -389,7 +389,7 @@ class Timeline:
 
             if isinstance(self.start, ss.dur): # Use durations
                 self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), decimals=12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
-                self.tvec = ss.DateArray(self.default_type(ss.years(self.yearvec))) # TODO: refactor
+                self.tvec = self.default_type(ss.years(self.yearvec))
             elif isinstance(self.start, ss.date):
                 self.tvec = self.datevec
                 self.yearvec = np.array([x.years for x in self.datevec])
@@ -404,11 +404,14 @@ class Timeline:
         #         if not isinstance(vec, ss.DateArray):
         #             setattr(self, attr, ss.DateArray(vec))
 
-        # The most human-friendly version of the dates: either dates or floats
-        if self.is_numeric:
-            self.timevec = self.tvec.to_float()
-        else:
-            self.timevec = self.tvec
+        # Ensure tvec is a DateArray
+        self.tvec = ss.DateArray(self.tvec)
+
+        # The most human-friendly version of the dates: dates if possible, else floats
+        # if self.is_numeric:
+        #     self.timevec = self.tvec.to_float()
+        # else:
+        self.timevec = self.tvec.to_human()
 
         # Finally, create a vector of relative times in the sim's time unit (if available)
         # self.relvec =
