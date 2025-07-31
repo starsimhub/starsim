@@ -277,7 +277,7 @@ class Arr(BaseArr):
 
     def _index(self, arr, inds):
         """ Index the array using the most efficient method for the current array size """
-        if inds.size >= numba_indexing:
+        if isinstance(inds, np.ndarray) and inds.size >= numba_indexing:
             return nb_indexer(arr, inds)
         else:
             return np_indexer(arr, inds)
