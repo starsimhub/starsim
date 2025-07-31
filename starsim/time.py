@@ -1203,6 +1203,30 @@ class datedur(dur):
 
         return pd.DateOffset(**d)
 
+    def __repr__(self):
+        if self.years == 0:
+            return '<datedur: 0>'
+        else:
+            labels = self.factor_keys
+            vals = self.to_array().astype(float)
+
+            time_portion = vals[4:]
+            time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
+
+            return '<datedur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
+
+    def str(self):
+        # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
+        vals = self.to_array()
+
+        # If we have only one nonzero value, return 'years', 'months', etc.
+        if np.count_nonzero(vals == 1) == 1:
+            for unit, val in zip(self.factor_keys, vals):
+                if val == 1:
+                    return unit[:-1]
+
+        strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(self.factor_keys, vals) if v != 0]
+        return ', '.join(strs)
 
     def scale(self, dateoffset, scale):
         """
@@ -1257,31 +1281,6 @@ class datedur(dur):
             raise Exception('Cannot divide a duration by a rate')
         return self.__class__(self.scale(self.value, 1/other))
 
-    def __repr__(self):
-        if self.years == 0:
-            return '<datedur: 0>'
-        else:
-            labels = self.factor_keys
-            vals = self.to_array().astype(float)
-
-            time_portion = vals[4:]
-            time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
-
-            return '<datedur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
-
-    def str(self):
-        # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
-        vals = self.to_array()
-
-        # If we have only one nonzero value, return 'years', 'months', etc.
-        if np.count_nonzero(vals == 1) == 1:
-            for unit, val in zip(self.factor_keys, vals):
-                if val == 1:
-                    return unit[:-1]
-
-        strs = [f'{v} {k[:-1] if abs(v) == 1 else k}' for k, v in zip(self.factor_keys, vals) if v != 0]
-        return ', '.join(strs)
-
     def __add__(self, other):
         if isinstance(other, date):
             return other + self.value
@@ -1312,6 +1311,9 @@ class datedur(dur):
         # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
         # (whereas abs(years) arises when comparing dates, which automatically return years)
         raise NotImplementedError('The absolute value of a datedur instance is undefined as components (e.g., months, days) may have different signs.')
+
+    def __eq__(self, other):
+        return np.array_equal(self.to_array(), sc.toarray(other))
 
 
 class Rate(TimePar):

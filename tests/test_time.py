@@ -58,7 +58,7 @@ def test_classes():
     # Test duration units
     d5 = ss.datedur(years=2)
     d6 = ss.datedur(days=5)
-    assert d5 + d6 == 2 + 5/365
+    assert (d5 + d6).years == 2 + 5/365
     assert (d5 + d6)/ss.datedur(days=1) == 365*2+5
 
     # Test rate units
