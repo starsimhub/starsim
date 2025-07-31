@@ -124,7 +124,7 @@ def test_time_class():
     print('Testing durations 1')
     s4 = sim(start=0, stop=ss.years(10), dt=1.0)
     assert s4.t.tvec[0] == ss.years(0)
-    assert np.array_equal(s4.t.datevec[-1], ss.datedur(years=10).to_array())
+    assert s4.t.datevec[-1] == ss.datedur(years=10)
     assert len(s4.t) == 11
 
     print('Testing durations 2')
@@ -136,7 +136,7 @@ def test_time_class():
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
     assert s5.t.datevec[0] == ss.dur(0)
-    assert np.array_equal(s5.t.datevec[-1], ss.datedur(years=30).to_array())
+    assert s5.t.datevec[-1] == ss.datedur(years=30)
     assert len(s5.t) == 31
 
     print('Testing numeric 2')

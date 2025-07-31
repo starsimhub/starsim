@@ -702,6 +702,7 @@ class Dist:
 
         # Do predraw scaling
         for key, v in self._pars.items():
+            # print('OHHH HI', key, v)
             is_timepar = False
             if isinstance(v, ss.TimePar):
                 is_timepar = True
@@ -716,6 +717,7 @@ class Dist:
                     ss.warn(warnmsg)
 
             if is_timepar:
+                print('YASS', self.module.dt)
                 if issubclass(timepar_type, ss.dur):
                     self._pars[key] = v/self.module.dt
                 elif issubclass(timepar_type, ss.Rate):

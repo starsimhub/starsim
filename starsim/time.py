@@ -716,8 +716,8 @@ class TimePar:
     def __bool__(self):
         return True
 
-    def __array__(self, *args, **kwargs):
-        return self.to_array(*args, **kwargs)
+    # def __array__(self, *args, **kwargs):
+    #     return self.to_array(*args, **kwargs)
 
     def __len__(self):
         if self.is_scalar:
@@ -1312,8 +1312,8 @@ class datedur(dur):
         # (whereas abs(years) arises when comparing dates, which automatically return years)
         raise NotImplementedError('The absolute value of a datedur instance is undefined as components (e.g., months, days) may have different signs.')
 
-    def __eq__(self, other):
-        return np.array_equal(self.to_array(), sc.toarray(other))
+    # def __eq__(self, other):
+    #     return np.array_equal(self.to_array(), sc.toarray(other))
 
 
 class Rate(TimePar):
