@@ -227,12 +227,11 @@ class Infection(Disease):
 
     @staticmethod # In future, consider: @nb.njit(fastmath=True, parallel=True, cache=True), but no faster it seems
     def compute_transmission(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
-        """ Compute the probability of a->b transmission """
+        """ Compute the probability of a->b transmission for networks (for other routes, the Route handles this) """
         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         transmitted = p_transmit > randvals
         target_uids = trg[transmitted]
         source_uids = src[transmitted]
-
         return target_uids, source_uids
 
     def infect(self):
@@ -269,7 +268,7 @@ class Infection(Disease):
             elif isinstance(route, ss.Route):
                 # Mixing pools are unidirectional, only use the first beta value
                 disease_beta = betamap[nk][0].to_prob(self.t.dt) if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
-                target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta)
+                target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
                 new_cases.append(target_uids)
                 sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
                 networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))

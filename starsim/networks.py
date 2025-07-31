@@ -23,7 +23,9 @@ class Route(ss.Module):
     """
     A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
     """
-    pass
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
+        errormsg = 'compute_transmission() must be defined by Route subclasses'
+        raise NotImplementedError(errormsg)
 
 
 class Network(Route):
@@ -1170,6 +1172,15 @@ class MixingPool(Route):
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
         return
 
+    def shrink(self):
+        """ Shrink the size of the mixing pool for saving to disk """
+        super().shrink()
+        shrunk = ss.utils.shrink()
+        self.diseases = shrunk
+        self.src_uids = shrunk
+        self.dst_uids = shrunk
+        return
+
     def __len__(self):
         try:
             return len(self.pars.dst)
@@ -1215,7 +1226,7 @@ class MixingPool(Route):
                 self.pars[key] = inds.remove(uids)
         return
 
-    def compute_transmission(self, rel_sus, rel_trans, disease_beta):
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
         """
         Calculate transmission
 
@@ -1228,7 +1239,7 @@ class MixingPool(Route):
         Returns:
             UIDs of agents who acquired the disease at this step
         """
-        if disease_beta == 0:
+        if (disease_beta == 0) or (disease not in self.diseases):
             return []
 
         # Determine the mixing pool beta value
