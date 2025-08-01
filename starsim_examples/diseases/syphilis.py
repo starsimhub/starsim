@@ -287,9 +287,7 @@ for key in ['dx', 'tx', 'vx']:
 
 
 def load_syph_dx():
-    """
-    Create default diagnostic products
-    """
+    """ Create default diagnostic products """
     df = sc.dataframe.read_csv(datafiles.dx)
     hierarchy = ['positive', 'inadequate', 'negative']
     dxprods = dict(
@@ -300,9 +298,7 @@ def load_syph_dx():
 
 
 def load_syph_tx():
-    """
-    Create default treatment products
-    """
+    """ Create default treatment products """
     df = sc.dataframe.read_csv(datafiles.tx)  # Read in dataframe with parameters
     txprods = dict()
     for name in df.name.unique():
@@ -314,7 +310,6 @@ class syph_screening(ss.routine_screening):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.requires = Syphilis  # not currently working
         return
 
     def _parse_product_str(self, product):
