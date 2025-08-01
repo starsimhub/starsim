@@ -121,6 +121,11 @@ class DateArray(np.ndarray):
         except:
             return False
 
+    @property
+    def years(self):
+        """ Represent the dates as floating point years """
+        return np.array([d.years for d in self])
+
     def to_date(self, inplace=False, day_round=None, die=True):
         """ Convert to ss.date
 
