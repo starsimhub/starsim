@@ -989,40 +989,36 @@ class dur(TimePar):
         return -1*self
 
     def _compare_args(self, other):
-        if isinstance(other, ss.dur):
-            return self.years, other.years
+        if isinstance(other, (ss.dur, ss.date)):
+            return self.years, other.years, True
+        elif sc.isnumber(other) or isinstance(other, np.ndarray):
+            return self.value, other, True
         else:
-            return self.value, other
+            return None, None, False
 
     def __lt__(self, other):
-        a,b = self._compare_args(other)
-        return a < b
+        a,b,impl = self._compare_args(other)
+        return a < b if impl else NotImplemented
 
     def __gt__(self, other):
-        a,b = self._compare_args(other)
-        return a > b
-        try:    return self.years > other.years
-        except: return self.years > other
+        a,b,impl = self._compare_args(other)
+        return a > b if impl else NotImplemented
 
     def __le__(self, other):
-        a,b = self._compare_args(other)
-        return a <= b
-        try:    return self.years <= other.years
-        except: return self.years <= other
+        a,b,impl = self._compare_args(other)
+        return a <= b if impl else NotImplemented
 
     def __ge__(self, other):
-        a,b = self._compare_args(other)
-        return a >= b
-        try:    return self.years >= other.years
-        except: return self.years >= other
+        a,b,impl = self._compare_args(other)
+        return a >= b if impl else NotImplemented
 
     def __eq__(self, other):
-        a,b = self._compare_args(other)
-        return a == b
+        a,b,impl = self._compare_args(other)
+        return a == b if impl else NotImplemented
 
     def __ne__(self, other):
-        a,b = self._compare_args(other)
-        return a != b
+        a,b,impl = self._compare_args(other)
+        return a != b if impl else NotImplemented
 
     def __rtruediv__(self, other):
         # If a dur is divided by a dur then we will call __truediv__
@@ -1155,6 +1151,15 @@ class datedur(dur):
         if isinstance(x, pd.DateOffset):
             x = cls._as_array(x)
         return {k: v for k, v in zip(cls.factor_keys, x)}
+
+    def _compare_args(self, other):
+        """ Need to handle numbers differently, since self.value is not a float """
+        if isinstance(other, (ss.dur, ss.date)):
+            return self.years, other.years, True
+        elif sc.isnumber(other) or isinstance(other, np.ndarray):
+            return self.years, other, True # self.years instead of self.value is the difference with ss.dur
+        else:
+            return None, None, False
 
     def to_array(self, *args, **kwargs):
         """ Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years """

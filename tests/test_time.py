@@ -181,8 +181,8 @@ def test_syntax():
 
     assert np.isclose((ss.freqperweek(1)+ss.freqperday(1)).value, ss.freqperweek(8).value) # CKTODO: would be nice if this were exact
 
-    assert date('2020-01-01') + datedur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
-    assert date('2020-01-01') + 52*datedur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
+    assert date('2020-01-01') + datedur(weeks=52) == date('2020-12-30') # Should give us 30th December 2020
+    assert date('2020-01-01') + 52*datedur(weeks=1) == date('2020-12-30')# Should give us 30th December 2020
     assert date('2020-01-01') + 52*dur(1/52) == date('2021-01-01') # Should give us 1st Jan 2021
     assert date('2020-01-01') + datedur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
