@@ -378,19 +378,25 @@ class MultiSim:
             fig = None
             res_keys = None
             kw = ss.plot_args(kwargs)
-            for sim in self.sims:
-                sim_keys = set(sim.results.flatten().keys()) # Check if keys match
-                if res_keys is None:
-                    res_keys = sim_keys
-                else:
-                    if res_keys != sim_keys:
-                        missing = res_keys - sim_keys
-                        extra = sim_keys - res_keys
-                        extratxt = f'\nExtra: {sc.strjoin(extra)}'
-                        missingtxt = f'\nMissing: {sc.strjoin(missing)}'
-                        warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
-                        ss.warn(warnmsg)
-                alpha = 0.7 if len(self) < 5 else 0.5
+            default_alpha = 0.7 if len(self) < 5 else 0.5
+            alpha = kw.plot.get('alpha', default_alpha) # Set default alpha
+            if key is None: # Set keys
+                for sim in self.sims:
+                    sim_keys = list(sim.results.flatten().keys()) # Check if keys match
+                    if res_keys is None:
+                        res_keys = sim_keys
+                    else:
+                        if res_keys != sim_keys:
+                            missing = set(res_keys) - set(sim_keys)
+                            for key in missing:
+                                res_keys.remove(key)
+                            # extra = sim_keys - res_keys
+                            # extratxt = f'\nExtra: {sc.strjoin(extra)}'
+                            # missingtxt = f'\nMissing: {sc.strjoin(missing)}'
+                            # warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly.'
+                            # ss.warn(warnmsg) # TODO: decide whether this is worth warning about -- would be better to just fix and plot all, most likely? But hard with sim.plot()
+                key = res_keys
+            for sim in self.sims: # Actually plot
                 fig = sim.plot(key=key, fig=fig, alpha=alpha, is_jupyter=False, do_show=False, **kwargs)
             if legend:
                 leg = None
