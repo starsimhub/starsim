@@ -749,19 +749,24 @@ class TimePar:
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
-        if len(inputs) == 1: # With a single input, operate on the value # TODO: check if this is always safe
+        if len(inputs) == 1 and inputs[0] is self: # With a single input, operate on the value
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
 
         if len(inputs) == 2: # TODO: check if this is needed
-            a,b = inputs
-            a_b = True # Are inputs in this order?
-            if b is self: # Opposite order than expected
-                b,a = a,b
-                a_b = False # NB, the functions reverse the expected order
+            self_,other = inputs # Expect self,other as order of inputs
+            if self_ is self:
+                s_o = True # Are inputs in this order?
+            elif other is self: # Opposite order than expected
+                other,self_ = self_,other
+                if isinstance()
+                s_o = False # NB, the functions reverse the expected order
+            else:
+                errormsg = f'Cannot perform array operation on a timepar when neither input is self: {self = }, {inputs = }'
+                raise NotImplementedError(errormsg)
 
-        if   ufunc == np.add:      return self.__add__(b)
-        elif ufunc == np.subtract: return self.__sub__(b) if a_b else self.__rsub__(b)
+        if   ufunc == np.add:      return self.__add__(other)
+        elif ufunc == np.subtract: return self.__sub__(other) if s_o else self.__rsub__(b)
         elif ufunc == np.multiply: return self.__mul__(b)
         elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
         elif ufunc == np.equal:    return self.__eq__(b) if a_b else self.__eq__(a)
@@ -779,8 +784,8 @@ Examples:
 • np.minimum(beta, 0.1) will cause this error if e.g. beta=ss.perday(0.2) instead use np.minimum(beta*dt, 0.1) or np.minimum(beta.value, 0.1) depending on what you intend.
 '''
                 raise ValueError(errormsg)
-            return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
-        return
+        print('TEMP TODO well, i am called')
+        return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
 
     def array_mul_error(self, ufunc=None):
         ufuncstr = f"{ufunc} " if ufunc is not None else ''
@@ -971,32 +976,41 @@ class dur(TimePar):
     def __neg__(self):
         return -1*self
 
+    def _compare_args(self, other):
+        if isinstance(other, ss.dur):
+            return self.years, other.years
+        else:
+            return self.value, other
+
     def __lt__(self, other):
-        try:    return self.years < other.years
-        except: return self.years < other
+        a,b = self._compare_args(other)
+        return a < b
 
     def __gt__(self, other):
+        a,b = self._compare_args(other)
+        return a > b
         try:    return self.years > other.years
         except: return self.years > other
 
     def __le__(self, other):
+        a,b = self._compare_args(other)
+        return a <= b
         try:    return self.years <= other.years
         except: return self.years <= other
 
     def __ge__(self, other):
+        a,b = self._compare_args(other)
+        return a >= b
         try:    return self.years >= other.years
         except: return self.years >= other
 
     def __eq__(self, other):
-        if isinstance(other, ss.dur):
-            return self.years == other.years
-        elif sc.isnumber(other):
-            return self.years == other
-        return NotImplemented # Used to set precedence
+        a,b = self._compare_args(other)
+        return a == b
 
     def __ne__(self, other):
-        try:    return self.years != other.years
-        except: return self.years != other
+        a,b = self._compare_args(other)
+        return a != b
 
     def __rtruediv__(self, other):
         # If a dur is divided by a dur then we will call __truediv__
@@ -1471,15 +1485,15 @@ class Rate(TimePar):
         return self.__add__(other)
 
     def __sub__(self, other):
-        if self.__class__ == other.__class__:
+        if self.__class__ == other.__class__: # TODO: make more flexible, e.g. ss.perday(1) - ss.peryear(1) could work in theory
             return self.__class__(self.value-other*self.unit, self.unit)
         elif not isinstance(other, Rate):
             if sc.isnumber(other) or isinstance(other, np.ndarray):
-                raise TypeError('Only rates can be added to rates. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
+                raise TypeError(f'Only rates can be subtracted from rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
             else:
-                raise TypeError('Only rates can be added to rates')
+                raise TypeError(f'Only rates can be subtracted from rates, not {other}')
         else:
-            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, prob+prob)')
+            raise TypeError(f'Can only subtract rates of identical types (e.g., ss.per+ss.per, prob+prob), not {other}')
 
     def __eq__(self, other):
         if self.unit is None:
