@@ -21,18 +21,20 @@ boo = '😢'
 
 def execute(path):
     """ Executes a single Jupyter notebook and returns success/failure """
-    try:
-        with open(path) as f:
-            with sc.timer(label=f'Execution time for {path}') as T:
+    with sc.timer(label=f'Execution time for {path}') as T:
+        try:
+            with open(path) as f:
                 print(f'Executing {path}...')
                 nb = nbformat.read(f, as_version=4)
                 ep = nbp.ExecutePreprocessor(timeout=timeout, kernel_name='python3')
                 ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
-        return f'{yay} {path} executed successfully in {T.total:n} s.'
-    except nbp.CellExecutionError as e:
-        return f'{boo} Execution failed for {path}: {str(e)}'
-    except Exception as e:
-        return f'{boo} Error processing {path}: {str(e)}'
+            string = f'{yay} {path} executed successfully '
+        except nbp.CellExecutionError as e:
+            string = f'{boo} Execution failed for {path}: {str(e)}\n'
+        except Exception as e:
+            string = f'{boo} Error processing {path}: {str(e)}\n'
+    string += f'(time: {T.total:0.1f} s)'
+    return string
 
 
 def main(*args, folders=folders):
@@ -71,11 +73,18 @@ def main(*args, folders=folders):
     sc.heading('Summary')
     n_yay = string.count(yay)
     n_boo = string.count(boo)
-    summary = f'{n_yay} succeeded, {n_boo} failed'
-    if n_boo:
-        for nb,res in results.items():
-            if boo in res:
-                summary += f'\nFailed: {nb}'
+    summary = f'{n_yay} succeeded, {n_boo} failed\n'
+
+    results.sort('values')
+    for nb,res in results.items():
+        timestr = res.split('time: ')[1][:-1]
+        suffix = f'{sc.path(nb).name:30s} ({timestr})'
+        if yay in res:
+            summary += f'\n{sc.ansi.green("Succeeded")}: {suffix}'
+        elif boo in res:
+            summary += f'\n{sc.ansi.red("   Failed")}: {suffix}'
+        else:
+            print('Unexpected result for {nb}, neither succeeded nor failed!')
     print(summary)
 
     T.toc()
