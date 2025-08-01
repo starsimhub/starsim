@@ -34,7 +34,7 @@ jobs:
     
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -44,7 +44,7 @@ jobs:
         run: pip install -e .
 
       - name: Check out HPVsim
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: 'starsimhub/stisim'
           path: 'stisim'
@@ -80,7 +80,7 @@ jobs:
     
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -90,7 +90,7 @@ jobs:
         run: pip install -e .
 
       - name: Check out HPVsim
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: 'fpsim/fpsim'
           path: 'fpsim'
