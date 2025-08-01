@@ -75,10 +75,10 @@ else:
 
 # Tidy up
 sc.heading("Tidying outputs...")
-run('./clean_outputs')
+run('./clean_outputs.py')
 
 sc.heading("Normalizing notebooks...")
-run('./normalize_notebooks')
+run('./normalize_notebooks.py')
 
 T.toc('Docs built')
 print(f"\nIndex:\n{os.getcwd()}/_build/index.html")
