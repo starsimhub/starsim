@@ -403,14 +403,16 @@ class Timeline:
                 stop = self.stop
                 dt = self.dt
                 eps = 1e-6 # Avoid rounding errors
+                decimals = 12 # Ditto
                 if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: do directly
                     self.tvec = sc.inclusiverange(start.value, stop.value+eps, dt.value)
                     self.tvec = self.default_type(self.tvec)
-                    self.yearvec = ss.years(self.tvec)
+                    self.yearvec = self.tvec.years
                 else: # They don't match, convert to years
                     start = self.start.years
                     stop = self.stop.years
-                    self.yearvec = np.round(start + sc.inclusiverange(0, stop-start+eps, self.dt.years), decimals=12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+                    dt = self.dt.years
+                    self.yearvec = np.round(start + sc.inclusiverange(0, stop-start+eps, dt), decimals=decimals)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
                     self.tvec = self.default_type(ss.years(self.yearvec))
             elif isinstance(self.start, ss.date):
                 self.tvec = self.datevec
