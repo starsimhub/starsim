@@ -5,6 +5,8 @@ import numpy as np
 import starsim as ss
 ss_float_ = ss.dtypes.float
 
+__all__ = ['ErdosRenyiNet' 'NullNet']
+
 class ErdosRenyiNet(ss.DynamicNetwork):
     """
     In the Erdos-Renyi network, every possible edge has a probability, p, of
