@@ -495,7 +495,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         return key.replace('.','_').lower()
 
     # Handle accessing subdicts
-    if key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
+    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
         flat = results[key].flatten() # e.g. sim.results['sis']
         key = None # We've already used the key, so reset it
     else: # Main use case: flatten the dict, e.g. sim.plot()
