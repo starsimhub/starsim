@@ -581,7 +581,7 @@ def return_fig(fig, **kwargs):
     is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
     if is_jupyter or is_reticulate:
         print(fig)
-        if show != False:
+        if do_show != False:
             plt.show()
         return None
     else:
