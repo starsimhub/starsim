@@ -36,22 +36,10 @@ cd example
 uv add starsim
 ```
 
-To run a Starsim script with uv:
+Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, clone first this repository, then run:
 ```sh
-uv run python your_script.py
+pip install -e .[dev]
 ```
-
-For development with optional dependencies:
-```sh
-uv add starsim[dev]
-```
-
-Starsim can also be installed locally. To do this, clone first this repository, then run:
-```sh
-pip install -e .
-```
-
-Don't forget the dot at the end!
 
 (Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here[(https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
 
@@ -146,7 +134,7 @@ The submodules of the Starsim folder are as follows:
 - `utils.py`: Helper functions.
 - `version.py`: Version, date, and license information.
 
-Starsim also includes a `starsim_examples` folder, which contains definitions of different examples of diseases, including STIs, Ebola, and cholera. **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. https://stisim.org.
+Starsim also includes a `starsim_examples` folder, which contains definitions of different examples of diseases, including STIs, Ebola, and cholera. **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. [STIsim](https://stisim.org).
 
 ## Contributing
 
