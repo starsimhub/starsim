@@ -711,8 +711,11 @@ class TimePar:
         if self.is_array:
             return self.__class__(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
         else:
-            errormsg = f'{type(self)} is a scalar'
-            raise TypeError(errormsg)
+            if index == 0:
+                return self
+            else:
+                errormsg = f'{type(self)} is a scalar'
+                raise TypeError(errormsg)
 
     def __setitem__(self, index, value):
         """ For indexing and slicing, e.g. TimePar[inds] """
@@ -720,8 +723,12 @@ class TimePar:
             self.value[index] = value
             return
         else:
-            errormsg = f'{type(self)} is a scalar'
-            raise TypeError(errormsg)
+            if index == 0:
+                self.value = value
+                return
+            else:
+                errormsg = f'{type(self)} is a scalar'
+                raise TypeError(errormsg)
 
     def __bool__(self):
         return True
@@ -753,26 +760,31 @@ class TimePar:
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
 
-        if len(inputs) == 2: # TODO: check if this is needed
-            self_,other = inputs # Expect self,other as order of inputs
-            if self_ is self:
-                s_o = True # Are inputs in this order?
-            elif other is self: # Opposite order than expected
-                other,self_ = self_,other
-                if isinstance()
-                s_o = False # NB, the functions reverse the expected order
+        if len(inputs) == 2: # Handle most operations: addition, multiplication, etc.
+            arg1,arg2 = inputs # Expect self,other as order of inputs, but can change
+            is_tp1 = isinstance(arg1, ss.TimePar)
+            is_tp2 = isinstance(arg2, ss.TimePar)
+            use_left = is_tp1 or not is_tp2 # Use left unless arg1 isn't a timepar and arg2 is
+            if use_left: # For operations where order doesn't matter
+                tp_arg,o_arg = arg1,arg2 # Timepar argument and other argument (which may or may not be a timepar)
             else:
-                errormsg = f'Cannot perform array operation on a timepar when neither input is self: {self = }, {inputs = }'
-                raise NotImplementedError(errormsg)
+                tp_arg,o_arg = arg2,arg1
 
-        if   ufunc == np.add:      return self.__add__(other)
-        elif ufunc == np.subtract: return self.__sub__(other) if s_o else self.__rsub__(b)
-        elif ufunc == np.multiply: return self.__mul__(b)
-        elif ufunc == np.divide:   return self.__truediv__(b) if a_b else self.__rtruediv__(b)
-        elif ufunc == np.equal:    return self.__eq__(b) if a_b else self.__eq__(a)
-        elif ufunc == np.less_equal:    return self.__le__(b) if a_b else a.__le__(self.value) # TODO: check
-        elif ufunc == np.greater_equal: return self.__ge__(b) if a_b else a.__ge__(self.value) # TODO: check
-        else: # Fall back to standard ufunc
+        # Commutative operations
+        if   ufunc == np.add:      return tp_arg.__add__(o_arg)
+        elif ufunc == np.multiply: return tp_arg.__mul__(o_arg)
+        elif ufunc == np.equal:    return tp_arg.__eq__(o_arg)
+
+        # Non-commutative
+        elif ufunc == np.subtract:      return arg1.__sub__(arg2)     if use_left else arg2.__rsub__(arg1)
+        elif ufunc == np.divide:        return arg1.__truediv__(arg2) if use_left else arg2.__rtruediv__(arg1)
+        elif ufunc == np.less:          return arg1.__lt__(arg2)      if use_left else arg2.__gt__(arg1)
+        elif ufunc == np.greater:       return arg1.__gt__(arg2)      if use_left else arg2.__lt__(arg1)
+        elif ufunc == np.less_equal:    return arg1.__le__(arg2)      if use_left else arg2.__ge__(arg1)
+        elif ufunc == np.greater_equal: return arg1.__ge__(arg2)      if use_left else arg2.__le__(arg1)
+
+        # Fall back to standard ufunc, or raise an exception
+        else:
             if any([isinstance(inp, TimePar) for inp in inputs]): # This is likely to be a confusing error, so let's go into detail about it
                 errormsg = f'''
 Cannot perform array operation "{ufunc}" on timepar {self}.
@@ -784,7 +796,7 @@ Examples:
 • np.minimum(beta, 0.1) will cause this error if e.g. beta=ss.perday(0.2) instead use np.minimum(beta*dt, 0.1) or np.minimum(beta.value, 0.1) depending on what you intend.
 '''
                 raise ValueError(errormsg)
-        print('TEMP TODO well, i am called')
+        print('TEMP TODO i am called')
         return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
 
     def array_mul_error(self, ufunc=None):
