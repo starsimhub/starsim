@@ -76,6 +76,7 @@ website:
             - tutorials/t4_diseases.ipynb
             - tutorials/t5_networks.ipynb
             - tutorials/t6_interventions.ipynb
+            - tutorials/solutions.ipynb
         - section: "**User guide**"
           contents:
           - section: "Introduction"
