@@ -100,6 +100,13 @@ class Timeline:
         except:
             return 0
 
+    def to_dict(self):
+        """ Return a dictionary of all time vectors """
+        out = sc.objdict()
+        for key in self._time_vecs:
+            out[key] = getattr(self, key)
+        return out
+
     @property
     def dt_year(self):
         return self.dt.years
@@ -233,6 +240,10 @@ class Timeline:
             self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
             self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
+        # # Convert e.g. dt=ss.datedur(days=3) to ss.days(3); we don't want to allow a dt like ss.datedur(months=1, days=-1)!
+        # if isinstance(self.dt, ss.datedur):
+        #     self.dt = self.dt.to_dur()
+
         # Check to see if any inputs were provided as durations: if so, reset the default type
         args = [self.start, self.stop, self.dur, self.dt]
         if isinstance(self.dt, str): # e.g. dt='year'
@@ -241,7 +252,7 @@ class Timeline:
             self.default_type = dur_class
         else:
             for arg in args:
-                if isinstance(arg, ss.dur):
+                if isinstance(arg, ss.dur) and not isinstance(arg, ss.datedur):
                     self.default_type = type(arg)
                     break # Stop at the first one
 
@@ -253,7 +264,9 @@ class Timeline:
         # Ensure dur is valid
         if sc.isnumber(self.dur):
             self.dur = self.default_type(self.dur)
-        assert self.dur is None or isinstance(self.dur, ss.dur), 'Timeline.dur must be a number, a dur object or None'
+        if not (self.dur is None or isinstance(self.dur, ss.dur)):
+            errormsg = f'Timeline.dur must be a number, a dur object or None, not {self.dur}'
+            raise TypeError(errormsg)
 
         # Now, figure out start, stop, and dur
         match (self.start, self.stop, self.dur):
@@ -337,7 +350,7 @@ class Timeline:
         assert start <= stop, f'Start must be before stop, not {start} and {stop}'
 
         # Figure out type and store everything
-        if issubclass(start_type, ss.dur):
+        if issubclass(start_type, ss.dur) and not start_type == ss.datedur: # Don't use datedur as a default type
             self.default_type = start_type # Now that we've reconciled everything, reset the default type if needed
         self.start = start
         self.stop = stop
@@ -385,10 +398,20 @@ class Timeline:
             self.yearvec = np.array([x.years for x in self.tvec])
 
         else: # self.dt = ss.years, ss.days etc
-
             if isinstance(self.start, ss.dur): # Use durations
-                self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), decimals=12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
-                self.tvec = self.default_type(ss.years(self.yearvec))
+                start = self.start
+                stop = self.stop
+                dt = self.dt
+                eps = 1e-6 # Avoid rounding errors
+                if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: do directly
+                    self.tvec = sc.inclusiverange(start.value, stop.value+eps, dt.value)
+                    self.tvec = self.default_type(self.tvec)
+                    self.yearvec = ss.years(self.tvec)
+                else: # They don't match, convert to years
+                    start = self.start.years
+                    stop = self.stop.years
+                    self.yearvec = np.round(start + sc.inclusiverange(0, stop-start+eps, self.dt.years), decimals=12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+                    self.tvec = self.default_type(ss.years(self.yearvec))
             elif isinstance(self.start, ss.date):
                 self.tvec = self.datevec
                 self.yearvec = np.array([x.years for x in self.datevec])
@@ -415,8 +438,19 @@ class Timeline:
         if isinstance(date0, ss.date) and not sc.isnumber(dt): # Checks to avoid this step for mock modules -- TODO, make tidier
             date_durs = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
             dur_class = type(dt) # Not ss.time.get_dur_class since we're not keeping the unit
+            if dur_class == ss.datedur:
+                dur_class = type(dt.to_dur())
             dur_vec = dur_class(date_durs)
             self.relvec = dur_vec.to_array() # Only keep the array
+        else: # If that fails, use the yearvec
+            self.relvec = self.yearvec - self.yearvec[0]
+
+        # Check that everything is the same
+        for k,v in self.to_dict().items():
+            if len(v) != len(self):
+                errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={len(self)}'
+                raise ValueError(errormsg)
+                # print(errormsg)
 
         self.initialized = True
         return self

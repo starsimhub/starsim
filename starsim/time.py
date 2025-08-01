@@ -1142,6 +1142,20 @@ class datedur(dur):
         """ Convert to a dictionary """
         return self._as_args(self.to_array())
 
+    def to_dur(self):
+        """ Convert to the smallest non-zero value, e.g. ss.datedur(years=1, days=10).to_dur() = ss.days(375) """
+        unit = None
+        for k in valid_bases:
+            v = self.value.kwds.get(k, 0)
+            if v != 0:
+                unit = k
+        if unit is not None:
+            value = self.to(unit)
+            dur_class = get_dur_class(unit)
+            return dur_class(value)
+        else:
+            return ss.years(0)
+
     def to(self, unit):
         """
         Return approximate conversion into the provided quantity

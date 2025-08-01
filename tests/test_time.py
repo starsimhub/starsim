@@ -164,20 +164,20 @@ def test_callable_dists():
 def test_syntax():
     """ Verify that a range of supported operations run without raising an error """
     sc.heading('Testing syntax')
-    from starsim import date, Timeline, dur, datedur, years, prob, per
+    from starsim import date, dur, datedur, years, prob, per
 
     assert float(date(1500))==1500
     assert np.isclose(float(date(1500.1)), 1500.1) # Not exactly equal, but very close
 
     assert np.all((years(1)*np.arange(5)) == (np.arange(5)*years(1)))
 
-    tv = Timeline(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
+    tv = ss.Timeline(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
 
     assert np.isclose(datedur(weeks=1)/datedur(days=1), 7) # TODO: would be nice if this were exact, but maybe impossible
 
     assert np.isclose(float(datedur(weeks=1) - datedur(days=1)), 6/365)
 
-    assert np.isclose(date(2050) - date(2020), years(30), rtol=1/365) # Not exact due to leap years
+    assert np.isclose((date(2050)-date(2020)).years, years(30).years, rtol=1/365) # Not exact due to leap years
 
     assert np.isclose((ss.freqperweek(1)+ss.freqperday(1)).value, ss.freqperweek(8).value) # CKTODO: would be nice if this were exact
 
@@ -187,15 +187,15 @@ def test_syntax():
     assert date('2020-01-01') + datedur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
     # These should all work - confirm the sizes
-    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), datedur(days=1)).init()) == 153
-    assert len(Timeline(date('2020-01-01'), date('2020-06-01'), datedur(months=1)).init()) == 6
-    assert len(Timeline(datedur(days=0), datedur(days=30), datedur(days=1)).init()) == 31
-    assert len(Timeline(datedur(days=0), datedur(months=1), datedur(days=30)).init()) == 2
-    assert len(Timeline(datedur(days=0), datedur(years=1), datedur(weeks=1)).init()) == 53
-    assert len(Timeline(datedur(days=0), datedur(years=1), datedur(months=1)).init()) == 13
-    assert len(Timeline(start=ss.years(0), stop=ss.years(1), dt=ss.years(1/12)).init()) == 13
-    assert len(Timeline(date('2020-01-01'), date('2030-06-01'), datedur(days=1)).init()) == 3805
-    assert len(Timeline(date(2020), date(2030.5), dur(0.1)).init()) == 106
+    assert len(ss.Timeline(date('2020-01-01'), date('2020-06-01'), ss.days(1)).init()) == 153
+    assert len(ss.Timeline(date('2020-01-01'), date('2020-06-01'), ss.months(1)).init()) == 6
+    assert len(ss.Timeline(ss.days(0), ss.days(30), ss.days(1)).init()) == 31
+    assert len(ss.Timeline(ss.days(0), ss.months(1), ss.days(30)).init()) == 2
+    assert len(ss.Timeline(ss.days(0), ss.years(1), ss.weeks(1)).init()) == 53
+    assert len(ss.Timeline(ss.days(0), ss.years(1), ss.months(1)).init()) == 13
+    assert len(ss.Timeline(start=ss.years(0), stop=ss.years(1), dt=ss.years(1/12)).init()) == 13
+    assert len(ss.Timeline(date('2020-01-01'), date('2030-06-01'), ss.days(1)).init()) == 3805
+    assert len(ss.Timeline(date(2020), date(2030.5), ss.years(0.1)).init()) == 106
 
     # Operations on date vectors
     date.arange(2020,2030)+years(1) # add years to date array
