@@ -1584,8 +1584,6 @@ class multi_random(sc.prettyobj):
         return rvs
 
 
-
-
 #%% Dist exceptions
 
 class DistNotInitializedError(RuntimeError):
