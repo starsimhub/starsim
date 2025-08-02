@@ -16,15 +16,12 @@ _ = None # For function signatures
 __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
 
 
-
 class Disease(ss.Module):
     """ Base module class for diseases """
 
     def __init__(self, pars=None, **kwargs):
         super().__init__()
-        self.define_pars(
-            log = False,
-        )
+        self.infection_log = None
         self.update_pars(pars, **kwargs)
         return
 
@@ -32,8 +29,8 @@ class Disease(ss.Module):
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
-        if self.pars.log:
-            self.log = InfectionLog()
+        if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
+            self.infection_log = InfectionLog()
         return
 
     def step_state(self):
@@ -97,12 +94,8 @@ class Disease(ss.Module):
             sources (array): Optionally specify the infecting agent
         """
         # Track infections
-        if self.pars.log:
-            self.log_infections(uids, sources)
-        return
-
-    def log_infections(self, uids, sources=None):
-        self.log.add_entries(uids, sources, self.now)
+        if self.infection_log:
+            self.infection_log.add_entries(uids, sources, self.now)
         return
 
 
@@ -332,18 +325,18 @@ class InfectionLog(nx.MultiDiGraph):
     associated with each transmission. Basic functionality is to track
     transmission with
 
-    >>> Disease.log.append(source, target, t)
+    >>> Disease.infection_log.append(source, target, t)
 
     Seed infections can be recorded with a source of `None`, although all infections
     should have a target and a time. Other data can be captured in the log, either at
     the time of creation, or later on. For example
 
-    >>> Disease.log.append(source, target, t, network='msm')
+    >>> Disease.infection_log.append(source, target, t, network='msm')
 
     could be used by a module to track the network in which transmission took place.
     Modules can optionally add per-infection outcomes later as well, for example
 
-    >>> Disease.log.add_data(source, t_dead=2024.25)
+    >>> Disease.infection_log.add_data(source, t_dead=2024.25)
 
     This would be equivalent to having specified the data at the original time the log
     entry was created - however, it is more useful for tracking events that may or may
@@ -352,6 +345,13 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
+    def __bool__(self):
+        """ Ensure that zero-length infection logs are still truthy """
+        return True
+
+    def disp(self):
+        return sc.pr(self)
+
     def add_entries(self, uids, sources=None, time=np.nan):
         if sources is None:
             for target in uids:
@@ -383,9 +383,9 @@ class InfectionLog(nx.MultiDiGraph):
         self.add_edge(source, target, key=t, **kwargs)
         return
 
-    def line_list(self):
+    def to_df(self):
         """
-        Return a tabular representation of the log
+        Return a tabular representation of the log as a line list dataframe
 
         This function returns a dataframe containing columns for all quantities
         recorded in the log. Note that the log will contain `NaN` for quantities
@@ -465,8 +465,8 @@ class NCD(Disease):
         ti = self.ti
         deaths = (self.ti_dead == ti).uids
         self.sim.people.request_death(deaths)
-        if self.pars.log:
-            self.log.add_data(deaths, died=True)
+        if self.infection_log:
+            self.infection_log.add_data(deaths, died=True)
         self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
         return
 

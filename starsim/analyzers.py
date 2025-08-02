@@ -4,10 +4,11 @@ Define analyzers, which are used to track variables when the sim is run.
 Analyzers typically include things like additional tracking states by age or another
 conditional.
 """
+import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['Analyzer', 'dynamics_by_age']
+__all__ = ['Analyzer', 'infection_log', 'dynamics_by_age']
 
 
 class Analyzer(ss.Module):
@@ -20,6 +21,42 @@ class Analyzer(ss.Module):
     on each timestep.
     """
     pass
+
+
+class infection_log(Analyzer):
+    """ Log infections """
+    def __init__(self):
+        super().__init__()
+        self.logs = sc.objdict()
+        return
+
+    def step(self):
+        """ Handled by ss.InfectionLog() """
+        pass
+
+    def finalize_results(self):
+        """ Collect the infection logs from each of the diseases """
+        super().finalize_results()
+        for key,disease in self.sim.diseases.items():
+            self.logs[key] = disease.infection_log
+            disease.infection_log = None # Reset them to save memory
+        return
+
+    def plot(self, **kwargs):
+        """ Plot all of the infection logs """
+        kw = ss.plot_args(kwargs, alpha=0.7)
+        with ss.style(**kw.style):
+            fig,axs = sc.getrowscols(len(self.logs), make=True, **kw.fig)
+            axs = sc.toarray(axs).flatten()
+            for i,key,log in self.logs.enumitems():
+                ax = axs[i]
+                plt.sca(ax)
+                df = log.to_df()
+                ax.scatter(df.t, df.target, **kw.plot) # NB, not all plot keywords are valid for scatter
+                ax.set_xlabel('Time')
+                ax.set_ylabel('Agent')
+                ax.set_title(f'Infection log for "{key}"')
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 class dynamics_by_age(Analyzer):
@@ -64,4 +101,4 @@ class dynamics_by_age(Analyzer):
             plt.xlabel('Model time')
             plt.ylabel('Count')
             plt.ylim(bottom=0)
-        return ss.return_fig(fig)
+        return ss.return_fig(fig, **kw.return_fig)
