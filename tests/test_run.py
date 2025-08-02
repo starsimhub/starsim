@@ -23,6 +23,7 @@ def make_sim_pars():
     return pars
 
 
+@sc.timer()
 def test_parallel():
     """ Test running two identical sims in parallel """
     sc.heading('Testing parallel...')
@@ -45,6 +46,7 @@ def test_parallel():
     return s1, s2
 
 
+@sc.timer()
 def test_multisim():
     """ Check MultiSim methods """
     sc.heading('Testing MultiSim')
@@ -61,7 +63,7 @@ def test_multisim():
     msim.plot()
 
     # Export results
-    res_df = msim.results.to_df(resample='2y')
+    res_df = msim.results.to_df(resample='2YE')
     assert res_df.sir_n_susceptible_low.loc['2030-12-31'] == msim.results.sir_n_susceptible.low[29:31].mean()
 
     # Reduce and plot median
@@ -76,6 +78,7 @@ def test_multisim():
     return msim
 
 
+@sc.timer()
 def test_other():
     """ Check other run options """
     sc.heading('Testing other run options')

@@ -1,11 +1,9 @@
 """
 Define core Sim classes
 """
-import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
@@ -22,39 +20,39 @@ class Sim(ss.Base):
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
         label (str): the human-readable name of the simulation
         people (People): if provided, use this ss.People object
+        modules (Module/list): if provided, use these modules (and divide among demographics, diseases, etc. based on type)
         demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
-        diseases (str/Disease/list): as above, for diseases
+        connectors (str/Connector/list): as above, for connectors
         networks (str/Network/list): as above, for networks
         interventions (str/Intervention/list): as above, for interventions
+        diseases (str/Disease/list): as above, for diseases
         analyzers (str/Analyzer/list): as above, for analyzers
-        connectors (str/Connector/list): as above, for connectors
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
-    **Examples**::
+    **Examples**:
 
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
     """
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
+    def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
-        self.pars = ss.make_pars()  # Make default parameters (using values from parameters.py)
-        args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks,
-                    interventions=interventions, analyzers=analyzers, connectors=connectors)
+        self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
+        args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
+                    networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
         self.pars.update(input_pars)  # Update the parameters
 
         # Set attributes; see also sim.init() for more
-        self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
-        self.metadata = sc.metadata(version=self.version, pipfreeze=False)
+        self.metadata = ss.metadata()
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
-        self.results = ss.Results(module='sim')  # For storing results
+        self.results = ss.Results(module='Sim')  # For storing results
         self.data = data # For storing input data
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
@@ -78,7 +76,10 @@ class Sim(ss.Base):
         try:
             labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
-            timestr = f'{self.pars.start}—{self.pars.stop}'
+            if self.initialized:
+                timestr = f'{self.t.start}—{self.t.stop}'
+            else:
+                timestr = f'{self.pars.start}—{self.pars.stop}'
 
             moddict = {}
             for modkey in ss.module_map().keys():
@@ -112,52 +113,76 @@ class Sim(ss.Base):
 
         return string
 
+    def products(self):
+        """ List all products across interventions; not an ndict like the other module types """
+        products = []
+        for intv in self.interventions():
+            if intv.has_product:
+                products.append(intv.product)
+        return products
+
     @property
-    def modules(self):
-        """ Return iterator over all Module instances (stored in standard places) in the Sim """
-        return itertools.chain(
+    def module_list(self):
+        """ Return a list of all Module instances (stored in standard places) in the Sim; see `sim.module_dict` for the dict version """
+        out = sc.mergelists(
+            self.modules(),
             self.demographics(),
-            self.networks(),
-            self.diseases(),
             self.connectors(),
+            self.networks(),
             self.interventions(),
-            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
+            self.products(),
+            self.diseases(),
             self.analyzers(),
         )
+        return out
 
-    def init(self, force=False, **kwargs):
+    @property
+    def module_dict(self):
+        """ Return a dictionary of all Module instances; see `sim.module_list` for the list version """
+        return ss.utils.nlist_to_dict(self.module_list)
+
+    def init(self, force=False, timer=False, **kwargs):
         """
         Perform all initializations for the sim
 
         Args:
             force (bool): whether to overwrite sim attributes even if they already exist
+            timer (bool): if True, count the time required for initialization (otherwise just count run time)
             kwargs (dict): passed to ss.People()
         """
+        # Handle the timer
+        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
+        if timer:
+            self.timer.start()
+
         # Validation and initialization -- this is "pre"
-        ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
-        self.init_sim_attrs(force=force)
-        self.init_mods_pre()
+        self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
+        self.init_modules_pre()
 
         # Final initializations -- this is "post"
         self.init_dists() # Initialize distributions
         self.init_people_vals() # Initialize the values in all the states and networks
-        self.init_mod_vals() # Initialize the module values
+        self.init_modules_post() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
-        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
+
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
 
         # It's initialized
         self.initialized = True
+        if timer:
+            self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         return self
 
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.t = ss.Time(pars=self.pars, name='sim', sim=True)
+        self.t = ss.Timeline(name='sim')
+        self.t.init(self)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
@@ -169,7 +194,7 @@ class Sim(ss.Base):
 
         Args:
             verbose (int):  detail to print
-            kwargs  (dict): passed to ss.make_people()
+            kwargs  (dict): passed to ss.People()
         """
         # Handle inputs
         people = self.pars.pop('people')
@@ -188,22 +213,49 @@ class Sim(ss.Base):
         self.people.link_sim(self)
         return self.people
 
-    def init_sim_attrs(self, force=False):
-        """ Move initialized modules to the sim """
-        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
-        for key in keys:
-            orig = getattr(self, key, None)
-            if not force and orig is not None:
-                if key != 'label': # Don't worry about overwriting the label
-                    warnmsg = f'Skipping key "{key}" in parameters since already present in sim and force=False'
-                    ss.warn(warnmsg)
-            else:
-                setattr(self, key, self.pars.pop(key))
+    @property
+    def label(self):
+        """
+        Get the sim label from the parameters, if available.
+
+        Note: for `ss.Sim` objects, the label is stored as `sim.pars.label`,
+        and `sim.label` is an alias to it. Sims do not have names separate from
+        their labels. For `ss.Module` objects, the name and label are both attributes
+        (`mod.name` and `mod.label`), with the difference being that the names
+        are machine-readable (e.g. `'my_sir'`) while the labels are human-readable
+        (e.g. `'My SIR module'`).
+        """
+        try:    return self.pars.label
+        except: return None
+
+    @label.setter
+    def label(self, label):
+        """
+        Set the sim label (actually sets `sim.pars.label`)
+        """
+        self.pars['label'] = label
         return
 
-    def init_mods_pre(self):
+    def init_module_attrs(self, force=False):
+        """ Move initialized modules to the sim """
+        module_types = ss.modules.module_types()
+        for attr in module_types:
+            orig = getattr(self, attr, None)
+            if not force and orig is not None:
+                warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
+                ss.warn(warnmsg)
+            else:
+                modules = self.pars.pop(attr) # Remove module type (e.g. 'diseases') from the parameters
+                setattr(self, attr, modules) # Add the modules ndict to the sim
+                self.pars[attr] = sc.objdict() # Recreate with just the module parameters
+                for key,module in modules.items():
+                    self.pars[attr][key] = module.pars
+
+        return
+
+    def init_modules_pre(self):
         """ Initialize all the modules with the sim """
-        for mod in self.modules:
+        for mod in self.module_list:
             mod.init_pre(self)
         return
 
@@ -213,7 +265,7 @@ class Sim(ss.Base):
         self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
 
         # Copy relevant dists to each module
-        for mod in self.modules:
+        for mod in self.module_list:
             self.dists.copy_to_module(mod)
         return
 
@@ -222,21 +274,21 @@ class Sim(ss.Base):
         self.people.init_vals()
         return
 
-    def init_mod_vals(self):
-        """ Initialize values in other modules, including networks and time parameters """
-        for mod in self.modules:
+    def init_modules_post(self):
+        """ Initialize values in other modules, including networks and time parameters, and do any other post-processing """
+        for mod in self.module_list:
             mod.init_post()
         return
 
     def reset_time_pars(self, force=True):
         """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
-        for mod in self.modules:
+        for mod in self.module_list:
             mod.init_time_pars(force=force)
         return
 
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        kw = dict(shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
+        kw = dict(module='Sim', shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),
@@ -289,12 +341,20 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None):
-        """ Run the model once """
+    def run(self, until=None, verbose=None, check_method_calls=True):
+        """
+        Run the model -- the main method for running a simulation.
 
+        Args:
+            until (date/str/float): the date to run the sim until
+            verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
+            check_method_calls (bool): whether to check that all required methods were called
+        """
         # Initialization steps
         if not self.initialized: self.init()
-        self.verbose = sc.ifelse(verbose, self.pars.verbose)
+        if verbose is not None:
+            self._orig_verbose = self.verbose
+            self.verbose = verbose
         self.timer.start()
 
         # Check for AlreadyRun errors
@@ -313,10 +373,9 @@ class Sim(ss.Base):
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-            for mod in self.modules: # May not be needed, but keeps it consistent with the sim
-                mod.t.ti -= 1
             self.finalize()
+            if check_method_calls:
+                self.check_method_calls()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()
 
@@ -327,6 +386,9 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
+        # Reset the time index (done in the modules as well in mod.finalize())
+        self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
@@ -334,8 +396,13 @@ class Sim(ss.Base):
         self.results_ready = True # Results are ready to use
 
         # Finalize each module
-        for module in self.modules:
+        for module in self.module_list:
             module.finalize()
+
+        # Resets verbose if needed
+        if hasattr(self, '_orig_verbose'):
+            self.verbose = self._orig_verbose
+            delattr(self, '_orig_verbose')
 
         # Generate the summary and finish up
         self.summarize() # Create summary
@@ -391,7 +458,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0):
+    def shrink(self, inplace=True, size_limit=1.0, intercept=10, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -401,6 +468,8 @@ class Sim(ss.Base):
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
             size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
+            intercept (float): the size (in units of size_limit) to allow for a zero-timestep sim
+            die (bool): whether to raise an exception if the shrink failed
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
@@ -414,50 +483,35 @@ class Sim(ss.Base):
         # Shrink the people and loop
         shrunk = ss.utils.shrink()
         sim.people = shrunk
-        with sc.tryexcept():
-            sim.loop.sim = shrunk
-            sim.loop.funcs = shrunk
-            sim.loop.plan = shrunk
+        with sc.tryexcept(die=die):
+            sim.loop.shrink()
 
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
-
-            # Shrink the networks
-            for network in sim.networks():
-                with sc.tryexcept():
-                    network.edges = shrunk
-                    network.participant = shrunk
 
             # Shrink the distributions
             sim.dists.sim = shrunk
             sim.dists.obj = shrunk
             for dist in sim.dists.dists.values():
-                with sc.tryexcept():
-                    dist.slots = shrunk
-                    dist._slots = shrunk
-                    dist.module = shrunk
-                    dist.sim = shrunk
-                    dist._n = shrunk
-                    dist._uids = shrunk
-                    dist.history = shrunk
+                with sc.tryexcept(die=die):
+                    dist.shrink()
 
             # Finally, shrink the modules
-            for mod in sim.modules:
-                mod.sim = shrunk
-                mod.dists = shrunk
-                for state in mod.states:
-                    with sc.tryexcept():
-                        state.people = shrunk
-                        state.raw = shrunk
+            for mod in sim.module_list:
+                with sc.tryexcept(die=die):
+                    mod.shrink()
 
             # Check that the module successfully shrunk
             if size_limit:
-                max_size = size_limit*len(sim)/1e3 # Maximum size in MB
-                for mod in sim.modules:
-                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
+                max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                for mod in sim.module_list:
+                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
                     if size > max_size:
-                        warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
-                        ss.warn(warnmsg)
+                        errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
+                        if die:
+                            raise RuntimeError(errormsg)
+                        else:
+                            ss.warn(errormsg)
 
         # Finally, set a flag that the sim has been shrunken
         sim.shrunken = True
@@ -471,6 +525,52 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
+    def check_method_calls(self, die=None, warn=None, verbose=False):
+        """
+        Check if any required methods were not called.
+
+        Typically called automatically by `sim.run()`; default behavior is to warn
+        (see `options.check_method_calls`).
+
+        Args:
+            die (bool): whether to raise an exception if missing methods were found (default False)
+            warn (bool): whether to raise a warning if missing methods were found (default False)
+            verbose (bool): whether to print the number of times each method was called (default False)
+
+        Returns:
+            A list of missing method calls by module
+        """
+        # Handle arguments, or fall back to options
+        valid = ['die', 'warn', False]
+        if die is not None or warn is not None:
+            check = 'die' if die else 'warn' if warn else False
+        else:
+            check = ss.options.check_method_calls
+        if check not in valid:
+            errormsg = f'Could not understand {check=}, must be one of {valid}'
+            raise ValueError(errormsg)
+
+        if check:
+            if verbose:
+                sc.pp(self._call_required)
+
+            missing = []
+            for mod in self.module_list:
+                modmissing = mod.check_method_calls()
+                if modmissing:
+                    missing.append([type(mod), modmissing])
+            if missing:
+                errormsg = 'The following methods are required, but were not called.\n'
+                errormsg += 'Did you mistype a method name, forget a super() call,\n'
+                errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
+                for modtype,modmissing in missing:
+                    errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
+                if check == 'die':
+                    raise RuntimeError(errormsg)
+                elif check == 'warn':
+                    ss.warn(errormsg)
+        return missing
+
     def to_df(self, sep='_', **kwargs):
         """
         Export results as a Pandas dataframe
@@ -481,6 +581,51 @@ class Sim(ss.Base):
         self.check_results_ready('Please run the sim before exporting the results')
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
+
+    def profile(self, line=True, do_run=True, plot=True, follow=None, **kwargs):
+        """
+        Profile the performance of the simulation using a line profiler (`sc.profile()`)
+
+        Args:
+            do_run (bool): whether to immediately run the sim
+            plot (bool): whether to plot time spent per module step
+            follow (func/list): a list of functions/methods to follow in detail
+            **kwargs (dict): passed to `sc.profile()`
+
+        **Example**:
+
+            import starsim as ss
+
+            net = ss.RandomNet()
+            sis = ss.SIS()
+            sim = ss.Sim(networks=net, diseases=sis)
+            prof = sim.profile(follow=[net.add_pairs, sis.infect])
+        """
+        prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
+        return prof
+
+    def cprofile(self, sort='cumtime', mintime=1e-3, **kwargs):
+        """
+        Profile the performance of the simulation using a function profiler (`sc.cprofile()`)
+
+        Args:
+            sort (str): default sort column; common choices are 'cumtime' (total time spent in a function, includin subfunctions) and 'selftime' (excluding subfunctions)
+            mintime (float): exclude function calls less than this time in seconds
+            **kwargs (dict): passed to `sc.cprofile()`
+
+        **Example**:
+
+            import starsim as ss
+
+            net = ss.RandomNet()
+            sis = ss.SIS()
+            sim = ss.Sim(networks=net, diseases=sis)
+            prof = sim.cprofile()
+        """
+        cprof = sc.cprofile(sort=sort, mintime=mintime, **kwargs)
+        with cprof:
+            self.run()
+        return cprof
 
     def save(self, filename=None, shrink=None, **kwargs):
         """
@@ -494,7 +639,7 @@ class Sim(ss.Base):
         Returns:
             filename (str): the validated absolute path to the saved file
 
-        **Example**::
+        **Example**:
 
             sim.save() # Saves to a .sim file
         """
@@ -519,23 +664,23 @@ class Sim(ss.Base):
 
         Args:
             filename (str): if None, return string; else, write to file
-            keys (str/list): attributes to write to json (choices: 'pars' and/or 'summary')
+            keys (str/list): attributes to write to json (choices: 'pars', 'summary', and/or 'results')
             verbose (bool): detail to print
-            kwargs (dict): passed to sc.jsonify()
+            **kwargs (dict): passed to `sc.jsonify()`
 
         Returns:
             A dictionary representation of the parameters and/or summary results
             (or write that dictionary to a file)
 
-        **Examples**::
+        **Examples**:
 
-            json = sim.to_json()
-            sim.to_json('results.json')
-            sim.to_json('summary.json', keys='summary')
+            json = sim.to_json() # Convert to a dict
+            sim.to_json('sim.json') # Write everything
+            sim.to_json('summary.json', keys='summary') # Just write the summary
         """
         # Handle keys
         if keys is None:
-            keys = ['pars', 'summary']
+            keys = ['pars', 'summary', 'results']
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
@@ -549,64 +694,88 @@ class Sim(ss.Base):
                     d.summary = dict(sc.dcp(self.summary))
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
+            elif key == 'results':
+                d.results = self.to_df().to_dict()
             else:  # pragma: no cover
-                errormsg = f'Could not convert "{key}" to JSON; continuing...'
-                print(errormsg)
+                warnmsg = f'Could not convert "{key}" to JSON; continuing...'
+                ss.warn(warnmsg)
 
         # Final conversion
+        d = sc.jsonify(d, **kwargs)
         if filename is not None:
-            sc.savejson(filename=filename, obj=d, **kwargs)
-        d = sc.jsonify(d)
+            sc.savejson(filename=filename, obj=d)
         return d
 
-    def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False,
-             show_module=26, show_label=False, fig_kw=None, plot_kw=None, scatter_kw=None):
+    def to_yaml(self, filename=None, sort_keys=False, **kwargs):
+        """
+        Export results and parameters as YAML.
+
+        Args:
+            filename (str): the name of the file to write to (default `{sim.label}.yaml`)
+            kwargs (dict): passed to `sim.to_json()`
+
+        **Example**:
+
+            sim = ss.Sim(diseases='sis', networks='random').run()
+            sim.to_yaml('results.yaml', keys='results')
+        """
+        if filename is None:
+            if self.label:
+                filename = f'{self.label}.yaml'
+            else:
+                filename = 'sim.yaml'
+        json = self.to_json(filename=None, **kwargs)
+        return sc.saveyaml(filename=filename, obj=json, sort_keys=sort_keys)
+
+    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
+             show_label=False, n_ticks=None, **kwargs):
         """
         Plot all results in the Sim object
 
         Args:
             key (str/list): the results key to plot (by default, all); if a list, plot exactly those keys
             fig (Figure): if provided, plot results into an existing figure
-            style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
+            style (str): the plotting style to use
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
-            show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length; if -1, use a newline
+            show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
-            fig_kw (dict): passed to ``plt.subplots()``
-            plot_kw (dict): passed to ``plt.plot()``
-            scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
+            n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
+            fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+            plot_kw (dict): passed to `plt.plot()`
+            data_kw (dict): passed to `plt.scatter()`, for plotting the data
+            style_kw (dict): passed to `ss.style()`, for controlling the detailed plotting style (default "starsim"; other options are "simple", None, or any Matplotlib style)
+            **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
+
+        **Examples**:
+
+            sim = ss.Sim(diseases='sis', networks='random').run()
+
+            # Basic usage
+            sim.plot()
+
+            # Plot a single result
+            sim.plot('sis.prevalence')
+
+            # Plot with a custom figure size, font, and style
+            sim.plot(figsize=(12,16), font='Raleway', style='fancy')
         """
         self.check_results_ready('Please run the sim before plotting')
 
-        # Configuration
-        flat = self.results.flatten()
-        if not show_skipped: # Skip plots with auto_plot set to False
-            for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-                res = flat[k]
-                if isinstance(res, ss.Result) and not res.auto_plot:
-                    flat.pop(k)
+        # Figure out the flat structure of results to plot
+        flat = ss.utils.match_result_keys(self.results, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
 
         # Set figure defaults
-        n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
+        n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes
         default_figsize = np.array([8, 6])
         figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
         figsize = default_figsize*figsize_factor
-        if show_module is True: # Set no limit for the label length
-            show_module = 999
 
         # Set plotting defaults
-        fig_kw     = sc.mergedicts(dict(figsize=figsize), fig_kw)
-        plot_kw    = sc.mergedicts(dict(lw=2), plot_kw)
-        scatter_kw = sc.mergedicts(dict(alpha=0.3, color='k'), scatter_kw)
+        kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
 
         # Do the plotting
-        with sc.options.with_style(style):
-
-            if key is not None:
-                if isinstance(key, str):
-                    flat = {k:v for k,v in flat.items() if (key.lower() in k)}
-                else:
-                    flat = {k.lower():flat[k.lower()] for k in key}
+        with ss.style(**kw.style):
 
             # Get the figure
             if fig is None:
@@ -616,8 +785,8 @@ class Sim(ss.Base):
                     while plt.fignum_exists(plotlabel):
                         figlist += plotlabel
                         plotlabel = sc.uniquename(self.label, figlist, human=True)
-                    fig_kw['num'] = plotlabel
-                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    kw.fig['num'] = plotlabel
+                fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
             else:
@@ -639,29 +808,18 @@ class Sim(ss.Base):
                             found = True
                             break
                     if found:
-                        ax.scatter(df.index.values, df[dfkey].values, **scatter_kw)
+                        ax.scatter(df.index.values, df[dfkey].values, **kw.data)
 
                 # Plot results
-                ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
-                if show_module == -1:
-                    label = res.full_label.replace(':', '\n')
-                elif len(res.full_label) > show_module:
-                    label = res.label
-                else:
-                    label = res.full_label
-
-                ax.set_title(label)
-                sc.commaticks(ax)
-                if res.has_dates:
-                    locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
-                    sc.dateformatter(ax, locator=locator)
+                ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
+                ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         if show_label in ['title', 'suptitle'] and self.label:
             fig.suptitle(self.label, weight='bold')
 
         sc.figlayout(fig=fig)
 
-        return ss.return_fig(fig)
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 class AlreadyRunError(RuntimeError):
@@ -679,9 +837,9 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         run (bool): whether to run the sim
         plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
-        kwargs (dict): passed to ``ss.Sim()``
+        kwargs (dict): passed to `ss.Sim()`
 
-    **Examples**::
+    **Examples**:
 
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
@@ -716,7 +874,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         die (bool): whether to raise an exception if the sims don't match
         require_run (bool): require that the simulations have been run
 
-    **Example**::
+    **Example**:
 
         s1 = ss.Sim(rand_seed=1).run()
         s2 = ss.Sim(rand_seed=2).run()
@@ -870,7 +1028,7 @@ def check_sims_match(*args, full=False):
         args (list): a list of 2 or more sims to compare
         full (bool): if True, return whether each sim matches the first
 
-    **Example**::
+    **Example**:
 
         s1 = ss.Sim(diseases='sir', networks='random')
         s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))

@@ -8,6 +8,7 @@ import sciris as sc
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 import starsim as ss
+import starsim_examples as sse
 
 n = 5 # Default number of samples
 
@@ -27,6 +28,7 @@ def make_dists(**kwargs):
 
 # %% Define the tests
 
+@sc.timer()
 def test_seed():
     """ Test assignment of seeds """
     sc.heading('Testing assignment of seeds')
@@ -40,6 +42,7 @@ def test_seed():
     return dist0, dist1
 
 
+@sc.timer()
 def test_reset(n=n):
     """ Sample, reset, sample """
     sc.heading('Testing sample, reset, sample')
@@ -62,6 +65,7 @@ def test_reset(n=n):
     return before, after
 
 
+@sc.timer()
 def test_jump(n=n):
     """ Sample, jump, sample """
     sc.heading('Testing sample, jump, sample')
@@ -84,6 +88,7 @@ def test_jump(n=n):
     return before, after
 
 
+@sc.timer()
 def test_order(n=n):
     """ Ensure sampling from one RNG doesn't affect another """
     sc.heading('Testing from multiple random number generators to test if sampling order matters')
@@ -181,6 +186,7 @@ def plot_infs(s1, s2):
     return fig
 
 
+@sc.timer()
 def test_worlds(do_plot=False):
     """ Test that one extra birth leads to one extra infection """
     sc.heading('Testing worlds...')
@@ -199,10 +205,7 @@ def test_worlds(do_plot=False):
             dur_inf = 20,
             p_death = 0, # Here since analyzer can't handle variable numbers of people
         ),
-        networks = dict(
-            type = 'embedding',
-            duration = 5, # Must be shorter than dur_inf for SIR transmission to occur
-        ),
+        networks = sse.EmbeddingNet(duration=5)  # Must be shorter than dur_inf for SIR transmission to occur
     )
     s1 = ss.Sim(pars=pars, interventions=CountInf())
     s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])
@@ -233,6 +236,7 @@ def test_worlds(do_plot=False):
     return res
 
 
+@sc.timer()
 def test_independence(do_plot=False, thresh=0.1):
     """ Test that when variables are created, they are uncorrelated """
     sc.heading('Testing independence...')
@@ -243,7 +247,7 @@ def test_independence(do_plot=False, thresh=0.1):
         diseases = [
             dict(type='sir', init_prev=0.1),
             dict(type='sis', init_prev=0.1),
-            dict(type='hiv', init_prev=0.1),
+            sse.HIV(init_prev=0.1),
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
@@ -294,6 +298,7 @@ def test_independence(do_plot=False, thresh=0.1):
     return sim
 
 
+@sc.timer()
 def test_combine_rands(do_plot=False):
     n = int(1e6)
     atol = 1e-3

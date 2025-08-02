@@ -1,0 +1,12 @@
+cpu_performance: 0.9975225907277415
+parameters:
+  dt:
+    python_class: <class 'starsim.time.years'>
+    value: 0.2
+  dur:
+    python_class: <class 'starsim.time.years'>
+    value: 20
+  n_agents: 10000
+time:
+  initialize: 0.062
+  run: 0.918

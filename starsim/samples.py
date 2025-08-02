@@ -98,7 +98,7 @@ class Samples:
     """
     Stores CSV outputs and summary dataframes
 
-    To construct, use ``Samples.new()``. To read an existing one, use ``Samples(fname)``.
+    To construct, use `Samples.new()`. To read an existing one, use `Samples(fname)`.
     The sample files are just ZIP archives with plain text CSV and TXT files so they
     can be easily accessed externally as well.
     """
@@ -330,8 +330,8 @@ class Samples:
         """
         Retrieve dataframe and summary row
 
-        Use ``Samples[seed]`` to read only the dataframe.
-        Use ``Samples.get(seed)`` to read both the dataframe and summary row
+        Use `Samples[seed]` to read only the dataframe.
+        Use `Samples.get(seed)` to read both the dataframe and summary row
         """
         df = self[seed]
         row = sc.objdict(self.summary.xs(seed, level="seed").reset_index().iloc[0])
@@ -407,9 +407,9 @@ class Samples:
 
         Args:
             fcn: A function to apply. It should take in a dataframe
-            args: Additional arguments for ``fcn``
-            kwargs: Additional arguments for ``fcn``
+            args: Additional arguments for `fcn`
+            kwargs: Additional arguments for `fcn`
 
-        Returns: A list with the output of ``fcn``
+        Returns: A list with the output of `fcn`
         """
         return [fcn(x, *args, **kwargs) for x in self]

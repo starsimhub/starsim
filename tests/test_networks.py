@@ -6,7 +6,9 @@ Test networks
 import sciris as sc
 import numpy as np
 import starsim as ss
+import starsim_examples as sse
 import scipy.stats as sps
+import matplotlib.pyplot as plt
 
 sc.options(interactive=False) # Assume not running interactively
 
@@ -15,6 +17,7 @@ medium = 1000
 
 # %% Define the tests
 
+@sc.timer()
 def test_manual():
     sc.heading('Testing manual networks')
 
@@ -38,6 +41,7 @@ def test_manual():
     return o
 
 
+@sc.timer()
 def test_random():
     sc.heading('Testing random networks')
 
@@ -63,6 +67,52 @@ def test_random():
     return o
 
 
+@sc.timer()
+def test_randomsafe():
+    sc.heading('Testing the RandomSafe network')
+
+    def auid_similarity(s1, s2):
+        """ Compute similarity between UID lists """
+        auids1 = s1.people.auids
+        auids2 = s2.people.auids
+        similarity = sc.similarity(auids1, auids2)
+        return similarity
+
+    # Set up a sim with some small number of births and deaths
+    pars = sc.objdict(n_agents=small, dur=5, verbose=False)
+    births = ss.Births(birth_rate=ss.freqperyear(5))
+    simil = sc.objdict()
+
+    # Confirm that non-safe networks diverge immediately
+    s1 = ss.Sim(pars, networks='random', label='random-nobirths').run()
+    s2 = ss.Sim(pars, networks='random', label='random-births', demographics=births).run()
+
+    n1 = s1.networks[0].to_edgelist()
+    n2 = s2.networks[0].to_edgelist()
+    simil.uid = auid_similarity(s1, s2)
+    simil.rand = sc.similarity(n1, n2)
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid:%}')
+    print(f'Similarity for random networks after {pars.dur} timesteps:\n{simil.rand:%}\n')
+    assert simil.rand < 0.5, 'Random networks were more similar than expected'
+
+    # Confirm that safe networks don't
+    s3 = ss.Sim(pars, networks='randomsafe', label='safe-nobirths').run()
+    s4 = ss.Sim(pars, networks='randomsafe', label='safe-births', demographics=births).run()
+
+    n3 = s3.networks[0].to_edgelist()
+    n4 = s4.networks[0].to_edgelist()
+    simil.uid2 = auid_similarity(s3, s4)
+    simil.safe = sc.similarity(n3, n4)
+    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid2:%}')
+    print(f'Similarity for random-safe networks after {pars.dur} timesteps:\n{simil.safe:%}\n')
+    assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
+
+    o = sc.objdict(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
+    return o
+
+
+
+@sc.timer()
 def test_erdosrenyi():
     sc.heading('Testing Erdos-Renyi network')
 
@@ -92,17 +142,21 @@ def test_erdosrenyi():
         f_obs = np.histogram(counts, bins=bins)[0] # Form the degree distribution
         pp = sps.binom.pmf(bins[:-1], n=n, p=p) # Computed the theoretical probability distribution
         f_exp = f_obs.sum()*pp / pp.sum() # Scale
-        p_value = sps.chisquare(f_obs, f_exp).pvalue # Compute the X2 p-value
-        assert not p_value < alpha
+        if f_obs.sum() and f_exp.sum(): # Skip if zero
+            p_value = sps.chisquare(f_obs, f_exp).pvalue # Compute the X2 p-value
+            assert not p_value < alpha
+        else:
+            p_value = 1.0
         return p_value
 
     # Manual creation
     p = 0.1
-    nw1 = ss.ErdosRenyiNet(p=p)
+    nw1 = sse.ErdosRenyiNet(p=p)
     ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
+    ss.register_modules(sse)
     s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
     nw2 = s2.networks[0]
 
@@ -121,32 +175,28 @@ def test_erdosrenyi():
     return o
 
 
+@sc.timer()
 def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    nw1 = ss.DiskNet()
-    s1 = ss.Sim(n_agents=5, dur=50, networks=nw1, copy_inputs=False).init() # This initializes the network
+    nw1 = sse.DiskNet()
+    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
-        # Visualize motion:
-        import matplotlib.pyplot as plt
-        import matplotlib as mpl
-
         fig, ax = plt.subplots()
-        vdt = nw1.pars.v * s1.pars.dt
+        vdt = nw1.pars.v * s1.t.dt
 
-        cmap = mpl.colormaps['plasma']
-        colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
+        colors = sc.vectocolor(np.linspace(0, 1, s1.pars.n_agents))
         ax.scatter(nw1.x, nw1.y, s=50, c=colors)
-        for i in range(s1.pars.dur):
+        for i in range(s1.t.npts):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
             ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
             ax.set_aspect('equal', adjustable='box') #ax.set_xlim([0,1]); ax.set_ylim([0,1])
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = ss.DiskNet(r=0.15, v=0.05)
+    nw2 = sse.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -157,6 +207,7 @@ def test_disk():
     return s1, s2
 
 
+@sc.timer()
 def test_static():
     sc.heading('Testing static networks')
 
@@ -181,16 +232,18 @@ def test_static():
     return o
 
 
+@sc.timer()
 def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
-    network = ss.NullNet()
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    network = sse.NullNet()
+    sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     return sim
 
 
+@sc.timer()
 def test_other():
     sc.heading('Other network tests...')
 
@@ -220,6 +273,7 @@ if __name__ == '__main__':
     # Run tests
     man  = test_manual()
     rand = test_random()
+    safe = test_randomsafe()
     stat = test_static()
     erdo = test_erdosrenyi()
     disk = test_disk()
