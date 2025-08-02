@@ -644,18 +644,25 @@ class RandomSafeNet(DynamicNetwork):
 
     This network is similar to `ss.RandomNet()`, but is random-number safe
     (i.e., the addition of a single new agent will not perturb the entire rest
-    of the network). However, it is somewhat slowever than `ss.RandomNet()`,
+    of the network). However, it is somewhat slower than `ss.RandomNet()`,
     so should be used where CRN safety is important (e.g., scenario analysis).
 
+    Note: `ss.RandomNet` uses `n_contacts`, which is the total number of contacts
+    per agent. `ss.RandomSateNet` users `n_edges`, which is the total number of
+    *edges* per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges.
+    For example, `ss.RandomNet(n_contacts=10)` will give (nearly) identical results
+    to `ss.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
+    a distribution, `n_edges` can only be an integer.
+
     Args:
-        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        n_edges (int): the average number of (bi-directional) edges between agents
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
     """
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, **kwargs):
+    def __init__(self, pars=None, n_edges=_, dur=_, beta=_, **kwargs):
         super().__init__()
         self.define_pars(
-            n_contacts = 10,
+            n_edges = 5,
             dur = 0, # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
         )
@@ -666,7 +673,7 @@ class RandomSafeNet(DynamicNetwork):
     def rep_rand(self, uids, sort=True):
         """ Reproducible repeated random numbers """
         n_agents = len(uids)
-        n_conn = self.pars.n_contacts
+        n_conn = self.pars.n_edges
         r_list = []
         for i in range(n_conn):
             r = self.dist.rvs(uids)
