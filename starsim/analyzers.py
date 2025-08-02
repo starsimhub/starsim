@@ -4,6 +4,7 @@ Define analyzers, which are used to track variables when the sim is run.
 Analyzers typically include things like additional tracking states by age or another
 conditional.
 """
+import numpy as np
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -24,7 +25,19 @@ class Analyzer(ss.Module):
 
 
 class infection_log(Analyzer):
-    """ Log infections """
+    """ Log infections -- see `ss.InfectionLog` for detail
+
+    This analyzer activates an infection log running in each disease. This is
+    different than other analyzers, but is required since the information required
+    to create an infection log isn't kept outside of the disease's `infect()` step.
+
+    **Example**:
+
+        import starsim as ss
+        sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
+        sim.run()
+        sim.analyzers[0].plot()
+    """
     def __init__(self):
         super().__init__()
         self.logs = sc.objdict()
@@ -89,6 +102,13 @@ class dynamics_by_age(Analyzer):
         for min, max in zip(self.mins, self.maxes):
             mask = (people.age >= min) & (people.age < max)
             self.hist[min].append(people.states[self.state][mask].sum())
+        return
+
+    def finalize_results(self):
+        """ Convert to an array """
+        super().finalize_results()
+        for k,hist in self.hist.items():
+            self.hist[k] = np.array(hist)
         return
 
     def plot(self, **kwargs):

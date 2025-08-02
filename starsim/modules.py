@@ -311,9 +311,9 @@ class Module(Base):
         class_name = self.__class__.__name__ # e.g. 'SIR'
         class_str = f':{class_name}' if name != class_name.lower() else '' # e.g. 'SIR'
         label_str = f'"{label}"; ' if (label.lower() != name and label != class_name) else ''
-        pars_str = sc.strjoin(self.pars.keys()) if len(self.pars) else 'None'
-        states_str = sc.strjoin(self.state_dict.keys()) if len(self.state_dict) else 'None'
-        out = f'{name}{class_str}({label_str}pars=[{pars_str}]; states=[{states_str}])'
+        pars_str = '[' + sc.strjoin(self.pars.keys()) + ']' if len(self.pars) else 'None'
+        states_str = '[' + sc.strjoin(self.state_dict.keys()) + ']' if len(self.state_dict) else 'None'
+        out = f'{name}{class_str}({label_str}pars={pars_str}; states={states_str})'
         return out if output else print(out)
 
     def __repr__(self):
