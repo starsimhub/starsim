@@ -385,7 +385,8 @@ def mock_sim(n_agents=100, **kwargs):
         dt = kwargs.get('dt', ss.years(1.0)),
         pars = t,
         results = sc.objdict(),
-        networks = sc.objdict(),
+        networks = sc.objdict(), # Needed for infections
+        analyzers = sc.objdict(), # Needed for infection log
     )
     return sim
 
