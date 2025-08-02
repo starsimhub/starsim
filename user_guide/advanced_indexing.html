@@ -722,7 +722,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li><code>values</code>: Contains data for active agents only (indexed by position in auids)</li>
 </ul>
 <p>Let’s see this in action:</p>
-<div id="7agla6ao1iu" class="cell">
+<div id="7agla6ao1iu" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a simple simulation to demonstrate indexing</span></span>
@@ -742,6 +742,24 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Alive: </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>alive<span class="sc">.</span>raw<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Ages (values): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Ages (raw): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>raw<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.26 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.28 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.30 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.32 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.34 s)  •••••••••••••••••••• 100%
+
+Number of agents: 6
+UIDs: &lt;IndexArr "uid", len=6, [2 3 4 5 6 9]&gt;
+Active UIDs (auids): [2 3 4 5 6 9]
+All UIDs: [0 1 2 3 4 5 6 7 8 9]
+Alive: [False False  True  True  True  True  True False False  True]
+Ages (values): &lt;FloatArr "age", len=6, [58.149414    0.13023734 43.819874   42.690937   54.292294   27.229174  ]&gt;
+Ages (raw): [25.152369    4.9882936  58.149414    0.13023734 43.819874   42.690937
+ 54.292294   52.604046    7.0768547  27.229174  ]</code></pre>
+</div>
 </div>
 </section>
 </section>
@@ -757,18 +775,28 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </ul></li>
 </ul>
 <p>Let’s demonstrate this:</p>
-<div id="q2b7sb0xewr" class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"After simulation:"</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Total agents ever created: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.uid.raw)<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Active agents: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.auids)<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Active UIDs: </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>auids<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Statistical operations work on active agents only</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Mean age (active agents): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Mean age (manual calculation): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>values<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># This would be different if we included all agents (including dead ones)</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Mean age (all agents, including dead): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>raw[sim.people.age.raw <span class="op">!=</span> sim.people.age.nan]<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="q2b7sb0xewr" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"After simulation:"</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Total agents ever created: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.uid.raw)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Active agents: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.auids)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Active UIDs: </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>auids<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Statistical operations work on active agents only</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Mean age (active agents): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Mean age (manual calculation): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>values<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">"</span>)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co"># This would be different if we included all agents (including dead ones)</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Mean age (all agents, including dead): </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>raw[sim.people.age.raw <span class="op">!=</span> sim.people.age.nan]<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>After simulation:
+Total agents ever created: 10
+Active agents: 6
+Active UIDs: [2 3 4 5 6 9]
+
+Mean age (active agents): 37.72
+Mean age (manual calculation): 37.72
+Mean age (all agents, including dead): 31.61</code></pre>
+</div>
 </div>
 </section>
 <section id="proper-indexing-examples" class="level2">
@@ -776,44 +804,58 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Here are examples of correct and incorrect ways to index Starsim arrays:</p>
 <section id="correct-indexing-patterns" class="level3">
 <h3 class="anchored" data-anchor-id="correct-indexing-patterns">Correct indexing patterns</h3>
-<div id="4owgvspvnmx" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using integer indices (works on active agents)</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>age_of_first_active <span class="op">=</span> sim.people.age[<span class="dv">0</span>]</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Age of first active agent: </span><span class="sc">{</span>age_of_first_active<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using ss.uids() for specific UIDs</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>specific_uids <span class="op">=</span> ss.uids([<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>])</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>ages_by_uid <span class="op">=</span> sim.people.age[specific_uids]</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Ages of UIDs </span><span class="sc">{</span>specific_uids<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>ages_by_uid<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using boolean arrays from states</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>female_uids <span class="op">=</span> sim.people.female.uids  <span class="co"># This gets UIDs of female agents</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>female_ages <span class="op">=</span> sim.people.age[female_uids]</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Ages of female agents: </span><span class="sc">{</span>female_ages<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using .true() and .false() methods</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>alive_uids <span class="op">=</span> sim.people.alive.true()</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>dead_uids <span class="op">=</span> sim.people.alive.false()</span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Alive UIDs: </span><span class="sc">{</span>alive_uids<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Dead UIDs: </span><span class="sc">{</span>dead_uids<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="4owgvspvnmx" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using integer indices (works on active agents)</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>age_of_first_active <span class="op">=</span> sim.people.age[<span class="dv">0</span>]</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Age of first active agent: </span><span class="sc">{</span>age_of_first_active<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using ss.uids() for specific UIDs</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>specific_uids <span class="op">=</span> ss.uids([<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>])</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>ages_by_uid <span class="op">=</span> sim.people.age[specific_uids]</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Ages of UIDs </span><span class="sc">{</span>specific_uids<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>ages_by_uid<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using boolean arrays from states</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>female_uids <span class="op">=</span> sim.people.female.uids  <span class="co"># This gets UIDs of female agents</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>female_ages <span class="op">=</span> sim.people.age[female_uids]</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Ages of female agents: </span><span class="sc">{</span>female_ages<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using .true() and .false() methods</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>alive_uids <span class="op">=</span> sim.people.alive.true()</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>dead_uids <span class="op">=</span> sim.people.alive.false()</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Alive UIDs: </span><span class="sc">{</span>alive_uids<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Dead UIDs: </span><span class="sc">{</span>dead_uids<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Age of first active agent: 25.152368545532227
+Ages of UIDs [0 1 2]: [25.152369   4.9882936 58.149414 ]
+Ages of female agents: [54.292294]
+Alive UIDs: [2 3 4 5 6 9]
+Dead UIDs: []</code></pre>
+</div>
 </div>
 </section>
 <section id="incorrect-indexing-patterns" class="level3">
 <h3 class="anchored" data-anchor-id="incorrect-indexing-patterns">Incorrect indexing patterns</h3>
 <p>These examples show what <strong>NOT</strong> to do:</p>
-<div id="2pxcnpsmrgh" class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># ❌ Don't index with raw lists of integers - this is ambiguous!</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.tryexcept() <span class="im">as</span> tc:</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">'This raises an error:'</span>)</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    sim.people.age[[<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>]]  <span class="co"># This would raise an error</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co"># ❌ Don't mix up .values and .raw</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>age <span class="op">=</span> sim.people.age</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age:'</span>, age.mean())</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age (values):'</span>, age.values.mean()) <span class="co"># &lt;- same as above</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age (raw):'</span>, age.raw.mean()) <span class="co"># &lt;- different since includes dead agents</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="2pxcnpsmrgh" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># ❌ Don't index with raw lists of integers - this is ambiguous!</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.tryexcept() <span class="im">as</span> tc:</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">'This raises an error:'</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    sim.people.age[[<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>]]  <span class="co"># This would raise an error</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="co"># ❌ Don't mix up .values and .raw</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>age <span class="op">=</span> sim.people.age</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age:'</span>, age.mean())</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age (values):'</span>, age.values.mean()) <span class="co"># &lt;- same as above</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age (raw):'</span>, age.raw.mean()) <span class="co"># &lt;- different since includes dead agents</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>This raises an error:
+&lt;class 'Exception'&gt; Indexing an Arr (age) by ([0, 1, 2]) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.
+Mean age: 37.718655
+Mean age (values): 37.718655
+Mean age (raw): 31.613348</code></pre>
+</div>
 </div>
 </section>
 </section>
@@ -937,7 +979,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

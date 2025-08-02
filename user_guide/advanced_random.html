@@ -688,7 +688,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="understanding-common-random-numbers-crn">Understanding Common Random Numbers (CRN)</h2>
 <p>Common Random Numbers (CRN) is a sophisticated technique that enables noise-free accounting of the effects of different parameters or interventions on outcomes like infections averted or lives saved. Starsim is the first and only simulation framework that fully supports CRN, including agent-agent interactions like disease transmission and vital dynamics including births.</p>
 <p>To understand CRN, you first have to know a little about where random numbers come from. As discussed in the <a href="../user_guide/advanced_distributions.html">Advanced Distributions guide</a>, random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the <code>numpy</code> library:</p>
-<div id="bcaa704e" class="cell">
+<div id="bcaa704e" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">42</span>) <span class="co"># Set the seed to 42</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>draws1 <span class="op">=</span> np.random.random(size<span class="op">=</span><span class="dv">10</span>) <span class="co"># Draw 10 realizations</span></span>
@@ -699,6 +699,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Second draws: </span><span class="sc">{</span>draws2<span class="sc">.</span><span class="bu">round</span>(<span class="dv">2</span>)<span class="sc">}</span><span class="ss">'</span>)</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> np.array_equal(draws1, draws2), <span class="st">"The two sets of draws should be equal since the seed is the same."</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>First draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]
+Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
+</div>
 </div>
 <section id="the-problem-solved-by-crn-in-agent-based-simulation-modeling" class="level3">
 <h3 class="anchored" data-anchor-id="the-problem-solved-by-crn-in-agent-based-simulation-modeling">The problem solved by CRN in agent-based simulation modeling</h3>
@@ -720,68 +724,108 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Both simulations will use the same random number seed. Because the agents do not interact (they’re not actually competing for the same fish!), the only difference in outcomes should be that agent 0 does not go fishing and therefore will never catch a fish. However, because of the way random numbers are generated, the two simulations will use the same random numbers for different purposes. This means that banning agent 0 from fishing will <em>change which other agents go fishing and catch fish</em>!</p>
 <p><strong>NOTE:</strong> We have to specifically disable Starsim’s CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the <code>_centralized</code> option to <code>True</code> in this example.</p>
 <p>As a first step, we will create a Fishing module:</p>
-<div id="918c0ff8" class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Fishing(ss.Module):</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>            p_fishing <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.5</span>),</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            p_catch <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.2</span>),</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>            banned_uids <span class="op">=</span> [],</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>            verbose <span class="op">=</span> <span class="va">True</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars<span class="op">=</span>pars, <span class="op">**</span>kwargs)</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'fish_caught'</span>, default<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        going_fishing_uids <span class="op">=</span> <span class="va">self</span>.pars.p_fishing.<span class="bu">filter</span>() <span class="co"># Filter with no arguments tests all agents</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Remove banned agents from going fishing</span></span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        going_fishing_uids <span class="op">=</span> going_fishing_uids.remove(<span class="va">self</span>.pars.banned_uids)</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        catch_uids <span class="op">=</span> <span class="va">self</span>.pars.p_catch.<span class="bu">filter</span>(going_fishing_uids)</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.pars.verbose:</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f'Time step </span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>ti<span class="sc">}</span><span class="ss">:'</span>)</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f' * Agents going fishing: </span><span class="sc">{</span>going_fishing_uids<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f' * Agents that caught fish: </span><span class="sc">{</span>catch_uids<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.fish_caught[catch_uids] <span class="op">=</span> <span class="va">self</span>.fish_caught[catch_uids] <span class="op">+</span> <span class="dv">1</span> <span class="co"># Increment the number of fish caught for each agent that caught a fish</span></span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="918c0ff8" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Fishing(ss.Module):</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>            p_fishing <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.5</span>),</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>            p_catch <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.2</span>),</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>            banned_uids <span class="op">=</span> [],</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>            verbose <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars<span class="op">=</span>pars, <span class="op">**</span>kwargs)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'fish_caught'</span>, default<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        going_fishing_uids <span class="op">=</span> <span class="va">self</span>.pars.p_fishing.<span class="bu">filter</span>() <span class="co"># Filter with no arguments tests all agents</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Remove banned agents from going fishing</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        going_fishing_uids <span class="op">=</span> going_fishing_uids.remove(<span class="va">self</span>.pars.banned_uids)</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        catch_uids <span class="op">=</span> <span class="va">self</span>.pars.p_catch.<span class="bu">filter</span>(going_fishing_uids)</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.pars.verbose:</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f'Time step </span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>ti<span class="sc">}</span><span class="ss">:'</span>)</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f' * Agents going fishing: </span><span class="sc">{</span>going_fishing_uids<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f' * Agents that caught fish: </span><span class="sc">{</span>catch_uids<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.fish_caught[catch_uids] <span class="op">=</span> <span class="va">self</span>.fish_caught[catch_uids] <span class="op">+</span> <span class="dv">1</span> <span class="co"># Increment the number of fish caught for each agent that caught a fish</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Now we can build and run the two simulations to compare the results:</p>
-<div id="64ca7217" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co">: For this example, we configure the simulation to be centralized!</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">True</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Shared parameters for both simulations</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">20</span>, start<span class="op">=</span>ss.days(<span class="dv">0</span>), dur<span class="op">=</span>ss.days(<span class="dv">1</span>), rand_seed<span class="op">=</span><span class="dv">42</span>)</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>simA.run()</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">SIMULATION B: WITH AGENT 0 BANNED'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">0</span>]), <span class="op">**</span>pars)</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>simB.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="64ca7217" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co">: For this example, we configure the simulation to be centralized!</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Shared parameters for both simulations</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">20</span>, start<span class="op">=</span>ss.days(<span class="dv">0</span>), dur<span class="op">=</span>ss.days(<span class="dv">1</span>), rand_seed<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>simA.run()</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">SIMULATION B: WITH AGENT 0 BANNED'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">0</span>]), <span class="op">**</span>pars)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>simB.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>SIMULATION A: WITHOUT BANNED AGENTS -------------------------
+Initializing sim with 20 agents
+  Running 0.0 ( 0/1) (0.00 s)  •••••••••••••••••••• 100%
+
+Time step 0:
+ * Agents going fishing: [ 0  1  2  4  6  9 16 17 18 19]
+ * Agents that caught fish: [16 18]
+
+SIMULATION B: WITH AGENT 0 BANNED -------------------------
+Initializing sim with 20 agents
+  Running 0.0 ( 0/1) (0.00 s)  •••••••••••••••••••• 100%
+
+Time step 0:
+ * Agents going fishing: [ 1  2  4  6  9 16 17 18 19]
+ * Agents that caught fish: [17 19]</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>Sim(n=20; days(0)—day(); modules=fishing)</code></pre>
+</div>
 </div>
 <p>In simulation A, agents 16 and 18 catch fish on the first time step, but in simulation B, agents 17 and 19 catch fish. Then on the second timestep, we can see that different agents go fishing and that 1, 15, and 19 catch fish in A but only 3 is lucky in B – what?! All we did was to ban agent 0 from fishing. The agents do not interact, so there should not have been a difference!</p>
 <p>What we are seeing here is a simple example of the stochastic branching problem. This “random number noise” could easily make it look like banning agent 0 could result in more fish being caught, which should be physically impossible as there are fewer agents fishing.</p>
 <p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>_centralized</code> option to its default value of <code>False</code>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing:</p>
-<div id="2334bf58" class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the _centralized option to False (this is the default, so you don't have to do this)</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">False</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>simA.run()</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">SIMULATION B: WITH AGENT 1 BANNED'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">1</span>]), <span class="op">**</span>pars)</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>simB.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="2334bf58" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the _centralized option to False (this is the default, so you don't have to do this)</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>simA.run()</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">SIMULATION B: WITH AGENT 1 BANNED'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">1</span>]), <span class="op">**</span>pars)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>simB.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>SIMULATION A: WITHOUT BANNED AGENTS -------------------------
+Initializing sim with 20 agents
+  Running 0.0 ( 0/1) (0.00 s)  •••••••••••••••••••• 100%
+
+Time step 0:
+ * Agents going fishing: [ 1  4  5  6  7  9 15 19]
+ * Agents that caught fish: [ 7 19]
+
+SIMULATION B: WITH AGENT 1 BANNED -------------------------
+Initializing sim with 20 agents
+  Running 0.0 ( 0/1) (0.00 s)  •••••••••••••••••••• 100%
+
+Time step 0:
+ * Agents going fishing: [ 4  5  6  7  9 15 19]
+ * Agents that caught fish: [ 7 19]</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>Sim(n=20; days(0)—day(); modules=fishing)</code></pre>
+</div>
 </div>
 <p>With CRN, banning agent 0 only prevents agent 0 from catching fish. Everything else is identical, as expected. This is the power of common random numbers.</p>
 </section>
@@ -796,53 +840,53 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li>If the parameters of your distribution change every step, set the parameter values to a callable function that performs the calculation.</li>
 </ol>
 <p>Preferred and avoided usage examples:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: use uids</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>all_uids <span class="op">=</span> <span class="va">self</span>.sim.people.auids</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> <span class="va">self</span>.dist.rvs(all_uids)</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: use a boolean mask</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>mask <span class="op">=</span> (<span class="va">self</span>.infected) <span class="op">&amp;</span> (<span class="va">self</span>.ti <span class="op">&gt;=</span> <span class="va">self</span>.ti_next_event)</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> <span class="va">self</span>.dist.rvs(mask)</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: set dynamic parameters using a callable</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> dynamic_p(<span class="va">self</span>, sim, uids):</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full_like(uids, fill_value<span class="op">=</span><span class="fl">0.5</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    p[sim.people.age[uids] <span class="op">&lt;</span> <span class="dv">18</span>] <span class="op">=</span> <span class="fl">0.1</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>):</span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.dist <span class="op">=</span> <span class="va">self</span>.bernoulli(p<span class="op">=</span>dynamic_p)</span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>uids <span class="op">=</span> <span class="va">self</span>.dist.<span class="bu">filter</span>(mask) <span class="co"># Reminder: filter returns the uids where the bernoulli trial is True</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID calling a distribution with a scalar argument</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> <span class="va">self</span>.dist.rvs(<span class="bu">len</span>(all_uids))</span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID: numpy random</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> np.random.rand(<span class="bu">len</span>(all_uids))</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID creating a new distribution every time</span></span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    new_dist_every_time <span class="op">=</span> <span class="va">self</span>.bernoulli(p<span class="op">=</span><span class="fl">0.5</span>)</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> new_dist_every_time.rvs(all_uids) </span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID using the same distribution for multiple decisions</span></span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>my_bernoulli <span class="op">=</span> <span class="va">self</span>.bernoulli(p<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>my_bernoulli.<span class="bu">set</span>(p<span class="op">=</span>p_infection)</span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>infected_uids <span class="op">=</span> my_bernoulli.<span class="bu">filter</span>()</span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>my_bernoulli.<span class="bu">set</span>(p<span class="op">=</span>p_die)</span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>died_uids <span class="op">=</span> my_bernoulli.<span class="bu">filter</span>()</span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="co"># Try to AVOID calling rvs multiple times per step</span></span>
-<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a><span class="co"># (It's better to get all the values you need in one call)</span></span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> uid <span class="kw">in</span> all_uids:</span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    value <span class="op">=</span> <span class="va">self</span>.dist.rvs(uid)</span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a><span class="co"># Try to AVOID overriding parameters every time step</span></span>
-<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a><span class="co"># (Use dynamic parameters instead)</span></span>
-<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    my_p_vec <span class="op">=</span> np.full(<span class="va">self</span>.sim.n, fill_value<span class="op">=</span><span class="fl">0.5</span>)</span>
-<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    my_p_vec[<span class="va">self</span>.sim.people.age <span class="op">&lt;</span> <span class="dv">18</span>] <span class="op">=</span> <span class="fl">0.1</span></span>
-<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.dist.<span class="bu">set</span>(p<span class="op">=</span>my_p_vec)</span>
-<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    uids <span class="op">=</span> <span class="va">self</span>.dist.<span class="bu">filter</span>(mask)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: use uids</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>all_uids <span class="op">=</span> <span class="va">self</span>.sim.people.auids</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> <span class="va">self</span>.dist.rvs(all_uids)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: use a boolean mask</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>mask <span class="op">=</span> (<span class="va">self</span>.infected) <span class="op">&amp;</span> (<span class="va">self</span>.ti <span class="op">&gt;=</span> <span class="va">self</span>.ti_next_event)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> <span class="va">self</span>.dist.rvs(mask)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: set dynamic parameters using a callable</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> dynamic_p(<span class="va">self</span>, sim, uids):</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full_like(uids, fill_value<span class="op">=</span><span class="fl">0.5</span>, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    p[sim.people.age[uids] <span class="op">&lt;</span> <span class="dv">18</span>] <span class="op">=</span> <span class="fl">0.1</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>):</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.dist <span class="op">=</span> <span class="va">self</span>.bernoulli(p<span class="op">=</span>dynamic_p)</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>uids <span class="op">=</span> <span class="va">self</span>.dist.<span class="bu">filter</span>(mask) <span class="co"># Reminder: filter returns the uids where the bernoulli trial is True</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID calling a distribution with a scalar argument</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> <span class="va">self</span>.dist.rvs(<span class="bu">len</span>(all_uids))</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID: numpy random</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>values <span class="op">=</span> np.random.rand(<span class="bu">len</span>(all_uids))</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID creating a new distribution every time</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>    new_dist_every_time <span class="op">=</span> <span class="va">self</span>.bernoulli(p<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> new_dist_every_time.rvs(all_uids) </span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a><span class="co"># AVOID using the same distribution for multiple decisions</span></span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>my_bernoulli <span class="op">=</span> <span class="va">self</span>.bernoulli(p<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>my_bernoulli.<span class="bu">set</span>(p<span class="op">=</span>p_infection)</span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>infected_uids <span class="op">=</span> my_bernoulli.<span class="bu">filter</span>()</span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>my_bernoulli.<span class="bu">set</span>(p<span class="op">=</span>p_die)</span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>died_uids <span class="op">=</span> my_bernoulli.<span class="bu">filter</span>()</span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a><span class="co"># Try to AVOID calling rvs multiple times per step</span></span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a><span class="co"># (It's better to get all the values you need in one call)</span></span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> uid <span class="kw">in</span> all_uids:</span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>    value <span class="op">=</span> <span class="va">self</span>.dist.rvs(uid)</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a><span class="co"># Try to AVOID overriding parameters every time step</span></span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a><span class="co"># (Use dynamic parameters instead)</span></span>
+<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>    my_p_vec <span class="op">=</span> np.full(<span class="va">self</span>.sim.n, fill_value<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>    my_p_vec[<span class="va">self</span>.sim.people.age <span class="op">&lt;</span> <span class="dv">18</span>] <span class="op">=</span> <span class="fl">0.1</span></span>
+<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.dist.<span class="bu">set</span>(p<span class="op">=</span>my_p_vec)</span>
+<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a>    uids <span class="op">=</span> <span class="va">self</span>.dist.<span class="bu">filter</span>(mask)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Please don’t hesitate to create issues related to any problems you encounter or questions you have!</p>
 
 
@@ -934,7 +978,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

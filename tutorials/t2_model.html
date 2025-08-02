@@ -690,7 +690,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="simple-sir-model" class="level2">
 <h2 class="anchored" data-anchor-id="simple-sir-model">Simple SIR model</h2>
 <p>Let’s revisit the simple SIR model from Tutorial 1:</p>
-<div id="e39a8782" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}">
+<div id="e39a8782" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the parameters</span></span>
@@ -711,19 +711,55 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span>
 <span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 5000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.28 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.32 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.36 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.39 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.42 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t2_model_files/figure-html/cell-3-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>Now let’s look at the <code>pars</code> dictionary in more detail. The one we’ve created here has 3 things in it: the number of agents (<code>n_agents</code>), detail on how the agents interact with each other (<code>networks</code>) and detail on what disease we’re modeling (<code>diseases</code>). When we create and run the model, what happens ‘under the hood’ is that the simulation creates 5,000 people, and allows them to the interact with one another over the network and transmit the infection.</p>
 </section>
 <section id="simple-sir-model-built-with-components" class="level2">
 <h2 class="anchored" data-anchor-id="simple-sir-model-built-with-components">Simple SIR model built with components</h2>
 <p>The example above is a nice simple way to get started, but you might want to have more control over the networks, diseases, and people that you’re creating. Here’s another version of the exact same model, but written slightly differently:</p>
-<div id="b3e79bfc" class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>people <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="dv">5_000</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">4</span>)</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev<span class="op">=</span><span class="fl">0.1</span>, beta<span class="op">=</span><span class="fl">0.1</span>)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, people<span class="op">=</span>people, networks<span class="op">=</span>network)</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="b3e79bfc" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>people <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="dv">5_000</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">4</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev<span class="op">=</span><span class="fl">0.1</span>, beta<span class="op">=</span><span class="fl">0.1</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, people<span class="op">=</span>people, networks<span class="op">=</span>network)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 5000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.04 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.08 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.11 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.14 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.18 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t2_model_files/figure-html/cell-4-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>Rather than bundling everything under pars, we’re now defining components individually for people, networks, and diseases. As for the disease/network details, instead of putting all information in one bucket (<code>pars['diseases'] = dict(name='sir', init_prev=0.1, beta=0.1)</code>), we’re now using <code>ss.SIR()</code>which serves as a prepared ‘template’ where we fill in the details. This new way provides us more flexibility to adjust details of the disease as we need.</p>
 <p>Don’t worry if you have not seen or used these ‘templates’ (called custom classes in programming) before, but imagine them as special containers that come with predefined tools (aka built-in methods) to streamline your modelling process. Even if you’re not an expert programmer, these ‘templates’ are intuitive to use and they will serve as our go-to solution as we move through the examples.</p>
@@ -732,9 +768,9 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="making-changes-to-our-components" class="level2">
 <h2 class="anchored" data-anchor-id="making-changes-to-our-components">Making changes to our components</h2>
 <p>One of the main advantages of agent-based models is they allow you to capture heterogeneity between people. In real life, it’s not realistic that everyone in a population has the same number of contacts with other people. Let’s make our contact network more realistic by adding some variation here. For this, we’ll use a Poisson distribution. The two lines below both do the same thing:</p>
-<div id="d17dd68a" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span> ss.poisson(<span class="dv">4</span>))</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'poisson'</span>, lam<span class="op">=</span><span class="dv">4</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="d17dd68a" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span> ss.poisson(<span class="dv">4</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'poisson'</span>, lam<span class="op">=</span><span class="dv">4</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>If we use this network, our agents will have varying numbers of contacts.</p>
 </section>
@@ -745,31 +781,47 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="matters-of-time" class="level2">
 <h2 class="anchored" data-anchor-id="matters-of-time">Matters of time</h2>
 <p>The default for Starsim models is the start simulations in 1995 and simulate with an annual timestep for 35 years. All of this can be easily changed within the main <code>pars</code> dictionary or by passing alternative values straight to the sim, e.g.&nbsp;</p>
-<div id="ad4fac82" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(start<span class="op">=</span><span class="st">'2020-01-01'</span>, stop<span class="op">=</span><span class="st">'2021-01-01'</span>, dt<span class="op">=</span>ss.months(<span class="dv">1</span>), diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>network)  <span class="co"># Simulate from 2020 for 1 year with a monthly timestep</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="ad4fac82" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(start<span class="op">=</span><span class="st">'2020-01-01'</span>, stop<span class="op">=</span><span class="st">'2021-01-01'</span>, dt<span class="op">=</span>ss.months(<span class="dv">1</span>), diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>network)  <span class="co"># Simulate from 2020 for 1 year with a monthly timestep</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2020.01.01 ( 0/13) (0.00 s)  •——————————————————— 8%
+  Running 2020.11.01 (10/13) (0.05 s)  ••••••••••••••••———— 85%
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t2_model_files/figure-html/cell-6-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 </section>
 <section id="loading-and-saving" class="level2">
 <h2 class="anchored" data-anchor-id="loading-and-saving">Loading and saving</h2>
 <p>You can save a sim to disk with <code>sim.save()</code>, and then reload it:</p>
-<div id="7357b64b" class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim.save(<span class="st">'example.sim'</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>new_sim <span class="op">=</span> ss.load(<span class="st">'example.sim'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="7357b64b" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sim.save(<span class="st">'example.sim'</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>new_sim <span class="op">=</span> ss.load(<span class="st">'example.sim'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>By default, to save space, this saves a “shrunken” version of the sim with most of the large objects (e.g.&nbsp;the <code>People</code>) removed. To save everything (for example, if you want to save a partially run sim, then reload it and continue running), you can use <code>shrink=False</code>:</p>
-<div id="a682778f" class="cell">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>sim.save(<span class="st">'example-big.sim'</span>, shrink<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="a682778f" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>sim.save(<span class="st">'example-big.sim'</span>, shrink<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="7">
+<pre><code>'/home/cliffk/idm/starsim/docs/tutorials/example-big.sim'</code></pre>
+</div>
 </div>
 <p>All Starsim objects can also be saved via <code>ss.save()</code>; this will save the entire object. This is useful for quickly storing objects for use by other Python functions, for example:</p>
-<div id="36a48fa5" class="cell">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.to_df()</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ss.save(<span class="st">'example.df'</span>, df)</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>new_df <span class="op">=</span> ss.load(<span class="st">'example.df'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="36a48fa5" class="cell" data-execution_count="8">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.to_df()</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ss.save(<span class="st">'example.df'</span>, df)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>new_df <span class="op">=</span> ss.load(<span class="st">'example.df'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>However, for a human-readable format, you may want to use a different format. For example, if you’ve exported the results as a dataframe, you can then save as an Excel file:</p>
-<div id="383c1c1b" class="cell">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>df.to_excel(<span class="st">'example.xlsx'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="383c1c1b" class="cell" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>df.to_excel(<span class="st">'example.xlsx'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="summary" class="level2">
@@ -872,7 +924,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

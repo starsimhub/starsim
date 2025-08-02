@@ -680,7 +680,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="simple-usage" class="level2">
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>For simple reporting, it’s possible to use a single function as an analyzer. In this case, the function receives a single argument, <code>sim</code>, which it has full access to. For example, if you wanted to know the number of connections in the network on each timestep, you could write a small analyzer as follows:</p>
-<div id="306a385e" class="cell">
+<div id="306a385e" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -713,54 +713,148 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="st">'Number of edges over time'</span>)</span>
 <span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>plt.ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+Number of edges for network mfnet on step 0: 3286
+Number of edges for network mfnet on step 1: 3333
+Number of edges for network mfnet on step 2: 3370
+Number of edges for network mfnet on step 3: 3429
+Number of edges for network mfnet on step 4: 3449
+Number of edges for network mfnet on step 5: 3485
+Number of edges for network mfnet on step 6: 3519
+Number of edges for network mfnet on step 7: 3556
+Number of edges for network mfnet on step 8: 3587
+Number of edges for network mfnet on step 9: 3611
+  Running 2010.01.01 (10/51) (0.32 s)  ••••———————————————— 22%
+Number of edges for network mfnet on step 10: 3632
+Number of edges for network mfnet on step 11: 3682
+Number of edges for network mfnet on step 12: 3701
+Number of edges for network mfnet on step 13: 3726
+Number of edges for network mfnet on step 14: 3759
+Number of edges for network mfnet on step 15: 3776
+Number of edges for network mfnet on step 16: 3814
+Number of edges for network mfnet on step 17: 3867
+Number of edges for network mfnet on step 18: 3894
+Number of edges for network mfnet on step 19: 3921
+  Running 2020.01.01 (20/51) (0.41 s)  ••••••••———————————— 41%
+Number of edges for network mfnet on step 20: 3948
+Number of edges for network mfnet on step 21: 4004
+Number of edges for network mfnet on step 22: 4029
+Number of edges for network mfnet on step 23: 4072
+Number of edges for network mfnet on step 24: 4081
+Number of edges for network mfnet on step 25: 4126
+Number of edges for network mfnet on step 26: 4148
+Number of edges for network mfnet on step 27: 4183
+Number of edges for network mfnet on step 28: 4222
+Number of edges for network mfnet on step 29: 4270
+  Running 2030.01.01 (30/51) (0.50 s)  ••••••••••••———————— 61%
+Number of edges for network mfnet on step 30: 4320
+Number of edges for network mfnet on step 31: 4368
+Number of edges for network mfnet on step 32: 4398
+Number of edges for network mfnet on step 33: 4448
+Number of edges for network mfnet on step 34: 4505
+Number of edges for network mfnet on step 35: 4538
+Number of edges for network mfnet on step 36: 4591
+Number of edges for network mfnet on step 37: 4631
+Number of edges for network mfnet on step 38: 4691
+Number of edges for network mfnet on step 39: 4734
+  Running 2040.01.01 (40/51) (0.59 s)  ••••••••••••••••———— 80%
+Number of edges for network mfnet on step 40: 4769
+Number of edges for network mfnet on step 41: 4816
+Number of edges for network mfnet on step 42: 4859
+Number of edges for network mfnet on step 43: 4918
+Number of edges for network mfnet on step 44: 4960
+Number of edges for network mfnet on step 45: 4995
+Number of edges for network mfnet on step 46: 5046
+Number of edges for network mfnet on step 47: 5106
+Number of edges for network mfnet on step 48: 5134
+Number of edges for network mfnet on step 49: 5172
+  Running 2050.01.01 (50/51) (0.70 s)  •••••••••••••••••••• 100%
+
+Number of edges for network mfnet on step 50: 5221
+Figure(896x672)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_analyzers_files/figure-html/cell-2-output-2.png" width="886" height="662" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_analyzers_files/figure-html/cell-2-output-3.png" width="583" height="431" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 </section>
 <section id="advanced-usage" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage">Advanced usage</h2>
 <p>Suppose we wanted to create an analyzer that would report on the number of new HIV infections in pregnant women:</p>
-<div id="639d87f1" class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HIV_preg(ss.Analyzer):</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs):</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_results(</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>            ss.Result(<span class="st">'new_infections_pregnancy'</span>),</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> <span class="va">self</span>.sim</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        ti <span class="op">=</span> sim.ti</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        hiv <span class="op">=</span> sim.diseases.hiv</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        pregnant <span class="op">=</span> sim.demographics.pregnancy.pregnant</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        newly_infected <span class="op">=</span> hiv.ti_infected <span class="op">==</span> ti</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results[<span class="st">'new_infections_pregnancy'</span>][ti] <span class="op">=</span> <span class="bu">len</span>((newly_infected <span class="op">&amp;</span> pregnant).uids)</span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span>pd.read_csv(<span class="st">'test_data/nigeria_asfr.csv'</span>))</span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> sse.HIV(beta<span class="op">=</span>{<span class="st">'mfnet'</span>:[<span class="fl">0.5</span>,<span class="fl">0.25</span>]})</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>hiv, networks<span class="op">=</span><span class="st">'mfnet'</span>, demographics<span class="op">=</span>pregnancy, analyzers<span class="op">=</span>HIV_preg())</span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Total infections among pregnant women: </span><span class="sc">{</span>sim<span class="sc">.</span>results<span class="sc">.</span>hiv_preg<span class="sc">.</span>new_infections_pregnancy<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss">'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="639d87f1" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HIV_preg(ss.Analyzer):</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs):</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_results(</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>            ss.Result(<span class="st">'new_infections_pregnancy'</span>),</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> <span class="va">self</span>.sim</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        ti <span class="op">=</span> sim.ti</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        hiv <span class="op">=</span> sim.diseases.hiv</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        pregnant <span class="op">=</span> sim.demographics.pregnancy.pregnant</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        newly_infected <span class="op">=</span> hiv.ti_infected <span class="op">==</span> ti</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results[<span class="st">'new_infections_pregnancy'</span>][ti] <span class="op">=</span> <span class="bu">len</span>((newly_infected <span class="op">&amp;</span> pregnant).uids)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span>pd.read_csv(<span class="st">'test_data/nigeria_asfr.csv'</span>))</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> sse.HIV(beta<span class="op">=</span>{<span class="st">'mfnet'</span>:[<span class="fl">0.5</span>,<span class="fl">0.25</span>]})</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>hiv, networks<span class="op">=</span><span class="st">'mfnet'</span>, demographics<span class="op">=</span>pregnancy, analyzers<span class="op">=</span>HIV_preg())</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Total infections among pregnant women: </span><span class="sc">{</span>sim<span class="sc">.</span>results<span class="sc">.</span>hiv_preg<span class="sc">.</span>new_infections_pregnancy<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss">'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.12 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.26 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.44 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.63 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.84 s)  •••••••••••••••••••• 100%
+
+Total infections among pregnant women: 171.0</code></pre>
+</div>
 </div>
 <p>Analyzers are ideal for adding custom results, and because they get added to the sim in the same way as any other result, they also get automatically exported in the same format, e.g.&nbsp;using <code>sim.to_df()</code>.</p>
 <p>Here’s a plot of the results from our HIV in pregnancy analyzer:</p>
-<div id="29072323" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.hiv_preg</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>plt.figure()</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>plt.bar(res.timevec.years, res.new_infections_pregnancy)</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="st">'HIV infections acquired during pregnancy'</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="29072323" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.hiv_preg</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>plt.figure()</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>plt.bar(res.timevec.years, res.new_infections_pregnancy)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="st">'HIV infections acquired during pregnancy'</span>)</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_analyzers_files/figure-html/cell-4-output-1.png" width="566" height="431" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 
 
@@ -852,7 +946,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

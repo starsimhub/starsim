@@ -696,7 +696,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> add starsim</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, clone first this repository, then run:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode sh code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-e</span> .<span class="pp">[</span><span class="ss">dev</span><span class="pp">]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>(Note: if after doing this, Starsim works, but you see “Import could not be resolved” in your editor, use <code>pip install -e . --config-settings editable_mode=strict</code> instead; more info [here[(https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)</p>
+<p>(Note: if after doing this, Starsim works, but you see “Import could not be resolved” in your editor, use <code>pip install -e . --config-settings editable_mode=strict</code> instead; more info <a href="https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs">here</a>.)</p>
 </section>
 <section id="r" class="level3">
 <h3 class="anchored" data-anchor-id="r">R</h3>
@@ -890,7 +890,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

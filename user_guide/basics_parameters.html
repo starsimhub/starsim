@@ -679,7 +679,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="defining-default-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="defining-default-parameters">Defining default parameters</h2>
 <p>When you create a module using Starsim, you have the opportunity to define the default format for parameters. Let’s look at an example from the SIR disease model:</p>
-<div id="78162546" class="cell">
+<div id="78162546" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySIR(ss.SIR):</span>
@@ -707,7 +707,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The point of <code>self.define_pars()</code> is to set the ground truth for the format that the parameters should take. When users enter their own parameters for defining an instance of this module, the parameter values they enter will be processed within <code>self.update_pars()</code> and will be checked for consistency with the format provided in the original parameters (<code>define_pars</code>). For example, the parameter <code>p_death</code> in the SIR example above is specified initially as a Bernoulli distribution. It would be perfectly legitimate to create an instance of the SIR model using any of the following formats:</p>
-<div id="3b9db922" class="cell">
+<div id="3b9db922" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>sir1 <span class="op">=</span> MySIR(p_death<span class="op">=</span><span class="fl">0.02</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>sir2 <span class="op">=</span> MySIR(p_death<span class="op">=</span>ss.bernoulli(p<span class="op">=</span><span class="fl">0.2</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -716,7 +716,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="using-callable-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="using-callable-parameters">Using callable parameters</h2>
 <p>One of the most flexible aspects of how Starsim’s distributions are defined is that they can take callable functions as parameter values. For example, in reality the duration of infection of a disease might vary by age. We could model this as follows:</p>
-<div id="379f6ed7" class="cell">
+<div id="379f6ed7" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -748,6 +748,27 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>sc.figlayout()</span>
 <span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 20000 agents
+  Running 2000.01.01 ( 0/11) (0.00 s)  •——————————————————— 9%
+  Running 2010.01.01 (10/11) (0.38 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="basics_parameters_files/figure-html/cell-4-output-2.png" width="762" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="basics_parameters_files/figure-html/cell-4-output-3.png" width="662" height="470" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>Using similar logic, any other parameter could be set to depend on anything that the sim is aware of, including time or agent properties like age, sex, or health attributes.</p>
 
@@ -840,7 +861,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

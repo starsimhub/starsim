@@ -681,7 +681,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>An interactive version of this notebook is available on <a href="https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/demographics.ipynb">Google Colab</a> or <a href="https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Fdemographics.ipynb">Binder</a>.</p>
 </div>
 <p>There are a few basic ways to add vital dynamics to your model, e.g.&nbsp;</p>
-<div id="7dc8b21a" class="cell">
+<div id="7dc8b21a" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(</span>
@@ -693,7 +693,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>This will apply annual birth and death rates as specified in the <code>pars</code> dict. Alternatively, we can make demographic components, which achieves the same thing:</p>
-<div id="acfa0a44" class="cell">
+<div id="acfa0a44" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
@@ -701,60 +701,95 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(demographics<span class="op">=</span>demographics)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>You can even simply set <code>demographics=True</code> to use default rates:</p>
-<div id="3b914207" class="cell">
+<div id="3b914207" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>ss.Sim(demographics<span class="op">=</span><span class="va">True</span>).run().plot()<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.11 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t3_demographics_files/figure-html/cell-5-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>By default, agents age if and only if at least one demographics module is included. You can override this behavior by setting <code>use_aging</code>, e.g.&nbsp;<code>ss.Sim(use_aging=False)</code></p>
 <section id="scaling-results-to-whole-populations" class="level2">
 <h2 class="anchored" data-anchor-id="scaling-results-to-whole-populations">Scaling results to whole populations</h2>
 <p>Even though we’ve been simulating populations of a few thousand agents, we can also use the <code>total_pop</code> parameter to scale our results so that they reflect a much larger population. You can think of this as a kind of statistical sampling approximation. If we want to model the population of Nigeria, for example, it would be much too computationally intensive to simulate 200 million agents. However, we could simulate 50,000 agents and then say that each agent represents 4,000 people. Again, we can do this by passing <code>total_pop=200e6</code> to the sim or in the <code>pars</code> dictionary. Here’s an example:</p>
-<div id="753528fa" class="cell">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>]</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>{<span class="st">'total_pop'</span>: <span class="fl">200e6</span>, <span class="st">'n_agents'</span>: <span class="fl">50e3</span>}, demographics<span class="op">=</span>demographics)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="753528fa" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>{<span class="st">'total_pop'</span>: <span class="fl">200e6</span>, <span class="st">'n_agents'</span>: <span class="fl">50e3</span>}, demographics<span class="op">=</span>demographics)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="using-realistic-vital-demographics" class="level2">
 <h2 class="anchored" data-anchor-id="using-realistic-vital-demographics">Using realistic vital demographics</h2>
 <p>For more realistic demographics, we can also pass in a file that has birth or death rates over time and by age/sex. There are examples of these files in the <code>test_data</code> folder. Here’s how we would read them in and construct realistic vital dynamics for Nigeria:</p>
-<div id="4bf3309e" class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Read in age-specific fertility rates</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>fertility_rates <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_asfr.csv'</span>)</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span>fertility_rates)</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>death_rates <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_deaths.csv'</span>)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>death_rates, rate_units<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [pregnancy, death]</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Make people using the distribution of the population by age/sex in 1995</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span>  <span class="co"># Population of Nigeria in 1995, the year we will start the model</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim, run and plot</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(total_pop<span class="op">=</span>nga_pop_1995, start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, demographics<span class="op">=</span>demographics, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sir'</span>)</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Read in a file with the actual population size</span></span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>nigeria_popsize <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_popsize.csv'</span>)</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> nigeria_popsize[(nigeria_popsize.year <span class="op">&gt;=</span> <span class="dv">1995</span>) <span class="op">&amp;</span> (nigeria_popsize.year <span class="op">&lt;=</span> <span class="dv">2030</span>)]</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the overall population size - simulated vs data</span></span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">1</span>)</span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results</span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>ax.scatter(data.year, data.n_alive, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>ax.plot(sim.t.yearvec, res.n_alive, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Model'</span>)</span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Population'</span>)</span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="4bf3309e" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Read in age-specific fertility rates</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>fertility_rates <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_asfr.csv'</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span>fertility_rates)</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>death_rates <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_deaths.csv'</span>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>death_rates, rate_units<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [pregnancy, death]</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Make people using the distribution of the population by age/sex in 1995</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span>  <span class="co"># Population of Nigeria in 1995, the year we will start the model</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim, run and plot</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(total_pop<span class="op">=</span>nga_pop_1995, start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, demographics<span class="op">=</span>demographics, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sir'</span>)</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Read in a file with the actual population size</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>nigeria_popsize <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_popsize.csv'</span>)</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> nigeria_popsize[(nigeria_popsize.year <span class="op">&gt;=</span> <span class="dv">1995</span>) <span class="op">&amp;</span> (nigeria_popsize.year <span class="op">&lt;=</span> <span class="dv">2030</span>)]</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the overall population size - simulated vs data</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>ax.scatter(data.year, data.n_alive, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>ax.plot(sim.t.yearvec, res.n_alive, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Model'</span>)</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Population'</span>)</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 5000 agents
+  Running 1995.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2005.01.01 (10/51) (0.46 s)  ••••———————————————— 22%
+  Running 2015.01.01 (20/51) (0.60 s)  ••••••••———————————— 41%
+  Running 2025.01.01 (30/51) (0.76 s)  ••••••••••••———————— 61%
+  Running 2035.01.01 (40/51) (0.94 s)  ••••••••••••••••———— 80%
+  Running 2045.01.01 (50/51) (1.14 s)  •••••••••••••••••••• 100%
+</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t3_demographics_files/figure-html/cell-7-output-2.png" width="571" height="431" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting.</p>
 <p><em>Note</em>: In the code block above, we set the units of the mortality data to 1, as opposed to 1/1000. If your data come in the form of deaths per 1000 people, set units to 1/1000. Note also that as per standard definitions, <code>fertility_rate</code> is defined per <em>woman</em>, whereas <code>birth_rate</code> is defined per <em>person</em>.</p>
@@ -854,7 +889,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

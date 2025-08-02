@@ -692,7 +692,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="hello-world" class="level2">
 <h2 class="anchored" data-anchor-id="hello-world">Hello world</h2>
 <p>Let’s start with the simplest version of a Starsim model. We’ll make a version of a <a href="https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology">classic SIR model</a>. Here’s how our code would look:</p>
-<div id="c6b0dfc8" class="cell">
+<div id="c6b0dfc8" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the parameters</span></span>
@@ -714,6 +714,34 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>sim.plot()</span>
 <span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.39 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.47 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.53 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.59 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t1_intro_files/figure-html/cell-3-output-2.png" width="759" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(672x480)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t1_intro_files/figure-html/cell-3-output-4.png" width="614" height="429" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>As the tutorials progress we’ll show how to extend this different diseases with different transmission pathways, and how to customize the model in lots of different ways.</p>
 </section>
@@ -814,7 +842,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

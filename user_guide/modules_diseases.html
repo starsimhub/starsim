@@ -759,7 +759,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="pattern-1-extending-existing-diseases" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</h3>
 <p>When you need to modify an existing disease model, inherit from it and override specific methods:</p>
-<div id="7adf75f1" class="cell">
+<div id="7adf75f1" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyCustomSIR(ss.SIR):</span>
@@ -778,7 +778,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="pattern-2-adding-new-states" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-2-adding-new-states">Pattern 2: Adding new states</h3>
 <p>To add states to an existing disease:</p>
-<div id="572ec8fe" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}">
+<div id="572ec8fe" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SIR):</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -897,7 +897,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

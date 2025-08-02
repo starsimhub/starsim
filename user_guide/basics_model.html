@@ -683,22 +683,67 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="overview-of-people" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-people">Overview of People</h2>
 <p>More details on the <code>People</code> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <code>People</code> class can be easily exported to a dataframe, e.g.:</p>
-<div id="d6fcbe2a" class="cell">
+<div id="d6fcbe2a" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10 agents
+   uid  slot  alive  female        age  ti_dead  scale
+0    0     0   True   False  25.152369      NaN    1.0
+1    1     1   True    True   4.988294      NaN    1.0
+2    2     2   True   False  58.149414      NaN    1.0
+3    3     3   True   False   0.130237      NaN    1.0
+4    4     4   True   False  43.819874      NaN    1.0
+5    5     5   True   False  42.690937      NaN    1.0
+6    6     6   True    True  54.292294      NaN    1.0
+7    7     7   True   False  52.604046      NaN    1.0
+8    8     8   True   False   7.076855      NaN    1.0
+9    9     9   True   False  27.229174      NaN    1.0</code></pre>
+</div>
 </div>
 <p>When a module is added to a sim, this can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. For example:</p>
-<div id="8c10c01b" class="cell">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">20</span>, diseases<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'sis'</span>, init_prev<span class="op">=</span><span class="fl">0.2</span>), networks<span class="op">=</span><span class="st">'random'</span>)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="8c10c01b" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">20</span>, diseases<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'sis'</span>, init_prev<span class="op">=</span><span class="fl">0.2</span>), networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 20 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.27 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.29 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.31 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.33 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.35 s)  •••••••••••••••••••• 100%
+
+    uid  slot  alive  female      age  ti_dead  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
+0     0     0   True   False  25.1524      NaN    1.0                  False             True         False       0.3449            1.0             33.0           42.7465        0.6551
+1     1     1   True    True   4.9883      NaN    1.0                  False            False          True       0.0000            1.0             42.0           52.0214        1.0051
+2     2     2   True   False  58.1494      NaN    1.0                  False             True         False       0.6627            1.0             23.0           31.5178        0.3373
+3     3     3   True   False   0.1302      NaN    1.0                  False            False          True       0.0000            1.0             49.0           59.3261        1.5559
+4     4     4   True   False  43.8199      NaN    1.0                  False             True         False       0.1787            1.0             38.0           48.7212        0.8213
+5     5     5   True   False  42.6909      NaN    1.0                  False             True         False       0.3620            1.0             29.0           37.6566        0.6380
+6     6     6   True    True  54.2923      NaN    1.0                  False             True         False       0.1526            1.0             38.0           47.5738        0.8474
+7     7     7   True   False  52.6040      NaN    1.0                  False             True         False       0.1201            1.0             39.0           49.7212        0.8799
+8     8     8   True   False   7.0769      NaN    1.0                  False             True         False       0.6627            1.0             22.0           31.8954        0.3373
+9     9     9   True   False  27.2292      NaN    1.0                  False             True         False       0.6816            1.0             18.0           28.5382        0.3184
+10   10    10   True    True   4.0500      NaN    1.0                  False             True         False       0.5393            1.0             29.0           38.6003        0.4607
+11   11    11   True   False  42.6985      NaN    1.0                  False             True         False       0.7392            1.0             16.0           23.6503        0.2608
+12   12    12   True    True  25.2828      NaN    1.0                  False             True         False       0.6321            1.0             24.0           33.8575        0.3679
+13   13    13   True    True  27.6266      NaN    1.0                  False             True         False       0.6454            1.0             23.0           32.7132        0.3546
+14   14    14   True   False  24.6072      NaN    1.0                  False             True         False       0.5097            1.0             30.0           40.1969        0.4903
+15   15    15   True   False  48.8226      NaN    1.0                  False             True         False       0.3416            1.0             32.0           42.4071        0.6584
+16   16    16   True   False  16.9486      NaN    1.0                  False             True         False       0.3998            1.0             31.0           40.2152        0.6002
+17   17    17   True    True  19.6193      NaN    1.0                  False             True         False       0.5808            1.0             28.0           37.0291        0.4192
+18   18    18   True    True  40.8453      NaN    1.0                  False             True         False       0.3479            1.0             29.0           39.7353        0.6521
+19   19    19   True   False  25.0690      NaN    1.0                  False            False          True       0.7392            1.0             50.0           60.8258        1.2608</code></pre>
+</div>
 </div>
 <p>We can see even in this very simple example with only one disease and 20 agents, a lot of data is generated!</p>
 </section>
@@ -722,11 +767,17 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="what-happens-when-you-add-a-module" class="level2">
 <h2 class="anchored" data-anchor-id="what-happens-when-you-add-a-module">What happens when you add a module?</h2>
 <p>When you add a module to a <code>Sim</code>, the module’s parameters, states, and results will be added to the centralized collections of parameters, states, and results that are maintained within the <code>Sim</code>. To illustrate this, let’s create a <code>Sim</code> with an SIR disease module and a random contact network:</p>
-<div id="c1095542" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>sim.init()  <span class="co"># Initialize the sim to create </span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="c1095542" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>sim.init()  <span class="co"># Initialize the sim to create </span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>Sim(n=10000; years(2000)—years(2050); networks=randomnet; diseases=sir)</code></pre>
+</div>
 </div>
 <p>The call to <code>sim.init()</code> means that the <code>SIR</code> module gets added to <code>sim.diseases</code> and the <code>RandomNet</code> network gets added to <code>sim.networks</code>. In addition, the following updates are made: * the parameters of the modules are added to the sim’s centralized parameter dictionary, so you can access them via either <code>sim.pars.sir.init_prev</code> or <code>sim.diseases.sir.pars.init_prev</code> * the states specific to each module are added to <code>People</code>, so you can access them via <code>sim.diseases.sir.infected</code> or <code>sim.people.sir.infected</code> * the results specific to each module are added to the centralized Results dictionary of the <code>Sim</code>, so you can access them via <code>sim.diseases.sir.results.n_infected</code> or <code>sim.results.sir.n_infected</code>.</p>
 </section>
@@ -823,7 +874,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

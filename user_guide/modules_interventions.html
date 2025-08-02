@@ -843,7 +843,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="eligibility-functions" class="level3">
 <h3 class="anchored" data-anchor-id="eligibility-functions">Eligibility functions</h3>
 <p>Interventions use eligibility functions to determine who can receive the intervention:</p>
-<div id="c6181085" class="cell">
+<div id="c6181085" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Lambda functions for simple eligibility</span></span>
@@ -862,7 +862,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="product-integration" class="level3">
 <h3 class="anchored" data-anchor-id="product-integration">Product integration</h3>
 <p>Interventions work with products that define the actual medical intervention:</p>
-<div id="af271715" class="cell">
+<div id="af271715" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -908,31 +908,56 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars, interventions<span class="op">=</span>[screening, vaccination])</span>
 <span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 5000 agents
+  Running 2000.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
+  Running 2010.01.01 (10/21) (0.28 s)  ••••••••••—————————— 52%
+  Running 2020.01.01 (20/21) (0.39 s)  •••••••••••••••••••• 100%
+
+Figure(896x672)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_interventions_files/figure-html/cell-3-output-2.png" width="885" height="662" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 </section>
 </section>
 <section id="adding-multiple-interventions" class="level2">
 <h2 class="anchored" data-anchor-id="adding-multiple-interventions">Adding multiple interventions</h2>
 <p>If you want to add multiple of the <em>same</em> intervention, you need to give them different names. (This also applies to diseases and other modules.) This example compares simulations with 0, 1, or 2 vaccines:</p>
-<div id="a09ee93a" class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the product - a vaccine with 80% efficacy</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>vx <span class="op">=</span> ss.simple_vx(efficacy<span class="op">=</span><span class="fl">0.8</span>)</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the interventions -- low and high coverage</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>intv_low  <span class="op">=</span> ss.routine_vx(name<span class="op">=</span><span class="st">'intv_low'</span>, start_year<span class="op">=</span><span class="dv">2010</span>, prob<span class="op">=</span><span class="fl">0.2</span>, product<span class="op">=</span>vx)</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>intv_high <span class="op">=</span> ss.routine_vx(name<span class="op">=</span><span class="st">'intv_high'</span>, start_year<span class="op">=</span><span class="dv">2020</span>, prob<span class="op">=</span><span class="fl">0.6</span>, product<span class="op">=</span>vx)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the sims</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">5000</span>, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sis'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>s0 <span class="op">=</span> ss.Sim(pars, label<span class="op">=</span><span class="st">'Baseline'</span>)</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(pars, label<span class="op">=</span><span class="st">'Low vaccine coverage'</span>, interventions<span class="op">=</span>intv_low)</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(pars, label<span class="op">=</span><span class="st">'Low + high vaccine coverage'</span>, interventions<span class="op">=</span>[intv_low, intv_high])</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Run &amp; plot</span></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(s0, s1, s2)</span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>msim.plot(<span class="st">'sis_new_infections'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="a09ee93a" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the product - a vaccine with 80% efficacy</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>vx <span class="op">=</span> ss.simple_vx(efficacy<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the interventions -- low and high coverage</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>intv_low  <span class="op">=</span> ss.routine_vx(name<span class="op">=</span><span class="st">'intv_low'</span>, start_year<span class="op">=</span><span class="dv">2010</span>, prob<span class="op">=</span><span class="fl">0.2</span>, product<span class="op">=</span>vx)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>intv_high <span class="op">=</span> ss.routine_vx(name<span class="op">=</span><span class="st">'intv_high'</span>, start_year<span class="op">=</span><span class="dv">2020</span>, prob<span class="op">=</span><span class="fl">0.6</span>, product<span class="op">=</span>vx)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the sims</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">5000</span>, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sis'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>s0 <span class="op">=</span> ss.Sim(pars, label<span class="op">=</span><span class="st">'Baseline'</span>)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(pars, label<span class="op">=</span><span class="st">'Low vaccine coverage'</span>, interventions<span class="op">=</span>intv_low)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(pars, label<span class="op">=</span><span class="st">'Low + high vaccine coverage'</span>, interventions<span class="op">=</span>[intv_low, intv_high])</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Run &amp; plot</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(s0, s1, s2)</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>msim.plot(<span class="st">'sis_new_infections'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_interventions_files/figure-html/cell-4-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 
 
@@ -1024,7 +1049,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }

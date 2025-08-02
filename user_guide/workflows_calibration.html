@@ -674,7 +674,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Calibration libraries often treat the disease model as a black box, where the input parameters are the “hyperparameters” to be tuned. The calibration process is often iterative and requires a combination of expert knowledge and computational tools. The optimization algorithm iteratively chooses new parameter values to evaluate, and the model is run with these values to generate outputs. The outputs are compared to observed data, and a loss function is calculated to quantify the difference between the model outputs and the observed data. The optimization algorithm then uses this loss function to update its search strategy and choose new parameter values to evaluate. This process continues until the algorithm converges to a set of parameter values that minimize the loss function.</p>
 <p>While many optimization algorithms are available, Starsim has a built-in interface to the Optuna library, which we will demonstrate in this guide. We will use a simple Susceptible-Infected-Recovered (SIR) model as an example. We will tune three input parameters, the infectivity parameter, <code>beta</code>, the initial prevalence parameter, <code>init_prev</code>, and the Poisson-distributed degree distribution parameter, <code>n_contacts</code>. We will calibrate the model using a beta-binomial likelihood function so as to match prevalence at three distinct time points.</p>
 <p>We begin with a few imports and default settings:</p>
-<div id="cell-4" class="cell">
+<div id="cell-4" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">##%% Imports and settings</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -686,7 +686,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>debug <span class="op">=</span> <span class="va">False</span> <span class="co"># If true, will run in serial</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The calibration class will require a base <code>Sim</code> object. This <code>sim</code> will later be modified according to parameters selected by the optimization engine. The following function creates the base <code>Sim</code> object.</p>
-<div id="cell-6" class="cell">
+<div id="cell-6" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim():</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    sir <span class="op">=</span> ss.SIR(</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        beta <span class="op">=</span> ss.peryear(<span class="fl">0.075</span>),</span>
@@ -710,7 +710,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Each parameter entry should have range defined by <code>low</code> and <code>high</code> as well as a <code>guess</code> values. The <code>guess</code> value is not used by Optuna, rather only for a check after calibration completes to see if the new parameters are better than the <code>guess</code> values.</p>
 <p>You’ll notice there are a few other parameters that can be specified. For example, the data type of the parameter appears in <code>suggest_type</code>. Possible values are listed in the Optuna documentation, and include <a href="https://optuna.readthedocs.io/en/stable/reference/generated/optuna.trial.Trial.html#optuna.trial.Trial.suggest_float">suggest_float</a> for float values and <a href="https://optuna.readthedocs.io/en/stable/reference/generated/optuna.trial.Trial.html#optuna.trial.Trial.suggest_int">suggest_int</a> for integer types.</p>
 <p>To make things easier for the search algorithm, it’s helpful to indicate how outputs are expected to change with inputs. For example, increasing <code>beta</code> from 0.01 to 0.02 should double disease transmission, but increasing from 0.11 to 0.12 will have a small effect. Thus, we indicate that this parameter should be calibrated with <code>log=True</code>.</p>
-<div id="cell-8" class="cell">
+<div id="cell-8" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>), <span class="co"># Note the log scale</span></span>
@@ -720,7 +720,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </div>
 <p>The optimization engine iteratively chooses input parameters to simulate. Those parameters are passed into the following <code>build_sim</code> function as a dictionary of <code>calib_pars</code> along with the base <code>sim</code> and any other key word arguments. The <code>calib_pars</code> will be as above, but importantly will have an additional key named <code>value</code> containing the value selected by Optuna.</p>
 <p>When modifying a <code>sim</code>, it is important to realize that the simulation has not been initialized yet. Nonetheless, the configuration is available for modification at <code>sim.pars</code>, as demonstrated in the function below for the SIR example.</p>
-<div id="cell-10" class="cell">
+<div id="cell-10" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> build_sim(sim, calib_pars, n_reps<span class="op">=</span><span class="dv">1</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Modify the base simulation by applying calib_pars. The result can be a</span></span>
@@ -774,7 +774,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li><code>incident</code>: While the two methods above capture the state of the model at a particular point in time (stocks), this component allows you to capture the behavior of the model over time (flows). Instead of just giving one time value, <code>t</code>, you’ll provide a second time value as well called <code>t1</code>. This conformer will add up events occurring between the two time points.</li>
 </ul>
 <p>Let’s make a Binomial component, as might be used to calibrate disease prevalence.</p>
-<div id="cell-13" class="cell">
+<div id="cell-13" class="cell" data-execution_count="5">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>prevalence <span class="op">=</span> ss.Normal(</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    name <span class="op">=</span> <span class="st">'Disease prevalence'</span>,</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    conform <span class="op">=</span> <span class="st">'prevalent'</span>,</span>
@@ -796,7 +796,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Finally, we can bring all the pieces together. We make a single base simulation and create an instance of a Starsim Calibration object. This object requires a few arguments, like the <code>calib_pars</code> and <code>sim</code>. We also pass in the function that modifies the base <code>sim</code>, here our <code>build_sim</code> function. No additional <code>build_kw</code> are required in this example.</p>
 <p>We also pass in a list of <code>components</code>. Instead of using this “component-based” system, a user could simply provide an <code>eval_fn</code>, which takes in a completed sim an any <code>eval_kwargs</code> and returns a “mismatch” score to be minimized.</p>
 <p>We can also specify the total number of trials to run, the number of parallel works, and a few other parameters.</p>
-<div id="cell-15" class="cell">
+<div id="cell-15" class="cell" data-execution_count="6">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>sc.heading(<span class="st">'Beginning calibration'</span>)</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
@@ -819,35 +819,264 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
 <span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
 <span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>calib.calibrate()<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+
+
+—————————————————————
+
+Beginning calibration
+
+—————————————————————
+
+</span>
+
+<span class="ansi-cyan-fg">
+
+Peforming calibration...</span>
+
+Removed existing calibration file starsim_calibration.db
+
+sqlite:///starsim_calibration.db
+</pre>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>[I 2025-08-02 11:05:16,590] A new study created in RDB with name: starsim_calibration
+[I 2025-08-02 11:05:18,841] Trial 0 finished with value: -0.4977939924612117 and parameters: {'beta': 0.011897108260878482, 'init_prev': 0.03252748013622367, 'n_contacts': 9, 'rand_seed': 111837}. Best is trial 0 with value: -0.4977939924612117.
+[I 2025-08-02 11:05:18,900] Trial 4 finished with value: -0.45458038135010054 and parameters: {'beta': 0.021014020591027204, 'init_prev': 0.013459837471030092, 'n_contacts': 3, 'rand_seed': 429359}. Best is trial 0 with value: -0.4977939924612117.
+[I 2025-08-02 11:05:19,294] Trial 11 finished with value: -0.4520120480167672 and parameters: {'beta': 0.037967180991625576, 'init_prev': 0.012296324632142546, 'n_contacts': 8, 'rand_seed': 311718}. Best is trial 0 with value: -0.4977939924612117.
+[I 2025-08-02 11:05:19,384] Trial 3 finished with value: -0.5135606591278782 and parameters: {'beta': 0.018129466645410753, 'init_prev': 0.04351348452354495, 'n_contacts': 6, 'rand_seed': 590175}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,462] Trial 13 finished with value: -0.5097028813501007 and parameters: {'beta': 0.04398689046322904, 'init_prev': 0.03942723001881461, 'n_contacts': 7, 'rand_seed': 407622}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,482] Trial 17 finished with value: -0.4982803813501005 and parameters: {'beta': 0.07031791956159432, 'init_prev': 0.03330334462075001, 'n_contacts': 2, 'rand_seed': 433950}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,610] Trial 9 finished with value: -0.48333982579454493 and parameters: {'beta': 0.06633966589824163, 'init_prev': 0.025029605840486642, 'n_contacts': 5, 'rand_seed': 405882}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,632] Trial 7 finished with value: -0.4703128813501006 and parameters: {'beta': 0.03019508923498835, 'init_prev': 0.02022771250644549, 'n_contacts': 3, 'rand_seed': 313869}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,662] Trial 15 finished with value: -0.5118703813501004 and parameters: {'beta': 0.02781804532029158, 'init_prev': 0.042271022774409604, 'n_contacts': 8, 'rand_seed': 774252}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,824] Trial 19 finished with value: -0.4517992702389894 and parameters: {'beta': 0.071497616548107, 'init_prev': 0.012332286531820872, 'n_contacts': 2, 'rand_seed': 750642}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,826] Trial 16 finished with value: -0.47886871468343384 and parameters: {'beta': 0.012256282612524467, 'init_prev': 0.023806091865898438, 'n_contacts': 10, 'rand_seed': 653141}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,840] Trial 14 finished with value: -0.5107826035723229 and parameters: {'beta': 0.09043867756067638, 'init_prev': 0.03955571169855875, 'n_contacts': 10, 'rand_seed': 911}. Best is trial 3 with value: -0.5135606591278782.
+[I 2025-08-02 11:05:19,851] Trial 10 finished with value: -0.4885231591278783 and parameters: {'beta': 0.0900302829557926, 'init_prev': 0.02777521925058634, 'n_contacts': 5, 'rand_seed': 873969}. Best is trial 18 with value: -0.5165153813501004.
+[I 2025-08-02 11:05:19,873] Trial 18 finished with value: -0.5165153813501004 and parameters: {'beta': 0.03330149881671853, 'init_prev': 0.04494362423692769, 'n_contacts': 9, 'rand_seed': 932989}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:19,920] Trial 2 finished with value: -0.5165695480167672 and parameters: {'beta': 0.014845317096358992, 'init_prev': 0.04621055075525674, 'n_contacts': 3, 'rand_seed': 760267}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:19,920] Trial 1 finished with value: -0.49965593690565613 and parameters: {'beta': 0.01161222810676176, 'init_prev': 0.03400992052333835, 'n_contacts': 7, 'rand_seed': 762225}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:19,934] Trial 20 finished with value: -0.46621399246121165 and parameters: {'beta': 0.06956672541705614, 'init_prev': 0.01935575626487529, 'n_contacts': 9, 'rand_seed': 977926}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:19,949] Trial 12 finished with value: -0.4671564924612116 and parameters: {'beta': 0.10489104356862108, 'init_prev': 0.018908946813878114, 'n_contacts': 6, 'rand_seed': 660312}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:19,953] Trial 8 finished with value: -0.4491937146834339 and parameters: {'beta': 0.05734395549819034, 'init_prev': 0.010979081617193178, 'n_contacts': 6, 'rand_seed': 680205}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,012] Trial 6 finished with value: -0.44757260357232276 and parameters: {'beta': 0.02647175517380259, 'init_prev': 0.010450871569529313, 'n_contacts': 4, 'rand_seed': 502881}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,062] Trial 21 finished with value: -0.516321214683434 and parameters: {'beta': 0.020658712055449165, 'init_prev': 0.048085225024837745, 'n_contacts': 5, 'rand_seed': 940799}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,103] Trial 5 finished with value: -0.5019103813501006 and parameters: {'beta': 0.04691871614013071, 'init_prev': 0.03525567402163141, 'n_contacts': 8, 'rand_seed': 544849}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,303] Trial 23 finished with value: -0.46736649246121165 and parameters: {'beta': 0.018682355662819592, 'init_prev': 0.020165251278438892, 'n_contacts': 8, 'rand_seed': 604629}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,409] Trial 22 finished with value: -0.47684177023898944 and parameters: {'beta': 0.05133402118323435, 'init_prev': 0.024152529685346973, 'n_contacts': 9, 'rand_seed': 190881}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,503] Trial 24 finished with value: -0.48341399246121164 and parameters: {'beta': 0.052068968771613225, 'init_prev': 0.027053806256776905, 'n_contacts': 5, 'rand_seed': 704967}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,509] Trial 25 finished with value: -0.4452539924612116 and parameters: {'beta': 0.04445763988308933, 'init_prev': 0.010560225913622125, 'n_contacts': 8, 'rand_seed': 392627}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,688] Trial 27 finished with value: -0.5139653813501005 and parameters: {'beta': 0.06525289391530013, 'init_prev': 0.04374885083923679, 'n_contacts': 10, 'rand_seed': 31426}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,743] Trial 28 finished with value: -0.4836481591278783 and parameters: {'beta': 0.06794227749217777, 'init_prev': 0.02694043557877248, 'n_contacts': 10, 'rand_seed': 56063}. Best is trial 2 with value: -0.5165695480167672.
+[I 2025-08-02 11:05:20,873] Trial 31 finished with value: -0.5218376035723227 and parameters: {'beta': 0.18581285890152305, 'init_prev': 0.04991311043649883, 'n_contacts': 4, 'rand_seed': 998239}. Best is trial 31 with value: -0.5218376035723227.
+[I 2025-08-02 11:05:20,907] Trial 26 finished with value: -0.45895343690565604 and parameters: {'beta': 0.010295619481581546, 'init_prev': 0.01679259230362084, 'n_contacts': 5, 'rand_seed': 585280}. Best is trial 31 with value: -0.5218376035723227.
+[I 2025-08-02 11:05:21,131] Trial 36 finished with value: -0.5162420480167671 and parameters: {'beta': 0.20218415727884514, 'init_prev': 0.049291190889084784, 'n_contacts': 4, 'rand_seed': 996480}. Best is trial 31 with value: -0.5218376035723227.
+[I 2025-08-02 11:05:21,249] Trial 34 finished with value: -0.5224848257945449 and parameters: {'beta': 0.23914638369298202, 'init_prev': 0.04990363516870414, 'n_contacts': 4, 'rand_seed': 966476}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,321] Trial 39 finished with value: -0.5214142702389893 and parameters: {'beta': 0.16974538029575162, 'init_prev': 0.04975574035014993, 'n_contacts': 4, 'rand_seed': 932085}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,355] Trial 35 finished with value: -0.5194153813501005 and parameters: {'beta': 0.017283882803657714, 'init_prev': 0.049453062978839335, 'n_contacts': 4, 'rand_seed': 963768}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,407] Trial 30 finished with value: -0.5214142702389893 and parameters: {'beta': 0.21156324872249818, 'init_prev': 0.04955500712832957, 'n_contacts': 4, 'rand_seed': 997812}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,407] Trial 41 finished with value: -0.5159098257945449 and parameters: {'beta': 0.016604720968563205, 'init_prev': 0.04787437632548134, 'n_contacts': 4, 'rand_seed': 971550}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,409] Trial 40 finished with value: -0.5183726035723227 and parameters: {'beta': 0.29728819660303063, 'init_prev': 0.04974705823110761, 'n_contacts': 4, 'rand_seed': 964508}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,458] Trial 32 finished with value: -0.5214142702389893 and parameters: {'beta': 0.19362747074042963, 'init_prev': 0.04973241980383814, 'n_contacts': 4, 'rand_seed': 977346}. Best is trial 34 with value: -0.5224848257945449.
+[I 2025-08-02 11:05:21,557] Trial 37 finished with value: -0.5220384369056561 and parameters: {'beta': 0.19318486156554002, 'init_prev': 0.04992856437670198, 'n_contacts': 4, 'rand_seed': 996671}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,676] Trial 44 finished with value: -0.5161251035723228 and parameters: {'beta': 0.1585008010321772, 'init_prev': 0.049466068569336843, 'n_contacts': 4, 'rand_seed': 978982}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,692] Trial 33 finished with value: -0.5198526035723227 and parameters: {'beta': 0.017106033452273982, 'init_prev': 0.04953822172062367, 'n_contacts': 4, 'rand_seed': 981435}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,708] Trial 43 finished with value: -0.5169462146834338 and parameters: {'beta': 0.19810256778247035, 'init_prev': 0.04963027368918426, 'n_contacts': 4, 'rand_seed': 977308}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,711] Trial 29 finished with value: -0.5226542702389894 and parameters: {'beta': 0.27552997046685346, 'init_prev': 0.04974894659694355, 'n_contacts': 4, 'rand_seed': 969319}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,722] Trial 38 finished with value: -0.5214142702389893 and parameters: {'beta': 0.18087515822691203, 'init_prev': 0.04962394293925165, 'n_contacts': 4, 'rand_seed': 995899}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,730] Trial 45 finished with value: -0.5153562146834338 and parameters: {'beta': 0.01635801934718692, 'init_prev': 0.04959449735008731, 'n_contacts': 4, 'rand_seed': 972921}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,742] Trial 42 finished with value: -0.5168412146834338 and parameters: {'beta': 0.16390900931032656, 'init_prev': 0.049945177817684455, 'n_contacts': 4, 'rand_seed': 997568}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:21,744] Trial 47 finished with value: -0.5168412146834338 and parameters: {'beta': 0.15931776710306278, 'init_prev': 0.049716794439279885, 'n_contacts': 4, 'rand_seed': 982611}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,001] Trial 48 finished with value: -0.5174095480167672 and parameters: {'beta': 0.27952924502432636, 'init_prev': 0.04928848694625159, 'n_contacts': 3, 'rand_seed': 864469}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,004] Trial 46 finished with value: -0.5174162146834338 and parameters: {'beta': 0.2707712886166422, 'init_prev': 0.04949293152947406, 'n_contacts': 3, 'rand_seed': 957493}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,072] Trial 49 finished with value: -0.5149751035723227 and parameters: {'beta': 0.014676323716392917, 'init_prev': 0.04930989082715195, 'n_contacts': 3, 'rand_seed': 863997}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,131] Trial 51 finished with value: -0.5148967702389893 and parameters: {'beta': 0.24261166673525195, 'init_prev': 0.04702786393036023, 'n_contacts': 3, 'rand_seed': 864198}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,367] Trial 52 finished with value: -0.5154426035723227 and parameters: {'beta': 0.29636708633204367, 'init_prev': 0.046873205272838295, 'n_contacts': 3, 'rand_seed': 852750}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,490] Trial 57 finished with value: -0.5137206591278783 and parameters: {'beta': 0.28173001507299605, 'init_prev': 0.04582091337324606, 'n_contacts': 3, 'rand_seed': 850522}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,533] Trial 50 finished with value: -0.5165678813501005 and parameters: {'beta': 0.25335592935650064, 'init_prev': 0.0499972001753247, 'n_contacts': 4, 'rand_seed': 894129}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,784] Trial 53 finished with value: -0.5139867702389895 and parameters: {'beta': 0.14662537205423415, 'init_prev': 0.046598259349472704, 'n_contacts': 3, 'rand_seed': 847845}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,803] Trial 61 finished with value: -0.5149614924612117 and parameters: {'beta': 0.2994155008134841, 'init_prev': 0.04612419515126202, 'n_contacts': 3, 'rand_seed': 876473}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,810] Trial 55 finished with value: -0.5128492702389894 and parameters: {'beta': 0.15958246422674702, 'init_prev': 0.04584073011798337, 'n_contacts': 3, 'rand_seed': 876516}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,880] Trial 59 finished with value: -0.5150373257945451 and parameters: {'beta': 0.2977386934144447, 'init_prev': 0.04639496773028994, 'n_contacts': 3, 'rand_seed': 862264}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,941] Trial 54 finished with value: -0.5149920480167672 and parameters: {'beta': 0.28342598573408934, 'init_prev': 0.04633951409421608, 'n_contacts': 3, 'rand_seed': 830245}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,973] Trial 58 finished with value: -0.5149614924612117 and parameters: {'beta': 0.29704798558290296, 'init_prev': 0.04612631214152212, 'n_contacts': 3, 'rand_seed': 865221}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:22,977] Trial 56 finished with value: -0.5055923257945449 and parameters: {'beta': 0.16166557236465187, 'init_prev': 0.041002079546075494, 'n_contacts': 3, 'rand_seed': 846072}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,035] Trial 65 finished with value: -0.5144745480167673 and parameters: {'beta': 0.2926882144656497, 'init_prev': 0.04611544419445656, 'n_contacts': 3, 'rand_seed': 866431}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,063] Trial 68 finished with value: -0.5132253813501005 and parameters: {'beta': 0.1294599367854127, 'init_prev': 0.04656594219719122, 'n_contacts': 3, 'rand_seed': 857742}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,063] Trial 64 finished with value: -0.5138951035723227 and parameters: {'beta': 0.2773055209716469, 'init_prev': 0.046008745071961586, 'n_contacts': 3, 'rand_seed': 860681}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,201] Trial 66 finished with value: -0.5145242702389894 and parameters: {'beta': 0.2905595772270262, 'init_prev': 0.04623294205034373, 'n_contacts': 3, 'rand_seed': 866136}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,246] Trial 62 finished with value: -0.5151320480167672 and parameters: {'beta': 0.2756848878097113, 'init_prev': 0.046613435894853755, 'n_contacts': 3, 'rand_seed': 855623}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,247] Trial 63 finished with value: -0.5144617702389893 and parameters: {'beta': 0.23846193971355656, 'init_prev': 0.04651974752222965, 'n_contacts': 3, 'rand_seed': 862200}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,249] Trial 70 finished with value: -0.512099825794545 and parameters: {'beta': 0.1269453798066647, 'init_prev': 0.045711941028598504, 'n_contacts': 5, 'rand_seed': 904720}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,301] Trial 67 finished with value: -0.5132253813501005 and parameters: {'beta': 0.1291534877322139, 'init_prev': 0.04664289421073186, 'n_contacts': 3, 'rand_seed': 847686}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,374] Trial 60 finished with value: -0.5136714924612116 and parameters: {'beta': 0.2947541193379271, 'init_prev': 0.04592575595149337, 'n_contacts': 3, 'rand_seed': 866329}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,396] Trial 69 finished with value: -0.512099825794545 and parameters: {'beta': 0.12865116043775532, 'init_prev': 0.04572059042043153, 'n_contacts': 5, 'rand_seed': 819857}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,486] Trial 71 finished with value: -0.5118673257945451 and parameters: {'beta': 0.12455628671502264, 'init_prev': 0.04541568626436475, 'n_contacts': 5, 'rand_seed': 813797}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,810] Trial 74 finished with value: -0.506874825794545 and parameters: {'beta': 0.1340543393482145, 'init_prev': 0.04133428761069591, 'n_contacts': 6, 'rand_seed': 817868}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,817] Trial 75 finished with value: -0.5109631591278783 and parameters: {'beta': 0.13577610520946923, 'init_prev': 0.043325020962105, 'n_contacts': 6, 'rand_seed': 778088}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:23,894] Trial 72 finished with value: -0.5073451035723227 and parameters: {'beta': 0.12504777298056452, 'init_prev': 0.04209042626622277, 'n_contacts': 6, 'rand_seed': 796831}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,010] Trial 73 finished with value: -0.511655936905656 and parameters: {'beta': 0.13947241457824802, 'init_prev': 0.04259318110518194, 'n_contacts': 6, 'rand_seed': 905910}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,063] Trial 78 finished with value: -0.5099123257945449 and parameters: {'beta': 0.2115608369145069, 'init_prev': 0.04291866552601368, 'n_contacts': 5, 'rand_seed': 915654}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,069] Trial 79 finished with value: -0.5120489924612115 and parameters: {'beta': 0.2191382719703157, 'init_prev': 0.04414303187842241, 'n_contacts': 5, 'rand_seed': 915869}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,379] Trial 80 finished with value: -0.514312325794545 and parameters: {'beta': 0.21536947407332568, 'init_prev': 0.04427406196758528, 'n_contacts': 5, 'rand_seed': 802262}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,404] Trial 76 finished with value: -0.5092903813501005 and parameters: {'beta': 0.12044223076906284, 'init_prev': 0.042924017693128556, 'n_contacts': 6, 'rand_seed': 919756}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,454] Trial 85 finished with value: -0.5135684369056561 and parameters: {'beta': 0.20596742615883443, 'init_prev': 0.04360098293344614, 'n_contacts': 6, 'rand_seed': 923208}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,464] Trial 84 finished with value: -0.5116906591278783 and parameters: {'beta': 0.2103738124148379, 'init_prev': 0.0434024779984797, 'n_contacts': 6, 'rand_seed': 925496}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,538] Trial 89 finished with value: -0.5132428813501005 and parameters: {'beta': 0.2100871185390275, 'init_prev': 0.04375759364100116, 'n_contacts': 5, 'rand_seed': 936878}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,584] Trial 81 finished with value: -0.5138506591278783 and parameters: {'beta': 0.2296687038795114, 'init_prev': 0.04403964491054136, 'n_contacts': 5, 'rand_seed': 926126}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,593] Trial 77 finished with value: -0.513152325794545 and parameters: {'beta': 0.13386376519670504, 'init_prev': 0.04448465876269436, 'n_contacts': 5, 'rand_seed': 915680}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,602] Trial 88 finished with value: -0.5113056591278783 and parameters: {'beta': 0.2044420049311424, 'init_prev': 0.043770742092379473, 'n_contacts': 5, 'rand_seed': 921879}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,640] Trial 86 finished with value: -0.5023762146834339 and parameters: {'beta': 0.20513340354272305, 'init_prev': 0.03661366257914889, 'n_contacts': 6, 'rand_seed': 792789}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,721] Trial 83 finished with value: -0.5139345480167672 and parameters: {'beta': 0.2139775428176563, 'init_prev': 0.04356176870867772, 'n_contacts': 6, 'rand_seed': 800077}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,736] Trial 90 finished with value: -0.512269825794545 and parameters: {'beta': 0.20092973924567958, 'init_prev': 0.04388286022728213, 'n_contacts': 2, 'rand_seed': 921242}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,740] Trial 93 finished with value: -0.5186084369056561 and parameters: {'beta': 0.20081632966886734, 'init_prev': 0.04809799522420058, 'n_contacts': 2, 'rand_seed': 925237}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,775] Trial 82 finished with value: -0.5124745480167672 and parameters: {'beta': 0.2164770535103422, 'init_prev': 0.042878158989202546, 'n_contacts': 5, 'rand_seed': 910917}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,836] Trial 87 finished with value: -0.5135662146834339 and parameters: {'beta': 0.2065028308152499, 'init_prev': 0.04406340596792238, 'n_contacts': 5, 'rand_seed': 920634}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,884] Trial 91 finished with value: -0.4987723257945449 and parameters: {'beta': 0.20927156423344295, 'init_prev': 0.03566832152079083, 'n_contacts': 2, 'rand_seed': 927876}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:24,900] Trial 92 finished with value: -0.5183803813501004 and parameters: {'beta': 0.19908376312702603, 'init_prev': 0.04795600372744254, 'n_contacts': 2, 'rand_seed': 928482}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:25,060] Trial 95 finished with value: -0.5183803813501004 and parameters: {'beta': 0.19440305170620778, 'init_prev': 0.048009748751140856, 'n_contacts': 2, 'rand_seed': 929658}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:25,094] Trial 96 finished with value: -0.5183731591278783 and parameters: {'beta': 0.18639207396243024, 'init_prev': 0.04784806644576985, 'n_contacts': 4, 'rand_seed': 941963}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:25,123] Trial 94 finished with value: -0.5183481591278782 and parameters: {'beta': 0.19477921906520582, 'init_prev': 0.047913300090878214, 'n_contacts': 5, 'rand_seed': 919822}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:25,258] Trial 97 finished with value: -0.5185848257945449 and parameters: {'beta': 0.1843483866115381, 'init_prev': 0.04799197379743717, 'n_contacts': 4, 'rand_seed': 946331}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:25,454] Trial 99 finished with value: -0.5188020480167671 and parameters: {'beta': 0.1731942863077101, 'init_prev': 0.04804729073565056, 'n_contacts': 4, 'rand_seed': 949371}. Best is trial 29 with value: -0.5226542702389894.
+[I 2025-08-02 11:05:25,470] Trial 98 finished with value: -0.5188156591278782 and parameters: {'beta': 0.1839344155733602, 'init_prev': 0.04807958427391274, 'n_contacts': 4, 'rand_seed': 950073}. Best is trial 29 with value: -0.5226542702389894.</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Making results structure...
+Processed 100 trials; 0 failed
+Best pars: {'beta': 0.27552997046685346, 'init_prev': 0.04974894659694355, 'n_contacts': 4, 'rand_seed': 969319}
+Removed existing calibration file starsim_calibration.db</code></pre>
+</div>
 </div>
 <p>Let’s look at the best parameters that were found. Note that the <code>rand_seed</code> was selected at random, but the other parameters are meaningful.</p>
-<div id="cell-17" class="cell">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>calib.best_pars</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-17" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>calib.best_pars</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="7">
+<pre><code>{'beta': 0.27552997046685346,
+ 'init_prev': 0.04974894659694355,
+ 'n_contacts': 4,
+ 'rand_seed': 969319}</code></pre>
+</div>
 </div>
 <p>Once the calibration is complete, we can compare the <code>guess</code> values to the best values found by calling <code>check_fit</code>.</p>
-<div id="cell-19" class="cell">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Confirm - Note the comparison is here configured over n_reps=15 replicates</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Confirming fit...'</span>)</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Increase replicates to 15 for more representative results when running check_fit</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>calib.build_kw[<span class="st">'n_reps'</span>] <span class="op">=</span> <span class="dv">15</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>calib.check_fit(do_plot<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-19" class="cell" data-execution_count="8">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Confirm - Note the comparison is here configured over n_reps=15 replicates</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Confirming fit...'</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Increase replicates to 15 for more representative results when running check_fit</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>calib.build_kw[<span class="st">'n_reps'</span>] <span class="op">=</span> <span class="dv">15</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>calib.check_fit(do_plot<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+Confirming fit...</span>
+
+<span class="ansi-cyan-fg">
+
+Checking fit...</span>
+
+Fit with original pars: -0.5465422146834339
+
+Fit with best-fit pars: -0.5175063257945448
+
+✗ Calibration did not improve fit as the objective got worse (-0.5465422146834339 --&gt; -0.5175063257945448), but this sometimes happens stochastically and is not necessarily an error
+</pre>
+</div>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="8">
+<pre><code>False</code></pre>
+</div>
 </div>
 <p>After calling <code>check_fit</code>, we can plot the results. This first plot shows the Normal likelihood distributions from each of the 15 simulations we did in <code>check_fit</code> as the colored lines. The vertical dashed line is located at the real (<code>expected</code>) data. Top row is the “guess” values and the bottom row is the new “best” parameters. We want the vertical dashed line to cross the Gaussians at high points, representing high likelihood.</p>
-<div id="cell-21" class="cell">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>calib.plot()<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-21" class="cell" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>calib.plot()<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_calibration_files/figure-html/cell-10-output-1.png" width="1286" height="569" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>Another way to plot the results is via bootstrapping. Here we repeatedly choose 15 from the <code>n_reps=15</code> simulations (with replacement), compute the average (or sum for some components), and repeatedly calculate the mean. We then plot the distribution of means, and hope it lands near the vertical dashed lines representing the real data.</p>
-<div id="cell-23" class="cell">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-23" class="cell" data-execution_count="10">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_calibration_files/figure-html/cell-11-output-1.png" width="1286" height="569" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>We can view some plots of the final fitted results. Whereas the two plots above were from the <code>check_fit</code>, running both “guess” and “best” parameters, here we make make new simulations to visualize the results.</p>
-<div id="cell-25" class="cell">
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> calib.plot_final()<span class="op">;</span> <span class="co"># Run the model for build_kw['n_reps'] = 15 replicates</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-25" class="cell" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> calib.plot_final()<span class="op">;</span> <span class="co"># Run the model for build_kw['n_reps'] = 15 replicates</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_calibration_files/figure-html/cell-12-output-1.png" width="758" height="566" class="figure-img"></p>
+</figure>
 </div>
-<div id="cell-26" class="cell">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>calib</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+<div id="cell-26" class="cell" data-execution_count="12">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>calib</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="12">
+<pre><code>&lt;starsim.calibration.Calibration at 0x718432b14860&gt;
+[&lt;class 'starsim.calibration.Calibration'&gt;, &lt;class 'sciris.sc_printing.prettyobj'&gt;]
+————————————————————————————————————————————————————————————————————————
+Methods:
+  _eval_fit()             make_study()            run_sim()               
+  _sample_from_trial()    parse_study()           run_trial()             
+  build_fn()              plot()                  run_workers()           
+  calibrate()             plot_final()            to_df()                 
+  check_fit()             plot_optuna()           to_json()               
+  eval_fn()               remove_db()             worker()                
+————————————————————————————————————————————————————————————————————————
+ after_fits: -0.5175063257945448
+ after_msim: MultiSim(n_sims: 15; base: Sim(n=2000;
+             2020.01.01—2020.02.12; not ini [...]
+before_fits: -0.5465422146834339
+before_msim: MultiSim(n_sims: 15; base: Sim(n=2000;
+             2020.01.01—2020.02.12; not ini [...]
+  best_pars: {'beta': 0.27552997046685346, 'init_prev':
+             0.04974894659694355, 'n_co [...]
+   build_fn: &lt;function build_sim at 0x7184321c37e0&gt;
+   build_kw: {'n_reps': 15}
+ calib_pars: {'beta': {'low': 0.01, 'high': 0.3, 'guess': 0.15,
+             'suggest_type': 's [...]
+ calibrated: True
+ components: [Calibration component with name Disease prevalence]
+         df:     index  mismatch      beta  init_prev  n_contacts
+             rand_seed
+             29    [...]
+        die: True
+    elapsed: 9.85933232307434
+    eval_fn: &lt;bound method Calibration._eval_fit of
+             &lt;starsim.calibration.Calibrati [...]
+    eval_kw: {}
+      label: None
+   prune_fn: None
+     reseed: True
+   run_args: #0. 'n_trials':    5
+             #1. 'n_workers':   20
+             #2. 'debug':       False
+             # [...]
+        sim: Sim(n=2000; 2020.01.01—2020.02.12; not initialized)
+      study: &lt;optuna.study.study.Study object at 0x718431466270&gt;
+ study_data: #0. 'index':      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+             12, 13, 14,  [...]
+    verbose: True
+————————————————————————————————————————————————————————————————————————</code></pre>
+</div>
 </div>
 <p>Optuna has lots of diagnostic plots that we can explore. Possible plots include:</p>
 <ul>
@@ -865,63 +1094,155 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li>plot_timeline</li>
 </ul>
 <p>Here are some examples:</p>
-<div id="cell-28" class="cell">
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-28" class="cell" data-execution_count="13">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:433: ExperimentalWarning: plot_optimization_history is experimental (supported from v2.2.0). The interface can change in the future.
+  fig = getattr(vis, method)(self.study)</code></pre>
 </div>
-<div id="cell-29" class="cell">
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_calibration_files/figure-html/cell-14-output-2.png" width="795" height="454" class="figure-img"></p>
+</figure>
 </div>
-<div id="cell-30" class="cell">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_param_importances'</span>)<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+<div id="cell-29" class="cell" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:433: ExperimentalWarning: plot_contour is experimental (supported from v2.2.0). The interface can change in the future.
+  fig = getattr(vis, method)(self.study)
+[W 2025-08-02 11:05:44,452] Output figures of this Matplotlib-based `plot_contour` function would be different from those of the Plotly-based `plot_contour`.</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_calibration_files/figure-html/cell-15-output-2.png" width="621" height="481" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<div id="cell-30" class="cell" data-execution_count="15">
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_param_importances'</span>)<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Could not run plot_param_importances: Tried to import 'sklearn' but failed. Please make sure that the package is installed correctly to use this feature. Actual error: No module named 'sklearn'.</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:433: ExperimentalWarning: plot_param_importances is experimental (supported from v2.2.0). The interface can change in the future.
+  fig = getattr(vis, method)(self.study)</code></pre>
+</div>
 </div>
 <p>If you choose not to use components, you can always create your own mismatch function, as in the following example:</p>
-<div id="cell-32" class="cell">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>my_data <span class="op">=</span> (ss.date(<span class="st">'2020-01-12'</span>), <span class="fl">0.13</span>)</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">eval</span>(sim, expected):</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute the squared error at one point in time.</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># expected will contain my_data in this example due to eval_kw</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    date, p <span class="op">=</span> expected</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(sim, ss.MultiSim):</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim])</span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> <span class="dv">0</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> sim.sims:</span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        ind <span class="op">=</span> np.searchsorted(s.results.timevec, date, side<span class="op">=</span><span class="st">'left'</span>)</span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> s.results.sir.prevalence[ind]</span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>        ret <span class="op">+=</span> (prev <span class="op">-</span> p)<span class="op">**</span><span class="dv">2</span></span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret</span>
-<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
-<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>),</span>
-<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
-<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
-<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the calibration</span></span>
-<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>calib <span class="op">=</span> ss.Calibration(</span>
-<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>    calib_pars <span class="op">=</span> calib_pars,</span>
-<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> sim,</span>
-<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>    build_fn <span class="op">=</span> build_sim,</span>
-<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>    build_kw <span class="op">=</span> <span class="bu">dict</span>(n_reps<span class="op">=</span><span class="dv">2</span>), <span class="co"># Two reps per point</span></span>
-<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>    reseed <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a>    eval_fn <span class="op">=</span> <span class="bu">eval</span>, <span class="co"># Will call my_function(msim, eval_kwargs)</span></span>
-<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>    eval_kw <span class="op">=</span> <span class="bu">dict</span>(expected<span class="op">=</span>my_data), <span class="co"># Will call eval(sim, **eval_kw)</span></span>
-<span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>    total_trials <span class="op">=</span> <span class="dv">20</span>,</span>
-<span id="cb16-36"><a href="#cb16-36" aria-hidden="true" tabindex="-1"></a>    n_workers <span class="op">=</span> <span class="va">None</span>, <span class="co"># None indicates to use all available CPUs</span></span>
-<span id="cb16-37"><a href="#cb16-37" aria-hidden="true" tabindex="-1"></a>    die <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb16-38"><a href="#cb16-38" aria-hidden="true" tabindex="-1"></a>    debug <span class="op">=</span> debug,</span>
-<span id="cb16-39"><a href="#cb16-39" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb16-40"><a href="#cb16-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-41"><a href="#cb16-41" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
-<span id="cb16-42"><a href="#cb16-42" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
-<span id="cb16-43"><a href="#cb16-43" aria-hidden="true" tabindex="-1"></a>calib.calibrate()</span>
-<span id="cb16-44"><a href="#cb16-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-45"><a href="#cb16-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
-<span id="cb16-46"><a href="#cb16-46" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="cell-32" class="cell" data-execution_count="16">
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>my_data <span class="op">=</span> (ss.date(<span class="st">'2020-01-12'</span>), <span class="fl">0.13</span>)</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">eval</span>(sim, expected):</span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute the squared error at one point in time.</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># expected will contain my_data in this example due to eval_kw</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>    date, p <span class="op">=</span> expected</span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(sim, ss.MultiSim):</span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim])</span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> sim.sims:</span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a>        ind <span class="op">=</span> np.searchsorted(s.results.timevec, date, side<span class="op">=</span><span class="st">'left'</span>)</span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> s.results.sir.prevalence[ind]</span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>        ret <span class="op">+=</span> (prev <span class="op">-</span> p)<span class="op">**</span><span class="dv">2</span></span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret</span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb25-20"><a href="#cb25-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>),</span>
+<span id="cb25-21"><a href="#cb25-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb25-22"><a href="#cb25-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-23"><a href="#cb25-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
+<span id="cb25-24"><a href="#cb25-24" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
+<span id="cb25-25"><a href="#cb25-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-26"><a href="#cb25-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the calibration</span></span>
+<span id="cb25-27"><a href="#cb25-27" aria-hidden="true" tabindex="-1"></a>calib <span class="op">=</span> ss.Calibration(</span>
+<span id="cb25-28"><a href="#cb25-28" aria-hidden="true" tabindex="-1"></a>    calib_pars <span class="op">=</span> calib_pars,</span>
+<span id="cb25-29"><a href="#cb25-29" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> sim,</span>
+<span id="cb25-30"><a href="#cb25-30" aria-hidden="true" tabindex="-1"></a>    build_fn <span class="op">=</span> build_sim,</span>
+<span id="cb25-31"><a href="#cb25-31" aria-hidden="true" tabindex="-1"></a>    build_kw <span class="op">=</span> <span class="bu">dict</span>(n_reps<span class="op">=</span><span class="dv">2</span>), <span class="co"># Two reps per point</span></span>
+<span id="cb25-32"><a href="#cb25-32" aria-hidden="true" tabindex="-1"></a>    reseed <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb25-33"><a href="#cb25-33" aria-hidden="true" tabindex="-1"></a>    eval_fn <span class="op">=</span> <span class="bu">eval</span>, <span class="co"># Will call my_function(msim, eval_kwargs)</span></span>
+<span id="cb25-34"><a href="#cb25-34" aria-hidden="true" tabindex="-1"></a>    eval_kw <span class="op">=</span> <span class="bu">dict</span>(expected<span class="op">=</span>my_data), <span class="co"># Will call eval(sim, **eval_kw)</span></span>
+<span id="cb25-35"><a href="#cb25-35" aria-hidden="true" tabindex="-1"></a>    total_trials <span class="op">=</span> <span class="dv">20</span>,</span>
+<span id="cb25-36"><a href="#cb25-36" aria-hidden="true" tabindex="-1"></a>    n_workers <span class="op">=</span> <span class="va">None</span>, <span class="co"># None indicates to use all available CPUs</span></span>
+<span id="cb25-37"><a href="#cb25-37" aria-hidden="true" tabindex="-1"></a>    die <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb25-38"><a href="#cb25-38" aria-hidden="true" tabindex="-1"></a>    debug <span class="op">=</span> debug,</span>
+<span id="cb25-39"><a href="#cb25-39" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb25-40"><a href="#cb25-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-41"><a href="#cb25-41" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
+<span id="cb25-42"><a href="#cb25-42" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
+<span id="cb25-43"><a href="#cb25-43" aria-hidden="true" tabindex="-1"></a>calib.calibrate()</span>
+<span id="cb25-44"><a href="#cb25-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-45"><a href="#cb25-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
+<span id="cb25-46"><a href="#cb25-46" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>[I 2025-08-02 11:05:47,687] A new study created in RDB with name: starsim_calibration</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+Peforming calibration...</span>
+
+Removed existing calibration file starsim_calibration.db
+
+sqlite:///starsim_calibration.db
+</pre>
+</div>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>[I 2025-08-02 11:05:48,693] Trial 0 finished with value: 0.02498225 and parameters: {'beta': 0.2730742244001015, 'rand_seed': 438215}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:48,703] Trial 1 finished with value: 0.02520625 and parameters: {'beta': 0.01089757742051882, 'rand_seed': 982546}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:48,800] Trial 3 finished with value: 0.025092500000000004 and parameters: {'beta': 0.23333626456814283, 'rand_seed': 650492}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:48,946] Trial 7 finished with value: 0.025092500000000004 and parameters: {'beta': 0.14652164797908684, 'rand_seed': 284761}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:48,966] Trial 4 finished with value: 0.02520625 and parameters: {'beta': 0.01957235371285875, 'rand_seed': 925621}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,018] Trial 16 finished with value: 0.02520625 and parameters: {'beta': 0.016120278100642038, 'rand_seed': 124419}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,023] Trial 9 finished with value: 0.02520625 and parameters: {'beta': 0.06400920610835381, 'rand_seed': 853520}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,048] Trial 5 finished with value: 0.025092500000000004 and parameters: {'beta': 0.17154767958813746, 'rand_seed': 834004}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,072] Trial 2 finished with value: 0.02520625 and parameters: {'beta': 0.08463456230114398, 'rand_seed': 357375}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,146] Trial 18 finished with value: 0.02520625 and parameters: {'beta': 0.09576313428961919, 'rand_seed': 127680}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,163] Trial 11 finished with value: 0.02520625 and parameters: {'beta': 0.0975296829354185, 'rand_seed': 731125}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,168] Trial 17 finished with value: 0.02520625 and parameters: {'beta': 0.057588478023495995, 'rand_seed': 611984}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,187] Trial 8 finished with value: 0.025092500000000004 and parameters: {'beta': 0.12981271020059384, 'rand_seed': 120098}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,216] Trial 13 finished with value: 0.02520625 and parameters: {'beta': 0.014773537044667065, 'rand_seed': 381260}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,229] Trial 12 finished with value: 0.02520625 and parameters: {'beta': 0.012742390948993484, 'rand_seed': 890277}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,236] Trial 19 finished with value: 0.02520625 and parameters: {'beta': 0.013393221880464663, 'rand_seed': 76182}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,261] Trial 6 finished with value: 0.025092500000000004 and parameters: {'beta': 0.1563823267863345, 'rand_seed': 927428}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,261] Trial 15 finished with value: 0.02520625 and parameters: {'beta': 0.08646342279171858, 'rand_seed': 824419}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,262] Trial 14 finished with value: 0.02498225 and parameters: {'beta': 0.2940496529176757, 'rand_seed': 942757}. Best is trial 0 with value: 0.02498225.
+[I 2025-08-02 11:05:49,266] Trial 10 finished with value: 0.02520625 and parameters: {'beta': 0.05259255550981246, 'rand_seed': 651292}. Best is trial 0 with value: 0.02498225.</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<div class="ansi-escaped-output">
+<pre>Making results structure...
+
+Processed 20 trials; 0 failed
+
+Best pars: {'beta': 0.2730742244001015, 'rand_seed': 438215}
+
+Removed existing calibration file starsim_calibration.db
+
+<span class="ansi-cyan-fg">
+
+Checking fit...</span>
+
+Fit with original pars: 0.025092500000000004
+
+Fit with best-fit pars: 0.024768250000000006
+
+✓ Calibration improved fit 0.025092500000000004 --&gt; 0.024768250000000006
+</pre>
+</div>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="16">
+<pre><code>True</code></pre>
+</div>
 </div>
 <p>For more, take a look at <code>test_calibration.py</code> in the <code>tests</code> directory.</p>
 
@@ -1013,7 +1334,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp("https:\/\/starsimhub\.github\.io\/starsim\/");
+        var filterRegex = new RegExp('/' + window.location.host + '/');
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
