@@ -3,7 +3,7 @@ Import all Starsim modules
 """
 
 # Time how long each import takes -- disabled by default, only used for developer debugging
-debug = True
+debug = False
 if debug:
     print('Note: importing Starsim in debug mode')
     from time import time as pytime
