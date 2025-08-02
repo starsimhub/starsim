@@ -14,7 +14,8 @@ __all__ = ['HouseholdDHSNet', 'EvolvingHouseholdDHSNet']
 
 
 class HouseholdDHSNet(ss.Network):
-    """
+    """ Static DHS network
+
     A network class of static households derived from DHS data. There's no formation of new households. The network
     requires a DHS dataset. When this network is initialized it overrides the age and sex of all agents in the sim and
     assigns each agent a household ID. Use with caution if other modules depend upon or alter age and sex too. Because
@@ -26,25 +27,45 @@ class HouseholdDHSNet(ss.Network):
     but we typically don't want all agents to have exactly the same age, so we add a random fractional age to each
     agent.
 
-    **Examples**::
+    This network assumes only one mother per household. Births are automatically added to their mother's household network.
+
+    Args:
+        dhs_data (dataframe): A pandas dataframe containing DHS data with columns 'hh_id' and 'ages'
+
+    Note: the dataframe should look something like this:
+
+            hh_id                ages
+       0        0          72, 17, 30
+       1        1                  37
+       2        2          13, 55, 36
+       3        3  52, 13, 12, 64, 53
+       4        4              30, 66
+
+    **Example**:
+
+        import numpy as np
+        import sciris as sc
         import starsim as ss
-        import pandas as pd
+        import starsim_examples as sse
 
-        # Load the DHS data file
-        dhs_data_path = 'path/to/dhs_data.csv'
-        dhs_data = pd.read_csv(dhs_data_path)
+        # Construct DHS data
+        n = 1000
+        hhid_id = np.arange(n)
+        age_strings = []
+        for i in range(n):
+            household_size = np.random.randint(1,6)
+            ages = np.random.randint(0, 80, household_size)
+            age_strings.append(sc.strjoin(ages))
+        dhs_data = sc.dataframe(hh_id=np.arange(n), ages=age_strings) # If real data are available: dhs_data = pd.read_csv(dhs_data_path)
 
-        # Pass the DHS data to Starsim
-        household_dhs = ss.HouseholdDHSNetwork(dhs_data=dhs_data)
+        household_dhs = sse.HouseholdDHSNet(dhs_data=dhs_data)
+
+        sim = ss.Sim(diseases='sis', networks=household_dhs)
+        sim.run()
+        sim.plot()
     """
-
-    def __init__(self, pars=None, key_dict=None, dhs_data=None, **kwargs):
-        """
-        :param dhs_data: A pandas dataframe containing DHS data with columns 'hh_id' and 'age'
-        This network assumes only one mother per household.
-        Births are automatically added to their mother's household network in demographics.py
-        """
-        super().__init__(key_dict=key_dict, **kwargs)
+    def __init__(self, pars=None, dhs_data=None, **kwargs):
+        super().__init__(**kwargs)
         self.define_pars()
         self.update_pars(pars, **kwargs)
         self.dhs_data = dhs_data
@@ -124,25 +145,24 @@ class HouseholdDHSNet(ss.Network):
         return
 
 
-class EvolvingHouseholdDHSNet(ss.HouseholdDHSNet):
+class EvolvingHouseholdDHSNet(HouseholdDHSNet):
+    """
+    Extends the HouseholdDHSNetwork by:
 
-    def __init__(self, pars=None, key_dict=None, dhs_data=None, **kwargs):
-        """
-        Extends the HouseholdDHSNetwork by:
         1. Assigning one random female as head of each household
-        1. Allowing females who are not current heads of household to move out and start their own household with a random male partner
-        2. Adding new births into the household of the mother
+        2. Allowing females who are not current heads of household to move out and start their own household with a random male partner
+        3. Adding new births into the household of the mother
 
-        :param dhs_data: A pandas dataframe containing DHS data with columns 'hh_id' and 'age'
-
-        This class also accepts the following pars:
-        :param prob_move_out: The probability a female non-head of household moves out to start her own household with a randomly selected partner. Evaluated once at the beginning of each pregnancy.
-        :param update_freq: The frequency of updates in timesteps, e.g. 7 for weekly if using daily timesteps, 1 if using weekly timesteps.
-        """
-        super().__init__(key_dict=key_dict)
+    Args:
+        dhs_data (dataframe): A pandas dataframe containing DHS data with columns 'hh_id' and 'ages'
+        prob_move_out (float): The probability a female non-head of household moves out to start her own household with a randomly selected partner. Evaluated once at the beginning of each pregnancy.
+        update_freq (int): The frequency of updates in timesteps, e.g. 7 for weekly if using daily timesteps, 1 if using weekly timesteps.
+    """
+    def __init__(self, pars=None, dhs_data=None, prob_move_out=_, update_freq=_, **kwargs):
+        super().__init__(**kwargs)
         self.define_pars(
-            prob_move_out=ss.bernoulli(p=0.7), # Probability that female moves out of her household when pregnant and not a head of household
-            update_freq=1,
+            prob_move_out = ss.bernoulli(p=0.7), # Probability that female moves out of her household when pregnant and not a head of household
+            update_freq = 1,
         )
         self.update_pars(pars, **kwargs)
         self.dhs_data = dhs_data
@@ -165,7 +185,6 @@ class EvolvingHouseholdDHSNet(ss.HouseholdDHSNet):
         ppl = self.sim.people
 
         # Find a female head of household if one exists between the ages of 15 and 50
-
         # We just created new households, so the last cluster id is the total number of clusters
         for cluster_id in range(int(self.household_ids[-1])):
             cluster_uids = ss.uids(self.household_ids == cluster_id)
