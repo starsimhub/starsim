@@ -389,13 +389,10 @@ class Sim(ss.Base):
         # Reset the time index (done in the modules as well in mod.finalize())
         self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
 
-        # Scale the results
-        for reskey, res in self.results.items():
-            if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
-                self.results[reskey] = self.results[reskey] * self.pars.pop_scale
-        self.results_ready = True # Results are ready to use
+        # Finalize the results
+        self.finalize_results()
 
-        # Finalize each module
+        # Finalize each module, including the results
         for module in self.module_list:
             module.finalize()
 
@@ -406,6 +403,17 @@ class Sim(ss.Base):
 
         # Generate the summary and finish up
         self.summarize() # Create summary
+        return
+
+    def finalize_results(self):
+        """ Scale the results and remove any "unused" results """
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result): # Note: since Result is a NumPy array, "res" and self.results[key] are not the same object
+                if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
+                    self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+                if np.all(res == res[0]): # Results were not modified during the sim
+                    self.results[reskey].auto_plot = False
+        self.results_ready = True # Results are ready to use
         return
 
     def summarize(self, how='default'):
@@ -458,7 +466,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0, die=True):
+    def shrink(self, inplace=True, size_limit=1.0, intercept=10, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -468,6 +476,7 @@ class Sim(ss.Base):
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
             size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
+            intercept (float): the size (in units of size_limit) to allow for a zero-timestep sim
             die (bool): whether to raise an exception if the shrink failed
 
         Returns:
@@ -502,11 +511,11 @@ class Sim(ss.Base):
 
             # Check that the module successfully shrunk
             if size_limit:
-                max_size = size_limit*len(sim)/1e3 # Maximum size in MB
+                max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
                 for mod in sim.module_list:
-                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
+                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
                     if size > max_size:
-                        errormsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
+                        errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
                         if die:
                             raise RuntimeError(errormsg)
                         else:
@@ -818,7 +827,7 @@ class Sim(ss.Base):
 
         sc.figlayout(fig=fig)
 
-        return ss.return_fig(fig)
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 class AlreadyRunError(RuntimeError):

@@ -1,0 +1,29 @@
+name: Publish Starsim docs (manual)
+
+on: workflow_dispatch
+
+jobs:
+  install:
+    name: Install Starsim
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+    - name: Install Starsim
+      run: pip install -e .[dev]
+
+  publish:
+    name: Publish Starsim docs
+    needs: install
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Quarto publish
+      working-directory: ./docs
+      run: ./publish

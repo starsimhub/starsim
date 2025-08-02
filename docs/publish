@@ -1,5 +1,12 @@
 #!/bin/bash
 # Build & publish site to GitHub Pages
 
-./build_docs
-quarto publish gh-pages
+# Rebuild docs
+./build_docs.py quarto notidy --cache-refresh
+
+# Publish automatically
+quarto publish gh-pages --no-render --no-prompt --no-browser
+
+# Manually tidy
+./clean_outputs.py
+./normalize_notebooks.py

@@ -5,6 +5,8 @@ import numpy as np
 import starsim as ss
 ss_float_ = ss.dtypes.float
 
+__all__ = ['DiskNet']
+
 class DiskNet(ss.Network):
     """
     Disk graph in which edges are made between agents located within a user-defined radius.

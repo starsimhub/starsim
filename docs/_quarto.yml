@@ -76,6 +76,7 @@ website:
             - tutorials/t4_diseases.ipynb
             - tutorials/t5_networks.ipynb
             - tutorials/t6_interventions.ipynb
+            - tutorials/solutions.ipynb
         - section: "**User guide**"
           contents:
           - section: "Introduction"
@@ -130,7 +131,7 @@ website:
         - section: "**Modules**"
           contents:
             - api/modules.qmd
-            - api/disease.qmd
+            - api/diseases.qmd
             - api/networks.qmd
             - api/demographics.qmd
             - api/interventions.qmd
@@ -175,6 +176,15 @@ interlinks:
       url: https://docs.scipy.org/doc/scipy/
     matplotlib:
       url: https://matplotlib.org/stable/
+    # sciris: # TODO: need to build this first
+    #   url: https://docs.sciris.org/
+  autolink: true
+  aliases:
+    numpy: [np]
+    pandas: [pd]
+    matplotlib: [plt]
+    sciris: [sc]
+    starsim: [null, ss]
 
 quartodoc:
   package: starsim
@@ -190,7 +200,7 @@ quartodoc:
         - arrays
         - calibration
         - demographics
-        - disease
+        - diseases
         - distributions
         - interventions
         - loop

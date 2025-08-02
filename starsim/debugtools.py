@@ -101,7 +101,7 @@ class Profile(sc.profile):
         return
 
 
-class Debugger:
+class Debugger(sc.prettyobj):
     """
     Step through one or more sims and pause or raise an exception when a condition is met
 
@@ -198,7 +198,7 @@ class Debugger:
         return msg
 
     def equal_dists(self, *sims):
-
+        """ Check if the dists are equal """
         dstates = []
         for sim in sims:
             ds = {d.trace:d.show_state(output=True) for d in sim.dists.dists.values()}

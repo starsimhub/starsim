@@ -41,7 +41,6 @@ class HIV(ss.Infection):
         dur = module.t.dt
         scale = (module.cd4[uids] - p.cd4_max)**2 / (p.cd4_min - p.cd4_max)**2 # Scale by cd4
         out = p.p_death.to_prob(dur, scale=scale)
-        print('HI', dur, scale, out)
         return out
 
     def step_state(self):

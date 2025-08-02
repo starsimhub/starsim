@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 """
 Build documentation with Quarto; usage is simply:
-./build_docs
+./build_docs.py
 
 Notebook execution options are:
-  ./build_docs jupyter # Execute with jcache in parallel (default)
-  ./build_docs quarto # Execute with quarto in serial
+  ./build_docs.py jupyter # Execute with jcache in parallel (default)
+  ./build_docs.py quarto # Execute with quarto in serial
 
 Additional arguments are passed to quarto render, e.g.:
-    ./build_docs quarto --cache-refresh
-"""
+    ./build_docs.py quarto --cache-refresh
 
+To skip tidying up (normalizing notebooks and removing outputs), use
+    ./build_docs.py notidy
+"""
 import os
 import sys
 import sciris as sc
@@ -25,13 +27,20 @@ debug = False
 execute = None
 folders = ['tutorials', 'user_guide']
 valid = ['jupyter', 'quarto', 'none']
-if len(sys.argv)>1:
-    execute = sys.argv[1]
+args = list(sys.argv)
+if 'notidy' in args:
+    args.remove('notidy')
+    tidy = False
+else:
+    tidy = True
+
+if len(args) > 1:
+    execute = args[1]
     if execute == '--execute': execute = 'quarto' # Replace as an alias
     if execute not in valid:
         errormsg = f'{execute} not a valid choice; choices are {sc.strjoin(valid)}'
         raise ValueError(errormsg)
-    argstr = sc.strjoin(sys.argv[2:], sep=' ')
+    argstr = sc.strjoin(args[2:], sep=' ')
 else:
     execute = 'jupyter'
     argstr = ''
@@ -63,22 +72,23 @@ run('python -m quartodoc interlinks')
 
 if execute == 'jupyter':
     sc.heading('Executing Jupyter notebooks via jcache')
-    run('./execute_notebooks')
+    run('./jcache_execute_notebooks')
 
 # Build the Quarto documentation
 if execute == 'quarto':
     sc.heading('Rendering docs with notebook execution...')
-    run(f'quarto render --execute{argstr}')
+    run(f'quarto render --execute {argstr}')
 else:
     sc.heading('Rendering docs...')
     run(f'quarto render{argstr}')
 
 # Tidy up
-sc.heading("Tidying outputs...")
-run('./clean_outputs')
+if tidy:
+    sc.heading("Tidying outputs...")
+    run('./clean_outputs.py')
 
-sc.heading("Normalizing notebooks...")
-run('./normalize_notebooks')
+    sc.heading("Normalizing notebooks...")
+    run('./normalize_notebooks.py')
 
 T.toc('Docs built')
 print(f"\nIndex:\n{os.getcwd()}/_build/index.html")

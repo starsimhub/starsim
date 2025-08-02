@@ -27,7 +27,7 @@ class Dx(Product):
     Generic class for diagnostics
     """
 
-    def __init__(self, df, hierarchy=None, *args, **kwargs):
+    def __init__(self, df=None, hierarchy=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
         self.health_states = df.state.unique()
@@ -58,7 +58,7 @@ class Dx(Product):
         """
 
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
-        results = pd.Series(self.default_value,index=uids)
+        results = pd.Series(self.default_value, index=uids)
 
         for disease in self.diseases:
             for state in self.health_states:
@@ -87,7 +87,7 @@ class Tx(Product):
     """
     Treatment products change fundamental properties about People, including their prognoses and infectiousness.
     """
-    def __init__(self, df, *args, **kwargs):
+    def __init__(self, df=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
         self.diseases = df.disease.unique()

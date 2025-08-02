@@ -214,7 +214,16 @@ class BaseTest(Intervention):
         return accept_uids
 
     def check_eligibility(self):
-        raise NotImplementedError
+        """
+        Return an array of indices of agents eligible for screening at time t,
+        e.g. matching demographic characteristics
+        """
+        sim = self.sim
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.auids  # Probably not required
+        return is_eligible
 
 
 class BaseScreening(BaseTest):
@@ -224,11 +233,13 @@ class BaseScreening(BaseTest):
     Args:
         kwargs (dict): passed to BaseTest
     """
-    def check_eligibility(self):
-        """
-        Check eligibility
-        """
-        raise NotImplementedError
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('n_screened', dtype=int, scale=True, label='Number screened'),
+            ss.Result('n_dx',       dtype=int, scale=True, label='Number diagnosed'),
+        )
+        return
 
     def step(self):
         """

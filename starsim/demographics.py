@@ -346,6 +346,7 @@ class Pregnancy(Demographics):
             ss.BoolState('fecund', default=True, label='Female of childbearing age'),
             ss.BoolState('pregnant', label='Pregnant'),  # Currently pregnant
             ss.BoolState('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.FloatArr('parity', label='Parity', default=0),  # Number of pregnancies
             ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
@@ -488,6 +489,7 @@ class Pregnancy(Demographics):
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
+        self.parity[deliveries] += 1  # Increment parity for the mothers
 
         # Add connections to any postnatal transmission layers
         for lkey, layer in self.sim.networks.items():
