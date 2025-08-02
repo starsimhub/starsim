@@ -332,20 +332,11 @@ class syph_screening(ss.routine_screening):
             is_eligible = sim.people.auids  # Probably not required
         return is_eligible
 
-    def init_results(self):
-        super().init_results()
-        self.define_results(
-            ss.Result('n_screened', dtype=int, label='Number screened'),
-            ss.Result('n_dx',       dtype=int, label='Number diagnosed'),
-        )
-        return
-
 
 class syph_treatment(ss.treat_num):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.requires = Syphilis
         return
 
     def _parse_product_str(self, product):
