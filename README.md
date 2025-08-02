@@ -41,7 +41,7 @@ Starsim can also be installed locally (including optional dependencies for testi
 pip install -e .[dev]
 ```
 
-(Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here[(https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
+(Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here](https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
 
 
 ### R
