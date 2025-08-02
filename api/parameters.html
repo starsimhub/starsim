@@ -421,8 +421,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -543,10 +543,6 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#starsim.parameters.Pars" id="toc-starsim.parameters.Pars" class="nav-link" data-scroll-target="#starsim.parameters.Pars">Pars</a></li>
   <li><a href="#starsim.parameters.SimPars" id="toc-starsim.parameters.SimPars" class="nav-link" data-scroll-target="#starsim.parameters.SimPars">SimPars</a></li>
-  </ul></li>
-  <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
-  <ul class="collapse">
-  <li><a href="#starsim.parameters.make_pars" id="toc-starsim.parameters.make_pars" class="nav-link" data-scroll-target="#starsim.parameters.make_pars">make_pars</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -673,7 +669,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.parameters.SimPars" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.parameters.SimPars">SimPars</h3>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars(<span class="va">self</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, create<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Create the parameters for the simulation. Typically, this function is used internally rather than called by the user; e.g.&nbsp;typical use would be to do sim = ss.Sim() and then inspect sim.pars, rather than calling this function directly.</p>
 <section id="parameters-1" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h4>
@@ -871,7 +867,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="starsim.parameters.SimPars.convert_modules" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.convert_modules">convert_modules</h5>
 <div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.convert_modules()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Convert different types of representations for modules into a standardized object representation that can be parsed and used by a Sim object. Used for starsim classes: - networks, - demographics, - diseases, - analyzers, - interventions, and - connectors.</p>
+<p>Convert different types of representations for modules into a standardized object representation that can be parsed and used by a Sim object</p>
 </section>
 <section id="starsim.parameters.SimPars.is_default" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.is_default">is_default</h5>
@@ -917,32 +913,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_verbose">validate_verbose</h5>
 <div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_verbose()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Validate verbosity</p>
-</section>
-</section>
-</section>
-</section>
-<section id="functions" class="level2">
-<h2 class="anchored" data-anchor-id="functions">Functions</h2>
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>Name</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td><a href="#starsim.parameters.make_pars">make_pars</a></td>
-<td>Shortcut for making a new instance of SimPars</td>
-</tr>
-</tbody>
-</table>
-<section id="starsim.parameters.make_pars" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.parameters.make_pars">make_pars</h3>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>parameters.make_pars(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Shortcut for making a new instance of SimPars</p>
 
 
+</section>
+</section>
 </section>
 </section>
 </section>
@@ -1379,7 +1353,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

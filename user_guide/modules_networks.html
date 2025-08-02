@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Network – Starsim</title>
+<title>Networks – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -345,7 +345,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_networks.html">Network</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_networks.html">Networks</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -418,6 +418,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <div class="sidebar-item-container"> 
   <a href="../tutorials/t6_interventions.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">T6 - Interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
   </div>
 </li>
       </ul>
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -655,6 +661,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#base-classes" id="toc-base-classes" class="nav-link" data-scroll-target="#base-classes">Base classes</a></li>
   <li><a href="#contact-network-implementations" id="toc-contact-network-implementations" class="nav-link" data-scroll-target="#contact-network-implementations">Contact network implementations</a></li>
+  <li><a href="#additional-example-contact-networks" id="toc-additional-example-contact-networks" class="nav-link" data-scroll-target="#additional-example-contact-networks">Additional example contact networks</a></li>
   <li><a href="#mixing-pool-classes" id="toc-mixing-pool-classes" class="nav-link" data-scroll-target="#mixing-pool-classes">Mixing pool classes</a></li>
   <li><a href="#choosing-the-right-network-type" id="toc-choosing-the-right-network-type" class="nav-link" data-scroll-target="#choosing-the-right-network-type">Choosing the right network type</a></li>
   </ul></li>
@@ -666,9 +673,9 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_networks.html">Network</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_networks.html">Networks</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Network</h1>
+<h1 class="title">Networks</h1>
 </div>
 
 
@@ -774,16 +781,16 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="contact-network-implementations">Contact network implementations</h3>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 16%">
-<col style="width: 21%">
-<col style="width: 38%">
+<col style="width: 18%">
 <col style="width: 23%">
+<col style="width: 31%">
+<col style="width: 26%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>Class</th>
 <th>Purpose</th>
-<th>Key Parameters</th>
+<th>Parameters</th>
 <th>Use Case</th>
 </tr>
 </thead>
@@ -801,40 +808,16 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td>General infectious diseases</td>
 </tr>
 <tr class="odd">
-<td><code>ErdosRenyiNet</code></td>
-<td>Probabilistic edges</td>
-<td><code>p</code> (edge probability), <code>dur</code></td>
-<td>Theoretical network studies</td>
-</tr>
-<tr class="even">
-<td><code>DiskNet</code></td>
-<td>Spatial proximity</td>
-<td><code>r</code> (radius), <code>v</code> (velocity)</td>
-<td>Geographic transmission</td>
-</tr>
-<tr class="odd">
-<td><code>NullNet</code></td>
-<td>Self-connections only</td>
-<td><code>n_people</code></td>
-<td>Debugging, placeholders</td>
-</tr>
-<tr class="even">
 <td><code>MFNet</code></td>
 <td>Male-female partnerships</td>
 <td><code>duration</code>, <code>acts</code>, <code>debut</code></td>
 <td>Heterosexual STI transmission</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>MSMNet</code></td>
 <td>Male-male partnerships</td>
 <td><code>duration</code>, <code>acts</code>, <code>participation</code></td>
 <td>MSM STI transmission</td>
-</tr>
-<tr class="even">
-<td><code>EmbeddingNet</code></td>
-<td>Age-assortative MF</td>
-<td><code>male_shift</code>, <code>embedding_func</code></td>
-<td>Age-structured STI modeling</td>
 </tr>
 <tr class="odd">
 <td><code>MaternalNet</code></td>
@@ -857,20 +840,66 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </tbody>
 </table>
 </section>
-<section id="mixing-pool-classes" class="level3">
-<h3 class="anchored" data-anchor-id="mixing-pool-classes">Mixing pool classes</h3>
+<section id="additional-example-contact-networks" class="level3">
+<h3 class="anchored" data-anchor-id="additional-example-contact-networks">Additional example contact networks</h3>
+<p><em>Note: these are available in the <code>starsim_examples</code> module.</em></p>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 16%">
-<col style="width: 21%">
-<col style="width: 38%">
+<col style="width: 18%">
 <col style="width: 23%">
+<col style="width: 31%">
+<col style="width: 26%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>Class</th>
 <th>Purpose</th>
-<th>Key Parameters</th>
+<th>Parameters</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ErdosRenyiNet</code></td>
+<td>Probabilistic edges</td>
+<td><code>p</code> (edge probability), <code>dur</code></td>
+<td>Theoretical network studies</td>
+</tr>
+<tr class="even">
+<td><code>DiskNet</code></td>
+<td>Spatial proximity</td>
+<td><code>r</code> (radius), <code>v</code> (velocity)</td>
+<td>Geographic transmission</td>
+</tr>
+<tr class="odd">
+<td><code>NullNet</code></td>
+<td>Self-connections only</td>
+<td><code>n_people</code></td>
+<td>Debugging, placeholders</td>
+</tr>
+<tr class="even">
+<td><code>EmbeddingNet</code></td>
+<td>Age-assortative MF</td>
+<td><code>male_shift</code>, <code>embedding_func</code></td>
+<td>Age-structured STI modeling</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="mixing-pool-classes" class="level3">
+<h3 class="anchored" data-anchor-id="mixing-pool-classes">Mixing pool classes</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 18%">
+<col style="width: 23%">
+<col style="width: 31%">
+<col style="width: 26%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Class</th>
+<th>Purpose</th>
+<th>Parameters</th>
 <th>Use Case</th>
 </tr>
 </thead>
@@ -878,7 +907,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <tr class="odd">
 <td><code>AgeGroup</code></td>
 <td>Age-based filtering</td>
-<td><code>low</code>, <code>high</code>, <code>do_cache</code></td>
+<td><code>low</code>, <code>high</code></td>
 <td>Defining age groups for mixing</td>
 </tr>
 <tr class="even">
@@ -898,11 +927,32 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="choosing-the-right-network-type" class="level3">
 <h3 class="anchored" data-anchor-id="choosing-the-right-network-type">Choosing the right network type</h3>
-<p><strong>For respiratory diseases (flu, COVID-19, measles):</strong> - <code>RandomNet</code>: Simple random mixing; the default in most cases - <code>MixingPools</code>: Age-structured mixing with contact matrices</p>
-<p><strong>For sexually transmitted infections:</strong> - <code>MFNet</code>: Male-female (heterosexual) transmission - <code>MSMNet</code>: Transmission between men who have sex with men (MSM) - <code>EmbeddingNet</code>: Age-assortative heterosexual mixing</p>
-<p><strong>For mother-to-child transmission:</strong> - <code>PrenatalNet</code>: In-utero transmission (HIV, syphilis) - <code>PostnatalNet</code>: Birth/breastfeeding transmission (HIV, HBV)</p>
-<p><strong>For special purposes:</strong> - <code>StaticNet</code>: Use existing NetworkX graphs - <code>DiskNet</code>: Proof-of-concept spatial/geographic transmission<br>
-- <code>NullNet</code>: Testing/debugging without transmission - <code>ErdosRenyiNet</code>: Theoretical network analysis</p>
+<ul>
+<li><strong>For respiratory diseases (flu, COVID-19, measles):</strong>
+<ul>
+<li><code>RandomNet</code>: Simple random mixing; the default in most cases</li>
+<li><code>MixingPools</code>: Age-structured mixing with contact matrices</li>
+</ul></li>
+<li><strong>For sexually transmitted infections:</strong>
+<ul>
+<li><code>MFNet</code>: Male-female (heterosexual) transmission</li>
+<li><code>MSMNet</code>: Transmission between men who have sex with men (MSM)</li>
+<li><code>EmbeddingNet</code>: Age-assortative heterosexual mixing</li>
+</ul></li>
+<li><strong>For mother-to-child transmission:</strong>
+<ul>
+<li><code>PrenatalNet</code>: In-utero transmission (HIV, syphilis)</li>
+<li><code>PostnatalNet</code>: Birth/breastfeeding transmission (HIV, HBV)</li>
+</ul></li>
+<li><strong>For special purposes:</strong>
+<ul>
+<li><code>StaticNet</code>: Use existing NetworkX graphs</li>
+<li><code>DiskNet</code>: Proof-of-concept spatial/geographic transmission<br>
+</li>
+<li><code>NullNet</code>: Testing/debugging without transmission</li>
+<li><code>ErdosRenyiNet</code>: Theoretical network analysis</li>
+</ul></li>
+</ul>
 </section>
 </section>
 <section id="core-implementation-methods" class="level2">
@@ -964,13 +1014,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a mixing pool</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span>ss.timeprob(<span class="fl">0.1</span>), contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>)) <span class="co"># A single mixing pool</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR() <span class="co"># Beta doesn't matter, that's just for networks</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>)) <span class="co"># A single mixing pool</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mp, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Mixing Pool'</span>)</span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a network</span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(beta<span class="op">=</span>ss.timeprob(<span class="fl">0.1</span>))</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>net, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Contact Network'</span>)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim1, sim2]).run()</span>
@@ -989,12 +1039,11 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sir'</span>, <span class="co"># Use this pool only for SIR, not other diseases (HIV in this example)</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> <span class="kw">lambda</span> sim: sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>, <span class="co"># Infection sources will be agents under age 15</span></span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> ss.AgeGroup(low<span class="op">=</span><span class="dv">15</span>, high<span class="op">=</span><span class="va">None</span>), <span class="co"># Here demonstrating the AgeGroup class, identical to lambda sim: sim.people.age &gt;= 15</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    contacts <span class="op">=</span> ss.poisson(lam<span class="op">=</span><span class="dv">2</span>), <span class="co"># Contacts will be poisson distributed with a mean of 2</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> ss.timeprob(<span class="fl">0.2</span>), <span class="co"># And we set beta to 0.2, automatically adjusting for time units via the ss.beta wrapper</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>[<span class="st">'sir'</span>, <span class="st">'hiv'</span>], networks<span class="op">=</span>mp) <span class="co"># Two diseases, only "sir" will have transmission</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> ss.poisson(lam<span class="op">=</span><span class="dv">5</span>), <span class="co"># Contacts will be poisson distributed with a mean of 5</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>[<span class="st">'sir'</span>, <span class="st">'sis'</span>], networks<span class="op">=</span>mp) <span class="co"># Two diseases, but only "sir" will have transmission</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p><code>MixingPools</code> (plural) allows you to configure multiple individual <code>MixingPool</code> pools. This first example shows how to do age mixing. Like <code>MixingPool</code>, <code>MixingPools</code> also takes <code>src</code> and <code>dst</code>, however each of these parameters must be a dictionary with key specifying the name of each group and value as in the singlular mixing pool proving the uids by a callable function or list of uids.</p>
 <div id="c4037c42" class="cell">
@@ -1016,48 +1065,47 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>plt.imshow(cm)</span>
 <span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>mps <span class="op">=</span> ss.MixingPools(</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    contacts <span class="op">=</span> cm,</span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> ss.timeprob(<span class="fl">0.2</span>),</span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> groups,</span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> groups,</span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Track new infections by age using an Analyzer, you'll learn about these in a subsequent tutorial</span></span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> InfectionsByAge(ss.Analyzer):</span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, bins, <span class="op">**</span>kwargs):</span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.bins <span class="op">=</span> bins</span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
-<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_post(<span class="va">self</span>):</span>
-<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_post()</span>
-<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(<span class="va">self</span>.bins)<span class="op">-</span><span class="dv">1</span>))</span>
-<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
-<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>(): <span class="cf">return</span></span>
-<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, :] <span class="op">=</span> np.histogram(<span class="va">self</span>.sim.people.age[new_inf], bins<span class="op">=</span><span class="va">self</span>.bins)[<span class="dv">0</span>]</span>
-<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>):</span>
-<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>        fig, ax <span class="op">=</span> plt.subplots()</span>
-<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>        ax.set_prop_cycle(<span class="st">'color'</span>, plt.cm.nipy_spectral(np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="bu">len</span>(<span class="va">self</span>.bins))))</span>
-<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i, (b1, b2) <span class="kw">in</span> <span class="bu">enumerate</span>(<span class="bu">zip</span>(<span class="va">self</span>.bins[:<span class="op">-</span><span class="dv">1</span>], <span class="va">self</span>.bins[<span class="dv">1</span>:])):</span>
-<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>            ax.plot(<span class="va">self</span>.timevec, <span class="va">self</span>.new_cases[:,i], label<span class="op">=</span><span class="ss">f'Age </span><span class="sc">{</span>b1<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>b2<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a>        ax.legend()<span class="op">;</span> ax.set_xlabel(<span class="st">'Year'</span>)<span class="op">;</span> ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
-<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> InfectionsByAge(np.concatenate([lows, [<span class="dv">1000</span>]]))</span>
-<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
-<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dur<span class="op">=</span><span class="dv">5</span>, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">4</span>, n_agents<span class="op">=</span><span class="dv">1000</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>sim.analyzers[<span class="dv">0</span>].plot()</span>
-<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'↑ The default age distribution is uniform, so the 75+ group contains many more people than the other age groups, explaining the larger number of new infections.'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> cm,</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> groups,</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> groups,</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Track new infections by age using an Analyzer, you'll learn about these in a subsequent tutorial</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> InfectionsByAge(ss.Analyzer):</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, bins, <span class="op">**</span>kwargs):</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.bins <span class="op">=</span> bins</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_post(<span class="va">self</span>):</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_post()</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(<span class="va">self</span>.bins)<span class="op">-</span><span class="dv">1</span>))</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>(): <span class="cf">return</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, :] <span class="op">=</span> np.histogram(<span class="va">self</span>.sim.people.age[new_inf], bins<span class="op">=</span><span class="va">self</span>.bins)[<span class="dv">0</span>]</span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>):</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>        fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>        ax.set_prop_cycle(<span class="st">'color'</span>, plt.cm.nipy_spectral(np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="bu">len</span>(<span class="va">self</span>.bins))))</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i, (b1, b2) <span class="kw">in</span> <span class="bu">enumerate</span>(<span class="bu">zip</span>(<span class="va">self</span>.bins[:<span class="op">-</span><span class="dv">1</span>], <span class="va">self</span>.bins[<span class="dv">1</span>:])):</span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>            ax.plot(<span class="va">self</span>.timevec, <span class="va">self</span>.new_cases[:,i], label<span class="op">=</span><span class="ss">f'Age </span><span class="sc">{</span>b1<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>b2<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>        ax.legend()<span class="op">;</span> ax.set_xlabel(<span class="st">'Year'</span>)<span class="op">;</span> ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> InfectionsByAge(np.concatenate([lows, [<span class="dv">1000</span>]]))</span>
+<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
+<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dur<span class="op">=</span><span class="dv">5</span>, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">4</span>, n_agents<span class="op">=</span><span class="dv">1000</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>sim.analyzers[<span class="dv">0</span>].plot()</span>
+<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'↑ The default age distribution is uniform, so the 75+ group contains many more people than the other age groups, explaining the larger number of new infections.'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Mixing pools work well with properties other than age. Here’s an example that mixes by socio-economic status (SES).</p>
 <div id="291469a2" class="cell">
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define SES states</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ses <span class="op">=</span> sc.dictobj(low<span class="op">=</span><span class="dv">0</span>, mid<span class="op">=</span><span class="dv">1</span>, high<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ses <span class="op">=</span> sc.objdict(low<span class="op">=</span><span class="dv">0</span>, mid<span class="op">=</span><span class="dv">1</span>, high<span class="op">=</span><span class="dv">2</span>)</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create 5,000 people adding 50% LOW, 30% MID, and 20% HIGH SES</span></span>
 <span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>ses_arr <span class="op">=</span> ss.FloatArr(<span class="st">'ses'</span>, default<span class="op">=</span>ss.choice(a<span class="op">=</span>ses.values(), p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.3</span>, <span class="fl">0.2</span>]))</span>
@@ -1069,48 +1117,47 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> {k: <span class="kw">lambda</span> sim, s<span class="op">=</span>v: ss.uids(sim.people.ses <span class="op">==</span> s) <span class="cf">for</span> k,v <span class="kw">in</span> ses.items()[:<span class="op">-</span><span class="dv">1</span>]}, <span class="co"># People in the HIGH group have no route to acquire new infections, for demonstration purposes here</span></span>
 <span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># src on rows (1st dimension), dst on cols (2nd dimension)</span></span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    contacts <span class="op">=</span> np.array([</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> np.array([</span>
 <span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">2.50</span>, <span class="fl">0.00</span>], <span class="co"># low→low,  low→mid</span></span>
 <span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">0.05</span>, <span class="fl">1.75</span>], <span class="co"># mid→low,  mid→mid</span></span>
 <span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">0.00</span>, <span class="fl">0.15</span>], <span class="co"># high→low, high→mid</span></span>
 <span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    ]),</span>
-<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> ss.timeprob(<span class="fl">0.2</span>),</span>
-<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Create an analyzer to track results by SES group</span></span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> New_Infections_By_SES(ss.Analyzer):</span>
-<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
-<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(ses)))</span>
-<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
-<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>():</span>
-<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
-<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> value <span class="kw">in</span> ses.values():</span>
-<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, value] <span class="op">=</span> np.count_nonzero(new_inf <span class="op">&amp;</span> (<span class="va">self</span>.sim.people.ses<span class="op">==</span>value))</span>
-<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> New_Infections_By_SES()</span>
-<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> seeding(<span class="va">self</span>, sim, uids):</span>
-<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.zeros(<span class="bu">len</span>(uids))</span>
-<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>    high_ses <span class="op">=</span> ss.uids(sim.people.ses <span class="op">==</span> ses.high)</span>
-<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>    p[high_ses] <span class="op">=</span> <span class="fl">0.1</span> <span class="co"># Seed infections into 10% of SES HIGH</span></span>
-<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
-<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>seeding)) <span class="co"># The probability of being selected as a seed is determined on a per-agent basis by the above 'seeding' function</span></span>
-<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, dur<span class="op">=</span><span class="dv">35</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
-<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a>new_cases <span class="op">=</span> sim.analyzers[<span class="dv">0</span>].new_cases</span>
-<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key,value <span class="kw">in</span> ses.items():</span>
-<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>    ax.plot(sim.results.timevec, new_cases[:,value], label<span class="op">=</span>key)</span>
-<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
-<span id="cb8-53"><a href="#cb8-53" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'Year'</span>)</span>
-<span id="cb8-54"><a href="#cb8-54" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
-<span id="cb8-55"><a href="#cb8-55" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Create an analyzer to track results by SES group</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> New_Infections_By_SES(ss.Analyzer):</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(ses)))</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>():</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> value <span class="kw">in</span> ses.values():</span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, value] <span class="op">=</span> np.count_nonzero(new_inf <span class="op">&amp;</span> (<span class="va">self</span>.sim.people.ses<span class="op">==</span>value))</span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> New_Infections_By_SES()</span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> seeding(<span class="va">self</span>, sim, uids):</span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.zeros(<span class="bu">len</span>(uids))</span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>    high_ses <span class="op">=</span> ss.uids(sim.people.ses <span class="op">==</span> ses.high)</span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>    p[high_ses] <span class="op">=</span> <span class="fl">0.1</span> <span class="co"># Seed infections into 10% of SES HIGH</span></span>
+<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
+<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>seeding), beta<span class="op">=</span>ss.peryear(<span class="fl">0.2</span>)) <span class="co"># The probability of being selected as a seed is determined on a per-agent basis by the above 'seeding' function</span></span>
+<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, dur<span class="op">=</span><span class="dv">35</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>new_cases <span class="op">=</span> sim.analyzers[<span class="dv">0</span>].new_cases</span>
+<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key,value <span class="kw">in</span> ses.items():</span>
+<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a>    ax.plot(sim.results.timevec, new_cases[:,value], label<span class="op">=</span>key)</span>
+<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
+<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'Year'</span>)</span>
+<span id="cb8-53"><a href="#cb8-53" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
+<span id="cb8-54"><a href="#cb8-54" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>In the above figure, infections are seeded into the high group at the beginning of the simulation, explaining the spike in new cases at that time. High SES can only infect mid SES, so the mid (orange) wave follows. Low SES can only become infected by mid SES in this example, so the blue wave follows. This example intentionally demonstrates the directional nature of mixing pools and includes strong mixing within groups and bottlenecks between groups to make the point.</p>
 
@@ -1549,7 +1596,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

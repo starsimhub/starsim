@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -676,7 +682,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Starsim models are designed to capture disease dynamics within a population of agents, which typically represent people (but may represent animals or other things). In keeping with this, the basic ingredients of a Starsim model are the <code>People</code> class, which store all the relevant attributes about people, a collection of <code>Modules</code> that determine what happens to people on each time step, and the <code>Sim</code> class, which pulls all the components together, runs the simulation, and stores the <code>Results</code>.</p>
 <section id="overview-of-people" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-people">Overview of People</h2>
-<p>More details on the <code>People</code> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <code>People</code> class can be easily exported to a dataframe, e.g.&nbsp;</p>
+<p>More details on the <code>People</code> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <code>People</code> class can be easily exported to a dataframe, e.g.:</p>
 <div id="d6fcbe2a" class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -698,7 +704,15 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="overview-of-modules" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-modules">Overview of Modules</h2>
-<p>Starsim contains the following kinds of modules, listed below in the order that they are typically updated: * Demographics * Diseases * Connectors * Networks * Interventions * Analyzers</p>
+<p>Starsim contains the following kinds of modules, listed below in the order that they are typically updated:</p>
+<ul>
+<li>Demographics</li>
+<li>Diseases</li>
+<li>Connectors</li>
+<li>Networks</li>
+<li>Interventions</li>
+<li>Analyzers</li>
+</ul>
 <p>Modules typically store <em>parameters</em> (e.g.&nbsp;the transmission probability), <em>states</em> of people (e.g.&nbsp;whether they are susceptible, infected, or recovered), and <em>results</em> (e.g.&nbsp;the number of people infected at each point in time).</p>
 </section>
 <section id="overview-of-a-sim" class="level2">
@@ -1155,7 +1169,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

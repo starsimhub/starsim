@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -740,7 +746,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="matters-of-time">Matters of time</h2>
 <p>The default for Starsim models is the start simulations in 1995 and simulate with an annual timestep for 35 years. All of this can be easily changed within the main <code>pars</code> dictionary or by passing alternative values straight to the sim, e.g.&nbsp;</p>
 <div id="ad4fac82" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(start<span class="op">=</span><span class="st">'2020-01-01'</span>, stop<span class="op">=</span><span class="st">'2021-01-01'</span>, dt<span class="op">=</span>ss.Dur(months<span class="op">=</span><span class="dv">1</span>), diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>network)  <span class="co"># Simulate from 2020 for 1 year with a monthly timestep</span></span>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(start<span class="op">=</span><span class="st">'2020-01-01'</span>, stop<span class="op">=</span><span class="st">'2021-01-01'</span>, dt<span class="op">=</span>ss.months(<span class="dv">1</span>), diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>network)  <span class="co"># Simulate from 2020 for 1 year with a monthly timestep</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
@@ -1212,7 +1218,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

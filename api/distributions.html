@@ -421,8 +421,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -544,6 +544,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <li><a href="#starsim.distributions.Dist" id="toc-starsim.distributions.Dist" class="nav-link" data-scroll-target="#starsim.distributions.Dist">Dist</a></li>
   <li><a href="#starsim.distributions.Dists" id="toc-starsim.distributions.Dists" class="nav-link" data-scroll-target="#starsim.distributions.Dists">Dists</a></li>
   <li><a href="#starsim.distributions.multi_random" id="toc-starsim.distributions.multi_random" class="nav-link" data-scroll-target="#starsim.distributions.multi_random">multi_random</a></li>
+  <li><a href="#starsim.distributions.scale_types" id="toc-starsim.distributions.scale_types" class="nav-link" data-scroll-target="#starsim.distributions.scale_types">scale_types</a></li>
   </ul></li>
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
   <ul class="collapse">
@@ -587,6 +588,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td><a href="#starsim.distributions.multi_random">multi_random</a></td>
 <td>A class for holding two or more ss.random() distributions, and generating</td>
 </tr>
+<tr class="even">
+<td><a href="#starsim.distributions.scale_types">scale_types</a></td>
+<td>Define how distributions scale</td>
+</tr>
 </tbody>
 </table>
 <section id="starsim.distributions.Dist" class="level3">
@@ -596,17 +601,20 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    dist<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    distname<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    offset<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    strict<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    auto<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    sim<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    module<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    debug<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    unit<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    offset<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    strict<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    auto<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    sim<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    module<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    mock<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    debug<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Base class for tracking one random number generator associated with one distribution, i.e.&nbsp;one decision per timestep.</p>
-<p>See ss.dist_list for a full list of supported distributions.</p>
+<p>See <code>ss.dist_list</code> for a full list of supported distributions. Parameter inputs tend to follow SciPy’s, rather than NumPy’s, definitions (although in most cases they’re the same). See also <code>ss.distributions.scale_types</code> for more information on how different distributions scale by time.</p>
+<p>Note: by default, <code>ss.Dist</code> is initialized with an <code>ss.Sim</code> object to ensure random number reproducibility. You can override this with either <code>ss.Dist(strict=False)</code> on creation, or <code>dist.init(force=True)</code> after creation.</p>
 <p>Although it’s possible in theory to define a custom distribution (i.e., not one from NumPy or SciPy), in practice this is difficult. The distribution needs to have both a way to return random variates (easy), as well as the probability point function (inverse CDF). In addition, the distribution must be able to take a NumPy RNG as its bit generator. It’s easier to just use a default Dist (e.g., ss.random()), and then take its output as input (i.e., quantiles) for whatever custom distribution you want to create.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -623,7 +631,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <tr class="odd">
 <td>dist</td>
 <td><code>rv_generic</code></td>
-<td>optional; a scipy.stats distribution (frozen or not) to get the ppf from</td>
+<td>optional; a <code>scipy.stats</code> distribution (frozen or not) to get the ppf from</td>
 <td><code>None</code></td>
 </tr>
 <tr class="even">
@@ -639,42 +647,60 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td><code>None</code></td>
 </tr>
 <tr class="even">
+<td>unit</td>
+<td>str/<code>ss.TimePar</code></td>
+<td>if provided, convert the output of the distribution to a timepar (e.g.&nbsp;rate or duration); can also be inferred from distribution parameters (see examples below)</td>
+<td><code>None</code></td>
+</tr>
+<tr class="odd">
 <td>seed</td>
 <td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
 <td>the user-chosen random seed (e.g.&nbsp;3)</td>
 <td><code>None</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>offset</td>
 <td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
 <td>the seed offset; will be automatically assigned (based on hashing the name) if None</td>
 <td><code>None</code></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>strict</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>if True, require initialization and invalidate after each call to rvs()</td>
 <td><code>True</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>auto</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to auto-reset the state after each draw</td>
 <td><code>True</code></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>sim</td>
 <td><a href="../api/sim.html#starsim.sim.Sim">Sim</a></td>
 <td>usually determined on initialization; the sim to use as input to callable parameters</td>
 <td><code>None</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>module</td>
 <td><a href="../api/modules.html#starsim.modules.Module">Module</a></td>
 <td>usually determined on initialization; the module to use as input to callable parameters</td>
 <td><code>None</code></td>
 </tr>
+<tr class="odd">
+<td>mock</td>
+<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td>if provided, then initialize with a mock Sim object (of size <code>mock</code>) for debugging purposes</td>
+<td><code>False</code></td>
+</tr>
 <tr class="even">
+<td>debug</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>print out additional detail</td>
+<td><code>False</code></td>
+</tr>
+<tr class="odd">
 <td>kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>parameters of the distribution</td>
@@ -683,7 +709,19 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </tbody>
 </table>
 <p><strong>Examples</strong>:</p>
-<pre><code>dist = ss.Dist(sps.norm, loc=3)
+<pre><code># Create a Bernoulli distribution
+p_death = ss.bernoulli(p=0.1).init(force=True)
+p_death.rvs(50) # Create 50 draws
+
+# Create a normal distribution that's also a timepar
+dur_infection = ss.normal(loc=12, scale=2, unit='years')
+dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
+dur_infection = ss.normal(loc=ss.years(12), scale=2)) # Same as above
+dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
+dur_infection.init(force=True).plot_hist() # Show results
+
+# Create a distribution manually
+dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
 dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 </section>
 <section id="attributes" class="level4">
@@ -770,12 +808,12 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 <td>Return default random numbers for scalar parameters; not for the user</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.distributions.Dist.plot_hist">plot_hist</a></td>
-<td>Plot the current state of the RNG as a histogram</td>
+<td><a href="#starsim.distributions.Dist.mock">mock</a></td>
+<td>Create a distribution using a mock sim for testing purposes</td>
 </tr>
 <tr class="odd">
-<td><a href="#starsim.distributions.Dist.postprocess_timepar">postprocess_timepar</a></td>
-<td>Scale random variates after generation; not for the user</td>
+<td><a href="#starsim.distributions.Dist.plot_hist">plot_hist</a></td>
+<td>Plot the current state of the RNG as a histogram</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.distributions.Dist.ppf">ppf</a></td>
@@ -802,20 +840,28 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 <td>Simple way to get simple random numbers</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.distributions.Dist.randround">randround</a></td>
+<td>Round the values up or down to an integer stochastically; usually called via <code>dist.rvs(round=True)</code></td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.distributions.Dist.reset">reset</a></td>
 <td>Restore state, allowing the same numbers to be resampled</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.distributions.Dist.rvs">rvs</a></td>
 <td>Get random variates – use this!</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.distributions.Dist.set">set</a></td>
 <td>Set (change) the distribution type, or one or more parameters of the distribution</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.distributions.Dist.show_state">show_state</a></td>
 <td>Show the state of the object</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.distributions.Dist.shrink">shrink</a></td>
+<td>Shrink the size of the module for saving to disk</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.distributions.Dist.sync_pars">sync_pars</a></td>
@@ -828,6 +874,10 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 <tr class="even">
 <td><a href="#starsim.distributions.Dist.update_dist_pars">update_dist_pars</a></td>
 <td>Update SciPy distribution parameters; not for the user</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.distributions.Dist.validate_pars">validate_pars</a></td>
+<td>Check if parameters are valid; only used for non-SciPy distributions</td>
 </tr>
 </tbody>
 </table>
@@ -843,7 +893,7 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 </section>
 <section id="starsim.distributions.Dist.convert_callable" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.convert_callable">convert_callable</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.convert_callable(key, val, size, uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.convert_callable(parkey, func, size, uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Method to handle how callable parameters are processed; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.convert_timepars" class="level5">
@@ -877,6 +927,58 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 <span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    force<span class="op">=</span><span class="va">False</span>,</span>
 <span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Calculate the starting seed and create the RNG</p>
+<p>Typically this is not invoked by the user, although the user can call it with force=True to initialize a distribution manually independently of a <code>ss.Sim</code> object (which is equivalent to setting strict=False when creating the dist).</p>
+<section id="parameters-1" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>trace</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the distribution’s location within the sim</td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>seed</td>
+<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td>the base random number seed that other random number seeds will be generated from</td>
+<td><code>None</code></td>
+</tr>
+<tr class="odd">
+<td>module</td>
+<td><code>ss.Module</code></td>
+<td>the parent module</td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>sim</td>
+<td><code>ss.Sim</code></td>
+<td>the parent sim</td>
+<td><code>None</code></td>
+</tr>
+<tr class="odd">
+<td>slots</td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>the agent slots of the parent sim</td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>force</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to skip validation (if the dist has already been initialized, and if any inputs are None)</td>
+<td><code>False</code></td>
+</tr>
+</tbody>
+</table>
+</section>
 </section>
 <section id="starsim.distributions.Dist.jump" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.jump">jump</h5>
@@ -887,8 +989,8 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.jump_dt">jump_dt</h5>
 <div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.jump_dt(ti<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Automatically jump on the next value of dt</p>
-<section id="parameters-1" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
+<section id="parameters-2" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -929,49 +1031,84 @@ dist.rvs(10) # Return 10 normally distributed random numbers</code></pre>
 <div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.make_rvs()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Return default random numbers for scalar parameters; not for the user</p>
 </section>
+<section id="starsim.distributions.Dist.mock" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.Dist.mock">mock</h5>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.mock(trace<span class="op">=</span><span class="st">'mock'</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Create a distribution using a mock sim for testing purposes</p>
+<section id="parameters-3" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>trace</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the “trace” of the distribution (normally, where it would be located in the sim)</td>
+<td><code>'mock'</code></td>
+</tr>
+<tr class="even">
+<td>**kwargs</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>ss.mock_sim()</code> as well as <code>ss.mock_module()</code> (typically time args, e.g.&nbsp;dt)</td>
+<td><code>{}</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>:</p>
+<pre><code>dist = ss.normal(3, 2, unit='years').mock(dt=ss.days(1))
+dist.rvs(10)</code></pre>
+</section>
+</section>
 <section id="starsim.distributions.Dist.plot_hist" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.plot_hist">plot_hist</h5>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.plot_hist(n<span class="op">=</span><span class="dv">1000</span>, bins<span class="op">=</span><span class="va">None</span>, fig_kw<span class="op">=</span><span class="va">None</span>, hist_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.plot_hist(n<span class="op">=</span><span class="dv">1000</span>, bins<span class="op">=</span><span class="va">None</span>, fig_kw<span class="op">=</span><span class="va">None</span>, hist_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Plot the current state of the RNG as a histogram</p>
-</section>
-<section id="starsim.distributions.Dist.postprocess_timepar" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.distributions.Dist.postprocess_timepar">postprocess_timepar</h5>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.postprocess_timepar(rvs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Scale random variates after generation; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.ppf" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.ppf">ppf</h5>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.ppf(rands)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.ppf(rands)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Return default random numbers for array parameters; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.process_dist" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.process_dist">process_dist</h5>
-<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_dist()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_dist()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Ensure the distribution works; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.process_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.process_pars">process_pars</h5>
-<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_pars(call<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_pars(call<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Ensure the supplied dist and parameters are valid, and initialize them; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.process_seed" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.process_seed">process_seed</h5>
-<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_seed(trace<span class="op">=</span><span class="va">None</span>, seed<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_seed(trace<span class="op">=</span><span class="va">None</span>, seed<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Obtain the seed offset by hashing the path to this distribution; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.process_size" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.process_size">process_size</h5>
-<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_size(n<span class="op">=</span><span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.process_size(n<span class="op">=</span><span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Handle an input of either size or UIDs and calculate size, UIDs, and slots; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.rand" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.rand">rand</h5>
-<div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.rand(size)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.rand(size)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Simple way to get simple random numbers</p>
+</section>
+<section id="starsim.distributions.Dist.randround" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.Dist.randround">randround</h5>
+<div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.randround(rvs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Round the values up or down to an integer stochastically; usually called via <code>dist.rvs(round=True)</code></p>
 </section>
 <section id="starsim.distributions.Dist.reset" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.reset">reset</h5>
-<div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.reset(state<span class="op">=</span><span class="dv">0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.reset(state<span class="op">=</span><span class="dv">0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Restore state, allowing the same numbers to be resampled</p>
 <p>Use 0 for original state, -1 for most recent state.</p>
 <p><strong>Example</strong>:</p>
@@ -988,10 +1125,10 @@ assert all(r4 == r1)</code></pre>
 </section>
 <section id="starsim.distributions.Dist.rvs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.rvs">rvs</h5>
-<div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.rvs(n<span class="op">=</span><span class="dv">1</span>, reset<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.rvs(n<span class="op">=</span><span class="dv">1</span>, <span class="bu">round</span><span class="op">=</span><span class="va">False</span>, reset<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Get random variates – use this!</p>
-<section id="parameters-2" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
+<section id="parameters-4" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1009,6 +1146,12 @@ assert all(r4 == r1)</code></pre>
 <td><code>1</code></td>
 </tr>
 <tr class="even">
+<td>round</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if True, randomly round up or down based on how close the value is</td>
+<td><code>False</code></td>
+</tr>
+<tr class="odd">
 <td>reset</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to automatically reset the random number distribution state after being called</td>
@@ -1020,34 +1163,44 @@ assert all(r4 == r1)</code></pre>
 </section>
 <section id="starsim.distributions.Dist.set" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.set">set</h5>
-<div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.<span class="bu">set</span>(<span class="op">*</span>args, dist<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.<span class="bu">set</span>(<span class="op">*</span>args, dist<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Set (change) the distribution type, or one or more parameters of the distribution</p>
 </section>
 <section id="starsim.distributions.Dist.show_state" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.show_state">show_state</h5>
-<div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.show_state(output<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.show_state(output<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Show the state of the object</p>
+</section>
+<section id="starsim.distributions.Dist.shrink" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.Dist.shrink">shrink</h5>
+<div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.shrink()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Shrink the size of the module for saving to disk</p>
 </section>
 <section id="starsim.distributions.Dist.sync_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.sync_pars">sync_pars</h5>
-<div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.sync_pars()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.sync_pars()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Perform any necessary synchronizations or transformations on distribution parameters; not for the user</p>
 </section>
 <section id="starsim.distributions.Dist.to_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.to_json">to_json</h5>
-<div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.to_json()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.to_json()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Return a dictionary representation of the Dist</p>
 </section>
 <section id="starsim.distributions.Dist.update_dist_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dist.update_dist_pars">update_dist_pars</h5>
-<div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.update_dist_pars(pars<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.update_dist_pars(pars<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Update SciPy distribution parameters; not for the user</p>
+</section>
+<section id="starsim.distributions.Dist.validate_pars" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.Dist.validate_pars">validate_pars</h5>
+<div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>distributions.Dist.validate_pars()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Check if parameters are valid; only used for non-SciPy distributions</p>
 </section>
 </section>
 </section>
 <section id="starsim.distributions.Dists" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.distributions.Dists">Dists</h3>
-<div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists(<span class="va">self</span>, obj<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, base_seed<span class="op">=</span><span class="va">None</span>, sim<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists(<span class="va">self</span>, obj<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, base_seed<span class="op">=</span><span class="va">None</span>, sim<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Class for managing a collection of Dist objects</p>
 <section id="methods-1" class="level4">
 <h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
@@ -1087,31 +1240,31 @@ assert all(r4 == r1)</code></pre>
 </table>
 <section id="starsim.distributions.Dists.check_seeds" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dists.check_seeds">check_seeds</h5>
-<div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.check_seeds()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.check_seeds()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Check that no two distributions share the same seed</p>
 </section>
 <section id="starsim.distributions.Dists.copy_to_module" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dists.copy_to_module">copy_to_module</h5>
-<div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.copy_to_module(module)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.copy_to_module(module)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Copy the Sim’s Dists object to the specified module</p>
 </section>
 <section id="starsim.distributions.Dists.init" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dists.init">init</h5>
-<div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.init(obj<span class="op">=</span><span class="va">None</span>, base_seed<span class="op">=</span><span class="va">None</span>, sim<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.init(obj<span class="op">=</span><span class="va">None</span>, base_seed<span class="op">=</span><span class="va">None</span>, sim<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Set the base seed, find and initialize all distributions in an object</p>
 <p>In practice, the object is usually a Sim, but can be anything.</p>
 </section>
 <section id="starsim.distributions.Dists.jump" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dists.jump">jump</h5>
-<div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.jump(to<span class="op">=</span><span class="va">None</span>, delta<span class="op">=</span><span class="dv">1</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.jump(to<span class="op">=</span><span class="va">None</span>, delta<span class="op">=</span><span class="dv">1</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Advance all RNGs, e.g.&nbsp;to call “to”, by jumping</p>
 </section>
 <section id="starsim.distributions.Dists.jump_dt" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dists.jump_dt">jump_dt</h5>
-<div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.jump_dt(ti<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.jump_dt(ti<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Advance all RNGs to the next timestep</p>
-<section id="parameters-3" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<section id="parameters-5" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1134,14 +1287,14 @@ assert all(r4 == r1)</code></pre>
 </section>
 <section id="starsim.distributions.Dists.reset" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.Dists.reset">reset</h5>
-<div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.reset()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>distributions.Dists.reset()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Reset each RNG</p>
 </section>
 </section>
 </section>
 <section id="starsim.distributions.multi_random" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.distributions.multi_random">multi_random</h3>
-<div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random(<span class="va">self</span>, names, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random(<span class="va">self</span>, names, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>A class for holding two or more ss.random() distributions, and generating random numbers linked to each of them. Useful for e.g.&nbsp;pairwise transmission probabilities.</p>
 <p>See ss.combine_rands() for the manual version; in almost all cases this class should be used instead.</p>
 <section id="usage" class="level4 doc-section doc-section-usage">
@@ -1182,28 +1335,81 @@ assert all(r4 == r1)</code></pre>
 </table>
 <section id="starsim.distributions.multi_random.combine_rvs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.multi_random.combine_rvs">combine_rvs</h5>
-<div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.combine_rvs(rvs_list, int_type, int_max)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.combine_rvs(rvs_list, int_type, int_max)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Combine inputs into one number</p>
 </section>
 <section id="starsim.distributions.multi_random.init" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.multi_random.init">init</h5>
-<div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.init(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.init(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Not usually needed since each dist will handle this automatically; for completeness only</p>
 </section>
 <section id="starsim.distributions.multi_random.jump" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.multi_random.jump">jump</h5>
-<div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.jump(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.jump(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Not usually needed since each dist will handle this automatically; for completeness only</p>
 </section>
 <section id="starsim.distributions.multi_random.reset" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.multi_random.reset">reset</h5>
-<div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.reset(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb47"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.reset(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Not usually needed since each dist will handle this automatically; for completeness only</p>
 </section>
 <section id="starsim.distributions.multi_random.rvs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.distributions.multi_random.rvs">rvs</h5>
-<div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.rvs(<span class="op">*</span>args)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>distributions.multi_random.rvs(<span class="op">*</span>args)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Get random variates from each of the underlying distributions and combine them efficiently</p>
+</section>
+</section>
+</section>
+<section id="starsim.distributions.scale_types" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.distributions.scale_types">scale_types</h3>
+<div class="sourceCode" id="cb49"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a>distributions.scale_types()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Define how distributions scale</p>
+<p>Distributions scale in different ways, such as converting between time units. Some distributions can’t be scaled at all (e.g.&nbsp;<code>ss.beta_dist()</code> or <code>ss.choice()</code>). For distributions that can be scaled, some distributions can only be (linearly) scaled <em>before</em> the random numbers are generated (called “predraw”), some can only be scaled after (called “postdraw”), and some can be scaled in either way (“both”).</p>
+<p>For example, a normal distribution is “both” since 2<em>Normal(a, b) = Normal(2</em>a, 2<em>b). A Poisson distribution is “predraw” since 2</em>Poisson(λ) ≠ Poisson(2<em>λ), and there is no way to get the correct shape of a different Poisson distribution once the numbers have been drawn. Finally, distributions with unitless shape parameters as well as parameter that can have units (e.g.&nbsp;a gamma distribution with shape and scale parameters) are referred to as “postdraw” since scaling all input parameters is invalid (i.e.&nbsp;2</em>Gamma(shape, scale) ≠ Gamma(2<em>shape, 2</em>scale)), but they can still be scaled (i.e.&nbsp;2<em>Gamma(shape, scale) = Gamma(1</em>shape, 2*scale)).</p>
+<p>To summarize, options for <code>dist.scaling</code> are:</p>
+<pre><code>- 'postdraw' (after the random numbers are drawn, e.g. `ss.weibull()`)
+- 'predraw' (before the draw, e.g. `ss.poisson()`)
+- 'both' (either pre or post draw, e.g. `ss.normal()`)
+- False (not at all, e.g. `ss.beta_dist()`)</code></pre>
+<p>Use <code>ss.distributions.scale_types.show()</code> to show how each distribution scales with time.</p>
+<section id="methods-3" class="level4">
+<h4 class="anchored" data-anchor-id="methods-3">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.distributions.scale_types.check_postdraw">check_postdraw</a></td>
+<td>Check if the supplied distribution supports post-draw (results) scaling</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.distributions.scale_types.check_predraw">check_predraw</a></td>
+<td>Check if the supplied distribution supports pre-draw (parameter) scaling</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.distributions.scale_types.show">show</a></td>
+<td>Show which distributions have which scale types</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.distributions.scale_types.check_postdraw" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.scale_types.check_postdraw">check_postdraw</h5>
+<div class="sourceCode" id="cb51"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a>distributions.scale_types.check_postdraw(dist)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Check if the supplied distribution supports post-draw (results) scaling</p>
+</section>
+<section id="starsim.distributions.scale_types.check_predraw" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.scale_types.check_predraw">check_predraw</h5>
+<div class="sourceCode" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a>distributions.scale_types.check_predraw(dist)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Check if the supplied distribution supports pre-draw (parameter) scaling</p>
+</section>
+<section id="starsim.distributions.scale_types.show" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.distributions.scale_types.show">show</h5>
+<div class="sourceCode" id="cb53"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>distributions.scale_types.show(to_df<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Show which distributions have which scale types</p>
 </section>
 </section>
 </section>
@@ -1230,19 +1436,19 @@ assert all(r4 == r1)</code></pre>
 </table>
 <section id="starsim.distributions.link_dists" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.distributions.link_dists">link_dists</h3>
-<div class="sourceCode" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>distributions.link_dists(</span>
-<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>    obj,</span>
-<span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a>    sim,</span>
-<span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a>    module<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a>    overwrite<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb45-6"><a href="#cb45-6" aria-hidden="true" tabindex="-1"></a>    init<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb45-7"><a href="#cb45-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb45-8"><a href="#cb45-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>distributions.link_dists(</span>
+<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    obj,</span>
+<span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>    sim,</span>
+<span id="cb54-4"><a href="#cb54-4" aria-hidden="true" tabindex="-1"></a>    module<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb54-5"><a href="#cb54-5" aria-hidden="true" tabindex="-1"></a>    overwrite<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb54-6"><a href="#cb54-6" aria-hidden="true" tabindex="-1"></a>    init<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb54-7"><a href="#cb54-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb54-8"><a href="#cb54-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Link distributions to the sim and the module; used in module.init() and people.init()</p>
 </section>
 <section id="starsim.distributions.make_dist" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.distributions.make_dist">make_dist</h3>
-<div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>distributions.make_dist(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb55"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>distributions.make_dist(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Make a distribution from a dictionary</p>
 
 
@@ -1682,7 +1888,7 @@ assert all(r4 == r1)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

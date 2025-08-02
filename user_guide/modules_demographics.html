@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -695,7 +701,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="advanced-usage-pregnancy-and-births" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <code>Pregnancy</code> module instead of simple <code>Births</code>. The pregnancy module models: - Age-specific fertility rates - Pregnancy duration and outcomes - Maternal and neonatal mortality - Mother-to-child transmission pathways</p>
+<p>For more detailed modeling, you can use the <code>Pregnancy</code> module instead of simple <code>Births</code>. The pregnancy module models:</p>
+<ul>
+<li>Age-specific fertility rates</li>
+<li>Pregnancy duration and outcomes</li>
+<li>Maternal and neonatal mortality</li>
+<li>Mother-to-child transmission pathways</li>
+</ul>
 <div id="b3a58be0" class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
@@ -764,9 +776,22 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="summary" class="level2">
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<p><strong>Demographics modules</strong> enable realistic population dynamics in Starsim: - <strong>Births</strong>: Simple constant or time-varying birth rates - <strong>Deaths</strong>: Background mortality separate from disease deaths<br>
-- <strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</p>
-<p><strong>Key considerations:</strong> - Use <code>demographics=True</code> for default birth/death rates - Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates - Use <code>ss.Pregnancy()</code> for age-specific fertility, pregnancy modeling, and mother-to-child transmission - Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></p>
+<ul>
+<li><strong>Demographics modules</strong> enable realistic population dynamics in Starsim:
+<ul>
+<li><strong>Births</strong>: Simple constant or time-varying birth rates</li>
+<li><strong>Deaths</strong>: Background mortality separate from disease deaths<br>
+</li>
+<li><strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</li>
+</ul></li>
+<li><strong>Key considerations:</strong>
+<ul>
+<li>Use <code>demographics=True</code> for default birth/death rates</li>
+<li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
+<li>Use <code>ss.Pregnancy()</code> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
+<li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
+</ul></li>
+</ul>
 
 
 </section>
@@ -1186,8 +1211,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Network">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Network</span>
+      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Networks">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Networks</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
@@ -1203,7 +1228,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

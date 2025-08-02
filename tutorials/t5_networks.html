@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -646,13 +652,9 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <li><a href="#sexual-networks" id="toc-sexual-networks" class="nav-link" data-scroll-target="#sexual-networks">Sexual networks</a></li>
   <li><a href="#maternal-networks" id="toc-maternal-networks" class="nav-link" data-scroll-target="#maternal-networks">Maternal networks</a></li>
   <li><a href="#making-your-own-contact-network" id="toc-making-your-own-contact-network" class="nav-link" data-scroll-target="#making-your-own-contact-network">Making your own contact network</a></li>
-  <li><a href="#step-5-introduction-to-mixing-pools" id="toc-step-5-introduction-to-mixing-pools" class="nav-link" data-scroll-target="#step-5-introduction-to-mixing-pools">Step 5: Introduction to mixing pools</a></li>
-  <li><a href="#simple-mixing-pool-example" id="toc-simple-mixing-pool-example" class="nav-link" data-scroll-target="#simple-mixing-pool-example">Simple mixing pool example</a></li>
-  <li><a href="#equivalent-contact-network" id="toc-equivalent-contact-network" class="nav-link" data-scroll-target="#equivalent-contact-network">Equivalent contact network</a>
-  <ul class="collapse">
+  <li><a href="#introduction-to-mixing-pools" id="toc-introduction-to-mixing-pools" class="nav-link" data-scroll-target="#introduction-to-mixing-pools">Introduction to mixing pools</a></li>
   <li><a href="#what-youve-learned" id="toc-what-youve-learned" class="nav-link" data-scroll-target="#what-youve-learned">What you’ve learned</a></li>
   <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
-  </ul></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -695,17 +697,18 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Make random network</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>random <span class="op">=</span> ss.RandomNet()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Make random network</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>random <span class="op">=</span> ss.RandomNet()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The network we just made stores two very important things: the list of contacts (found in <code>random.edges</code>) and the parameters (<code>random.pars</code>).</p>
 <p>If we just make a network on its own like this, it’s not very interesting. Like all components of Starsim, it needs to be initialized within a <code>sim</code> before the database of contacts gets populated:</p>
 <div id="f2b1686b" class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">100</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span>net) <span class="co"># Decreasing n_agents so we can plot the network below</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">50</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span>net) <span class="co"># Decreasing n_agents so we can plot the network below</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim.init()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>We can easily take a look at the list of edges between agents. All networks are stored in <code>sim.networks</code>, and individual networks can be found at their class name after conversion to lower case. So for this example, <code>sim.networks.randomnet.edges</code> has all the information about which agents (referenced by their UID) are paired with which other agents as well as a per-edge transmission multiplier called <code>beta</code> and a per-edge duration, <code>dur</code>.</p>
@@ -726,9 +729,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">Edges involving UID 0 extracted from the edge list data frame:'</span>)</span>
 <span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>display(uid0_edges)</span>
 <span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> networkx <span class="im">as</span> nx</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>G <span class="op">=</span> net.to_graph()</span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>nx.draw(G, with_labels<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the network using networkx</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>net.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="sexual-networks" class="level2">
@@ -736,7 +738,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Starsim contains a few basic sexual networks, including an <code>mf</code> network for modeling heterosexual partnerships and an <code>msm</code> network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here’s an example modeling syphilis:</p>
 <div id="dd802fdd" class="cell">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the disease</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> ss.Syphilis(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> sse.Syphilis(</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>]},    <span class="co"># See notes below </span></span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
@@ -757,7 +759,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="maternal-networks">Maternal networks</h2>
 <p>Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the maternal network. Here’s an example showing how you would do this for syphilis:</p>
 <div id="860b879b" class="cell">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> ss.Syphilis(</span>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> sse.Syphilis(</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>], <span class="st">'maternal'</span>: [<span class="fl">0.99</span>, <span class="dv">0</span>]}</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -784,22 +786,29 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </div>
 <p>This network would operate exactly like the existing <code>mf</code> network, but you could control how new pairs were added.</p>
 </section>
-<section id="step-5-introduction-to-mixing-pools" class="level2">
-<h2 class="anchored" data-anchor-id="step-5-introduction-to-mixing-pools">Step 5: Introduction to mixing pools</h2>
+<section id="introduction-to-mixing-pools" class="level2">
+<h2 class="anchored" data-anchor-id="introduction-to-mixing-pools">Introduction to mixing pools</h2>
 <p>While contact networks model individual relationships, mixing pools model group-level transmission. This is useful for: - Large populations where individual contacts are impractical - Age-structured mixing (like school, work, household contacts) - When you have contact matrices from epidemiological studies</p>
 <p>Here’s a simple comparison:</p>
+<div id="67c881d2" class="cell">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple mixing pool example</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>sir_mp <span class="op">=</span> ss.SIR()</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>sim_mp <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir_mp, networks<span class="op">=</span>mp, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Mixing Pool'</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Equivalent contact network</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>sir_net <span class="op">=</span> ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="fl">0.1</span>))</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>sim_net <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir_net, networks<span class="op">=</span>net, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Contact Network'</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim_mp, sim_net]).run()</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts.</p>
 </section>
-<section id="simple-mixing-pool-example" class="level1">
-<h1>Simple mixing pool example</h1>
-<p>mp = ss.MixingPool(beta=ss.TimeProb(0.1), contacts=ss.poisson(lam=3)) sir_mp = ss.SIR() sim_mp = ss.Sim(diseases=sir_mp, networks=mp, verbose=0, label=‘Mixing Pool’)</p>
-</section>
-<section id="equivalent-contact-network" class="level1">
-<h1>Equivalent contact network</h1>
-<p>net = ss.RandomNet(n_contacts=ss.poisson(lam=3)) sir_net = ss.SIR(beta=ss.TimeProb(0.1)) sim_net = ss.Sim(diseases=sir_net, networks=net, verbose=0, label=‘Contact Network’)</p>
-<p>msim = ss.MultiSim([sim_mp, sim_net]).run() msim.plot() print(“Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts.”)</p>
 <section id="what-youve-learned" class="level2">
 <h2 class="anchored" data-anchor-id="what-youve-learned">What you’ve learned</h2>
-<p>Congratulations! You’ve now learned how to: - ✅ Use basic contact networks for disease transmission - ✅ Model disease-specific networks (sexual, maternal) - ✅ Create custom networks with your own connection rules - ✅ Understand the difference between contact networks and mixing pools</p>
+<p>Congratulations! You’ve now learned how to: - Use basic contact networks for disease transmission - Model disease-specific networks (sexual, maternal) - Create custom networks with your own connection rules - Understand the difference between contact networks and mixing pools</p>
 <p>For more advanced mixing pool techniques (age-structured mixing, contact matrices, multi-group models), see the Networks implementation guide.</p>
 </section>
 <section id="exercises" class="level2">
@@ -811,7 +820,6 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </ol>
 
 
-</section>
 </section>
 
 </main> <!-- /main -->
@@ -1246,7 +1254,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

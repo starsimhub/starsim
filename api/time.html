@@ -421,8 +421,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -541,18 +541,21 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#classes" id="toc-classes" class="nav-link" data-scroll-target="#classes">Classes</a>
   <ul class="collapse">
+  <li><a href="#starsim.time.DateArray" id="toc-starsim.time.DateArray" class="nav-link" data-scroll-target="#starsim.time.DateArray">DateArray</a></li>
   <li><a href="#starsim.time.Rate" id="toc-starsim.time.Rate" class="nav-link" data-scroll-target="#starsim.time.Rate">Rate</a></li>
-  <li><a href="#starsim.time.Time" id="toc-starsim.time.Time" class="nav-link" data-scroll-target="#starsim.time.Time">Time</a></li>
+  <li><a href="#starsim.time.TimePar" id="toc-starsim.time.TimePar" class="nav-link" data-scroll-target="#starsim.time.TimePar">TimePar</a></li>
   <li><a href="#starsim.time.date" id="toc-starsim.time.date" class="nav-link" data-scroll-target="#starsim.time.date">date</a></li>
-  <li><a href="#starsim.time.rateprob" id="toc-starsim.time.rateprob" class="nav-link" data-scroll-target="#starsim.time.rateprob">rateprob</a></li>
-  <li><a href="#starsim.time.timeprob" id="toc-starsim.time.timeprob" class="nav-link" data-scroll-target="#starsim.time.timeprob">timeprob</a></li>
+  <li><a href="#starsim.time.datedur" id="toc-starsim.time.datedur" class="nav-link" data-scroll-target="#starsim.time.datedur">datedur</a></li>
+  <li><a href="#starsim.time.dur" id="toc-starsim.time.dur" class="nav-link" data-scroll-target="#starsim.time.dur">dur</a></li>
+  <li><a href="#starsim.time.freq" id="toc-starsim.time.freq" class="nav-link" data-scroll-target="#starsim.time.freq">freq</a></li>
+  <li><a href="#starsim.time.per" id="toc-starsim.time.per" class="nav-link" data-scroll-target="#starsim.time.per">per</a></li>
+  <li><a href="#starsim.time.prob" id="toc-starsim.time.prob" class="nav-link" data-scroll-target="#starsim.time.prob">prob</a></li>
   </ul></li>
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
   <ul class="collapse">
-  <li><a href="#starsim.time.perday" id="toc-starsim.time.perday" class="nav-link" data-scroll-target="#starsim.time.perday">perday</a></li>
-  <li><a href="#starsim.time.permonth" id="toc-starsim.time.permonth" class="nav-link" data-scroll-target="#starsim.time.permonth">permonth</a></li>
-  <li><a href="#starsim.time.perweek" id="toc-starsim.time.perweek" class="nav-link" data-scroll-target="#starsim.time.perweek">perweek</a></li>
-  <li><a href="#starsim.time.peryear" id="toc-starsim.time.peryear" class="nav-link" data-scroll-target="#starsim.time.peryear">peryear</a></li>
+  <li><a href="#starsim.time.rate" id="toc-starsim.time.rate" class="nav-link" data-scroll-target="#starsim.time.rate">rate</a></li>
+  <li><a href="#starsim.time.rate_prob" id="toc-starsim.time.rate_prob" class="nav-link" data-scroll-target="#starsim.time.rate_prob">rate_prob</a></li>
+  <li><a href="#starsim.time.time_prob" id="toc-starsim.time.time_prob" class="nav-link" data-scroll-target="#starsim.time.time_prob">time_prob</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -569,6 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h1>time</h1>
 <p><code>time</code></p>
 <p>Functions and classes for handling time</p>
+<p>Hierarchy of TimePars: TimePar # All time parameters ├── dur # All durations, units of <em>time</em> │ ├── days # Duration with units of days │ ├── weeks │ ├── months │ ├── years │ └── datedur # Calendar durations └── Rate # All rates, units of <em>per</em> (e.g.&nbsp;per time or per event) ├── per # Probability rates over time (e.g., death rate per year) │ ├── perday │ ├── perweek │ ├── permonth │ └── peryear ├── prob # Unitless probability (e.g., probability of death per infection) │ ├── probperday │ ├── probperweek │ ├── probpermonth │ └── probperyear └── freq # Number of events (e.g., number of acts per year) ├── freqperday ├── freqperweek ├── freqpermonth └── freqperyear</p>
 <section id="classes" class="level2">
 <h2 class="anchored" data-anchor-id="classes">Classes</h2>
 <table class="caption-top table">
@@ -580,202 +584,47 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.time.DateArray">DateArray</a></td>
+<td>Lightweight wrapper for an array of dates</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.time.Rate">Rate</a></td>
 <td>Store a value per unit time e.g., 2 per day</td>
 </tr>
-<tr class="even">
-<td><a href="#starsim.time.Time">Time</a></td>
-<td>Handle time vectors for both simulations and modules.</td>
-</tr>
 <tr class="odd">
+<td><a href="#starsim.time.TimePar">TimePar</a></td>
+<td>Parent class for all TimePars – dur, Rate, etc.</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.time.date">date</a></td>
 <td>Define a point in time, based on <code>pd.Timestamp</code></td>
 </tr>
+<tr class="odd">
+<td><a href="#starsim.time.datedur">datedur</a></td>
+<td>Date based duration e.g., if requiring a week to be 7 calendar days later</td>
+</tr>
 <tr class="even">
-<td><a href="#starsim.time.rateprob">rateprob</a></td>
-<td>A <code>rateprob</code> represents an instantaneous rate of an event occurring. Rates</td>
+<td><a href="#starsim.time.dur">dur</a></td>
+<td>Base class for durations</td>
 </tr>
 <tr class="odd">
-<td><a href="#starsim.time.timeprob">timeprob</a></td>
-<td><code>timeprob</code> represents the probability of an event occurring during a</td>
+<td><a href="#starsim.time.freq">freq</a></td>
+<td>Class for the number of events (rather than probability) in a specified period</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.per">per</a></td>
+<td>A <code>per</code> represents an instantaneous rate of an event occurring. Rates</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.prob">prob</a></td>
+<td><code>prob</code> represents the probability of an event occurring during a</td>
 </tr>
 </tbody>
 </table>
-<section id="starsim.time.Rate" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.Rate">Rate</h3>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>time.Rate(<span class="va">self</span>, value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Store a value per unit time e.g., 2 per day - self.value - the numerator (e.g., 2) - a scalar float - self.unit - the denominator (e.g., 1 day) - a Dur object</p>
-<section id="methods" class="level4">
-<h4 class="anchored" data-anchor-id="methods">Methods</h4>
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>Name</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td><a href="#starsim.time.Rate.to_prob">to_prob</a></td>
-<td>Calculate a time-specific probability value</td>
-</tr>
-</tbody>
-</table>
-<section id="starsim.time.Rate.to_prob" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.Rate.to_prob">to_prob</h5>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_prob(dur, v<span class="op">=</span><span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Calculate a time-specific probability value</p>
-<p>This function is mainly useful for subclasses where the multiplication by a duration is non-linear (e.g., <code>timeprob</code>) and therefore it is important to apply the factor prior to multiplication by duration. This function avoids creating an intermediate array of rates, and is therefore much higher performance.</p>
-<p>e.g.</p>
-<blockquote class="blockquote">
-<blockquote class="blockquote">
-<blockquote class="blockquote">
-<p>p = ss.timeprob(0.05)<em>self.cd4</em>self.t.dt</p>
-</blockquote>
-</blockquote>
-</blockquote>
-<p>and</p>
-<blockquote class="blockquote">
-<blockquote class="blockquote">
-<blockquote class="blockquote">
-<p>p = ss.timeprob(0.05).scale(self.cd4,self.t.dt)</p>
-</blockquote>
-</blockquote>
-</blockquote>
-<p>are equivalent, except that the second one is (much) faster.</p>
-<section id="parameters" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h6>
-<table class="caption-top table">
-<colgroup>
-<col style="width: 6%">
-<col style="width: 6%">
-<col style="width: 77%">
-<col style="width: 9%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>Name</th>
-<th>Type</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>v</td>
-<td></td>
-<td>The factor to scale the rate by. This factor is applied before multiplication by the duration</td>
-<td><code>1</code></td>
-</tr>
-<tr class="even">
-<td>dur</td>
-<td></td>
-<td>An ss.Dur instance to scale the rate by (often this is <code>dt</code>)</td>
-<td><em>required</em></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="returns" class="level6 doc-section doc-section-returns">
-<h6 class="doc-section doc-section-returns anchored" data-anchor-id="returns">Returns</h6>
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>Name</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td></td>
-<td></td>
-<td>A numpy float array of values</td>
-</tr>
-</tbody>
-</table>
-</section>
-</section>
-</section>
-</section>
-<section id="starsim.time.Time" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.Time">Time</h3>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>time.Time(<span class="va">self</span>, start<span class="op">=</span><span class="va">None</span>, stop<span class="op">=</span><span class="va">None</span>, dt<span class="op">=</span><span class="va">None</span>, dur<span class="op">=</span><span class="va">None</span>, name<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Handle time vectors for both simulations and modules.</p>
-<p>Each module can have its own time instance, in the case where the time vector is defined by absolute dates, these time vectors are by definition aligned. Otherwise they can be specified using Dur objects which express relative times (they can be added to a date to get an absolute time)</p>
-<section id="parameters-1" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h4>
-<table class="caption-top table">
-<thead>
-<tr class="header">
-<th>Name</th>
-<th>Type</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>start</td>
-<td></td>
-<td>ss.date or ss.Dur</td>
-<td><code>None</code></td>
-</tr>
-<tr class="even">
-<td>stop</td>
-<td></td>
-<td>ss.date if start is an ss.date, or an ss.Dur if start is an ss.Dur</td>
-<td><code>None</code></td>
-</tr>
-<tr class="odd">
-<td>dt</td>
-<td><code>ss</code>.<code>Dur</code></td>
-<td>Simulation step size</td>
-<td><code>None</code></td>
-</tr>
-<tr class="even">
-<td>pars</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>if provided, populate parameter values from this dictionary</td>
-<td><em>required</em></td>
-</tr>
-<tr class="odd">
-<td>parent</td>
-<td><code>obj</code></td>
-<td>if provided, populate missing parameter values from a ’parent” <code>Time</code> instance</td>
-<td><em>required</em></td>
-</tr>
-<tr class="even">
-<td>name</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
-<td>if provided, name the <code>Time</code> object</td>
-<td><code>None</code></td>
-</tr>
-<tr class="odd">
-<td>init</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
-<td>whether or not to immediately initialize the Time object</td>
-<td><em>required</em></td>
-</tr>
-<tr class="even">
-<td>sim</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a> / <a href="../api/sim.html#starsim.sim.Sim">Sim</a></td>
-<td>if True, initializes as a sim-specific <code>Time</code> instance; if a Sim instance, initialize the absolute time vector</td>
-<td><em>required</em></td>
-</tr>
-</tbody>
-</table>
-<p>The <code>Time</code> object, after initialization, has the following attributes:</p>
-<ul>
-<li><code>ti</code> (int): the current timestep</li>
-<li><code>npts</code> (int): the number of timesteps</li>
-<li><code>tvec</code> (array): time either as absolute <code>ss.date</code> instances, or relative <code>ss.Dur</code> instances</li>
-<li><code>yearvec</code> (array): time represented as floating-point years</li>
-</ul>
-<p><strong>Examples</strong>:</p>
-<pre><code>t1 = ss.Time(start=2000, stop=2020, dt=1.0)
-t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))</code></pre>
-</section>
+<section id="starsim.time.DateArray" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.DateArray">DateArray</h3>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>time.DateArray()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Lightweight wrapper for an array of dates</p>
 <section id="attributes" class="level4">
 <h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
 <table class="caption-top table">
@@ -787,18 +636,18 @@ t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td><a href="#starsim.time.Time.is_absolute">is_absolute</a></td>
-<td>Check whether the fundamental simulation unit is absolute</td>
+<td><a href="#starsim.time.DateArray.subdaily">subdaily</a></td>
+<td>Check if the array has sub-daily timesteps</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.time.Time.ready">ready</a></td>
-<td>Check if all parameters are in place to be initialized</td>
+<td><a href="#starsim.time.DateArray.years">years</a></td>
+<td>Represent the dates as floating point years</td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="methods-1" class="level4">
-<h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
+<section id="methods" class="level4">
+<h4 class="anchored" data-anchor-id="methods">Methods</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -808,30 +657,43 @@ t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td><a href="#starsim.time.Time.init">init</a></td>
-<td>Initialize all vectors</td>
+<td><a href="#starsim.time.DateArray.is_">is_</a></td>
+<td>Checks if the DateArray is comprised of ss.date objects</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.time.Time.now">now</a></td>
-<td>Get the current simulation time</td>
+<td><a href="#starsim.time.DateArray.to_array">to_array</a></td>
+<td>Force conversion to an array</td>
 </tr>
 <tr class="odd">
-<td><a href="#starsim.time.Time.update">update</a></td>
-<td>Reconcile different ways of supplying inputs</td>
+<td><a href="#starsim.time.DateArray.to_date">to_date</a></td>
+<td>Convert to ss.date</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.DateArray.to_float">to_float</a></td>
+<td>Convert to a float, returning a new DateArray unless inplace=True</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.DateArray.to_human">to_human</a></td>
+<td>Return the most human-friendly (i.e.&nbsp;plotting-friendly) version of the dates,</td>
 </tr>
 </tbody>
 </table>
-<section id="starsim.time.Time.init" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.Time.init">init</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>time.Time.init(sim<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Initialize all vectors</p>
+<section id="starsim.time.DateArray.is_" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.DateArray.is_">is_</h5>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.is_(which)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Checks if the DateArray is comprised of ss.date objects</p>
 </section>
-<section id="starsim.time.Time.now" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.Time.now">now</h5>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>time.Time.now(key<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Get the current simulation time</p>
-<section id="parameters-2" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
+<section id="starsim.time.DateArray.to_array" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.DateArray.to_array">to_array</h5>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Force conversion to an array</p>
+</section>
+<section id="starsim.time.DateArray.to_date" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.DateArray.to_date">to_date</h5>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.to_date(inplace<span class="op">=</span><span class="va">False</span>, day_round<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert to ss.date</p>
+<section id="parameters" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -843,35 +705,174 @@ t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td>which</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
-<td>which type of time to get: default (None), “year”, “date”, “tvec”, or “str”</td>
+<td>inplace</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to modify in place</td>
+<td><code>False</code></td>
+</tr>
+<tr class="even">
+<td>round</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to round dates to the nearest day (otherwise, keep timestamp); if None, round if and only if the span of the first timestep is at least one day</td>
 <td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>die</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if False, then fall back to float if conversion to date fails (e.g.&nbsp;year 0)</td>
+<td><code>True</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Examples</strong>:</p>
-<pre><code>t = ss.Time(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
-t.ti = 25
-t.now() # Returns &lt;2021-06-25&gt;
-t.now('date') # Returns &lt;2021-06-25&gt;
-t.now('year') # Returns 2021.479
-t.now('str') # Returns '2021-06-25'</code></pre>
 </section>
 </section>
-<section id="starsim.time.Time.update" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.Time.update">update</h5>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>time.Time.update(pars<span class="op">=</span><span class="va">None</span>, parent<span class="op">=</span><span class="va">None</span>, reset<span class="op">=</span><span class="va">True</span>, force<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Reconcile different ways of supplying inputs</p>
+<section id="starsim.time.DateArray.to_float" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.DateArray.to_float">to_float</h5>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.to_float(inplace<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert to a float, returning a new DateArray unless inplace=True</p>
+</section>
+<section id="starsim.time.DateArray.to_human" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.DateArray.to_human">to_human</h5>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.to_human()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Return the most human-friendly (i.e.&nbsp;plotting-friendly) version of the dates, i.e.&nbsp;ss.date if possible, float otherwise</p>
+</section>
+</section>
+</section>
+<section id="starsim.time.Rate" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.Rate">Rate</h3>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>time.Rate(<span class="va">self</span>, value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Store a value per unit time e.g., 2 per day - self.value - the numerator (e.g., 2) - a scalar float - self.unit - the denominator (e.g., 1 day) - a dur object</p>
+<section id="methods-1" class="level4">
+<h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.Rate.set_default_dur">set_default_dur</a></td>
+<td>Set the default duration, e.g.&nbsp;module.dt, so .to_prob() can be used with no input</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.Rate.to_events">to_events</a></td>
+<td>Simple multiplication: calculate the number of events over the time period</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.Rate.to_prob">to_prob</a></td>
+<td>Convert from one time probability to another</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.time.Rate.set_default_dur" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.Rate.set_default_dur">set_default_dur</h5>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>time.Rate.set_default_dur(dur)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Set the default duration, e.g.&nbsp;module.dt, so .to_prob() can be used with no input</p>
+</section>
+<section id="starsim.time.Rate.to_events" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.Rate.to_events">to_events</h5>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_events(dur<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Simple multiplication: calculate the number of events over the time period</p>
+</section>
+<section id="starsim.time.Rate.to_prob" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.Rate.to_prob">to_prob</h5>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_prob(dur<span class="op">=</span><span class="va">None</span>, scale<span class="op">=</span><span class="fl">1.0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert from one time probability to another</p>
+<section id="parameters-1" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>dur</td>
+<td><code>ss.dur</code></td>
+<td>the duration over which to convert the probability to</td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>scale</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>an optional additional mutliplicative scale factor to incorporate in the calculation</td>
+<td><code>1.0</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>:</p>
+<pre><code>p_month = ss.probpermonth(0.05)
+p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12</code></pre>
+</section>
+</section>
+</section>
+</section>
+<section id="starsim.time.TimePar" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.TimePar">TimePar</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>time.TimePar()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Parent class for all TimePars – dur, Rate, etc.</p>
+<section id="methods-2" class="level4">
+<h4 class="anchored" data-anchor-id="methods-2">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.TimePar.mutate">mutate</a></td>
+<td>Mutate a TimePar in place to a new base unit – see <code>TimePar.to()</code> to return a new instance (much more common)</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.TimePar.to">to</a></td>
+<td>Convert this TimePar to one of a different class</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.TimePar.to_array">to_array</a></td>
+<td>Force conversion to an array</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.TimePar.to_base">to_base</a></td>
+<td>Convert another TimePar object to this TimePar’s base units</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.time.TimePar.mutate" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.mutate">mutate</h5>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.mutate(unit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Mutate a TimePar in place to a new base unit – see <code>TimePar.to()</code> to return a new instance (much more common)</p>
+</section>
+<section id="starsim.time.TimePar.to" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.to">to</h5>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to(unit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert this TimePar to one of a different class</p>
+</section>
+<section id="starsim.time.TimePar.to_array" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.to_array">to_array</h5>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Force conversion to an array</p>
+</section>
+<section id="starsim.time.TimePar.to_base" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.to_base">to_base</h5>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_base(other)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert another TimePar object to this TimePar’s base units</p>
 </section>
 </section>
 </section>
 <section id="starsim.time.date" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.date">date</h3>
-<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>time.date()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>time.date()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Define a point in time, based on <code>pd.Timestamp</code></p>
-<section id="parameters-3" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h4>
+<section id="parameters-2" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -889,6 +890,12 @@ t.now('str') # Returns '2021-06-25'</code></pre>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
+<td>allow_zero</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
 <td>kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to pd.Timestamp()</td>
@@ -903,8 +910,25 @@ ss.date(year=2024.75) # Returns &lt;2024-10-01&gt;
 ss.date('2024-04-04') # Returns &lt;2024-04-04&gt;
 ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 </section>
-<section id="methods-2" class="level4">
-<h4 class="anchored" data-anchor-id="methods-2">Methods</h4>
+<section id="attributes-1" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-1">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.date.years">years</a></td>
+<td>Return the date as a number of years</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="methods-3" class="level4">
+<h4 class="anchored" data-anchor-id="methods-3">Methods</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -926,12 +950,28 @@ ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 <td>Convert an array of float years into an array of date instances</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.time.date.from_json">from_json</a></td>
+<td>Reconstruct a date from a JSON; reverse of <code>to_json()</code></td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.time.date.from_year">from_year</a></td>
 <td>Convert an int or float year to a date.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.time.date.replace">replace</a></td>
 <td>Returns a new ss.date(); pd.Timestamp is immutable</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.date.round">round</a></td>
+<td>Round to a given interval (by default a day</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.date.subdaily">subdaily</a></td>
+<td>Check if a subdaily timestep is used</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.date.to_json">to_json</a></td>
+<td>Returns a JSON representation of the date</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.time.date.to_pandas">to_pandas</a></td>
@@ -945,26 +985,27 @@ ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 </table>
 <section id="starsim.time.date.arange" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.arange">arange</h5>
-<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>time.date.arange(low, high, step<span class="op">=</span><span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>time.date.arange(</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    start,</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    stop,</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    step<span class="op">=</span><span class="fl">1.0</span>,</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    inclusive<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    day_round<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    allow_zero<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Construct an array of dates</p>
 <p>Functions similarly to np.arange, but returns date objects</p>
 <p>Example usage:</p>
 <blockquote class="blockquote">
 <blockquote class="blockquote">
 <blockquote class="blockquote">
-<p>date.arange(2020, 2025) array([&lt;2020.01.01&gt;, &lt;2021.01.01&gt;, &lt;2022.01.01&gt;, &lt;2023.01.01&gt;, &lt;2024.01.01&gt;], dtype=object)</p>
+<p>date.arange(2020, 2025) array([&lt;2020.01.01&gt;, &lt;2021.01.01&gt;, &lt;2022.01.01&gt;, &lt;2023.01.01&gt;, &lt;2024.01.01&gt;, &lt;2025.01.01&gt;], dtype=object)</p>
 </blockquote>
 </blockquote>
 </blockquote>
-<section id="parameters-4" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
+<section id="parameters-3" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 10%">
-<col style="width: 10%">
-<col style="width: 63%">
-<col style="width: 15%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Name</th>
@@ -975,22 +1016,79 @@ ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td>low</td>
-<td></td>
+<td>start</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <code>ss</code>.<code>date</code> / <code>ss</code>.<code>dur</code></td>
 <td>Lower bound - can be a date or a numerical year</td>
 <td><em>required</em></td>
 </tr>
-<tr class="even">
-<td>high</td>
+</tbody>
+</table>
+<p>stop (float/ss.date/ss.dur): Upper bound - can be a date or a numerical year step (float/ss.dur): Assumes 1 calendar year steps by default inclusive (bool): Whether to include “stop” in the output day_round (bool): Whether to round to the nearest day (by default, True if step &gt; 1 day) allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning</p>
+</section>
+<section id="returns" class="level6 doc-section doc-section-returns">
+<h6 class="doc-section doc-section-returns anchored" data-anchor-id="returns">Returns</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
 <td></td>
-<td>Upper bound - can be a date or a numerical year</td>
+<td></td>
+<td>An array of date instances</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="starsim.time.date.disp" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.disp">disp</h5>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>time.date.disp(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Show the full object</p>
+</section>
+<section id="starsim.time.date.from_array" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.from_array">from_array</h5>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>time.date.from_array(array, day_round<span class="op">=</span><span class="va">True</span>, allow_zero<span class="op">=</span><span class="va">True</span>, date_type<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert an array of float years into an array of date instances</p>
+<section id="parameters-4" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>array</td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>An array of float years</td>
 <td><em>required</em></td>
 </tr>
+<tr class="even">
+<td>day_round</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>Whether to round to the nearest day</td>
+<td><code>True</code></td>
+</tr>
 <tr class="odd">
-<td>step</td>
-<td></td>
-<td>Assumes 1 calendar year steps by default</td>
-<td><code>1</code></td>
+<td>allow_zero</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning</td>
+<td><code>True</code></td>
+</tr>
+<tr class="even">
+<td>date_type</td>
+<td><a href="https://docs.python.org/3/library/functions.html#type">type</a></td>
+<td>Optionally convert to a class other than <code>ss.date</code> (e.g.&nbsp;<code>ss.datedur</code>)</td>
+<td><code>None</code></td>
 </tr>
 </tbody>
 </table>
@@ -1015,15 +1113,15 @@ ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 </table>
 </section>
 </section>
-<section id="starsim.time.date.disp" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.date.disp">disp</h5>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>time.date.disp(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Show the full object</p>
+<section id="starsim.time.date.from_json" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.from_json">from_json</h5>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>time.date.from_json(json)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Reconstruct a date from a JSON; reverse of <code>to_json()</code></p>
 </section>
-<section id="starsim.time.date.from_array" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.date.from_array">from_array</h5>
-<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>time.date.from_array(array)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Convert an array of float years into an array of date instances</p>
+<section id="starsim.time.date.from_year" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.from_year">from_year</h5>
+<div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>time.date.from_year(year, day_round<span class="op">=</span><span class="va">True</span>, allow_zero<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert an int or float year to a date.</p>
 <section id="parameters-5" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
 <table class="caption-top table">
@@ -1037,14 +1135,142 @@ ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td>array</td>
-<td></td>
-<td>An array of float years</td>
+<td>year</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>the year to round</td>
 <td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>day_round</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to round to the nearest day</td>
+<td><code>True</code></td>
+</tr>
+<tr class="odd">
+<td>allow_zero</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to allow year 0 (if so, return ss.datedur instead)</td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Examples</strong>:</p>
+<pre><code>ss.date.from_year(2020) # Returns &lt;2020-01-01&gt;
+ss.date.from_year(2024.75) # Returns &lt;2024-10-01&gt;</code></pre>
+</section>
+</section>
+<section id="starsim.time.date.replace" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.replace">replace</h5>
+<div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>time.date.replace(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Returns a new ss.date(); pd.Timestamp is immutable</p>
+</section>
+<section id="starsim.time.date.round" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.round">round</h5>
+<div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>time.date.<span class="bu">round</span>(to<span class="op">=</span><span class="st">'d'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Round to a given interval (by default a day</p>
+</section>
+<section id="starsim.time.date.subdaily" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.subdaily">subdaily</h5>
+<div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>time.date.subdaily(years)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Check if a subdaily timestep is used</p>
+<p>A date has no concept of a timestep, but add this as a convienence method since this is required by other methods (e.g.&nbsp;<code>ss.date.arange()</code>).</p>
+</section>
+<section id="starsim.time.date.to_json" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.to_json">to_json</h5>
+<div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>time.date.to_json()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Returns a JSON representation of the date</p>
+</section>
+<section id="starsim.time.date.to_pandas" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.to_pandas">to_pandas</h5>
+<div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>time.date.to_pandas()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert to a standard pd.Timestamp instance</p>
+</section>
+<section id="starsim.time.date.to_year" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.date.to_year">to_year</h5>
+<div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>time.date.to_year()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert a date to a floating-point year</p>
+<p><strong>Examples</strong>:</p>
+<pre><code>ss.date('2020-01-01').to_year() # Returns 2020.0
+ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
+</section>
+</section>
+</section>
+<section id="starsim.time.datedur" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.datedur">datedur</h3>
+<div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>time.datedur(<span class="va">self</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Date based duration e.g., if requiring a week to be 7 calendar days later</p>
+<section id="attributes-2" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-2">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.datedur.days">days</a></td>
+<td>Shortcut to datedur.to(‘days’)</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.datedur.months">months</a></td>
+<td>Shortcut to datedur.to(‘months’)</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.datedur.weeks">weeks</a></td>
+<td>Shortcut to datedur.to(‘weeks’)</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.datedur.years">years</a></td>
+<td>Shortcut to datedur.to(‘years’)</td>
 </tr>
 </tbody>
 </table>
 </section>
+<section id="methods-4" class="level4">
+<h4 class="anchored" data-anchor-id="methods-4">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.datedur.round_duration">round_duration</a></td>
+<td>Round a dictionary of duration values by overflowing remainders</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.datedur.scale">scale</a></td>
+<td>Scale a pd.DateOffset by a factor</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.datedur.to">to</a></td>
+<td>Return approximate conversion into the provided quantity</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.datedur.to_array">to_array</a></td>
+<td>Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.time.datedur.to_dict">to_dict</a></td>
+<td>Convert to a dictionary</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.datedur.to_dur">to_dur</a></td>
+<td>Convert to the smallest non-zero value, e.g.&nbsp;ss.datedur(years=1, days=10).to_dur() = ss.days(375)</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.time.datedur.round_duration" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.round_duration">round_duration</h5>
+<div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>time.datedur.round_duration(vals<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Round a dictionary of duration values by overflowing remainders</p>
+<p>The input can be - A numpy array of length <code>ss.time.factors</code> containing values in key order - A pd.DateOffset instance - A dictionary with keys from <code>ss.time.factors</code></p>
+<p>The output will be a pd.DateOffset with integer values, where non-integer values have been handled by overflow using the factors in <code>ss.time.factors</code>. For example, 2.5 weeks would first become 2 weeks and 0.5<em>7 = 3.5 days, and then become 3 days + 0.5</em>24 = 12 hours.</p>
+<p>Negative values are supported - -1.5 weeks for example will become (-1w, -3d, -12h)</p>
 <section id="returns-2" class="level6 doc-section doc-section-returns">
 <h6 class="doc-section doc-section-returns anchored" data-anchor-id="returns-2">Returns</h6>
 <table class="caption-top table">
@@ -1059,59 +1285,274 @@ ss.date(year=2024, month=4, day=4) # Returns &lt;2024-04-04&gt;</code></pre>
 <tr class="odd">
 <td></td>
 <td></td>
-<td>An array of date instances</td>
+<td>A pd.DateOffset</td>
 </tr>
 </tbody>
 </table>
 </section>
 </section>
-<section id="starsim.time.date.from_year" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.date.from_year">from_year</h5>
-<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>time.date.from_year(year)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Convert an int or float year to a date.</p>
-<p><strong>Examples</strong>:</p>
-<pre><code>ss.date.from_year(2020) # Returns &lt;2020-01-01&gt;
-ss.date.from_year(2024.75) # Returns &lt;2024-10-01&gt;</code></pre>
+<section id="starsim.time.datedur.scale" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.scale">scale</h5>
+<div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>time.datedur.scale(dateoffset, scale)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Scale a pd.DateOffset by a factor</p>
+<p>This function will automatically cascade remainders to finer units using <code>ss.time.factors</code> so for example 2.5 weeks would first become 2 weeks and 0.5<em>7 = 3.5 days, and then become 3 days + 0.5</em>24 = 12 hours.</p>
+<section id="parameters-6" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h6>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 16%">
+<col style="width: 10%">
+<col style="width: 57%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>dateoffset</td>
+<td></td>
+<td>A pd.DateOffset instance</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>scale</td>
+<td></td>
+<td>A float scaling factor (must be positive)</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="starsim.time.date.replace" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.date.replace">replace</h5>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>time.date.replace(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Returns a new ss.date(); pd.Timestamp is immutable</p>
+<section id="returns-3" class="level6 doc-section doc-section-returns">
+<h6 class="doc-section doc-section-returns anchored" data-anchor-id="returns-3">Returns</h6>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 10%">
+<col style="width: 10%">
+<col style="width: 78%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td></td>
+<td></td>
+<td>A pd.DateOffset instance scaled by the requested amount</td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="starsim.time.date.to_pandas" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.date.to_pandas">to_pandas</h5>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>time.date.to_pandas()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Convert to a standard pd.Timestamp instance</p>
 </section>
-<section id="starsim.time.date.to_year" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.date.to_year">to_year</h5>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>time.date.to_year()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Convert a date to a floating-point year</p>
-<p><strong>Examples</strong>:</p>
-<pre><code>ss.date('2020-01-01').to_year() # Returns 2020.0
-ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
+<section id="starsim.time.datedur.to" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.to">to</h5>
+<div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to(unit)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Return approximate conversion into the provided quantity</p>
+<p>This allows interoperability with years objects (which would typically be expected to occur if module parameters have been entered with <code>datedur</code> durations, but the simulation timestep is in <code>years</code> units).</p>
+<p>The conversion is based on <code>ss.time.factors</code> which defines the conversion from each time unit to the next.</p>
+<section id="parameters-7" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h6>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 7%">
+<col style="width: 31%">
+<col style="width: 50%">
+<col style="width: 10%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>unit</td>
+<td><code>str</code></td>
+<td>the unit to convert to: years, months, weeks, or days</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="returns-4" class="level6 doc-section doc-section-returns">
+<h6 class="doc-section doc-section-returns anchored" data-anchor-id="returns-4">Returns</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td></td>
+<td></td>
+<td>A float representing the duration in that unit</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="starsim.time.datedur.to_array" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.to_array">to_array</h5>
+<div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years</p>
+</section>
+<section id="starsim.time.datedur.to_dict" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.to_dict">to_dict</h5>
+<div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_dict()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert to a dictionary</p>
+</section>
+<section id="starsim.time.datedur.to_dur" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.to_dur">to_dur</h5>
+<div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_dur()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert to the smallest non-zero value, e.g.&nbsp;ss.datedur(years=1, days=10).to_dur() = ss.days(375)</p>
 </section>
 </section>
 </section>
-<section id="starsim.time.rateprob" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.rateprob">rateprob</h3>
-<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>time.rateprob(<span class="va">self</span>, value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>A <code>rateprob</code> represents an instantaneous rate of an event occurring. Rates must be non-negative, but need not be less than 1.</p>
+<section id="starsim.time.dur" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.dur">dur</h3>
+<div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>time.dur(<span class="va">self</span>, value<span class="op">=</span><span class="dv">1</span>, base<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Base class for durations</p>
+<p>Note: this class should not be used by the user directly; instead, use ss.years(), ss.days(), etc.</p>
+<p>Note that although they are different classes, <code>ss.dur</code> objects can be modified in place if needed via the <code>ss.dur.mutate()</code> method.</p>
+<section id="methods-5" class="level4">
+<h4 class="anchored" data-anchor-id="methods-5">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.dur.arange">arange</a></td>
+<td>Construct an array of dur instances</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.time.dur.arange" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.dur.arange">arange</h5>
+<div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>time.dur.arange(start, stop, step, inclusive<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Construct an array of dur instances</p>
+<p>For this function, the start, stop, and step must ALL be specified, and they must all be dur instances. Mixing dur types (years and datedur) is permitted.</p>
+<section id="parameters-8" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h6>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 8%">
+<col style="width: 40%">
+<col style="width: 37%">
+<col style="width: 12%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>start</td>
+<td><code>ss</code>.<code>dur</code></td>
+<td>Starting point, e.g., ss.years(0)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>stop</td>
+<td><code>ss</code>.<code>dur</code></td>
+<td>Ending point, e.g.&nbsp;ss.years(20)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>step</td>
+<td><code>ss</code>.<code>dur</code></td>
+<td>Step size, e.g.&nbsp;ss.years(2)</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+</section>
+<section id="starsim.time.freq" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.freq">freq</h3>
+<div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>time.freq(<span class="va">self</span>, value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Class for the number of events (rather than probability) in a specified period</p>
+<p>Identical to <code>ss.per</code>, except by default multiplication returns a number of events rather than a probability. Use <code>ss.freq</code> for events (e.g., number of acts per year) and <code>ss.per</code> for probabilities (e.g., probability of death per year).</p>
+<section id="attributes-3" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-3">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.freq.rate">rate</a></td>
+<td>Alias to self.value</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="starsim.time.per" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.per">per</h3>
+<div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>time.per(<span class="va">self</span>, value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>A <code>per</code> represents an instantaneous rate of an event occurring. Rates must be non-negative, but need not be less than 1.</p>
 <p>Through multiplication, rate can be modified or converted to a probability, depending on the data type of the object being multiplied.</p>
-<p>When a <code>rateprob</code> is multiplied by a scalar or array, the rate is simply scaled. Such multiplication occurs frequently in epidemiological models, where the base rate is multiplied by “rate ratio” or “relative rate” to represent agents experiencing higher (multiplier &gt; 1) or lower (multiplier &lt; 1) event rates.</p>
-<p>Alternatively, when a <code>rateprob</code> is multiplied by a duration (type ss.Dur), a probability is calculated. The conversion from rate to probability on multiplication by a duration is <code>1 - np.exp(-rate/factor)</code>, where <code>factor</code> is the ratio of the multiplied duration to the original period (denominator).</p>
-<p>For example, consider &gt;&gt;&gt; p = ss.rateprob(0.8, ss.years(1)) When multiplied by a duration of 1 year, the calculated probability is <code>1 - np.exp(-0.8)</code>, which is approximately 55%. &gt;&gt;&gt; p*ss.years(1)</p>
+<p>When a <code>per</code> is multiplied by a scalar or array, the rate is simply scaled. Such multiplication occurs frequently in epidemiological models, where the base rate is multiplied by “rate ratio” or “relative rate” to represent agents experiencing higher (multiplier &gt; 1) or lower (multiplier &lt; 1) event rates.</p>
+<p>Alternatively, when a <code>per</code> is multiplied by a duration (type ss.dur), a probability is calculated. The conversion from rate to probability on multiplication by a duration is <code>1 - np.exp(-rate/factor)</code>, where <code>factor</code> is the ratio of the multiplied duration to the original period (denominator).</p>
+<p>For example, consider &gt;&gt;&gt; p = ss.per(0.8, ss.years(1)) When multiplied by a duration of 1 year, the calculated probability is <code>1 - np.exp(-0.8)</code>, which is approximately 55%. &gt;&gt;&gt; p*ss.years(1)</p>
 <p>When multiplied by a scalar, the rate is simply scaled. &gt;&gt;&gt; p*2</p>
-<p>The difference between <code>timeprob</code> and <code>rateprob</code> is subtle, but important. <code>rateprob</code> works directly with the instantaneous rate of an event occurring. In contrast, <code>timeprob</code> starts with a probability and a duration, and the underlying rate is calculated. On multiplication by a duration, * rateprob: rate -&gt; probability * timeprob: probability -&gt; rate -&gt; probability</p>
+<p>The difference between <code>prob</code> and <code>per</code> is subtle, but important. <code>per</code> works directly with the instantaneous rate of an event occurring. In contrast, <code>prob</code> starts with a probability and a duration, and the underlying rate is calculated. On multiplication by a duration, * per: rate -&gt; probability * prob: probability -&gt; rate -&gt; probability</p>
 <p>The behavior of both classes is depending on the data type of the object being multiplied.</p>
+<p><code>ss.per</code> is identical to <code>ss.freq</code>, except by default multiplication returns a probability rather than a number of events. Use <code>ss.per</code> for probabilities (e.g., probability of death per year), and <code>ss.freq</code> for events (e.g., number of acts per year).</p>
+<section id="attributes-4" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-4">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.per.rate">rate</a></td>
+<td>Alias to self.value</td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="starsim.time.timeprob" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.timeprob">timeprob</h3>
-<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>time.timeprob(<span class="va">self</span>, value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p><code>timeprob</code> represents the probability of an event occurring during a specified period of time.</p>
+</section>
+<section id="starsim.time.prob" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.prob">prob</h3>
+<div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>time.prob(<span class="va">self</span>, value<span class="op">=</span><span class="va">None</span>, unit<span class="op">=</span><span class="va">None</span>, rate<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><code>prob</code> represents the probability of an event occurring during a specified period of time.</p>
 <p>The class is designed to allow conversion of a probability from one duration to another through multiplication. However, the behavior of this conversion depends on the data type of the the object being multiplied.</p>
-<p>When multiplied by a duration (type ss.Dur), the underlying constant rate is calculated as <code>rate = -np.log(1 - self.value)</code>. Then, the probability over the new duration is <code>p = 1 - np.exp(-rate/factor)</code>, where <code>factor</code> is the ratio of the new duration to the original duration.</p>
-<p>For example, &gt;&gt;&gt; p = ss.timeprob(0.8, ss.years(1)) indicates a 80% chance of an event occurring in one year.</p>
+<p>When multiplied by a duration (type ss.dur), the underlying constant rate is calculated as <code>rate = -np.log(1 - self.value)</code>. Then, the probability over the new duration is <code>p = 1 - np.exp(-rate/factor)</code>, where <code>factor</code> is the ratio of the new duration to the original duration.</p>
+<p>For example, &gt;&gt;&gt; p = ss.prob(0.8, ss.years(1)) indicates a 80% chance of an event occurring in one year.</p>
 <blockquote class="blockquote">
 <blockquote class="blockquote">
 <blockquote class="blockquote">
@@ -1126,8 +1567,60 @@ ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
 </blockquote>
 </blockquote>
 </blockquote>
-<p>However, the behavior is different when a <code>timeprob</code> object is multiplied by a scalar or array. In this case, the probability is simply scaled. This scaling may result in a value greater than 1, which is not valid. For example, &gt;&gt;&gt; p * 2 raises an AssertionError because the resulting probability (160%) exceeds 100%.</p>
-<p>Use <code>rateprob</code> instead if <code>timeprob</code> if you would prefer to directly specify the instantaneous rate.</p>
+<p>However, the behavior is different when a <code>prob</code> object is multiplied by a scalar or array. In this case, the probability is simply scaled. This scaling may result in a value greater than 1, which is not valid. For example, &gt;&gt;&gt; p * 2 raises an AssertionError because the resulting probability (160%) exceeds 100%.</p>
+<p>Use <code>per</code> instead if <code>prob</code> if you would prefer to directly specify the instantaneous rate.</p>
+<section id="methods-6" class="level4">
+<h4 class="anchored" data-anchor-id="methods-6">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.prob.to_prob">to_prob</a></td>
+<td>Convert from one time probability to another</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.time.prob.to_prob" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.prob.to_prob">to_prob</h5>
+<div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>time.prob.to_prob(dur<span class="op">=</span><span class="va">None</span>, scale<span class="op">=</span><span class="fl">1.0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Convert from one time probability to another</p>
+<section id="parameters-9" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>dur</td>
+<td><code>ss.dur</code></td>
+<td>the duration over which to convert the probability to</td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>scale</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>an optional additional mutliplicative scale factor to incorporate in the calculation</td>
+<td><code>1.0</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>:</p>
+<pre><code>p_month = ss.probpermonth(0.05)
+p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12</code></pre>
+</section>
+</section>
+</section>
 </section>
 </section>
 <section id="functions" class="level2">
@@ -1141,42 +1634,33 @@ ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td><a href="#starsim.time.perday">perday</a></td>
-<td>Shortcut to specify rate per calendar day</td>
+<td><a href="#starsim.time.rate">rate</a></td>
+<td>Backwards compatibility function for Rate</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.time.permonth">permonth</a></td>
-<td>Shortcut to specify rate per calendar month</td>
+<td><a href="#starsim.time.rate_prob">rate_prob</a></td>
+<td>Backwards compatibility function for per</td>
 </tr>
 <tr class="odd">
-<td><a href="#starsim.time.perweek">perweek</a></td>
-<td>Shortcut to specify rate per calendar week</td>
-</tr>
-<tr class="even">
-<td><a href="#starsim.time.peryear">peryear</a></td>
-<td>Shortcut to specify rate per numeric year</td>
+<td><a href="#starsim.time.time_prob">time_prob</a></td>
+<td>Backwards compatibility function for prob</td>
 </tr>
 </tbody>
 </table>
-<section id="starsim.time.perday" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.perday">perday</h3>
-<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>time.perday(v)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Shortcut to specify rate per calendar day</p>
+<section id="starsim.time.rate" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.rate">rate</h3>
+<div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>time.rate(value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Backwards compatibility function for Rate</p>
 </section>
-<section id="starsim.time.permonth" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.permonth">permonth</h3>
-<div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>time.permonth(v)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Shortcut to specify rate per calendar month</p>
+<section id="starsim.time.rate_prob" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.rate_prob">rate_prob</h3>
+<div class="sourceCode" id="cb47"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>time.rate_prob(value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Backwards compatibility function for per</p>
 </section>
-<section id="starsim.time.perweek" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.perweek">perweek</h3>
-<div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>time.perweek(v)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Shortcut to specify rate per calendar week</p>
-</section>
-<section id="starsim.time.peryear" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.time.peryear">peryear</h3>
-<div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>time.peryear(v)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Shortcut to specify rate per numeric year</p>
+<section id="starsim.time.time_prob" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.time.time_prob">time_prob</h3>
+<div class="sourceCode" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>time.time_prob(value, unit<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Backwards compatibility function for prob</p>
 
 
 </section>
@@ -1615,7 +2099,7 @@ ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

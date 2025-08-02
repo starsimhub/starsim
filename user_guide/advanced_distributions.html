@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -679,7 +685,14 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 
 
 <p>Agent-based models draw random numbers from distributions to simulate various phenomena. Realizations (also called draws or samples) from distributions are used to model everything from the duration of each infection to the number of contacts each individual has in a network to the outcomes of individual diagnostic tests. The Starsim framework includes state of the art functionality for specifying and sampling from statistical distributions.</p>
-<p>In this guide, you will: - Learn which distributions are available in Starsim. - See how to use Starsim framework functionality to create a frozen distribution, generate samples, visualize the distribution, and extract statistics. - Set or update model parameters that are distributions. - Use distributions with “dynamic parameters” that depend on agent attributes, the simulation time, or other factors. - Build an example Starsim intervention that uses a distribution with dynamic parameters.</p>
+<p>In this guide, you will:</p>
+<ul>
+<li>Learn which distributions are available in Starsim.</li>
+<li>See how to use Starsim framework functionality to create a frozen distribution, generate samples, visualize the distribution, and extract statistics.</li>
+<li>Set or update model parameters that are distributions.</li>
+<li>Use distributions with “dynamic parameters” that depend on agent attributes, the simulation time, or other factors.</li>
+<li>Build an example Starsim intervention that uses a distribution with dynamic parameters.</li>
+</ul>
 <p>One key advantage of Starsim distributions is that they enable low-variance comparison between simulations through a technique called “common random numbers” (CRN). To learn more about CRN, see the <a href="../user_guide/advanced_random.html">Common Random Numbers</a> guide.</p>
 <section id="available-distributions" class="level2">
 <h2 class="anchored" data-anchor-id="available-distributions">Available distributions</h2>
@@ -761,30 +774,36 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td>Random number from a gamma distribution with specified shape and scale parameters.</td>
 </tr>
 <tr class="odd">
+<td>Beta</td>
+<td>beta_dist</td>
+<td>a (shape parameter, must be &gt; 0), b (shape parameter, must be &gt; 0)</td>
+<td>Random number from a beta distribution with specified shape parameters.</td>
+</tr>
+<tr class="even">
 <td>Constant</td>
 <td>constant</td>
 <td>v</td>
 <td>Constant value, useful for fixed parameters and testing.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>Random Integer</td>
 <td>randint</td>
 <td>low, high</td>
 <td>Random integer between a specified minimum and maximum.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Bernoulli</td>
 <td>bernoulli</td>
 <td>p</td>
 <td>Random number from a Bernoulli distribution with specified probability of success. Bernoulli distributions are used frequently to determine binary outcomes, such as whether an agent is infected or not.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>Choice</td>
 <td>choice</td>
 <td>a (int or list of choices), p (probability of each choice)</td>
 <td>Randomly select from a list of values. This distribution only supports fixed parameters.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Histogram</td>
 <td>histogram</td>
 <td>values, bins, density, data</td>
@@ -797,7 +816,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="how-to-use-starsim-distributions" class="level2">
 <h2 class="anchored" data-anchor-id="how-to-use-starsim-distributions">How to use Starsim distributions</h2>
-<p>Parameters for Starsim distributions can have fixed parameters (the same for all agents) or vary dynamically. We will start with a simple normal distribution with fixed parameters.</p>
+<p>Parameters for Starsim distributions can have fixed parameters (the same for all agents) or vary dynamically. We will start with a simple normal distribution with fixed parameters:</p>
 <div id="e2cdacfe" class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -812,12 +831,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="drawing-samples" class="level3">
 <h3 class="anchored" data-anchor-id="drawing-samples">Drawing samples</h3>
 <p>Samples from a distribution can be drawn using the <code>rvs</code> method.</p>
-<p>While possible to request a specific number of samples, as shown below, please know that this is not the preferred way to use distribution in Starsim.</p>
+<p>While possible to request a specific number of samples, as shown below, please know that this is not the preferred way to use distribution in Starsim:</p>
 <div id="6f73ac94" class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>draws <span class="op">=</span> d.rvs(<span class="dv">5</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(draws)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>The above approach is better than calling <code>numpy.random</code> directly, but still not ideal because it does not allow for dynamic parameter nor low-noise sampling. Therefore, please instead call the <code>rvs</code> method with the unique identifiers (uids) of the agents for which you need samples. Alternatively, you can pass a boolean mask of length equal to the number of agents in the simulation.</p>
+<p>The above approach is better than calling <code>numpy.random</code> directly, but still not ideal because it does not allow for dynamic parameter nor low-noise sampling. Therefore, please instead call the <code>rvs</code> method with the unique identifiers (uids) of the agents for which you need samples. Alternatively, you can pass a boolean mask of length equal to the number of agents in the simulation:</p>
 <div id="91f5f842" class="cell">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a> <span class="co"># Create a simulation for context</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a> <span class="co"># [you will not need to do this when working within the framework]</span></span>
@@ -844,14 +863,14 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="visualizing-distributions" class="level3">
 <h3 class="anchored" data-anchor-id="visualizing-distributions">Visualizing distributions</h3>
-<p>Let’s take a look at the distribution by plotting a histogram of samples.</p>
+<p>Let’s take a look at the distribution by plotting a histogram of samples:</p>
 <div id="5d5f54e6" class="cell">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> d.plot_hist(n<span class="op">=</span><span class="dv">1000</span>, bins<span class="op">=</span><span class="dv">30</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="extracting-distribution-statistics" class="level3">
 <h3 class="anchored" data-anchor-id="extracting-distribution-statistics">Extracting distribution statistics</h3>
-<p>We can quickly calculate statistics of the distribution by accessing the underlying “dist” property of the distribution.</p>
+<p>We can quickly calculate statistics of the distribution by accessing the underlying “dist” property of the distribution:</p>
 <div id="642620e2" class="cell">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>underlying_dist <span class="op">=</span> d.dist</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Mean:"</span>, underlying_dist.mean())</span>
@@ -921,7 +940,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="using-distributions-with-dynamic-parameters">Using distributions with dynamic parameters</h2>
 <p>Up to this point, the distributions we have used have had fixed parameters. Every agent draws will draw from the same distribution at every time step. But Starsim has a powerful feature to specify distributions with dynamic parameters that can change based on agent attributes, simulation time, or other factors.</p>
 <p>Let’s continue with the <code>SIR</code> example, but make the initial prevalence of infection depend on the age of the agent. Instead of a fixed probability for all agents, let’s make it so that children under 15 years old have a 25% chance of being selected as a “seed” infection and adults over 15 years old have a 10% chance.</p>
-<p>To implement dynamic parameters, we set the parameter (<code>p</code> in the case of a Bernoulli distribution) to a callable like a function. The callable must accept three arguments: 1. <code>self</code>: The module that is calling the distribution 2. <code>sim</code>: The simulation object 3. <code>uids</code>: The unique IDs of the agents being processed It should return a numpy array of the same length as <code>uids</code> containing the parameter value for each agent, or a scalar if the parameter is the same for all agents.</p>
+<p>To implement dynamic parameters, we set the parameter (<code>p</code> in the case of a Bernoulli distribution) to a callable like a function. The callable must accept three arguments:</p>
+<ol type="1">
+<li><code>self</code>: The module that is calling the distribution</li>
+<li><code>sim</code>: The simulation object</li>
+<li><code>uids</code>: The unique IDs of the agents being processed</li>
+</ol>
+<p>It should return a numpy array of the same length as <code>uids</code> containing the parameter value for each agent, or a scalar if the parameter is the same for all agents.</p>
 <div id="eb3bdf00" class="cell">
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> set_p_by_age(<span class="va">self</span>, sim, uids):</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full(<span class="bu">len</span>(uids), fill_value<span class="op">=</span><span class="fl">0.10</span>)  <span class="co"># Default 10% infection probability</span></span>
@@ -951,7 +976,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
 <span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>            ss.State(<span class="st">'vaccinated'</span>, label<span class="op">=</span><span class="st">"Vaccinated"</span>, default<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'vaccinated'</span>, label<span class="op">=</span><span class="st">"Vaccinated"</span>, default<span class="op">=</span><span class="va">False</span>)</span>
 <span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        )</span>
 <span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
 <span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Create a Bernoulli distribution as a module parameter</span></span>
@@ -1007,10 +1032,9 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    interventions<span class="op">=</span>[vx_intv],</span>
 <span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span>ss.RandomNet()</span>
 <span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>sim.run().plot(<span class="st">'Myvx'</span>) <span class="co"># Verify vaccinations only on the 5th time step</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>sim.run().plot(<span class="st">'myvx'</span>) <span class="co"># Verify vaccinations only on the 5th time step</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>See how vaccines were delivered only on time step 5? If we were to look at which agents received the vaccine, we would see probability increasing with age.</p>
-<p>This concludes this user guide. If you have any questions or feedback, please create an issue or reach out to info@starsim.org.</p>
 
 
 </section>
@@ -1447,7 +1471,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -421,8 +421,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -545,6 +545,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <li><a href="#starsim.products.Product" id="toc-starsim.products.Product" class="nav-link" data-scroll-target="#starsim.products.Product">Product</a></li>
   <li><a href="#starsim.products.Tx" id="toc-starsim.products.Tx" class="nav-link" data-scroll-target="#starsim.products.Tx">Tx</a></li>
   <li><a href="#starsim.products.Vx" id="toc-starsim.products.Vx" class="nav-link" data-scroll-target="#starsim.products.Vx">Vx</a></li>
+  <li><a href="#starsim.products.simple_vx" id="toc-starsim.products.simple_vx" class="nav-link" data-scroll-target="#starsim.products.simple_vx">simple_vx</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -587,11 +588,15 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td><a href="#starsim.products.Vx">Vx</a></td>
 <td>Vaccine product</td>
 </tr>
+<tr class="odd">
+<td><a href="#starsim.products.simple_vx">simple_vx</a></td>
+<td>Create a simple vaccine product that affects the probability of infection.</td>
+</tr>
 </tbody>
 </table>
 <section id="starsim.products.Dx" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.products.Dx">Dx</h3>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>products.Dx(<span class="va">self</span>, df, hierarchy<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>products.Dx(<span class="va">self</span>, df<span class="op">=</span><span class="va">None</span>, hierarchy<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Generic class for diagnostics</p>
 <section id="methods" class="level4">
 <h4 class="anchored" data-anchor-id="methods">Methods</h4>
@@ -648,7 +653,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.products.Tx" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.products.Tx">Tx</h3>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>products.Tx(<span class="va">self</span>, df, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>products.Tx(<span class="va">self</span>, df<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Treatment products change fundamental properties about People, including their prognoses and infectiousness.</p>
 <section id="methods-2" class="level4">
 <h4 class="anchored" data-anchor-id="methods-2">Methods</h4>
@@ -697,9 +702,48 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <h5 class="anchored" data-anchor-id="starsim.products.Vx.administer">administer</h5>
 <div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>products.Vx.administer(uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Apply the vaccine to the requested uids.</p>
-
-
 </section>
+</section>
+</section>
+<section id="starsim.products.simple_vx" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.products.simple_vx">simple_vx</h3>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>products.simple_vx(<span class="va">self</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Create a simple vaccine product that affects the probability of infection.</p>
+<p>The vaccine can be either “leaky”, in which everyone who receives the vaccine receives the same amount of protection (specified by the efficacy parameter) each time they are exposed to an infection. The alternative (leaky=False) is that the efficacy is the probability that the vaccine “takes”, in which case that person is 100% protected (and the remaining people are 0% protected).</p>
+<section id="parameters" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>efficacy</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>efficacy of the vaccine (0&lt;=efficacy&lt;=1)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>disease</td>
+<td><a href="https://docs.python.org/3/library/functions.html#int">int</a> / <a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td>the disease to modify (if None, modify all)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>leaky</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>see above</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+
+
 </section>
 </section>
 </section>
@@ -1137,7 +1181,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -421,8 +421,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -570,14 +570,32 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td><a href="#starsim.loop.Loop">Loop</a></td>
-<td>Base class for integration loop</td>
+<td>Define the integration loop</td>
 </tr>
 </tbody>
 </table>
 <section id="starsim.loop.Loop" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.loop.Loop">Loop</h3>
 <div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>loop.Loop(<span class="va">self</span>, sim)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Base class for integration loop</p>
+<p>Define the integration loop</p>
+<p>The Loop handles the order in which each function is called in the sim. The order is defined in <code>Loop.collect_funcs()</code>, which searches through the sim and collects all methods to call, in order, in the integration loop.</p>
+<p>Each type of module is called at a different time. Within each module type, they are called in the order listed. The default loop order is:</p>
+<pre><code>1. sim:               start_step()     # Initialize the sim, including plotting progress
+2. all modules:       start_step()     # Initialize the modules, including the random number distribution
+3. sim.modules:       step()           # Run any custom modules
+4. sim.demographics:  step()           # Update the demographics, including adding new agents
+5. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -&gt; infected
+6. sim.connectors:    step()           # Run the connectors
+7. sim.networks:      step()           # Run the networks, including adding/removing edges
+8. sim.interventions: step()           # Run the interventions
+9. sim.diseases:      step()           # Run the diseases, including transmission
+10. people:           step_die()       # Figure out who died on this timestep
+11. people:           update_results() # Update basic state results
+12. all modules:      update_results() # Update any results
+13. sim.analyzers:    step()           # Run the analyzers
+14. all modules:      finish_step()    # Do any final tidying
+15. people:           finish_step()    # Clean up dead agents
+16. sim:              finish_step()    # Increment the timestep</code></pre>
 <section id="methods" class="level4">
 <h4 class="anchored" data-anchor-id="methods">Methods</h4>
 <table class="caption-top table">
@@ -601,12 +619,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td>Parse the sim into the integration plan</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.loop.Loop.make_plan">make_plan</a></td>
-<td>Combine the module ordering and the time vectors into the integration plan</td>
+<td><a href="#starsim.loop.Loop.insert">insert</a></td>
+<td>Insert a function into the loop plan at the specified location.</td>
 </tr>
 <tr class="odd">
-<td><a href="#starsim.loop.Loop.manual_reset">manual_reset</a></td>
-<td>Reset the loop to run again. Note, does not reset sim quantities so should</td>
+<td><a href="#starsim.loop.Loop.make_plan">make_plan</a></td>
+<td>Combine the module ordering and the time vectors into the integration plan</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.loop.Loop.plot">plot</a></td>
@@ -617,12 +635,20 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td>Plot the CPU time spent on each event; visualization of Loop.cpu_df.</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.loop.Loop.plot_step_order">plot_step_order</a></td>
+<td>Plot the order of the module steps across timesteps – useful for debugging</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.loop.Loop.run">run</a></td>
 <td>Actually run the integration loop; usually called by sim.run()</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.loop.Loop.run_one_step">run_one_step</a></td>
 <td>Take a single step, i.e.&nbsp;call a single function; only used for debugging purposes.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.loop.Loop.shrink">shrink</a></td>
+<td>Shrink the size of the loop for saving to disk</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.loop.Loop.store_time">store_time</a></td>
@@ -636,35 +662,124 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </table>
 <section id="starsim.loop.Loop.collect_abs_tvecs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.collect_abs_tvecs">collect_abs_tvecs</h5>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.collect_abs_tvecs()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.collect_abs_tvecs()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Collect numerical time arrays for each module</p>
 </section>
 <section id="starsim.loop.Loop.collect_funcs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.collect_funcs">collect_funcs</h5>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.collect_funcs()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.collect_funcs()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Collect all the callable functions (methods) that comprise the step</p>
 </section>
 <section id="starsim.loop.Loop.init" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.init">init</h5>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.init()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.init()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Parse the sim into the integration plan</p>
+</section>
+<section id="starsim.loop.Loop.insert" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.loop.Loop.insert">insert</h5>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.insert(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    func,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    label<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    match_fn<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    before<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Insert a function into the loop plan at the specified location.</p>
+<p>The loop plan is a dataframe with columns including time (e.g.&nbsp;<code>date('2025-05-05')</code>), label (e.g.&nbsp;<code>'randomnet.step'</code>), module (’<code>randomnet'</code>), and function name (<code>'step'</code>). By default, this method will match the conditions in the plan based on the criteria specified.</p>
+<p>This functionality is similar to an analyzer or an intervention, but gives additional flexibility since can be inserted at (almost) any point in a sim.</p>
+<p>Note: the loop must be initialized (<code>sim.init()</code>) before you can call this.</p>
+<section id="parameters" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>func</td>
+<td><code>func</code></td>
+<td>the function to insert; must take a single argument, <code>sim</code></td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>label</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the label (module.name) of the function to match; see <code>sim.loop.plan.label.unique() for choices</code></td>
+<td><code>None</code></td>
+</tr>
+<tr class="odd">
+<td>match_fn</td>
+<td><code>func</code></td>
+<td>if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)</td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>before</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if true, insert the function before rather than after the match</td>
+<td><code>False</code></td>
+</tr>
+<tr class="odd">
+<td>die</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to raise an exception if no matches found</td>
+<td><code>True</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Examples</strong>:</p>
+<pre><code># Simple label matching with analyzer-like functionality
+def check_pop_size(sim):
+    print(f'Population size is {len(sim.people)}')
+
+sim = ss.Sim(diseases='sir', networks='random', demographics=True)
+sim.init()
+sim.loop.insert(check_pop_size, label='people.finish_step')
+sim.run()
+
+# Function-based matching with intervention-like functionality
+def match_fn(plan):
+    past_2010 = plan.time &gt; ss.date(2010)
+    is_step = (plan.label == 'sir.step') | (plan.label == 'randomnet.step')
+    return past_2010 * is_step
+
+def update_betas(sim):
+    if not sim.metadata.get('updated'):
+        print(f'Updating beta values on {sim.now}')
+        sim.diseases.sis.beta = 0.1
+        sim.networks.randomnet.edges.beta[:] = 0.5
+        sim.metadata.updated = True
+    return
+
+sim = ss.Sim(diseases='sis', networks='random')
+sim.init()
+sim.loop.insert(update_betas, match_fn=match_fn, before=True)
+sim.run()</code></pre>
+</section>
 </section>
 <section id="starsim.loop.Loop.make_plan" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.make_plan">make_plan</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.make_plan()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.make_plan()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Combine the module ordering and the time vectors into the integration plan</p>
-</section>
-<section id="starsim.loop.Loop.manual_reset" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.loop.Loop.manual_reset">manual_reset</h5>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.manual_reset()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Reset the loop to run again. Note, does not reset sim quantities so should only be used for debugging.</p>
 </section>
 <section id="starsim.loop.Loop.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.plot">plot</h5>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.plot(simplify<span class="op">=</span><span class="va">False</span>, fig_kw<span class="op">=</span><span class="va">None</span>, plot_kw<span class="op">=</span><span class="va">None</span>, scatter_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.plot(</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    simplify<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    max_len<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    fig_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    plot_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    scatter_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Plot a diagram of all the events</p>
-<section id="parameters" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h6>
+<section id="parameters-1" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -682,18 +797,24 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td><code>False</code></td>
 </tr>
 <tr class="even">
+<td>max_len</td>
+<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td>maximum number of entries to plot</td>
+<td><code>100</code></td>
+</tr>
+<tr class="odd">
 <td>fig_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to <code>plt.figure()</code></td>
 <td><code>None</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>plot_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to <code>plt.plot()</code></td>
 <td><code>None</code></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>scatter_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to <code>plt.scatter()</code></td>
@@ -705,10 +826,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.loop.Loop.plot_cpu" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.plot_cpu">plot_cpu</h5>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.plot_cpu(bytime<span class="op">=</span><span class="va">True</span>, max_entries<span class="op">=</span><span class="dv">10</span>, fig_kw<span class="op">=</span><span class="va">None</span>, bar_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.plot_cpu(bytime<span class="op">=</span><span class="va">True</span>, max_entries<span class="op">=</span><span class="dv">10</span>, fig_kw<span class="op">=</span><span class="va">None</span>, bar_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Plot the CPU time spent on each event; visualization of Loop.cpu_df.</p>
-<section id="parameters-1" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
+<section id="parameters-2" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -741,25 +862,101 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </table>
 </section>
 </section>
+<section id="starsim.loop.Loop.plot_step_order" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.loop.Loop.plot_step_order">plot_step_order</h5>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.plot_step_order(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    which<span class="op">=</span><span class="st">'default'</span>,</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    max_len<span class="op">=</span><span class="dv">500</span>,</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    plot_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    scatter_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    fig_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    legend_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Plot the order of the module steps across timesteps – useful for debugging when using different time units.</p>
+<p>Note: generates a lot of data, best to debug with a small number of timesteps first!</p>
+<section id="parameters-3" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>which</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>columns and values to filter to (default: {‘func_name’:‘step’}; if None, do not filter)</td>
+<td><code>'default'</code></td>
+</tr>
+<tr class="even">
+<td>max_len</td>
+<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td>maximum number of entries to plot</td>
+<td><code>500</code></td>
+</tr>
+<tr class="odd">
+<td>plot_kw</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>plt.plot()</code></td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>scatter_kw</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>plt.scatter()</code></td>
+<td><code>None</code></td>
+</tr>
+<tr class="odd">
+<td>fig_kw</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>plt.figure()</code></td>
+<td><code>None</code></td>
+</tr>
+<tr class="even">
+<td>legend_kw</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>plt.legend()</code></td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>:</p>
+<pre><code>sis = ss.SIS(dt=0.1)
+net = ss.RandomNet(dt=0.5)
+births = ss.Births(dt=1)
+sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
+sim.init()
+sim.loop.plot_step_order()</code></pre>
+</section>
+</section>
 <section id="starsim.loop.Loop.run" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.run">run</h5>
-<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.run(until<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.run(until<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Actually run the integration loop; usually called by sim.run()</p>
 </section>
 <section id="starsim.loop.Loop.run_one_step" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.run_one_step">run_one_step</h5>
-<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.run_one_step()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.run_one_step()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Take a single step, i.e.&nbsp;call a single function; only used for debugging purposes.</p>
 <p>Compare sim.run_one_step(), which runs a full timestep (which involves multiple function calls).</p>
 </section>
+<section id="starsim.loop.Loop.shrink" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.loop.Loop.shrink">shrink</h5>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.shrink()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Shrink the size of the loop for saving to disk</p>
+</section>
 <section id="starsim.loop.Loop.store_time" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.store_time">store_time</h5>
-<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.store_time()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.store_time()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Store the current time in as high resolution as possible</p>
 </section>
 <section id="starsim.loop.Loop.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.to_df">to_df</h5>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Return a user-friendly version of the plan, omitting object columns</p>
 
 
@@ -1201,7 +1398,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

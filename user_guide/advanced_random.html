@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -676,12 +682,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 
 <p>The Starsim framework implements a novel approach to sampling from distributions that prevents random number noise from corrupting differences between two simulations. This user guide will demonstrate how to use the common random number (CRN) feature to achieve low-variance differences in simulation results. This feature is important for scenario and sensitivity analyses, where the goal is to isolate the effects of specific changes in model parameters or configurations.</p>
 <p>For technical details and additional examples, please refer to the following publication: <a href="https://arxiv.org/abs/2409.02086">D. J. Klein, R. G. Abeysuriya, R. M. Stuart, and C. C. Kerr, “Noise-free comparison of stochastic agent-based simulations using common random numbers.” arXiv preprint arXiv:2409.02086 (2024).</a></p>
-<p>This guide builds on the <a href="../user_guide/advanced_distributions.html">Advanced Distribution User Guide</a>, so please familiarize yourself with that guide before proceeding.</p>
+<p>This guide builds on the <a href="../user_guide/advanced_distributions.html">Distributions guide</a>, so please familiarize yourself with that guide before proceeding.</p>
 <p>In this user guide, you will: - Understand the concept of common random numbers (CRN) - Learn how to sample from distributions using common random numbers - See the benefits of using CRN for low-variance differences</p>
 <section id="understanding-common-random-numbers-crn" class="level2">
 <h2 class="anchored" data-anchor-id="understanding-common-random-numbers-crn">Understanding Common Random Numbers (CRN)</h2>
 <p>Common Random Numbers (CRN) is a sophisticated technique that enables noise-free accounting of the effects of different parameters or interventions on outcomes like infections averted or lives saved. Starsim is the first and only simulation framework that fully supports CRN, including agent-agent interactions like disease transmission and vital dynamics including births.</p>
-<p>To understand CRN, you first have to know a little about where random numbers come from. As discussed in the <a href="../user_guide/advanced_distributions.html">Advanced Distribution User Guide</a>, random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the <code>numpy</code> library:</p>
+<p>To understand CRN, you first have to know a little about where random numbers come from. As discussed in the <a href="../user_guide/advanced_distributions.html">Advanced Distributions guide</a>, random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the <code>numpy</code> library:</p>
 <div id="bcaa704e" class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">42</span>) <span class="co"># Set the seed to 42</span></span>
@@ -697,15 +703,23 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="the-problem-solved-by-crn-in-agent-based-simulation-modeling" class="level3">
 <h3 class="anchored" data-anchor-id="the-problem-solved-by-crn-in-agent-based-simulation-modeling">The problem solved by CRN in agent-based simulation modeling</h3>
 <p>Most agent-based modeling frameworks dole out random numbers to agents sequentially, as needed, drawing values from a single centralized random number generator. The problem arises when you want to compare two similar, but different simulations.</p>
-<p>Even if the two simulations are run with the same seed, the difference in outcomes will be a combination of 1. Real and meaningful “mechanistic” differences caused by the different inputs, and 2. Random number noise caused by “stochastic branching.”</p>
+<p>Even if the two simulations are run with the same seed, the difference in outcomes will be a combination of:</p>
+<ol type="1">
+<li>Real and meaningful “mechanistic” differences caused by the different inputs, and</li>
+<li>Random number noise caused by “stochastic branching.”</li>
+</ol>
 <p>Stochastic branching is just a technical term used to describe which random numbers are used to make each decision. The random number noise obscures the real differences, making it difficult to determine the true impact of the changes made in the second simulation.</p>
 </section>
 <section id="example-of-stochastic-branching-fishing" class="level3">
 <h3 class="anchored" data-anchor-id="example-of-stochastic-branching-fishing">Example of stochastic branching: Fishing 🎣</h3>
-<p>As a simple example, consider the following two simulations of a Fishing module. - Simulation A has 20 agents who are trying to catch fish. On each time step, each agent has a 50% chance of going fishing, and a 20% chance of catching a fish if they go fishing. - Simulation B is identical to Simulation A, except that agent 0 is banned from fishing.</p>
+<p>As a simple example, consider the following two simulations of a Fishing module.</p>
+<ul>
+<li>Simulation A has 20 agents who are trying to catch fish. On each time step, each agent has a 50% chance of going fishing, and a 20% chance of catching a fish if they go fishing.</li>
+<li>Simulation B is identical to Simulation A, except that agent 0 is banned from fishing.</li>
+</ul>
 <p>Both simulations will use the same random number seed. Because the agents do not interact (they’re not actually competing for the same fish!), the only difference in outcomes should be that agent 0 does not go fishing and therefore will never catch a fish. However, because of the way random numbers are generated, the two simulations will use the same random numbers for different purposes. This means that banning agent 0 from fishing will <em>change which other agents go fishing and catch fish</em>!</p>
 <p><strong>NOTE:</strong> We have to specifically disable Starsim’s CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the <code>_centralized</code> option to <code>True</code> in this example.</p>
-<p>As a first step, we will create a Fishing module.</p>
+<p>As a first step, we will create a Fishing module:</p>
 <div id="918c0ff8" class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -720,7 +734,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        )</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars<span class="op">=</span>pars, <span class="op">**</span>kwargs)</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>            ss.State(<span class="st">'fish_caught'</span>, default<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'fish_caught'</span>, default<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        )</span>
 <span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
 <span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
@@ -738,35 +752,35 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.fish_caught[catch_uids] <span class="op">=</span> <span class="va">self</span>.fish_caught[catch_uids] <span class="op">+</span> <span class="dv">1</span> <span class="co"># Increment the number of fish caught for each agent that caught a fish</span></span>
 <span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>Now we can build and run the two simulations to compare the results.</p>
+<p>Now we can build and run the two simulations to compare the results:</p>
 <div id="64ca7217" class="cell">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co">: For this example, we configure the simulation to be centralized!</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options.<span class="bu">set</span>(_centralized<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">True</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Shared parameters for both simulations</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">20</span>, dur<span class="op">=</span><span class="dv">1</span>, rand_seed<span class="op">=</span><span class="dv">42</span>, start<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">20</span>, start<span class="op">=</span>ss.days(<span class="dv">0</span>), dur<span class="op">=</span>ss.days(<span class="dv">1</span>), rand_seed<span class="op">=</span><span class="dv">42</span>)</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(interventions<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>simA.run()</span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">SIMULATION B: WITH AGENT 0 BANNED'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(interventions<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">0</span>]), <span class="op">**</span>pars)</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">0</span>]), <span class="op">**</span>pars)</span>
 <span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>simB.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>In simulation A, agents 16 and 18 catch fish on the first time step, but in simulation B, agents 17 and 19 catch fish. Then on the second timestep, we can see that different agents go fishing and that 1, 15, and 19 catch fish in A but only 3 is lucky in B – what?! All we did was to ban agent 0 from fishing. The agents do not interact, so there should not have been a difference!</p>
 <p>What we are seeing here is a simple example of the stochastic branching problem. This “random number noise” could easily make it look like banning agent 0 could result in more fish being caught, which should be physically impossible as there are fewer agents fishing.</p>
-<p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>_centralized</code> option to its default value of <code>False</code>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing.</p>
+<p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>_centralized</code> option to its default value of <code>False</code>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing:</p>
 <div id="2334bf58" class="cell">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the _centralized option to False (this is the default, so you don't have to do this)</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options.<span class="bu">set</span>(_centralized<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">False</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(interventions<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>simA <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(), <span class="op">**</span>pars)</span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>simA.run()</span>
 <span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">SIMULATION B: WITH AGENT 1 BANNED'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(interventions<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">1</span>]), <span class="op">**</span>pars)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>simB <span class="op">=</span> ss.Sim(modules<span class="op">=</span>Fishing(banned_uids<span class="op">=</span>[<span class="dv">1</span>]), <span class="op">**</span>pars)</span>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>simB.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>With CRN, banning agent 0 only prevents agent 0 from catching fish. Everything else is identical, as expected. This is the power of common random numbers.</p>
@@ -774,7 +788,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="tips-for-crn-enabled-sampling-in-starsim" class="level2">
 <h2 class="anchored" data-anchor-id="tips-for-crn-enabled-sampling-in-starsim">Tips for CRN-enabled sampling in Starsim</h2>
-<p>This advanced CRN functionality is built into every distribution in Starsim! You will automatically get the benefits of CRN whenever you properly use distributions in your modules. Here are a few tips to ensure proper usage: 1. Use a separate distribution for each “decision” in your code. Ideally, each distribution would only be called one time per time step. 1. Create each distribution one time per module. The <code>__init__</code> method is a great place to do this. Do not create a new distribution on every step. 1. When sampling from a distribution, pass <code>uids</code> or a boolean mask with length equal to the number of agents in the simulation. This ensures that each agent gets the right random number. 1. If the parameters of your distribution change every step, set the parameter values to a callable function that performs the calculation.</p>
+<p>This advanced CRN functionality is built into every distribution in Starsim! You will automatically get the benefits of CRN whenever you properly use distributions in your modules. Here are a few tips to ensure proper usage:</p>
+<ol type="1">
+<li>Use a separate distribution for each “decision” in your code. Ideally, each distribution would only be called one time per time step.</li>
+<li>Create each distribution one time per module. The <code>__init__</code> method is a great place to do this. Do not create a new distribution on every step.</li>
+<li>When sampling from a distribution, pass <code>uids</code> or a boolean mask with length equal to the number of agents in the simulation. This ensures that each agent gets the right random number.</li>
+<li>If the parameters of your distribution change every step, set the parameter values to a callable function that performs the calculation.</li>
+</ol>
 <p>Preferred and avoided usage examples:</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># PREFERRED: use uids</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>all_uids <span class="op">=</span> <span class="va">self</span>.sim.people.auids</span>
@@ -823,7 +843,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>    my_p_vec[<span class="va">self</span>.sim.people.age <span class="op">&lt;</span> <span class="dv">18</span>] <span class="op">=</span> <span class="fl">0.1</span></span>
 <span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.dist.<span class="bu">set</span>(p<span class="op">=</span>my_p_vec)</span>
 <span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a>    uids <span class="op">=</span> <span class="va">self</span>.dist.<span class="bu">filter</span>(mask)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Please don’t hesitate to create issues related to any problems you encounter or reach out to use at info@starsim.org.</p>
+<p>Please don’t hesitate to create issues related to any problems you encounter or questions you have!</p>
 
 
 </section>
@@ -1248,8 +1268,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/advanced_profiling.html" class="pagination-link" aria-label="Profiling and performance">
-        <span class="nav-page-text">Profiling and performance</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/advanced_profiling.html" class="pagination-link" aria-label="Profiling and debugging">
+        <span class="nav-page-text">Profiling and debugging</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
@@ -1260,7 +1280,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

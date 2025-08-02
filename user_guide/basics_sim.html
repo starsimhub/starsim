@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -679,14 +685,21 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>On this page, we explain what happens when you create a <code>Sim</code>, and the particular order of steps taken when a <code>Sim</code> is run. We then provide a few common examples of how to create and run a <code>Sim</code> and when/why you might choose each one.</p>
 <section id="creating-and-initializing-a-sim" class="level2">
 <h2 class="anchored" data-anchor-id="creating-and-initializing-a-sim">Creating and initializing a Sim</h2>
-<p>When you first create a sim, e.g.&nbsp;with <code>sim = ss.Sim()</code>, the resulting <code>Sim</code> object will be mostly empty with a few pre-set defaults. Most of the initialization is done when <code>sim.init()</code> is called. This completes the initialization with the following steps: * Validating the parameters; * Adding a <code>Time</code> module to the sim (stored under <code>sim.t</code>), which looks after converting parameters between timesteps; * Adding <code>People</code> to the <code>Sim</code>: if these are not supplied directly, STarsim will automatically add <code>People</code> with default age/sex structure; * Adding all the parameters and results from each <code>Module</code> to the <code>Sim</code>, and adding the states from each <code>Module</code> to the <code>People</code>; * Initializing any distributions contained anywhere within the parameters or states.</p>
+<p>When you first create a sim, e.g.&nbsp;with <code>sim = ss.Sim()</code>, the resulting <code>Sim</code> object will be mostly empty with a few pre-set defaults. Most of the initialization is done when <code>sim.init()</code> is called. This completes the initialization with the following steps:</p>
+<ul>
+<li>Validating the parameters;</li>
+<li>Adding a <code>Time</code> module to the sim (stored under <code>sim.t</code>), which looks after converting parameters between timesteps;</li>
+<li>Adding <code>People</code> to the <code>Sim</code>: if these are not supplied directly, Starsim will automatically add <code>People</code> with default age/sex structure;</li>
+<li>Adding all the parameters and results from each <code>Module</code> to the <code>Sim</code>, and adding the states from each <code>Module</code> to the <code>People</code>;</li>
+<li>Initializing any distributions contained anywhere within the parameters or states.</li>
+</ul>
 <p>A <code>Sim</code> is automatically initialized if <code>sim.run()</code> is called.</p>
 </section>
 <section id="running-a-sim" class="level2">
 <h2 class="anchored" data-anchor-id="running-a-sim">Running a Sim</h2>
 <section id="order-of-operations" class="level3">
 <h3 class="anchored" data-anchor-id="order-of-operations">Order of operations</h3>
-<p>An important function of the <code>Sim</code> class is that it controls the order in which the different steps of each module are executed. Starsim allows users lots of flexibility regarding the timesteps for individual modules. For example, a common usage pattern is that you may only want to update your demographic modules once a year, but you may want to update your disease modules once per month, week, or day. The <code>Sim</code> class stores a plan for updating each modules in the right order and with the right frequency. This is stored within a specialized <code>Loop</code> class housed within the <code>Sim</code>. Users typically won’t interact with this class directly, but it is worth knowing the order in which updates are made on each timestep.</p>
+<p>An important function of the <code>Sim</code> class is that it controls the order in which the different steps of each module are executed. Starsim allows users lots of flexibility regarding the timesteps for individual modules. For example, a common usage pattern is that you may only want to update your demographic modules once a year, but you may want to update your disease modules once per month, week, or day. The <code>Sim</code> class stores a plan for updating each module in the right order and with the right frequency. This is stored within a specialized <code>Loop</code> class housed within the <code>Sim</code>. Users typically won’t interact with this class directly, but it is worth knowing the order in which updates are made on each timestep.</p>
 <ol type="1">
 <li><code>Modules</code> have a <code>start_step</code> method which is called first. This usually just advances random number generators forward.</li>
 <li>Any <code>Demographic</code> modules have their <code>step</code> method called</li>
@@ -711,7 +724,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.update_immunity()</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>To illustrate the ordering of all these updates, let’s consider an example of a woman infected with pre-symptomatic COVID who, in the course of a single busy day, started developing COVID symptoms, took a COVID test, moved out of her parents house and into her husband’s house, and fell pregnant. Starsim’s model update logic would order her day as follows: (1) fall pregnant, (2) develop symptoms, (3) move house, (4) transmit COVID to anyone still in her contact networks, which at this point would include her husband but not her parents, (5) get COVID test.</p>
+<p>To illustrate the ordering of all these updates, let’s consider an example of a woman infected with pre-symptomatic COVID who, in the course of a single busy day, started developing COVID symptoms, took a COVID test, moved out of her parents’ house and into her husband’s house, and became pregnant. Starsim’s model update logic would order her day as follows: (1) become pregnant, (2) develop symptoms, (3) move house, (4) transmit COVID to anyone still in her contact networks, which at this point would include her husband but not her parents, (5) get COVID test.</p>
 <p>There are a few principles that guide the logic about the update ordering. Updating the demographics first makes sense because we want to make sure we capture mother-to-child transmission. Suppose that during one month, a woman became pregnant and also acquired malaria; we want to ensure that the effects of malaria on her pregnancy are captured. Updating the network before disease transmission occurs is fairly arbitrary, but it means that transmission can occur with new partners, which is particularly relevant for sexually transmitted infections, especially when it’s an instantaneously-dissolving partnership.</p>
 </section>
 <section id="printing-progress" class="level3">
@@ -721,7 +734,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starting-and-stopping-a-run" class="level2">
 <h2 class="anchored" data-anchor-id="starting-and-stopping-a-run">Starting and stopping a run</h2>
-<p>Simulations can be partially run, stopped, and restarted using the <code>sim.run(until=)</code> argument. This can be useful for a few different reasons: - To inspect the state of a simulation for mid-run (although you can also use an analyzer or the Python debugger for this) - To modify the state of a simulation before continuing (although you can also use an intervention for this) - To run part of a simulation only once, before copying it and running different scenarios (although note that copying a simulation can often take almost as much time as running it!)</p>
+<p>Simulations can be partially run, stopped, and restarted using the <code>sim.run(until=)</code> argument. This can be useful for a few different reasons:</p>
+<ul>
+<li>To inspect the state of a simulation for mid-run (although you can also use an analyzer or the Python debugger for this)</li>
+<li>To modify the state of a simulation before continuing (although you can also use an intervention for this)</li>
+<li>To run part of a simulation only once, before copying it and running different scenarios (although note that copying a simulation can often take almost as much time as running it!)</li>
+</ul>
 <p>Of these, the third use case is probably the most common. The example below illustrates how to do this.</p>
 <div id="7e8dd5db" class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -1240,7 +1258,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

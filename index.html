@@ -419,6 +419,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -506,7 +512,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -565,7 +571,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -606,7 +612,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -650,6 +656,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <li><a href="#r" id="toc-r" class="nav-link" data-scroll-target="#r">R</a></li>
   </ul></li>
   <li><a href="#usage-and-documentation" id="toc-usage-and-documentation" class="nav-link" data-scroll-target="#usage-and-documentation">Usage and documentation</a></li>
+  <li><a href="#ai-integration" id="toc-ai-integration" class="nav-link" data-scroll-target="#ai-integration">AI integration</a></li>
   <li><a href="#starsim-structure" id="toc-starsim-structure" class="nav-link" data-scroll-target="#starsim-structure">Starsim structure</a></li>
   <li><a href="#contributing" id="toc-contributing" class="nav-link" data-scroll-target="#contributing">Contributing</a></li>
   <li><a href="#disclaimer" id="toc-disclaimer" class="nav-link" data-scroll-target="#disclaimer">Disclaimer</a></li>
@@ -667,9 +674,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 
 <section id="starsim" class="level1">
 <h1>Starsim</h1>
-<p>Starsim is an agent-based modeling framework for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. Starsim allows detailed modeling of mother-child relationships from conception to study birth-related diseases. Additionally, Starsim lets users compare different intervention strategies, like vaccines or treatments, to see their impact through various delivery methods such as mass campaigns or targeted outreach.</p>
-<p>Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).</p>
-<p>Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included <a href="https://covasim.org">Covasim</a>, <a href="https://hpvsim.org">HPVsim</a>, and <a href="https://fpsim.org">FPsim</a>. In cases where a distinction needs to be made, Starsim is also known as “the Starsim framework” or “Starsim Core”, while this collection of other models is known as the “Starsim suite”.</p>
+<p><a href="https://pypi.org/project/starsim"><img src="https://badgen.net/pypi/v/starsim/?color=blue.png" class="img-fluid" alt="PyPI version"></a> <a href="https://pepy.tech/project/starsim"><img src="https://static.pepy.tech/personalized-badge/starsim?period=total&amp;units=international_system&amp;left_color=grey&amp;right_color=blue&amp;left_text=Downloads.png" class="img-fluid" alt="Downloads"></a> <a href="https://github.com/starsimhub/starsim/actions/workflows/tests.yaml"><img src="https://github.com/starsimhub/starsim/actions/workflows/tests.yaml/badge.svg?branch=main" class="img-fluid" alt="Tests"></a></p>
+<p>Starsim is an agent-based modeling framework designed for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Additionally, users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. To enable the study of birth-related diseases, Starsim allows detailed modeling of mother-child relationships starting from conception. Finally, Starsim lets users compare different intervention strategies, such as vaccines or treatments, to examine their impact through various delivery methods such as mass campaigns or targeted outreach.</p>
+<p>Examples of systems that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as malnutrition).</p>
+<p>Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included <a href="https://covasim.org">Covasim</a>, <a href="https://hpvsim.org">HPVsim</a>, and <a href="https://fpsim.org">FPsim</a>. In cases where a distinction needs to be made, Starsim is also known as “the Starsim framework” or “Starsim Core,” while this collection of other models is known as the “Starsim suite.”</p>
 <p>For more information about Starsim, please see the <a href="https://docs.starsim.org">documentation</a>. Information about Starsim for R is available at <a href="https://r.starsim.org">r.starsim.org</a>.</p>
 <section id="requirements" class="level2">
 <h2 class="anchored" data-anchor-id="requirements">Requirements</h2>
@@ -686,9 +694,9 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="sourceCode" id="cb2"><pre class="sourceCode sh code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> init example</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> example</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> add starsim</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Starsim can also be installed locally. To do this, clone first this repository, then run:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode sh code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-e</span> .</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>(Don’t forget the dot at the end!)</p>
+<p>Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, clone first this repository, then run:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-e</span> .<span class="pp">[</span><span class="ss">dev</span><span class="pp">]</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>(Note: if after doing this, Starsim works, but you see “Import could not be resolved” in your editor, use <code>pip install -e . --config-settings editable_mode=strict</code> instead; more info [here[(https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)</p>
 </section>
 <section id="r" class="level3">
 <h3 class="anchored" data-anchor-id="r">R</h3>
@@ -697,6 +705,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">install_github</span>(<span class="st">"starsimhub/rstarsim"</span>)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(starsim)</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">init_starsim</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>See <a href="https://r.starsim.org">r.starsim.org</a> for more information.</p>
 </section>
 </section>
 <section id="usage-and-documentation" class="level2">
@@ -729,19 +738,25 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot() <span class="co"># Plot the standard SIR curves</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>More usage examples are available in the tutorials, as well as the <code>tests</code> folder.</p>
 </section>
+<section id="ai-integration" class="level2">
+<h2 class="anchored" data-anchor-id="ai-integration">AI integration</h2>
+<p>Starsim includes a <a href="https://en.wikipedia.org/wiki/Model_Context_Protocol">model context protocol</a> (MCP) server that ensures your favorite AI-enabled editor/tool is Starsim-aware. For details, see the <a href="https://github.com/starsimhub/starsim_ai">Starsim AI</a> project.</p>
+</section>
 <section id="starsim-structure" class="level2">
 <h2 class="anchored" data-anchor-id="starsim-structure">Starsim structure</h2>
 <p>All core model code is located in the <code>starsim</code> subfolder; standard usage is <code>import starsim as ss</code>.</p>
 <p>The model consists of core classes including <code>Sim</code>, <code>People</code>, <code>Disease</code>, <code>Network</code>, <code>Intervention</code>, and more. These classes contain methods for running, building simple or dynamic networks, generating random numbers, calculating results, plotting, etc.</p>
 <p>The submodules of the Starsim folder are as follows:</p>
 <ul>
-<li><code>arrays.py</code>: Classes to handle store and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.</li>
+<li><code>analyzers.py</code>: The Analyzers class (for performing analyses on the sim while it’s running), and other classes and functions for analyzing simulations.</li>
+<li><code>arrays.py</code>: Classes to handle, store, and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.</li>
 <li><code>calibration.py</code>: Class to handle automated calibration of the model to data.</li>
-<li><code>calib_components.py</code>: Classes to handle additional operations related to calibration (e.g., the likelihood function).</li>
+<li><code>connectors.py</code>: Classes for modulating interactions between modules (e.g.&nbsp;between two diseases).</li>
+<li><code>debugtools.py</code>: Helper functions and classes to aid with debugging model results and performance.</li>
 <li><code>demographics.py</code>: Classes to transform initial condition input parameters for use in building and utilizing networks.</li>
-<li><code>disease.py</code>: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.</li>
+<li><code>diseases.py</code>: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.</li>
 <li><code>distributions.py</code>: Classes that handle statistical distributions used throughout Starsim to produce random numbers.</li>
-<li><code>interventions.py</code>: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it. The Analyzers class (for performing analyses on the sim while it’s running), and other classes and functions for analyzing simulations.</li>
+<li><code>interventions.py</code>: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it.</li>
 <li><code>loop.py</code>: The logic for the main simulation integration loop.</li>
 <li><code>modules.py</code>: Class to handle “module” logic, such as updates (diseases, networks, etc).</li>
 <li><code>networks.py</code>: Classes for creating simple and dynamic networks of people based on input parameters.</li>
@@ -753,11 +768,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li><code>samples.py</code>: Class to store data from a large number of simulations.</li>
 <li><code>settings.py</code>: User-customizable options for Starsim (e.g.&nbsp;default font size).</li>
 <li><code>sim.py</code>: The Sim class, which performs most of the heavy lifting: initializing the model, running, and plotting.</li>
-<li><code>time.py</code>: The Time class, which coordinates time between the Sim and different modules.</li>
+<li><code>time.py</code>: Time classes, such as dates, durations, probabilities, and frequencies.</li>
+<li><code>timeline.py</code>: The Timeline class, which coordinates time between the Sim and different modules.</li>
 <li><code>utils.py</code>: Helper functions.</li>
 <li><code>version.py</code>: Version, date, and license information.</li>
 </ul>
-<p>The <code>diseases</code> folder within the Starsim package contains definitions of different types of diseases, including STIs, Ebola, and cholera.</p>
+<p>Starsim also includes a <code>starsim_examples</code> folder, which contains definitions of different examples of diseases, including STIs, Ebola, and cholera. <strong>Note</strong>: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g.&nbsp;<a href="https://stisim.org">STIsim</a>.</p>
 </section>
 <section id="contributing" class="level2">
 <h2 class="anchored" data-anchor-id="contributing">Contributing</h2>
@@ -1217,7 +1233,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

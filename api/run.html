@@ -421,8 +421,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/disease.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">disease</span></a>
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -798,15 +798,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.run.MultiSim.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.plot">plot</h5>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.plot(</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    key<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    fig<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    fig_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    plot_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    fill_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    legend_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    legend<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.plot(key<span class="op">=</span><span class="va">None</span>, fig<span class="op">=</span><span class="va">None</span>, legend<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Plot all results in the MultiSim object.</p>
 <p>If the MultiSim object has been reduced (i.e.&nbsp;mean or median), then plot the best value and uncertainty bound. Otherwise, plot individual sims.</p>
 <section id="parameters-3" class="level6 doc-section doc-section-parameters">
@@ -836,32 +828,50 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <tr class="odd">
 <td>fig_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>plt.subplots()</code></td>
-<td><code>None</code></td>
+<td>passed to <code>sc.getrowscols()</code>, then <code>plt.subplots()</code> and <code>plt.figure()</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>plot_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to <code>plt.plot()</code></td>
-<td><code>None</code></td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>data_kw</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>plt.scatter()</code>, for plotting the data</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>style_kw</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>sc.options.with_style()</code>, for controlling the detailed plotting style</td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>fill_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to <code>plt.fill_between()</code></td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>legend_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>passed to <code>plt.legend()</code></td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>legend</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to show the legend</td>
 <td><code>True</code></td>
+</tr>
+<tr class="even">
+<td>**kwargs</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>known arguments (e.g.&nbsp;figsize, font) split between the above dicts; see <code>ss.plot_args()</code> for all valid options</td>
+<td><code>{}</code></td>
 </tr>
 </tbody>
 </table>
@@ -1117,11 +1127,12 @@ msim.show() # Prints moderate length output</code></pre>
 <span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
 <span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>For running multiple sims in parallel. If the first argument is a list of sims rather than a single sim, exactly these will be run and most other arguments will be ignored.</p>
+<p>Note: <code>n_cpus=1</code> is <em>not</em> the same thing as setting <code>parallel=False</code>. The former still uses the parallelization methods (just on a single core), while the latter simply runs in a loop.</p>
 <section id="parameters-9" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h4>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 7%">
+<col style="width: 6%">
 <col style="width: 7%">
 <col style="width: 76%">
 <col style="width: 8%">
@@ -1198,7 +1209,7 @@ msim.show() # Prints moderate length output</code></pre>
 <tr class="odd">
 <td>n_cpus</td>
 <td>(int)</td>
-<td>the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args)</td>
+<td>the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args, and use all cores)</td>
 <td><code>None</code></td>
 </tr>
 <tr class="even">
@@ -1868,7 +1879,7 @@ sim = ss.single_run(sim) # Run it, equivalent(ish) to sim.run()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

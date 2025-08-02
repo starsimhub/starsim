@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Managing samples – Starsim</title>
+<title>Samples – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -345,7 +345,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Workflows</a></li><li class="breadcrumb-item"><a href="../user_guide/workflows_samples.html">Managing samples</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Workflows</a></li><li class="breadcrumb-item"><a href="../user_guide/workflows_samples.html">Samples</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -418,6 +418,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <div class="sidebar-item-container"> 
   <a href="../tutorials/t6_interventions.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">T6 - Interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
   </div>
 </li>
       </ul>
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -673,9 +679,9 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Workflows</a></li><li class="breadcrumb-item"><a href="../user_guide/workflows_samples.html">Managing samples</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Workflows</a></li><li class="breadcrumb-item"><a href="../user_guide/workflows_samples.html">Samples</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Managing samples</h1>
+<h1 class="title">Samples</h1>
 </div>
 
 
@@ -692,7 +698,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </header>
 
 
-<p>As STIsim models are usually stochastic, for a single scenario it is often desirable to run the model multiple times with different random seeds. The role of the <code>Samples</code> class is to facilitate working with large numbers of simulations and scenarios, to ease:</p>
+<p>As Starsim models are usually stochastic, for a single scenario it is often desirable to run the model multiple times with different random seeds. The role of the <code>Samples</code> class is to facilitate working with large numbers of simulations and scenarios, to ease:</p>
 <ul>
 <li>Loading large result sets</li>
 <li>Filtering/selecting simulation runs</li>
@@ -728,7 +734,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </div>
 <section id="dataframe-output" class="level3">
 <h3 class="anchored" data-anchor-id="dataframe-output">Dataframe output</h3>
-<p>A <code>Sim</code> instance is (in general) too large and complex to efficiently store on disk - the file size and loading time make it prohibitive to work with tens of thousands of simulations. Therefore, rather than storing entire <code>Sim</code> instances, we instead store dataframes containing just the simulation results and any other pre-processed calculated quantities. There are broadly speaking two types of outputs</p>
+<p>A <code>Sim</code> instance is (in general) too large and complex to efficiently store on disk - the file size and loading time make it prohibitive to work with tens of thousands of simulations. Therefore, rather than storing entire <code>Sim</code> instances, we instead store dataframes containing just the simulation results and any other pre-processed calculated quantities. There are broadly speaking two types of outputs:</p>
 <ul>
 <li>Scalar outputs at each timepoint (e.g., daily new cases)</li>
 <li>Scalar outputs for each simulation (e.g., total number of deaths)</li>
@@ -758,7 +764,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="running-the-model" class="level3">
 <h3 class="anchored" data-anchor-id="running-the-model">Running the model</h3>
-<p>For usage at scale, the steps of creating a simulation, running it and producing these outputs are usually encapsulated in functions</p>
+<p>For usage at scale, the steps of creating a simulation, running it and producing these outputs are usually encapsulated in functions:</p>
 <div id="13" class="cell">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_sim(seed, p_death):</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">5000</span>)</span>
@@ -784,7 +790,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="alert alert-success">
 <p>The functions above could be combined into a single function. However, in real world usage it is often convenient to be able to construct a simulation independently of running it (e.g., for diagnostic purposes or to allow running the sim in a range of different ways). The suggested structure above, with a <code>get_sim()</code> function and a <code>run_sim()</code> function are recommended as standard practice.</p>
 </div>
-<p>Now running a simulation for a given beta/seed value and returning the processed outputs can be done in a single step</p>
+<p>Now running a simulation for a given beta/seed value and returning the processed outputs can be done in a single step:</p>
 <div id="16" class="cell">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scalar output</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>df, summary <span class="op">=</span> run_sim(<span class="dv">0</span>, <span class="fl">0.2</span>)<span class="op">;</span></span>
@@ -801,7 +807,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="saving-and-loading-the-samples" class="level2">
 <h2 class="anchored" data-anchor-id="saving-and-loading-the-samples">Saving and loading the samples</h2>
-<p>We have now produced simulation outputs (dataframes and summary statistics) for 20 simulation runs. The <code>outputs</code> here are a list of tuples, containing the dataframe and dictionary outputs for each sample. This list can be passed to the <code>cvv.Samples</code> class to produce a single compressed file on disk</p>
+<p>We have now produced simulation outputs (dataframes and summary statistics) for 20 simulation runs. The <code>outputs</code> here are a list of tuples, containing the dataframe and dictionary outputs for each sample. This list can be passed to the <code>cvv.Samples</code> class to produce a single compressed file on disk:</p>
 <div id="21" class="cell">
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>resultsdir <span class="op">=</span> Path(<span class="st">'results'</span>)</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>resultsdir.mkdir(exist_ok<span class="op">=</span><span class="va">True</span>, parents<span class="op">=</span><span class="va">True</span>)</span>
@@ -869,7 +875,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="filtering-results" class="level3">
 <h3 class="anchored" data-anchor-id="filtering-results">Filtering results</h3>
-<p>The <code>.seeds</code> attribute contains a listing of seeds, which can be helpful for iteration</p>
+<p>The <code>.seeds</code> attribute contains a listing of seeds, which can be helpful for iteration:</p>
 <div id="40" class="cell">
 <div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>res.seeds</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -877,7 +883,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div id="42" class="cell">
 <div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>res.summary.loc[res[<span class="st">'cum_infections'</span>]<span class="op">&gt;</span><span class="dv">4900</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>We can then make a copy of the results and write the reduced summary dataframe back to that object</p>
+<p>We can then make a copy of the results and write the reduced summary dataframe back to that object:</p>
 <div id="44" class="cell">
 <div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>res2 <span class="op">=</span> res.copy()</span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>res2.summary <span class="op">=</span> res.summary.loc[res[<span class="st">'cum_infections'</span>]<span class="op">&gt;</span><span class="dv">4900</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -885,7 +891,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="alert alert-warning">
 <p>Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only deep copies the summary dataframe. It does not duplicate the time series dataframes or the cache. For <code>Samples</code> objects, it is therefore generally preferable to use <code>.copy()</code>.</p>
 </div>
-<p>Now notice that there are fewer samples, and the seeds have been filtered</p>
+<p>Now notice that there are fewer samples, and the seeds have been filtered:</p>
 <div id="46" class="cell">
 <div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(res)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -919,7 +925,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </ul>
 <section id="implementation-details" class="level3">
 <h3 class="anchored" data-anchor-id="implementation-details">Implementation details</h3>
-<p>If the file is loaded from a memory buffer, the <code>._zipfile</code> attribute will be populated. A helper property <code>.zipfile</code> is used to access the buffer, so if caching is not used, <code>.zipfile</code> returns the actual file on disk rather than the buffer</p>
+<p>If the file is loaded from a memory buffer, the <code>._zipfile</code> attribute will be populated. A helper property <code>.zipfile</code> is used to access the buffer, so if caching is not used, <code>.zipfile</code> returns the actual file on disk rather than the buffer:</p>
 <div id="56" class="cell">
 <div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, memory_buffer<span class="op">=</span><span class="va">True</span>) <span class="co"># Copy the entire file into memory</span></span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
@@ -939,7 +945,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>]</span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>res._cache.keys()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>This means that iterating through the dataframes the first time can be slow (but in general, iterating over all dataframes is avoided in favour of either only using summary outputs, or accessing a subset of the runs)</p>
+<p>This means that iterating through the dataframes the first time can be slow (but in general, iterating over all dataframes is avoided in favour of either only using summary outputs, or accessing a subset of the runs):</p>
 <div id="63" class="cell">
 <div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
@@ -970,7 +976,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="running-scenarios" class="level2">
 <h2 class="anchored" data-anchor-id="running-scenarios">Running scenarios</h2>
-<p>Suppose we wanted to compare a range of different <code>p_death</code> values and <code>initial</code> values (initial number of infections). We might define these runs as</p>
+<p>Suppose we wanted to compare a range of different <code>p_death</code> values and <code>initial</code> values (initial number of infections). We might define these runs as:</p>
 <div id="72" class="cell">
 <div class="sourceCode cell-code" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>initials <span class="op">=</span> np.arange(<span class="dv">1</span>,<span class="dv">4</span>)</span>
 <span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>p_deaths <span class="op">=</span> np.arange(<span class="dv">0</span>,<span class="dv">1</span>,<span class="fl">0.25</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -978,10 +984,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>Recall that our <code>run_sim()</code> function had an argument for <code>p_death</code>. We can extend this to include the <code>initial</code> parameter too. We can actually generalize this further by passing the parameters as keyword arguments to avoid needing to hard-code all of them. Note that we also need to add the <code>initial</code> value to the summary outputs:</p>
 <div id="74" class="cell">
 <div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_sim(seed, <span class="op">**</span>kwargs):</span>
-<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">5000</span>)</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">1000</span>)</span>
 <span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>))</span>
 <span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>    sir <span class="op">=</span> ss.SIR(pars<span class="op">=</span>kwargs)</span>
-<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, networks<span class="op">=</span>net, diseases<span class="op">=</span>sir, rand_seed<span class="op">=</span>seed)</span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, networks<span class="op">=</span>net, diseases<span class="op">=</span>sir, rand_seed<span class="op">=</span>seed, dur<span class="op">=</span>ss.years(<span class="dv">10</span>))</span>
 <span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>    sim.init(verbose<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sim</span>
 <span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a>    </span>
@@ -1008,7 +1014,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </div>
 <div id="77" class="cell">
 <div class="sourceCode cell-code" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the sweep over initial and p_death</span></span>
-<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">20</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">10</span></span>
 <span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> np.arange(n)</span>
 <span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> init_prev <span class="kw">in</span> initials:</span>
 <span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p_death <span class="kw">in</span> p_deaths:</span>
@@ -1026,7 +1032,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div id="82" class="cell">
 <div class="sourceCode cell-code" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">id</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>The ‘identifier’ is a tuple of these values, which is suitable for use as a dictionary key. This can be useful for accumulating and comparing variables across scenarios</p>
+<p>The ‘identifier’ is a tuple of these values, which is suitable for use as a dictionary key. This can be useful for accumulating and comparing variables across scenarios:</p>
 <div id="84" class="cell">
 <div class="sourceCode cell-code" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>res.identifier</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -1045,11 +1051,11 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div id="90" class="cell">
 <div class="sourceCode cell-code" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>results[<span class="fl">0.25</span>,<span class="dv">2</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>This indexing operation is sensitive to the order in which the identifiers are specified. The <code>.get()</code> method allows you to specify them as key-value pairs</p>
+<p>This indexing operation is sensitive to the order in which the identifiers are specified. The <code>.get()</code> method allows you to specify them as key-value pairs:</p>
 <div id="92" class="cell">
 <div class="sourceCode cell-code" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>results.get(initial<span class="op">=</span><span class="dv">2</span>, p_death<span class="op">=</span><span class="fl">0.25</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>Iterating over the <code>Dataset</code> will iterate over the <code>Samples</code> instances contained within it</p>
+<p>Iterating over the <code>Dataset</code> will iterate over the <code>Samples</code> instances contained within it:</p>
 <div id="94" class="cell">
 <div class="sourceCode cell-code" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results:</span>
 <span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -1095,7 +1101,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
 <span id="cb50-4"><a href="#cb50-4" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="st">'Sensitivity to initial infections (p_death = 0.25)'</span>)</span>
 <span id="cb50-5"><a href="#cb50-5" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Year'</span>)</span>
-<span id="cb50-6"><a href="#cb50-6" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'New deaths'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb50-6"><a href="#cb50-6" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'New deaths'</span>)</span>
+<span id="cb50-7"><a href="#cb50-7" aria-hidden="true" tabindex="-1"></a>sc.dateformatter()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 
 
@@ -1534,7 +1541,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

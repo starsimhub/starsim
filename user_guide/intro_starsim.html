@@ -31,7 +31,7 @@ ul.task-list li input[type="checkbox"] {
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
 <link href="../user_guide/intro_spokes.html" rel="next">
-<link href="../tutorials/t6_interventions.html" rel="prev">
+<link href="../tutorials/solutions.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -385,6 +385,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -472,7 +478,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -531,7 +537,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -572,7 +578,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -640,7 +646,15 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
-<p>Starsim is a framework for modeling the spread of diseases among agents via dynamic transmission networks. Starsim supports: * Co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally * Non-infectious diseases, either on their own or as factors affecting the transmission or mortality of infectious diseases * Detailed modeling of mother-child relationships starting from conception, allowing investigation of infant and childhood diseases * Multiple types of transmission network, including theoretical (e.g.&nbsp;Erdős–Rényi) and realistic (e.g.&nbsp;age-assortative sexual partnerships) * Different intervention types, such as vaccines or treatments, and showing their impact through different delivery methods such as mass campaigns or targeted outreach * Automated calibration to data, plus careful handling of random numbers to minimize variance between simulations</p>
+<p>Starsim is a framework for modeling the spread of diseases among agents via dynamic transmission networks. Starsim supports:</p>
+<ul>
+<li>Co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally</li>
+<li>Non-infectious diseases, either on their own or as factors affecting the transmission or mortality of infectious diseases</li>
+<li>Detailed modeling of mother-child relationships starting from conception, allowing investigation of infant and childhood diseases</li>
+<li>Multiple types of transmission network, including theoretical (e.g.&nbsp;Erdős–Rényi) and realistic (e.g.&nbsp;age-assortative sexual partnerships)</li>
+<li>Different intervention types, such as vaccines or treatments, and showing their impact through different delivery methods such as mass campaigns or targeted outreach</li>
+<li>Automated calibration to data, plus careful handling of random numbers to minimize variance between simulations</li>
+</ul>
 <p>Starsim is available for both Python and R, and is fully open-source under the MIT license.</p>
 </section>
 <section id="types-of-disease-modeling" class="level2">
@@ -652,7 +666,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <figcaption>Types of Model</figcaption>
 </figure>
 </div>
-<p>For simpler questions, statistical or compartmental models are often all that’s needed. For very complex questions, LLMs (which themselves might be trained on agent-based model outputs) may be more suitable. Examples of each type of question are: * <strong>Statistical models</strong>: “Are people who received the vaccine less likely to get infected?” * <strong>Machine learning models</strong>: “What behavioral factors influence vaccination uptake?” * <strong>Compartmental models</strong>: “What is disease prevalence going to be in 5 years given 100% vaccine uptake?” * <strong>Agent-based models</strong>: “What is disease prevalence going to be in 5 years given realistic assumptions about screening and vaccine coverage?”</p>
+<p>For simpler questions, statistical or compartmental models are often all that’s needed. For very complex questions, LLMs (which themselves might be trained on agent-based model outputs) may be more suitable. Examples of each type of question are:</p>
+<ul>
+<li><strong>Statistical models</strong>: “Are people who received the vaccine less likely to get infected?”</li>
+<li><strong>Machine learning models</strong>: “What behavioral factors influence vaccination uptake?”</li>
+<li><strong>Compartmental models</strong>: “What is disease prevalence going to be in 5 years given 100% vaccine uptake?”</li>
+<li><strong>Agent-based models</strong>: “What is disease prevalence going to be in 5 years given realistic assumptions about screening and vaccine coverage?”</li>
+</ul>
 </section>
 <section id="why-starsim" class="level2">
 <h2 class="anchored" data-anchor-id="why-starsim">Why Starsim?</h2>
@@ -692,9 +712,19 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim-principles" class="level2">
 <h2 class="anchored" data-anchor-id="starsim-principles">Starsim principles</h2>
-<p>Starsim’s design philosophy has two parts. First, “<strong>Common tasks should be simple</strong>”. Examples include: - Defining parameters - Running a simulation - Plotting results</p>
+<p>Starsim’s design philosophy has two parts. First, “<strong>Common tasks should be simple</strong>”. Examples include:</p>
+<ul>
+<li>Defining parameters</li>
+<li>Running a simulation</li>
+<li>Plotting results</li>
+</ul>
 <p>These are things you need to do in every single Starsim analysis, so we’ve tried to make them as easy as possible.</p>
-<p>The second part of the philosophy is “<strong>Custom tasks can’t always be simple, but they should still be possible</strong>”. Examples include: - Introducing a new vaccine - Implementing a new disease - Writing a custom calibration function</p>
+<p>The second part of the philosophy is “<strong>Custom tasks can’t always be simple, but they should still be possible</strong>”. Examples include:</p>
+<ul>
+<li>Introducing a new vaccine</li>
+<li>Implementing a new disease</li>
+<li>Writing a custom calibration function</li>
+</ul>
 <p>If you’re implementing a complicated disease, there will always be some irreducible complexity involved in that. Starsim’s job is to help you where it can, but then get out of the way and let you write your code.</p>
 </section>
 <section id="should-i-use-starsim" class="level2">
@@ -1139,8 +1169,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../tutorials/t6_interventions.html" class="pagination-link" aria-label="T6 - Interventions">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">T6 - Interventions</span>
+      <a href="../tutorials/solutions.html" class="pagination-link" aria-label="Solutions">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Solutions</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
@@ -1156,7 +1186,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

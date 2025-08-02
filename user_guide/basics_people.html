@@ -420,6 +420,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">T6 - Interventions</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -507,7 +513,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Network</span></a>
+ <span class="menu-text">Networks</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -566,7 +572,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Managing samples</span></a>
+ <span class="menu-text">Samples</span></a>
   </div>
 </li>
       </ul>
@@ -607,7 +613,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Profiling and performance</span></a>
+ <span class="menu-text">Profiling and debugging</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -677,8 +683,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>We start by giving an overview on this page of Starsim’s custom <code>Arr</code> (array) classes, which are a separate but related Starsim class designed to neatly track data about people.</p>
 <section id="starsim-states-and-arrays" class="level2">
 <h2 class="anchored" data-anchor-id="starsim-states-and-arrays">Starsim States and Arrays</h2>
-<p>Starsim has a set of custom array classes for recording information about each agent in the population. The two fundamental types of array for storing such infomation are the <code>State</code> class, which is a Boolean array, and the <code>FloatArr</code> class, which stores numbers (we don’t distinguish between floats and integers, so all numbers are stored in these arrays). Each of these is a subclass of the Starsim <code>Arr</code> class.</p>
-<p>The <code>Arr</code> class in Starsim is optimized for three key tasks that are common to almost all Starsim models: 1. <em>Dynamic growth</em>: as the population grows over time, the size of the arrays dynamically update in a way that avoids costly concatenation operations; 2. <em>Indexing</em>: over time, there are agents in the population who die. It is desirable for these agents to remain in the arrays so that we can continue to access data about them, but the indexing is set up so that dead agents are automatically excluded from most operations. 3. <em>Stochastic states</em>: we often want to set the values of a state by sampling from a random variable (e.g.&nbsp;sex might be drawn as a Bernoulli random variable). Starsim’s <code>Arr</code> class can be initialized with a random variables; we will provide examples of this below.</p>
+<p>Starsim has a set of custom array classes for recording information about each agent in the population. The two fundamental types of array for storing such infomation are the <code>BoolState</code> class, which is a Boolean array, and the <code>FloatArr</code> class, which stores numbers (we don’t distinguish between floats and integers, so all numbers are stored in these arrays). Each of these is a subclass of the Starsim <code>Arr</code> class.</p>
+<p>The <code>Arr</code> class in Starsim is optimized for three key tasks that are common to almost all Starsim models:</p>
+<ol type="1">
+<li><em>Dynamic growth</em>: as the population grows over time, the size of the arrays dynamically update in a way that avoids costly concatenation operations;</li>
+<li><em>Indexing</em>: over time, there are agents in the population who die. It is desirable for these agents to remain in the arrays so that we can continue to access data about them, but the indexing is set up so that dead agents are automatically excluded from most operations.</li>
+<li><em>Stochastic states</em>: we often want to set the values of a state by sampling from a random variable (e.g.&nbsp;sex might be drawn as a Bernoulli random variable). Starsim’s <code>Arr</code> class can be initialized with a random variables; we will provide examples of this below.</li>
+</ol>
 <p>All agents have a <code>uid</code> (universal identifier), which corresponds to their position in the array. Starsim keeps track of a list of <code>auids</code> (active UIDs), corresponding to agents who are alive or are otherwise participating in the simulation. This way, Starsim knows to skip over dead agents (or otherwise removed, e.g.&nbsp;from migration) when calculating disease progression, aging, etc.</p>
 <p>In most cases, you shouldn’t need to worry about <code>uids</code>, <code>auids</code>, etc. However, this example illustrates how they work:</p>
 <div id="8f1d4735" class="cell">
@@ -715,7 +726,14 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>)  <span class="co"># Create a sim with default people</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>The <code>People</code> that are added to the <code>Sim</code> come with the following default states and arrays: * <code>alive</code>, a <code>State</code> that records whether each agent is alive * <code>female</code>, a <code>State</code> that records whether each agent is female * <code>age</code>, a <code>FloatArr</code> that records agent ages * <code>ti_dead</code>, a <code>FloatArr</code> that records the time of death, NaN by default * <code>scale</code>, a <code>FloatArr</code> that records the number of people that each agent represents; 1 by default.</p>
+<p>The <code>People</code> that are added to the <code>Sim</code> come with the following default states and arrays:</p>
+<ul>
+<li><code>alive</code>, a <code>State</code> that records whether each agent is alive</li>
+<li><code>female</code>, a <code>State</code> that records whether each agent is female</li>
+<li><code>age</code>, a <code>FloatArr</code> that records agent ages</li>
+<li><code>ti_dead</code>, a <code>FloatArr</code> that records the time of death, NaN by default</li>
+<li><code>scale</code>, a <code>FloatArr</code> that records the number of people that each agent represents; 1 by default.</li>
+</ul>
 </section>
 <section id="creating-custom-people" class="level2">
 <h2 class="anchored" data-anchor-id="creating-custom-people">Creating custom people</h2>
@@ -737,7 +755,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" Make a function to randomly assign people to urban/rural locations """</span> </span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.random.choice(a<span class="op">=</span>[<span class="va">True</span>, <span class="va">False</span>], p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.5</span>], size<span class="op">=</span>n)</span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>urban <span class="op">=</span> ss.State(<span class="st">'urban'</span>, default<span class="op">=</span>urban_function)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>urban <span class="op">=</span> ss.BoolState(<span class="st">'urban'</span>, default<span class="op">=</span>urban_function)</span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">10</span>, extra_states<span class="op">=</span>urban)  <span class="co"># Create 10 people with this state</span></span>
 <span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl)</span>
 <span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>sim.init()  <span class="co"># Initialize the sim --&gt; essential step to create the people and sample states</span></span>
@@ -749,7 +767,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>We saw an example above of adding a custom state to people. However, a far more common way to add states to people is by adding a module to the <code>Sim</code>. All the states of the modules will automatically get added to the main <code>People</code> instance.</p>
 <div id="4ecd3e3a" class="cell">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">30</span>)</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>ss.SIS(), networks<span class="op">=</span>ss.RandomNet())</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>ss.SIS(init_prev<span class="op">=</span><span class="fl">0.1</span>), networks<span class="op">=</span>ss.RandomNet())</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Number of infected people: </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>sis<span class="sc">.</span>infected<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss">'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -1211,7 +1229,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-06-29).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
