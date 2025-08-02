@@ -577,7 +577,7 @@ def show(**kwargs):
 def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
     do_show = kwargs.pop('do_show', ss.options.show) # TODO: make this more consistent with other implementations, e.g. plot_args()
-    is_jupyter = kwargs.pop('is_jupyter', [False, True, sc.isjupyter()][ss.options.jupyter])
+    is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
     is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
     if is_jupyter or is_reticulate:
         print(fig)

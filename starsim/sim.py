@@ -389,13 +389,10 @@ class Sim(ss.Base):
         # Reset the time index (done in the modules as well in mod.finalize())
         self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
 
-        # Scale the results
-        for reskey, res in self.results.items():
-            if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
-                self.results[reskey] = self.results[reskey] * self.pars.pop_scale
-        self.results_ready = True # Results are ready to use
+        # Finalize the results
+        self.finalize_results()
 
-        # Finalize each module
+        # Finalize each module, including the results
         for module in self.module_list:
             module.finalize()
 
@@ -406,6 +403,17 @@ class Sim(ss.Base):
 
         # Generate the summary and finish up
         self.summarize() # Create summary
+        return
+
+    def finalize_results(self):
+        """ Scale the results and remove any "unused" results """
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result): # Note: since Result is a NumPy array, "res" and self.results[key] are not the same object
+                if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
+                    self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+                if np.all(res == res[0]): # Results were not modified during the sim
+                    self.results[reskey].auto_plot = False
+        self.results_ready = True # Results are ready to use
         return
 
     def summarize(self, how='default'):

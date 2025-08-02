@@ -289,7 +289,9 @@ class Options(sc.objdict):
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases
-                if key == 'precision':
+                if key == 'jupyter':
+                    self.set_jupyter()
+                elif key == 'precision':
                     self.set_precision()
                 elif key == 'numba_indexing':
                     self.refresh_references()
@@ -335,6 +337,16 @@ class Options(sc.objdict):
             return self[key] != self.orig_options[key]
         else:
             return None
+
+    @property
+    def is_jupyter(self):
+        """ Check if we're in an Jupyter environment """
+        return [False, True, sc.isjupyter()][self.jupyter] # 0 = False, 1 = True, -1 = sc.isjupyter()
+
+    def set_jupyter(self):
+        """ Set Sciris' Jupyter settings as well """
+        sc.options(jupyter=self.is_jupyter)
+        return
 
     def set_precision(self):
         """ Change the arithmetic precision used by Starsim/NumPy """
