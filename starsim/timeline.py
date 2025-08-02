@@ -86,9 +86,9 @@ class Timeline:
 
     def __repr__(self):
         if self.initialized:
-            return f'<Timeline t={self.tvec[self.ti]}, ti={self.ti}, {self.start}-{self.stop} dt={self.dt}>'
+            return f'Timeline({self.start}-{self.stop}; dt={self.dt}; t={self.tvec[self.ti]}; ti={self.ti}/{len(self)-1})'
         else:
-            return '<Timeline (uninitialized)>'
+            return 'Timeline(uninitialized)>'
 
     def disp(self):
         return sc.pr(self)

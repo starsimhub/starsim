@@ -134,16 +134,18 @@ class Network(Route):
         except: return 0
 
     def __repr__(self, **kwargs):
-        """ Convert to a dataframe for printing """
-        try:
-            namestr = self.name
-            labelstr = f'"{self.label}"' if self.label else '<no label>'
-            keys_str = ', '.join(self.edges.keys())
-            output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
-            output += self.to_df().__repr__()
-        except:
-            output = sc.prepr(self, vals=False)
-        return output
+        """ Same as default, except with length """
+        out = self.brief(output=True)
+        len_str = f'n_edges={len(self)}; '
+        pos = out.find('pars=')
+        out = out[:pos] + len_str + out[pos:]
+        return out
+
+    def __str__(self):
+        """ Slightly more detailed, show the dataframe as well """
+        out = self.brief(output=True)
+        out += '\n' + self.to_df().__repr__()
+        return out
 
     def __contains__(self, item):
         """

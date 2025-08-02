@@ -42,6 +42,7 @@ For full details, see the migration guide.
 - Modules can now be used like dictionaries for accessing user-defined states, e.g. `module['my_custom_state']` is an alias for `module.my_custom_state`.
 - `module.states` has been renamed `module.state_list`. `module.statesdict` has been renamed `module.state_dict`. There is also a `module.auto_state_list` property, referring specifically to `ss.BoolState` attributes.
 - Built-in modules now have function signatures that look like this example for `ss.Births()`: `def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):`. Although `_` is simply `None`, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the `define_pars()` method.
+- Modules now have a much briefer `__repr__`, typically one line. The full module information can still be obtained via `module.disp()`.
 
 #### Changes to networks
 - `key_dict` has been removed from `ss.Network()`; modify the `network.meta` dictionary directly instead, e.g. `ss.DynamicNetwork` has `self.meta.dur = ss_float` in its `__init__()` method, while `ss.SexualNetwork` has `self.meta.acts = ss_int`.
@@ -99,6 +100,7 @@ Distributions now have a `mock()` method, that allows you to immediately start u
 - Result plotting has been improved, in terms of module labels and correct x-axis labels.
 - `ss.MultiSim()` plotting has been improved to display legends correctly.
 - Plotting arguments are now handled by `ss.plot_args()`, which will parse different arguments among figure, plot, scatter, and other functions, e.g. `ss.plot_args(dpi=150, linewidth=3)` will set the figure DPI and the plot line width.
+- Sim results are now automatically skipped during plotting if they were never updated (e.g., `n_deaths` if there were no deaths).
 
 #### Array and results updates
 - Array indexing has been reimplemented, using Numba instead of NumPy for large operations; this should be about 30% faster. An unnecessary array copy operation was also removed, for a further ~50% efficiency gain. (Note that although array indexing is now much faster, it was not typically the slowest step, so "real world" performance gains are closer to 10-20%.)

@@ -160,7 +160,7 @@ def required(val=True):
     return decorator
 
 
-class Base(sc.quickobj):
+class Base:
     """
     The parent class for Sim and Module objects
     """
@@ -172,6 +172,10 @@ class Base(sc.quickobj):
         """ The length of a module is the number of timepoints; see also len(sim) """
         try:    return self.t.npts
         except: return 0
+
+    def __repr__(self):
+        """ Equivalent to sc.prettyobj() """
+        return sc.prepr(self)
 
     def disp(self, output=False, **kwargs):
         """ Display the full object """
@@ -299,6 +303,25 @@ class Module(Base):
     def setattribute(self, attr, value):
         """ Method for setting an attribute that does not perform checking against immutable attributes """
         return super().__setattr__(attr, value)
+
+    def brief(self, output=False):
+        """ Show a brief representation of the module; used by __repr__ """
+        name = self.name # e.g. 'sir'
+        label = self.label # e.g. 'My SIR'
+        class_name = self.__class__.__name__ # e.g. 'SIR'
+        class_str = f':{class_name}' if name != class_name.lower() else '' # e.g. 'SIR'
+        label_str = f'"{label}"; ' if (label.lower() != name and label != class_name) else ''
+        pars_str = sc.strjoin(self.pars.keys()) if len(self.pars) else 'None'
+        states_str = sc.strjoin(self.state_dict.keys()) if len(self.state_dict) else 'None'
+        out = f'{name}{class_str}({label_str}pars=[{pars_str}]; states=[{states_str}])'
+        return out if output else print(out)
+
+    def __repr__(self):
+        """ Show the object including parameters and states """
+        try: # Default representation
+            return self.brief(output=True)
+        except: # If for any reason that fails, return the full repr
+            return sc.prepr(self)
 
     @property
     def _debug_name(self):
