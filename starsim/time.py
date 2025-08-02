@@ -1109,6 +1109,15 @@ class datedur(dur):
             else:
                 self.value = self.round_duration(kwargs)
 
+    def __repr__(self):
+        if self.years == 0:
+            return 'datedur(0)'
+        else:
+            vals = self.to_array().astype(float)
+            time_portion = vals[4:]
+            time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
+            return 'datedur(' +  ', '.join([f'{k}={int(v)}' for k, v in zip(self.factor_keys[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + ')' # Sorry
+
     def __float__(self):
         return float(self.years)
 
@@ -1271,18 +1280,6 @@ class datedur(dur):
         d[-1] = round(d[-1])
 
         return pd.DateOffset(**d)
-
-    def __repr__(self):
-        if self.years == 0:
-            return '<datedur: 0>'
-        else:
-            labels = self.factor_keys
-            vals = self.to_array().astype(float)
-
-            time_portion = vals[4:]
-            time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
-
-            return '<datedur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
 
     def str(self):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'

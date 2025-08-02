@@ -17,6 +17,7 @@ def test_infection_log(do_plot=False):
     assert len(log.logs[0]) > 900, 'Expect almost everyone to be infected'
     if do_plot:
         log.plot()
+        log.animate()
     return log
 
 

@@ -71,6 +71,49 @@ class infection_log(Analyzer):
                 ax.set_title(f'Infection log for "{key}"')
         return ss.return_fig(fig, **kw.return_fig)
 
+    def animate(self, key=0, framerate=10, clear=False, cmap='parula', **kwargs):
+        """ Animate the infection log -- mostly for amusement!
+
+        Args:
+            key (int/str): which disease to animate the infection log of
+            framerate (float): how many frames per second to display
+            clear (bool): whether to clear the frame on each step
+            cmap (str): the colormap to use
+        """
+        # Get data
+        log = self.logs[key]
+        df = log.to_df()
+
+        # Convert to 2d coordinates
+        side = int(np.ceil(np.sqrt(df.target.max())))
+        x, y = np.meshgrid(np.arange(side), np.arange(side))
+        df['x'] = x.ravel()[df.target]
+        df['y'] = y.ravel()[df.target]
+
+        # Assemble into frames
+        frames = sc.autolist()
+        unique_t = df.t.unique()
+        colors = sc.vectocolor(len(unique_t), cmap=cmap)
+        for i,t in enumerate(unique_t):
+            thisdf = df[df.t == t]
+            frames += sc.objdict(t=t, x=thisdf.x, y=thisdf.y, c=colors[i])
+
+        # Plot
+        kw = ss.plot_args(kwargs, alpha=0.7)
+        with ss.style(**kw.style):
+            fig = plt.figure(**kw.fig)
+            for i,frame in enumerate(frames):
+                if clear:
+                    plt.cla()
+                plt.scatter(frame.x, frame.y, c=frame.c, **kw.plot)
+                plt.xlabel('Agent')
+                plt.ylabel('Agent')
+                plt.title(f't = {ss.date(frame.t)} (step {i+1} of {len(frames)}')
+                plt.xlim(0, side)
+                plt.ylim(0, side)
+                plt.pause(1/framerate)
+        return ss.return_fig(fig, **kw.return_fig)
+
 
 class dynamics_by_age(Analyzer):
     """
