@@ -826,20 +826,12 @@ Examples:
 
     @classmethod
     def to_base(cls, other):
-        """ Convert another TimePar object to this TimePar's base units """
+        """ Class method to convert another TimePar object to this TimePar's base units; in most cases """
         if isinstance(other, TimePar):
             return getattr(other, cls.base) # e.g. other.years
         else:
             errormsg = f'Can only convert TimePars to a different base, not {other}'
             raise AttributeError(errormsg)
-
-    def mutate(self, unit):
-        """ Mutate a TimePar in place to a new base unit -- see `TimePar.to()` to return a new instance (much more common) """
-        unit_class = get_unit_class(self.timepar_type, unit) # Mutate the class in place
-        self.base = unit_class.base
-        self._set_factors()
-        self.__class__ = unit_class
-        return self
 
 
 class dur(TimePar):
@@ -847,10 +839,7 @@ class dur(TimePar):
     Base class for durations
 
     Note: this class should not be used by the user directly; instead, use ss.years(),
-    ss.days(), etc.
-
-    Note that although they are different classes, `ss.dur` objects can be modified
-    in place if needed via the `ss.dur.mutate()` method.
+    ss.days(), etc. These classes can be interconverted using `.to()`, e.g. `ss.years(3).to('days')`.
     """
     base = None
     factors = None
@@ -892,7 +881,8 @@ class dur(TimePar):
             if self.base is not None:
                 self.value = self.to_base(value)
             else:
-                self.mutate(value.base)
+                errormsg = f'Cannot convert value since base is None; {self} is not a valid timepar'
+                raise ValueError(errormsg)
         elif sc.isnumber(value) or isinstance(value, np.ndarray) or isinstance(value, list):
             if isinstance(value, list):
                 value = np.array(value)
