@@ -6,18 +6,19 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import datetime as dt
 
-__all__ = ['Pars', 'SimPars', 'make_pars']
+__all__ = ['Pars', 'SimPars']
 
 # Define classes to not descend into further -- based on sciris.sc_nested
-atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None))
+atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
 
 class Pars(sc.objdict):
     """
     Dict-like container of parameters
 
-    Acts like an ``sc.objdict()``, except that adding new keys are disallowed by
+    Acts like an `sc.objdict()`, except that adding new keys are disallowed by
     default, and auto-updates known types.
     """
     def __init__(self, pars=None, **kwargs):
@@ -70,6 +71,8 @@ class Pars(sc.objdict):
                     self[key] = new
                 elif isinstance(old, dict):
                     self[key] = new # Take dictionaries directly, without warning the user
+                elif isinstance(old, (ss.dur, ss.Rate)):
+                    self[key] = new
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -99,9 +102,9 @@ class Pars(sc.objdict):
         return
 
     def _update_timepar(self, key, old, new):
-        """ Update a time parameter (duration or rate) """
+        """ Update a time parameter """
 
-        # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
+        # It's a TimePar, e.g. dur_inf = ss.years(6); use directly
         if isinstance(new, ss.TimePar):
             self[key] = new
 
@@ -110,23 +113,23 @@ class Pars(sc.objdict):
             self[key] = new # TODO: add validation or convert to timepar
 
         # It's a single number, e.g. dur_inf = 6; set parameters
-        elif isinstance(new, Number):
-            old.set(new)
+        elif sc.isnumber(new):
+            old.value = new
 
-        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
-        elif isinstance(new, list):
-            old.set(*new)
+        # It's array-like; set the value, but convert first to handle lists etc
+        elif sc.checktype(new, 'arraylike'):
+            old.value = sc.toarray(new)
 
-        # It's a dict, figure out what to do
+        # It's a dict, e.g. beta for different networks, just set it directly and trust the user
         elif isinstance(new, dict):
-            if isinstance(old, ss.beta):
-                self[key] = new # TODO: use an actual set here
-            else:
-                old.set(**new)
+            # for key,val in new.items(): # TODO: should we include validation like this?
+            #     if sc.isnumber(val):
+            #         new[key] = old.__class__(val)
+            self[key] = new
 
         # Give up
         else:
-            errormsg = f'Updating timepar from {type(old)} to {type(new)} is not supported'
+            errormsg = f'Updating timepar {old} from {type(old)} to {type(new)} is not supported'
             raise TypeError(errormsg)
 
         return
@@ -142,23 +145,13 @@ class Pars(sc.objdict):
             else:
                 self[key] = new
 
-        # It's a single number, e.g. dur_inf = 6; set parameters
-        elif isinstance(new, Number):
+        # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
+        elif isinstance(new, (Number, ss.dur, ss.Rate)):
             old.set(new)
 
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
-
-        # It's a timepar, set it like a number, e.g. dur_inf = ss.dur(6)
-        elif isinstance(new, ss.TimePar):
-            oldpar = old.pars[0]
-            if isinstance(oldpar, ss.TimePar): # If changing from one timepar to another, validate
-                dur_mismatch = isinstance(oldpar, ss.dur) != isinstance(new, ss.dur)
-                if dur_mismatch:
-                    errormsg = f'Cannot change a duration to a non-duration vice versa: old={type(oldpar)}, new={type(new)}'
-                    raise TypeError(errormsg)
-            old.set(new)
 
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
@@ -234,7 +227,7 @@ class SimPars(Pars):
         analyzers (str/list/Module): As above
         verbose (float): How much detail to print (1 = every timestep, 0.1 = every 10 timesteps, etc.)
     """
-    def __init__(self, **kwargs):
+    def __init__(self, pars=None, create=True, **kwargs):
 
         # General parameters
         self.label   = '' # The label of the simulation
@@ -246,11 +239,10 @@ class SimPars(Pars):
         self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
         self.start     = None  # Start of the simulation (default 2020)
         self.stop      = None  # End of the simulation
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
-        self.dt        = 1.0   # Timestep (in units of self.unit)
+        self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters
@@ -260,6 +252,7 @@ class SimPars(Pars):
 
         # Modules: demographics, diseases, networks, analyzers, and interventions
         self.people = None
+        self.modules       = ss.ndict()
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
@@ -268,7 +261,7 @@ class SimPars(Pars):
         self.analyzers     = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
-        self.update(kwargs)
+        self.update(pars, create=create, **kwargs)
         return
 
     def is_default(self, key):
@@ -290,7 +283,6 @@ class SimPars(Pars):
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
-        self.validate_time()
         return
 
     def validate_verbose(self):
@@ -298,7 +290,7 @@ class SimPars(Pars):
         if self.verbose == 'brief':
             self.verbose = -1
         if not sc.isnumber(self.verbose):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.verbose)} "{self.verbose}"'
             raise ValueError(errormsg)
         return
 
@@ -334,34 +326,6 @@ class SimPars(Pars):
             self.pop_scale = total_pop / self.n_agents
         return
 
-    def validate_time(self):
-        """ Ensure at least one of dur and stop is defined, but not both """
-
-        # Handle the unit
-        if self.unit == '':
-            self.unit = ss.time.default_unit
-        self.unit = ss.time.validate_unit(self.unit)
-
-        # Handle start
-        if self.start is None:
-            self.start = ss.time.default_start[self.unit]
-
-        # Handle stop and dur
-        if self.stop is not None:
-            if self.dur is None:
-                self.dur = ss.date_diff(self.start, self.stop, self.unit)
-            else:
-                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
-                raise ValueError(errormsg)
-            if self.dur <= 0:
-                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
-                raise ValueError(errormsg)
-        else:
-            if self.dur is None:
-                self.dur = ss.time.default_dur
-            self.stop = ss.date_add(self.start, self.dur, self.unit)
-        return
-
     def validate_modules(self):
         """ Validate modules passed in pars"""
 
@@ -381,6 +345,14 @@ class SimPars(Pars):
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
 
+        # Find any modules that belong to other types and move them -- e.g. ss.Sim(modules=[ss.SIS(), ss.RandomNet()])
+        for modkey,modclass in modmap.items():
+            if modkey != 'modules': # Skip
+                for mod in self.modules():
+                    if isinstance(mod, modclass):
+                        self[modkey].append(mod) # Add to the correct list
+                        self.modules.pop(mod.name) # Remove from the modules list
+
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
         return
@@ -388,12 +360,14 @@ class SimPars(Pars):
     def validate_demographics(self):
         """ Validate demographics-related input parameters"""
         # Allow shortcut for default demographics
-        if self.demographics == True:
+        demog = self.demographics
+        if demog in [True, False, 1, 0]: # Allow turning it on or off
             self.demographics = sc.autolist()
-            if self.birth_rate is None:
-                self.demographics += ss.Births()
-            if self.death_rate is None:
-                self.demographics += ss.Deaths()
+            if demog: # ...turn it on with True or 1
+                if self.birth_rate is None:
+                    self.demographics += ss.Births()
+                if self.death_rate is None:
+                    self.demographics += ss.Deaths()
 
         # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         valid = isinstance(self.demographics, ss.ndict) and not len(self.demographics)
@@ -439,14 +413,7 @@ class SimPars(Pars):
         """
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
-        a Sim object.
-        Used for starsim classes:
-        - networks,
-        - demographics,
-        - diseases,
-        - analyzers,
-        - interventions, and
-        - connectors.
+        a Sim object
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
@@ -502,14 +469,14 @@ class SimPars(Pars):
                         elif not isinstance(mod, ss.Module) and callable(mod):
                             mod = expected_cls.from_func(mod)
 
+                    # Convert plain modules from functions to actual modules
+                    if modkey == 'modules':
+                        if not isinstance(mod, ss.Module) and callable(mod):
+                            mod = ss.Module.from_func(mod)
+
                     # Do final check
-                    if not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'
+                    if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
         return
-
-
-def make_pars(**kwargs):
-    """ Shortcut for making a new instance of SimPars """
-    return SimPars(**kwargs)

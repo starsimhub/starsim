@@ -2,15 +2,11 @@
 Test that the current version of Starsim exactly matches
 the baseline results.
 """
-
-import numpy as np
 import sciris as sc
 import starsim as ss
 
-baseline_filename  = sc.thisdir(__file__, 'baseline.json')
-multisim_filename  = sc.thisdir(__file__, 'baseline_multisim.json')
-benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
-parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
+baseline_filename  = sc.thisdir(__file__, 'baseline.yaml')
+benchmark_filename = sc.thisdir(__file__, 'benchmark.yaml')
 sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
@@ -53,46 +49,19 @@ def save_baseline():
     sim.run()
 
     # Export results
-    sim.to_json(filename=baseline_filename, keys='summary')
-
-    # Save parameters
-    sim.to_json(filename=parameters_filename, keys='pars') # If not different from previous version, can safely delete
+    json = sim.to_json(keys='summary')['summary']
+    sc.saveyaml(baseline_filename, json)
 
     print('Done.')
     return
 
 
-def multisim_baseline(save=False, n_runs=10, **kwargs):
-    """
-    Check or update the multisim baseline results; not part of the integration tests
-    """
-    word = 'Saving' if save else 'Checking'
-    sc.heading(f'{word} MultiSim baseline...')
-
-    # Make and run sims
-    kwargs.setdefault('verbose', ss.options.verbose/n_runs*2)
-    sim = make_sim(**kwargs)
-    msim = ss.MultiSim(base_sim=sim)
-    msim.run(n_runs)
-    summary = msim.summarize()
-
-    # Export results
-    if save:
-        sc.savejson(multisim_filename, summary)
-        print('Done.')
-    else:
-        baseline = sc.loadjson(multisim_filename)
-        ss.diff_sims(baseline, summary, die=False)
-
-    return
-
-
+@sc.timer()
 def test_baseline():
     """ Compare the current default sim against the saved baseline """
 
     # Load existing baseline
-    baseline = sc.loadjson(baseline_filename)
-    old = baseline['summary']
+    old = sc.loadyaml(baseline_filename)
 
     # Calculate new baseline
     new = make_sim()
@@ -104,40 +73,22 @@ def test_baseline():
     return new
 
 
+@sc.timer()
 def test_benchmark(do_save=False, repeats=1, verbose=True):
     """ Compare benchmark performance """
 
     if verbose: print('Running benchmark...')
     try:
-        previous = sc.loadjson(benchmark_filename)
+        previous = sc.loadyaml(benchmark_filename)
     except FileNotFoundError:
         previous = None
 
     t_inits = []
     t_runs  = []
-
-    def normalize_performance():
-        """ Normalize performance across CPUs """
-        t_bls = []
-        bl_repeats = 3
-        n_outer = 10
-        n_inner = 1e6
-        for r in range(bl_repeats):
-            t0 = sc.tic()
-            for i in range(n_outer):
-                a = np.random.random(int(n_inner))
-                b = np.random.random(int(n_inner))
-                a*b
-            t_bl = sc.toc(t0, output=True)
-            t_bls.append(t_bl)
-        t_bl = min(t_bls)
-        reference = 0.07 # Benchmarked on an Intel i7-12700H CPU @ 2.90GHz
-        ratio = reference/t_bl
-        return ratio
-
+    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
 
     # Test CPU performance before the run
-    r1 = normalize_performance()
+    r1 = sc.benchmark(which='numpy')
 
     # Do the actual benchmarking
     for r in range(repeats):
@@ -160,8 +111,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
         t_runs.append(t_run)
 
     # Test CPU performance after the run
-    r2 = normalize_performance()
-    ratio = (r1+r2)/2
+    r2 = sc.benchmark(which='numpy')
+    ratio = (r1+r2)/2/ref
     t_init = ratio*min(t_inits)
     t_run  = ratio*min(t_runs)
 
@@ -173,8 +124,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
                 },
             'parameters': {
                 'n_agents': sim.pars.n_agents,
-                'dur':      sim.pars.dur,
-                'dt':       sim.pars.dt,
+                'dur':      sim.t.dur,
+                'dt':       sim.t.dt,
                 },
             'cpu_performance': ratio,
             }
@@ -192,7 +143,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
         sc.pp(brief)
 
     if do_save:
-        sc.savejson(filename=benchmark_filename, obj=json, indent=2)
+        sc.saveyaml(filename=benchmark_filename, obj=json)
 
     if verbose:
         print('Done.')
@@ -203,6 +154,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
+    ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
+
     T = sc.timer()
 
     json = test_benchmark() # Run this first so benchmarking is available even if results are different

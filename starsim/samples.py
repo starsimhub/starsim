@@ -89,6 +89,7 @@ class Dataset:
         else:
             return ds[0]
 
+# File names used in the zip file
 identifiers_file = 'identifiers.txt'
 summary_file = 'summary.csv'
 
@@ -97,7 +98,7 @@ class Samples:
     """
     Stores CSV outputs and summary dataframes
 
-    To construct, use ``Samples.new()``. To read an existing one, use ``Samples(fname)``.
+    To construct, use `Samples.new()`. To read an existing one, use `Samples(fname)`.
     The sample files are just ZIP archives with plain text CSV and TXT files so they
     can be easily accessed externally as well.
     """
@@ -177,7 +178,11 @@ class Samples:
             return zipfile.ZipFile(self._fname, mode="r")
 
     def __repr__(self):
-        return f"<Samples {'-'.join(str(x) for x in self.id.values())}, {len(self)} seeds>"
+        _id = self.id.values()
+        if _id:
+            return f"<Samples {'-'.join(str(x) for x in _id)}, {len(self)} seeds>"
+        else:
+            return f"<Samples (no identifier), {len(self)} seeds>"
 
     @property
     def index(self):
@@ -202,10 +207,12 @@ class Samples:
         e.g. the identifier could contain the starting level of restrictions. The dimensionality
         will vary depending on the analysis, hence it returns a tuple of arbitrary length. It would
         just be expected that all results being analyzed at the same time would have the same set of
-        identifiers. The first two index levels are always 'beta' and 'seed', therefore these are
-        dropped from the ID.
+        identifiers. The first index level is always 'seed', therefore it will dropped from the ID.
         """
-        return tuple(self.summary.iloc[0].name[1:])
+        if len(self.summary.index.names) == 1:
+            return tuple()
+        else:
+            return tuple(self.summary.iloc[0].name[1:])
 
     @property
     def id(self):
@@ -214,9 +221,9 @@ class Samples:
 
         For example:
 
-        >>> result.id
+        >>> result.identifier
         (2.0, 'Gradually escalate restrictions', 0.16, 0.5, '95_70', 1)
-        >>>  result.identifier
+        >>>  result.id
         {'beta_multiplier': 2.0,
          'strategy': 'Gradually escalate restrictions',
          'symp_test': 0.16,
@@ -275,12 +282,13 @@ class Samples:
         return f'seed_{seed}.csv'
 
     @classmethod
-    def new(cls, folder, outputs, identifiers, fname=None):
+    def new(cls, folder, outputs, identifiers=None, fname=None, verbose=True):
         """
         Args:
             folder: The folder name
             outputs: A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry 'seed' for the seed
-            identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the same value for all samples.
+            identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the
+                         same value for all samples. This is useful when generating multiple sets of results e.g., for scenarios (optional)
         """
         zipdata = {} # Store all the data to be written as files inside the zipfile
         summary_rows = []
@@ -314,7 +322,7 @@ class Samples:
         folder.mkdir(parents=True, exist_ok=True)
 
         # Save the zip file
-        sc.savezip(folder/fname, data=zipdata, tobytes=False)
+        sc.savezip(folder/fname, data=zipdata, tobytes=False, verbose=verbose)
 
         return cls(folder/fname, memory_buffer=False)
 
@@ -322,8 +330,8 @@ class Samples:
         """
         Retrieve dataframe and summary row
 
-        Use ``Samples[seed]`` to read only the dataframe.
-        Use ``Samples.get(seed)`` to read both the dataframe and summary row
+        Use `Samples[seed]` to read only the dataframe.
+        Use `Samples.get(seed)` to read both the dataframe and summary row
         """
         df = self[seed]
         row = sc.objdict(self.summary.xs(seed, level="seed").reset_index().iloc[0])
@@ -387,7 +395,7 @@ class Samples:
 
         if item not in self._cache:
             with self.zipfile.open(self._seedfile(item)) as f:
-                self._cache[item] = sc.dataframe.read_csv(f, index_col="t")
+                self._cache[item] = sc.dataframe.read_csv(f, index_col="timevec")
 
         return self._cache[item].copy()
 
@@ -399,9 +407,9 @@ class Samples:
 
         Args:
             fcn: A function to apply. It should take in a dataframe
-            args: Additional arguments for ``fcn``
-            kwargs: Additional arguments for ``fcn``
+            args: Additional arguments for `fcn`
+            kwargs: Additional arguments for `fcn`
 
-        Returns: A list with the output of ``fcn``
+        Returns: A list with the output of `fcn`
         """
         return [fcn(x, *args, **kwargs) for x in self]

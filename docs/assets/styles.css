@@ -1,0 +1,33 @@
+/* Global font settings */
+body, p {
+  font-family: "Raleway", "Montserrat", "Lato", "Open Sans", sans-serif;
+  font-size: 1.0em;
+}
+
+/* Prevent excessive spacing in terminal output */
+pre {
+  line-height: 1.0;
+}
+
+/* Do not insert a space between a paragraph and a list */
+p:has(+ ul) {
+  margin-bottom: 0.0em;
+}
+
+/* Quarto-specific */
+.navbar-logo {
+    height: 2em !important;
+    max-height: none !important;
+    min-height: 40px !important;
+}
+
+.navbar-nav {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+#quarto-document-content {
+  margin-top: 0;
+  padding-top: 0 !important;
+}

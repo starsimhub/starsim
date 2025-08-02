@@ -6,8 +6,9 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
-ss_float_ = ss.dtypes.float
-ss_int_ = ss.dtypes.int
+ss_float = ss.dtypes.float
+ss_int = ss.dtypes.int
+_ = None
 
 __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
@@ -22,11 +23,22 @@ class Demographics(ss.Module):
 
 
 class Births(Demographics):
-    """ Create births based on rates, rather than based on pregnancy """
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
+        """
+        Create births based on rates, rather than based on pregnancy.
+
+        Births are generated using population-level birth rates that can vary
+        by year. The number of births per timestep is determined by applying
+        the birth rate to the current population size.
+
+        Args:
+            birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
+            rel_birth (float): constant used to scale all birth rates
+            rate_units (float): units for birth rates (default assumes per 1000)
+            metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
+        """
         super().__init__()
         self.define_pars(
-            unit = 'year',
             birth_rate = ss.peryear(20),
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
@@ -43,6 +55,7 @@ class Births(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
         self.n_births = 0 # For results tracking
+        self.dist = ss.bernoulli(p=0) # Used to generate random numbers; set to use the birth rate above
         return
 
     def init_pre(self, sim):
@@ -60,14 +73,19 @@ class Births(Demographics):
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
+        if sc.isnumber(birth_rate):
+            # If the user has provided a bare number, assume it is per year
+            msg = f'Birth rate was specified as a number rather than a rate - assuming it is {birth_rate} per year'
+            ss.warn(msg)
+            return ss.peryear(birth_rate)
         return birth_rate
 
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  label='New births'),
-            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative births'),
-            ss.Result('cbr',        dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
+            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
+            ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
         return
 
@@ -83,18 +101,21 @@ class Births(Demographics):
             year_ind = sc.findnearest(available_years, sim.t.now('year'))
             nearest_year = available_years[year_ind]
             this_birth_rate = p.birth_rate.loc[nearest_year]
+            scaled_birth_prob = ss.prob.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
         else:
             this_birth_rate = p.birth_rate
+            if isinstance(this_birth_rate, ss.Rate):
+                this_birth_rate = ss.prob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
+            else: # number
+                this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_birth
 
-        if isinstance(this_birth_rate, ss.TimePar):
-            factor = 1.0
-        else:
-            factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
+            scaled_birth_prob = ss.prob.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
 
-        scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * factor
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
-        return n_new
+        self.dist.set(p=scaled_birth_prob) # Update the distribution with the probabilities for this timestep
+        birth_uids = self.dist.filter()
+        # n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
+        return birth_uids
 
     def step(self):
         new_uids = self.add_births()
@@ -104,12 +125,14 @@ class Births(Demographics):
     def add_births(self):
         """ Add n_new births to each state in the sim """
         people = self.sim.people
-        n_new = self.get_births()
-        new_uids = people.grow(n_new)
+        birth_uids = self.get_births()
+        new_uids = people.grow(len(birth_uids))
         people.age[new_uids] = 0
+        people.parent[new_uids] = birth_uids
         return new_uids
 
     def update_results(self):
+        """ Calculate new births and crude birth rate """
         # New births -- already calculated
         self.results.new[self.ti] = self.n_births
 
@@ -127,14 +150,14 @@ class Births(Demographics):
 
 
 class Deaths(Demographics):
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
         The probability of death for each agent on each timestep is determined
         by the `death_rate` parameter and the time step. The default value of
-        this parameter is 0.02, indicating that all agents will
-        face a 2% chance of death per year.
+        this parameter is 0.01, indicating that all agents will
+        face a 1% chance of death per year.
 
         However, this function can be made more realistic by using a dataframe
         for the `death_rate` parameter, to allow it to vary by year, sex, and
@@ -157,9 +180,8 @@ class Deaths(Demographics):
         """
         super().__init__()
         self.define_pars(
-            unit = 'year',
             rel_death = 1,
-            death_rate = ss.peryear(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -186,14 +208,26 @@ class Deaths(Demographics):
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
             assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if sc.isnumber(death_rate):
+            # If the user has provided a bare number, assume it is per year
+            msg = f'Death rate was specified as a number rather than a rate - assuming it is {death_rate} per year'
+            ss.warn(msg)
+            return ss.peryear(death_rate)
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
     def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
         drd = self.death_rate_data
-        if sc.isnumber(drd) or isinstance(drd, ss.TimePar):
-            death_rate = drd
+        # We are going to set up death_rate as a prob with unit=ss.years(1). That is the probability of death in 1 year
+        if sc.isnumber(drd):
+            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a prob with unit=ss.years(1) by ss.prob.array_to_prob
+        elif isinstance(drd, ss.Rate):
+            if drd.unit == 1: # drd is already in years so don't need to translate
+                death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
+            else:
+                # Convert from prob per drd.unit to prob per year, ss.prob.array_to_prob will convert to prob per timestep later
+                death_rate = np.array([ss.prob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(ss.years(1))])
 
         # Process data
         else:
@@ -207,7 +241,7 @@ class Deaths(Demographics):
             year_ind = sc.findnearest(available_years, sim.t.now('year')) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
-            death_rate = np.empty(uids.shape, dtype=ss_float_)
+            death_rate = np.empty(uids.shape, dtype=ss_float)
 
             if 'sex' in drd.index.names:
                 s = drd.loc[nearest_year, 'f']
@@ -220,23 +254,22 @@ class Deaths(Demographics):
                 s = drd.loc[nearest_year]
                 binned_ages = np.digitize(ppl.age, s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
                 death_rate[:] = s.values[binned_ages]
+            death_rate *= self.pars.rate_units * self.pars.rel_death
 
         # Scale from rate to probability. Consider an exponential here.
-        if isinstance(death_rate, ss.TimePar):
-            factor = self.t.dt # TODO: figure out why this isn't 1.0
-        else:
-            factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
-        death_prob = death_rate * self.pars.rate_units * self.pars.rel_death * factor
+        death_prob = ss.prob.array_to_prob(death_rate, self.t.dt)
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
+        if sc.isnumber(drd) or isinstance(drd, ss.Rate):
+            death_prob = death_prob[0] # TODO: what???
         return death_prob
 
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths', auto_plot=False),
-            ss.Result('cmr',        dtype=float, scale=False, label='Crude mortality rate'),
+            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
+            ss.Result('cmr',        dtype=float, scale=False, summarize_by='mean', label='Crude mortality rate'),
         )
         return
 
@@ -263,14 +296,36 @@ class Deaths(Demographics):
 
 
 class Pregnancy(Demographics):
-    """ Create births via pregnancies """
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
+                 p_maternal_death=_, p_neonatal_death=_, sex_ratio=_, min_age=_, max_age=_,
+                 rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
+        """
+        Create births via pregnancies for each agent.
+
+        This module models conception, pregnancy, and birth at the individual level using
+        age-specific fertility rates. Supports prenatal and postnatal transmission
+        networks, maternal and neonatal mortality, and burn-in of existing
+        pregnancies at simulation start.
+
+        Args:
+            dur_pregnancy (float/dur): duration of pregnancy (default 9 months)
+            dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+            fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
+            rel_fertility (float): constant used to scale all fertility rates
+            p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
+            p_neonatal_death (float): probability of neonatal death (default 0.0)
+            sex_ratio (float): probability of female births (default 0.5)
+            min_age (float): minimum age for pregnancy (default 15)
+            max_age (float): maximum age for pregnancy (default 50)
+            rate_units (float): units for fertility rates (default assumes per 1000)
+            burnin (bool): whether to seed pregnancies from before simulation start (default true)
+            metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
+        """
         super().__init__()
         self.define_pars(
-            unit = 'year',
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = 0, # Can be a number of Pandas DataFrame
+            fertility_rate = ss.peryear(100), # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             p_maternal_death = ss.bernoulli(0),
             p_neonatal_death = ss.bernoulli(0),
@@ -288,9 +343,10 @@ class Pregnancy(Demographics):
 
         # Other, e.g. postpartum, on contraception...
         self.define_states(
-            ss.State('fecund', default=True, label='Female of childbearing age'),
-            ss.State('pregnant', label='Pregnant'),  # Currently pregnant
-            ss.State('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.BoolState('fecund', default=True, label='Female of childbearing age'),
+            ss.BoolState('pregnant', label='Pregnant'),  # Currently pregnant
+            ss.BoolState('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.FloatArr('parity', label='Parity', default=0),  # Number of pregnancies
             ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
@@ -318,15 +374,16 @@ class Pregnancy(Demographics):
         age = sim.people.age[uids]
 
         frd = self.fertility_rate_data
-        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
 
-        time_factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
         if sc.isnumber(frd):
-            fertility_rate[uids] = self.fertility_rate_data
-            if isinstance(frd, ss.TimePar):
-                time_factor = 1 # Time conversion performed automatically by TimePar
+            raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
+
+        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
+
+        if isinstance(frd, ss.Rate):
+            fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
         else:
-            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.to('year')) # TODO: make time-unit-aware
+            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
@@ -349,11 +406,11 @@ class Pregnancy(Demographics):
                 new_denom = age_counts - infecund_age_counts  # New denominator for rates
                 np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
-            fertility_rate[uids] = new_rate[age_bin_all]
+            fertility_rate[uids] = new_rate[age_bin_all] * (self.pars.rate_units * self.pars.rel_fertility)  # Prob per year
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.rate_units * self.pars.rel_fertility) * time_factor
+        fertility_prob = ss.prob.array_to_prob(fertility_rate, self.t.dt)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
@@ -371,6 +428,10 @@ class Pregnancy(Demographics):
             max_age = fertility_rate.columns.max()
             fertility_rate[max_age + 1] = 0
             assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if sc.isnumber(fertility_rate):
+            msg = f'Fertility rate was specified as a number rather than a rate - assuming it is {fertility_rate} per year'
+            ss.warn(msg)
+            return ss.peryear(fertility_rate)
         return fertility_rate
 
     def init_pre(self, sim):
@@ -395,15 +456,15 @@ class Pregnancy(Demographics):
         """
         super().init_results()
         self.define_results(
-            ss.Result('pregnancies', dtype=int,   scale=True,  label='New pregnancies'),
-            ss.Result('births',      dtype=int,   scale=True,  label='New births'),
-            ss.Result('cbr',         dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result('pregnancies', dtype=int,   scale=True,  summarize_by='sum',  label='New pregnancies'),
+            ss.Result('births',      dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
+            ss.Result('cbr',         dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
         return
 
     def step(self):
         if self.ti == 0 and self.pars.burnin: # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy), 0, 1).astype(int)
+            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy/self.dt), 0, 1).astype(int)
             for dti in dtis:
                 self.t.ti = dti
                 self.do_step()
@@ -428,6 +489,7 @@ class Pregnancy(Demographics):
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
+        self.parity[deliveries] += 1  # Increment parity for the mothers
 
         # Add connections to any postnatal transmission layers
         for lkey, layer in self.sim.networks.items():
@@ -499,7 +561,7 @@ class Pregnancy(Demographics):
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = people.grow(len(new_slots), new_slots)
-            people.age[new_uids] = -self.pars.dur_pregnancy.to('year')
+            people.age[new_uids] = -self.pars.dur_pregnancy.years
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
             people.parent[new_uids] = conceive_uids
@@ -508,7 +570,7 @@ class Pregnancy(Demographics):
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy/layer.t.dt) # Network edge duration is stored in units of timesteps, so we need to convert dur_pregnancy to a number of timesteps here
                     start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
@@ -532,15 +594,15 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy
+        dur_preg = self.pars.dur_pregnancy
         dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.p_maternal_death.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_delivery[uids] = ti + dur_preg/self.t.dt # Currently assumes maternal deaths still result in a live baby. Note that since we are adding the duration to `ti` (the number of timesteps) we need to convert `dur_preg` into a number of timesteps
         self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
         self.dur_postpartum[uids] = dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = ti + dur_preg[dead]
+            self.ti_dead[uids[dead]] = ti + dur_preg
         return
 
     def finish_step(self):

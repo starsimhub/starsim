@@ -1,0 +1,7 @@
+#!/bin/bash
+# Execute all Jupyter notebooks using Jupyter Cache
+
+for d in tutorials user_guide; do
+  echo "Running in $d..."
+  (cd "$d" && jcache notebook add *.ipynb && jcache project execute -e local-parallel)
+done
