@@ -62,7 +62,7 @@ run('python -m quartodoc interlinks')
 
 if execute == 'jupyter':
     sc.heading('Executing Jupyter notebooks via jcache')
-    run('./execute_notebooks')
+    run('./jcache_execute_notebooks')
 
 # Build the Quarto documentation
 if execute == 'quarto':
