@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-## Version 3.0.0 (2025-08-01)
+## Version 3.0.0 (2025-08-02)
 
 ### Summary
 Starsim v3 includes a reimplementation of how time is handled, an extensive new suite of debugging tools, and smaller changes, including an extensive user guide in addition to the tutorials. Please also see `docs/migration_v2v3` for a detailed (and LLM-friendly) migration guide for porting existing Starsim code over to the new version. If a point below says "See the migration guide", that indicates that additional information (and a conversion script where possible) is provided in that guide. Otherwise, it is (generally) a non-breaking change.

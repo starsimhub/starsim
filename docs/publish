@@ -1,5 +1,5 @@
 #!/bin/bash
 # Build & publish site to GitHub Pages
 
-./build_docs
+./build_docs.py quarto --cache-refresh
 quarto publish gh-pages
