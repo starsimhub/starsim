@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 """
 Build documentation with Quarto; usage is simply:
-./build_docs
+./build_docs.py
 
 Notebook execution options are:
-  ./build_docs jupyter # Execute with jcache in parallel (default)
-  ./build_docs quarto # Execute with quarto in serial
+  ./build_docs.py jupyter # Execute with jcache in parallel (default)
+  ./build_docs.py quarto # Execute with quarto in serial
 
 Additional arguments are passed to quarto render, e.g.:
-    ./build_docs quarto --cache-refresh
+    ./build_docs.py quarto --cache-refresh
 """
-
 import os
 import sys
 import sciris as sc
@@ -68,7 +67,7 @@ if execute == 'jupyter':
 # Build the Quarto documentation
 if execute == 'quarto':
     sc.heading('Rendering docs with notebook execution...')
-    run(f'quarto render --execute{argstr}')
+    run(f'quarto render --execute {argstr}')
 else:
     sc.heading('Rendering docs...')
     run(f'quarto render{argstr}')

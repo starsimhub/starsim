@@ -2,51 +2,67 @@
 Import all Starsim modules
 """
 
+# Time how long each import takes -- disabled by default, only used for developer debugging
+debug = True
+if debug:
+    print('Note: importing Starsim in debug mode')
+    from time import time as pytime
+    start = pytime()
+    timings = {}
+    def t(label):
+        timings[label] = pytime() - start
+else:
+    def t(label):
+        pass
+
+# Assign the root folder
+t('sciris')
+import sciris as sc
+root = sc.thispath(__file__).parent
+
 # Start imports: version and settings
+t('settings')
 from .version import __version__, __versiondate__, __license__
 from .settings import *
 
 # Optionally print the license
+t('license')
 if options.license:
     print(__license__)
 
-# Assign the root folder
-import sciris as sc
-root = sc.thispath(__file__).parent
-
 # Double-check key requirements -- should match pyproject.toml
-reqs = ['sciris>=3.2.4', 'pandas>=2.0.0']
-msg = f'\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\n\n'
-msg += 'You can update with:\n  pip install <MISSING> --upgrade'
-sc.require(reqs, message=msg)
-del sc, reqs, msg # Don't keep this in the module
+t('reqs')
+sc.require(
+    reqs = ['sciris>=3.2.4', 'pandas>=2.0.0'], 
+    message = f'\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\n\nYou can update with:\n  pip install <MISSING> --upgrade'
+)
 
 # Finish imports
-from .utils         import *
-from .debugtools    import *
-from .arrays        import *
-from .distributions import *
-from .time          import *
-from .timeline      import *
-from .parameters    import *
-from .people        import *
-from .modules       import *
-from .networks      import *
-from .results       import *
-from .demographics  import *
-from .products      import *
-from .interventions import *
-from .analyzers     import *
-from .connectors    import *
-from .diseases      import *
-from .loop          import *
-from .sim           import *
-from .run           import *
-from .calibration   import *
-from .samples       import *
+t('utils        '); from .utils         import *
+t('debugtools   '); from .debugtools    import *
+t('arrays       '); from .arrays        import *
+t('distributions'); from .distributions import *
+t('time         '); from .time          import *
+t('timeline     '); from .timeline      import *
+t('parameters   '); from .parameters    import *
+t('people       '); from .people        import *
+t('modules      '); from .modules       import *
+t('networks     '); from .networks      import *
+t('results      '); from .results       import *
+t('demographics '); from .demographics  import *
+t('products     '); from .products      import *
+t('interventions'); from .interventions import *
+t('analyzers    '); from .analyzers     import *
+t('connectors   '); from .connectors    import *
+t('diseases     '); from .diseases      import *
+t('loop         '); from .loop          import *
+t('sim          '); from .sim           import *
+t('run          '); from .run           import *
+t('calibration  '); from .calibration   import *
+t('samples      '); from .samples       import *
 
 # Load fonts
-def _load_fonts(debug=False):
+def _load_fonts(debug=debug):
     """ Try installing and loading fonts, but fail silently if folder is not writable """
     if options.install_fonts:
         test_file = root / 'starsim' / 'assets' / 'fonts_installed_successfully'
@@ -70,4 +86,19 @@ def _load_fonts(debug=False):
     return
 
 # Try loading fonts
+t('fonts')
 _load_fonts()
+
+# If we're in debug mode, show the timings
+if debug:
+    t('') # Final timing, label is discarded
+    timing_keys = list(timings.keys())[:-1] # The labels happen *before* the code, so correct the offset here
+    timing_vals = list(timings.values())[1:]
+    lastval = 0
+    print('\nImport timings:')
+    for key,val in zip(timing_keys, timing_vals): 
+        print(f'{key:15s} | Σ = {val:0.3f} s | Δ = {(val-lastval)*1000:0.1f} ms')
+        lastval = val
+
+# Don't keep these in the module
+del t, sc, debug

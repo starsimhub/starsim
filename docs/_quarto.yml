@@ -131,7 +131,7 @@ website:
         - section: "**Modules**"
           contents:
             - api/modules.qmd
-            - api/disease.qmd
+            - api/diseases.qmd
             - api/networks.qmd
             - api/demographics.qmd
             - api/interventions.qmd
@@ -176,8 +176,8 @@ interlinks:
       url: https://docs.scipy.org/doc/scipy/
     matplotlib:
       url: https://matplotlib.org/stable/
-    sciris:
-      url: https://docs.sciris.org/
+    # sciris: # TODO: need to build this first
+    #   url: https://docs.sciris.org/
   autolink: true
   aliases:
     numpy: [np]
@@ -200,7 +200,7 @@ quartodoc:
         - arrays
         - calibration
         - demographics
-        - disease
+        - diseases
         - distributions
         - interventions
         - loop

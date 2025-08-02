@@ -4,6 +4,11 @@ body, p {
   font-size: 1.0em;
 }
 
+/* Do not insert a space between a paragraph and a list */
+p:has(+ ul) {
+  margin-bottom: 0.0em;
+}
+
 /* Quarto-specific */
 .navbar-logo {
     height: 2em !important;
