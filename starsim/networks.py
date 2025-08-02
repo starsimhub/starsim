@@ -1,12 +1,12 @@
 """
 Networks that connect people within a population
 """
-import networkx as nx
 import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+import networkx as nx # Also used by InfectionLog, so we can't lazily import it, and only 100 ms
 
 # This has a significant impact on runtime, surprisingly
 ss_float = ss.dtypes.float

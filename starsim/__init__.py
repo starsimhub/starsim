@@ -16,12 +16,12 @@ else:
         pass
 
 # Assign the root folder
-t('sciris')
+t('sciris') # SLow since importing NumPy, Matplotlib, etc.
 import sciris as sc
 root = sc.thispath(__file__).parent
 
 # Start imports: version and settings
-t('settings')
+t('settings') # SLow since import Numba
 from .version import __version__, __versiondate__, __license__
 from .settings import *
 
@@ -41,13 +41,13 @@ sc.require(
 t('utils        '); from .utils         import *
 t('debugtools   '); from .debugtools    import *
 t('arrays       '); from .arrays        import *
-t('distributions'); from .distributions import *
+t('distributions'); from .distributions import * # Slow import due to scipy.stats
 t('time         '); from .time          import *
 t('timeline     '); from .timeline      import *
 t('parameters   '); from .parameters    import *
 t('people       '); from .people        import *
 t('modules      '); from .modules       import *
-t('networks     '); from .networks      import *
+t('networks     '); from .networks      import * # Slow import due to networkx
 t('results      '); from .results       import *
 t('demographics '); from .demographics  import *
 t('products     '); from .products      import *
@@ -58,7 +58,7 @@ t('diseases     '); from .diseases      import *
 t('loop         '); from .loop          import *
 t('sim          '); from .sim           import *
 t('run          '); from .run           import *
-t('calibration  '); from .calibration   import *
+t('calibration  '); from .calibration   import * # Lazy import to save 500 ms
 t('samples      '); from .samples       import *
 
 # Load fonts
