@@ -27,3 +27,4 @@ jobs:
     - name: Quarto publish
       working-directory: ./docs
       run: ./publish
+      shell: bash
