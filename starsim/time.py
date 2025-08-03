@@ -801,7 +801,6 @@ Examples:
 • np.minimum(beta, 0.1) will cause this error if e.g. beta=ss.perday(0.2) instead use np.minimum(beta*dt, 0.1) or np.minimum(beta.value, 0.1) depending on what you intend.
 '''
                 raise ValueError(errormsg)
-        print('TEMP TODO i am called')
         return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
 
     def array_mul_error(self, ufunc=None):
@@ -1567,8 +1566,6 @@ class Rate(TimePar):
             else:
                 errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
                 raise ValueError(errormsg)
-        elif isinstance(dur, np.ndarray):
-            self.array_mul_error()
         elif isinstance(dur, ss.dur): # Main use case # TODO: make array calculations robust to branches
             if sc.isnumber(self.rate) and self.rate == 0:
                 return 0
@@ -1582,7 +1579,7 @@ class Rate(TimePar):
                 if sc.isnumber(factor) and factor == 1:
                     return self._base_prob # Avoid expensive calculation and precision issues
                 return 1 - np.exp(-self.rate*factor) # Main use case
-        elif sc.isnumber(dur):
+        elif sc.isnumber(dur) or isinstance(dur, np.ndarray):
             rate = self.rate*dur*scale # Scale the rate rather than the value
             rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
             out = self.__class__(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
