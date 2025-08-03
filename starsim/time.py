@@ -1593,13 +1593,11 @@ class Rate(TimePar):
         if dur is None:
             dur = self.default_dur # May also be None
 
-        if isinstance(dur, np.ndarray):
-            return self*dur
-        elif isinstance(dur, ss.dur):
+        if isinstance(dur, ss.dur):
             return self.value*(dur/self.unit)
         elif dur is None and self.unit is None:
             return self.value
-        else:
+        else: # Handle float, array, etc.
             return self.__class__(self.value*dur, self.unit)
 
 

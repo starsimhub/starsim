@@ -494,7 +494,7 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     # Shrink the sim to save memory
     if shrink:
-        sim.shrink()
+        sim.shrink(die=False)
 
     return sim
 
