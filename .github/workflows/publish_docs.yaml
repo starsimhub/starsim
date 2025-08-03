@@ -23,7 +23,10 @@ jobs:
     - name: Set up Quarto
       uses: quarto-dev/quarto-actions/setup@v2
 
+    - name: Install Quarto interlinks
+      working-directory: ./docs
+      run: quarto add machow/quartodoc
+
     - name: Custom Quarto publish
       working-directory: ./docs
       run: ./publish
-      shell: bash
