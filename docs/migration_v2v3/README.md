@@ -455,6 +455,8 @@ mp = ss.MixingPool(**mp_pars)
 
 *Note: no automatic migration script is available for this change.*
 
+Previously, extra edge attributes were set on networks via a `key_dict` argument. Now, the `self.meta` dictionary is simply updated directly.
+
 For example, code such as this:
 ```py
 def __init__(self, pars=None, key_dict=None, name=None, **kwargs):
