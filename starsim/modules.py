@@ -486,6 +486,11 @@ class Module(Base):
                     self._locked_attrs.remove(attr)
             self._auto_states = []
 
+        # If we're not checking, don't lock the attrs
+        if not check:
+            orig_lock_attrs = self._lock_attrs
+            self._lock_attrs = False
+
         # Add the new states
         for arg in args:
             if isinstance(arg, (list, tuple)):
@@ -501,10 +506,13 @@ class Module(Base):
             # Add the state to the module
             attr = state.name
             if check and hasattr(self, attr):
+                present = [s.name for s in self.state_list]
+                new = [s.name for s in args]
                 errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module.\n'
-                errormsg += 'Did you mean to use define_states(reset=True)?\n'
-                errormsg += f'States already in module:\n{[s.name for s in self.state_list]}\n'
-                errormsg += f'New states being added:\n{[s.name for s in args]}\n'
+                errormsg += 'Did you mean to use define_states(reset=True) (skip inherited states) or define_states(check=False) (skip this check)?\n'
+                errormsg += f'States already in module:\n{present}\n'
+                errormsg += f'New states being added:\n{new}\n'
+                errormsg += f'Conflicting states:\n{set(present) & set(new)}\n'
                 raise AttributeError(errormsg)
             setattr(self, attr, state)
             if lock:
@@ -513,6 +521,10 @@ class Module(Base):
             # Add it to the list of auto states, if needed
             if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
+
+        # Reset the lock state
+        if not check:
+            self._lock_attrs = orig_lock_attrs
         return
 
     def define_results(self, *args, check=True):
@@ -543,7 +555,7 @@ class Module(Base):
         """
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_rates() # Add module dt to the timepars
             sim.pars[self.name] = self.pars

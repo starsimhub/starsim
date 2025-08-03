@@ -716,10 +716,18 @@ class Dist:
                     ss.warn(warnmsg)
 
             if is_timepar:
+                if self.module is not None:
+                    dt = self.module.dt
+                elif self.sim is not None:
+                    dt = self.sim.dt
+                else:
+                    errormsg = 'Cannot do predraw scaling of timepar {v} when both module and sim are None. Consider e.g. ss.normal(3, 2, unit=ss.year) instead of ss.normal(ss.years(3), ss.years(2))'
+                    raise RuntimeError(errormsg)
+
                 if issubclass(timepar_type, ss.dur):
-                    self._pars[key] = v/self.module.dt
+                    self._pars[key] = v/dt
                 elif issubclass(timepar_type, ss.Rate):
-                    self._pars[key] = v*self.module.dt # Usually to_prob, but may be n_events
+                    self._pars[key] = v*dt # Usually to_prob, but may be n_events
                 else:
                     errormsg = f'Unknown timepar type {v}'
                     raise NotImplementedError(errormsg)

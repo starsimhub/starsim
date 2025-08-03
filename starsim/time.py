@@ -801,7 +801,6 @@ Examples:
 • np.minimum(beta, 0.1) will cause this error if e.g. beta=ss.perday(0.2) instead use np.minimum(beta*dt, 0.1) or np.minimum(beta.value, 0.1) depending on what you intend.
 '''
                 raise ValueError(errormsg)
-        print('TEMP TODO i am called')
         return getattr(ufunc, method)(*inputs, **kwargs) # TODO: not sure if this would ever get called
 
     def array_mul_error(self, ufunc=None):
@@ -1416,9 +1415,10 @@ class Rate(TimePar):
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
 
-        if isinstance(value, ss.TimePar):
-            value = value.value
-            ss.warn('Converting TimePars in this way is inadvisable and will become an exception in future')
+        # Convert from one rate to another
+        if isinstance(value, ss.Rate):
+            factor = self.unit/value.unit
+            value = value.value*factor
 
         if isinstance(value, list):
             value = np.array(value)
@@ -1566,12 +1566,10 @@ class Rate(TimePar):
             else:
                 errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
                 raise ValueError(errormsg)
-        elif isinstance(dur, np.ndarray):
-            self.array_mul_error()
-        elif isinstance(dur, ss.dur): # Main use case
-            if self.rate == 0:
+        elif isinstance(dur, ss.dur): # Main use case # TODO: make array calculations robust to branches
+            if sc.isnumber(self.rate) and self.rate == 0:
                 return 0
-            elif not np.isfinite(self.rate):
+            elif sc.isnumber(self.rate) and not np.isfinite(self.rate):
                 return 1
             else: # Main use case
                 if self.unit is None: # Final check before we proceed.
@@ -1581,7 +1579,7 @@ class Rate(TimePar):
                 if sc.isnumber(factor) and factor == 1:
                     return self._base_prob # Avoid expensive calculation and precision issues
                 return 1 - np.exp(-self.rate*factor) # Main use case
-        elif sc.isnumber(dur):
+        elif sc.isnumber(dur) or isinstance(dur, np.ndarray):
             rate = self.rate*dur*scale # Scale the rate rather than the value
             rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
             out = self.__class__(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
@@ -1595,13 +1593,11 @@ class Rate(TimePar):
         if dur is None:
             dur = self.default_dur # May also be None
 
-        if isinstance(dur, np.ndarray):
-            return self*dur
-        elif isinstance(dur, ss.dur):
+        if isinstance(dur, ss.dur):
             return self.value*(dur/self.unit)
         elif dur is None and self.unit is None:
             return self.value
-        else:
+        else: # Handle float, array, etc.
             return self.__class__(self.value*dur, self.unit)
 
 
@@ -1854,7 +1850,8 @@ class per(Rate):
     timepar_subtype = 'per'
 
     def __init__(self, value, unit=None):
-        assert value >= 0, 'Value must be >= 0'
+        if sc.isnumber(value):
+            assert value >= 0, f'Value must be >= 0, not {value}'
         return super().__init__(value, unit)
 
     @property

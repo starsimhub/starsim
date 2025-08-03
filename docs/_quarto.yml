@@ -136,6 +136,8 @@ website:
             - api/demographics.qmd
             - api/interventions.qmd
             - api/products.qmd
+            - api/analyzers.qmd
+            - api/connectors.qmd
         - section: "**Workflows**"
           contents:
             - api/run.qmd
@@ -144,10 +146,12 @@ website:
           contents:
             - api/arrays.qmd
             - api/time.qmd
+            - api/timeline.qmd
             - api/distributions.qmd
             - api/results.qmd
             - api/samples.qmd
             - api/settings.qmd
+            - api/debugtools.qmd
             - api/utils.qmd
 
 format:
@@ -197,8 +201,11 @@ quartodoc:
     - title: API reference
       desc: Full details on all Starsim classes and functions.
       contents:
+        - analyzers
         - arrays
         - calibration
+        - connectors
+        - debugtools
         - demographics
         - diseases
         - distributions
@@ -215,6 +222,7 @@ quartodoc:
         - settings
         - sim
         - time
+        - timeline
         - utils
 
 jupyter: python3
