@@ -23,7 +23,6 @@ authors = [
 
 classifiers = [
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Topic :: Software Development :: Libraries :: Python Modules",
