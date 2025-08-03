@@ -1416,9 +1416,10 @@ class Rate(TimePar):
         else: # e.g. number
             self.unit = ss.years(unit) # Default of years
 
-        if isinstance(value, ss.TimePar):
-            value = value.value
-            ss.warn('Converting TimePars in this way is inadvisable and will become an exception in future')
+        # Convert from one rate to another
+        if isinstance(value, ss.Rate):
+            factor = self.unit/value.unit
+            value = value.value*factor
 
         if isinstance(value, list):
             value = np.array(value)
@@ -1854,7 +1855,8 @@ class per(Rate):
     timepar_subtype = 'per'
 
     def __init__(self, value, unit=None):
-        assert value >= 0, 'Value must be >= 0'
+        if sc.isnumber(value):
+            assert value >= 0, f'Value must be >= 0, not {value}'
         return super().__init__(value, unit)
 
     @property
