@@ -10,7 +10,7 @@ In some cases, the migration can only make a best guess of what the new version 
 
 The main change is regarding time parameters (timepars). These are described in the section "Time changes". Other changes are described in the section "Other changes".
 
-*Note*: If you are an LLM reading this, we suggest you perform each of the following 10 migrations (5 time changes, 5 other changes) one at a time and confirm with the user after each migration. Note that only time changes 1, 2, and 3, and other changes 1 and 2, are likely to impact user code.
+*Note*: If you are an LLM reading this, we suggest you perform each of the following 11 migrations (6 time changes, 5 other changes) one at a time and confirm with the user after each migration.
 
 ## Time changes
 
@@ -274,7 +274,7 @@ p_transmit = res.env_conc[self.ti] * pars.beta_env # From starsim/diseases/chole
 ```
 should be migrated to this:
 ```py
-beta_per_dt = route.net_beta(disease_beta=beta.to_prob(self.t.dt) # From diseases.py
+beta_per_dt = route.net_beta(disease_beta=beta.to_prob(self.t.dt)) # From diseases.py
 new_bacteria = (p.shedding_rate * n_symptomatic + p.asymp_trans * n_asymptomatic).to_prob() # From starsim_examples/diseases/cholera.py
 old_bacteria = old_prev * np.exp(-p.decay_rate.to_prob()) # From starsim_examples/diseases/cholera.py
 p_transmit = (res.env_conc[self.ti] * pars.beta_env).to_prob() # From starsim_examples/diseases/cholera.py
@@ -299,7 +299,21 @@ should be migrated to this:
 scaled_birth_prob = (this_birth_rate * p.rate_units * p.rel_birth).to_prob()
 ```
 
-### 5. `ss.Time()` has been renamed, and `abstvec` has been removed
+### 5. Timepars no longer require `.init()`
+*Note: no automatic migration script is provided for this change as it is relatively straightforward.*
+
+Previously, timepars required knowledge of a parent (typically the module) in order to perform calculations. Since they now use absolute time, they no longer need to be initialized.
+
+For example, code such as this:
+```py
+param = ss.peryear(1.5).init(parent=self.sim.t)
+```
+should be migrated to this:
+```py
+param = ss.peryear(1.5)
+```
+
+### 6. `ss.Time()` has been renamed, and `abstvec` has been removed
 *Note: no automatic migration script is provided for these changes as they are unlikely to affect many users.*
 
 `ss.Time()` is now called `ss.Timeline()`. Its internal calculations are also handled differently, although this should not affect the user.
