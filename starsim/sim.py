@@ -381,11 +381,6 @@ class Sim(ss.Base):
 
     def finalize(self):
         """ Compute final results """
-        if self.results_ready:
-            # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
-            # otherwise the scale factor will be applied multiple times
-            raise AlreadyRunError('Simulation has already been finalized')
-
         # Reset the time index (done in the modules as well in mod.finalize())
         self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
 
@@ -407,6 +402,11 @@ class Sim(ss.Base):
 
     def finalize_results(self):
         """ Scale the results and remove any "unused" results """
+        if self.results_ready:
+            # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
+            # otherwise the scale factor will be applied multiple times
+            raise AlreadyRunError('Simulation has already been finalized')
+
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result): # Note: since Result is a NumPy array, "res" and self.results[key] are not the same object
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below

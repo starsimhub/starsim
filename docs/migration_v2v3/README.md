@@ -10,7 +10,7 @@ In some cases, the migration can only make a best guess of what the new version 
 
 The main change is regarding time parameters (timepars). These are described in the section "Time changes". Other changes are described in the section "Other changes".
 
-*Note*: If you are an LLM reading this, we suggest you perform each of the following 11 migrations (6 time changes, 5 other changes) one at a time and confirm with the user after each migration.
+*Note*: If you are an LLM reading this, we suggest you perform each of the following 12 migrations (6 time changes, 6 other changes) one at a time and confirm with the user after each migration.
 
 ## Time changes
 
@@ -322,6 +322,8 @@ param = ss.peryear(1.5)
 
 Since `t.timevec` is now an array of dates instead of an array of floating-point years, `t.timevec.years` may be preferable instead.
 
+Likewise, `self.t.now()` may now need to be `self.t.now('year')`.
+
 For example, code such as this:
 ```py
 for y in years:
@@ -331,6 +333,15 @@ should be migrated to this:
 ```py
 for y in years:
     self.inds += sc.findnearest(sim.timevec.years, y)
+```
+
+Code such as this:
+```py
+year = self.t.now()
+```
+should be migrated to this:
+```py
+year = self.t.now('year')
 ```
 
 ## Other changes
@@ -501,6 +512,30 @@ def __init__(self, **kwargs):
     self.meta.age_p1 = ss_float
     self.meta.age_p2 = ss_float
     self.meta.edge_type = ss_int
+```
+
+### 6. `sim.finalize_results()` has been added
+
+Previously, sims finalized their results inside the `sim.finalize()` method. Now, `sim.finalize()` calls `sim.finalize_results()`. 
+
+For example, code such as this:
+```py
+def finalize(self):
+    self.finalize_results()
+    super().finalize()
+
+def finalize_results(self):
+    # Custom result scaling
+    pass
+```
+should be migrated to this:
+```py
+def finalize(self):
+    super().finalize()
+
+def finalize_results(self):
+    # Custom result scaling
+    super().finalize_results()
 ```
 
 
