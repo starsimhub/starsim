@@ -25,6 +25,6 @@ jobs:
 
     steps:
     - name: Quarto publish
-      working-directory: ./docs
+      working-directory: ../docs # Not sure how we ended up in /starsim/starsim, but we did
       run: ./publish
       shell: bash
