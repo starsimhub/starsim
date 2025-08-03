@@ -1569,10 +1569,10 @@ class Rate(TimePar):
                 raise ValueError(errormsg)
         elif isinstance(dur, np.ndarray):
             self.array_mul_error()
-        elif isinstance(dur, ss.dur): # Main use case
-            if self.rate == 0:
+        elif isinstance(dur, ss.dur): # Main use case # TODO: make array calculations robust to branches
+            if sc.isnumber(self.rate) and self.rate == 0:
                 return 0
-            elif not np.isfinite(self.rate):
+            elif sc.isnumber(self.rate) and not np.isfinite(self.rate):
                 return 1
             else: # Main use case
                 if self.unit is None: # Final check before we proceed.
