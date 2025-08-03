@@ -11,13 +11,19 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: "3.x"
+
     - name: Install Starsim
       run: pip install -e .[dev]
-    - name: Quarto publish
+
+    - name: Set up Quarto
+      uses: quarto-dev/quarto-actions/setup@v2
+
+    - name: Custom Quarto publish
       working-directory: ./docs
       run: ./publish
       shell: bash
