@@ -589,7 +589,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Time units</span></a>
+ <span class="menu-text">Time</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -782,16 +782,16 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
 <span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
 <span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(896x672)</code></pre>
+</div>
 <div class="cell-output cell-output-stderr">
 <pre><code>/home/cliffk/idm/starsim/starsim/run.py:394: RuntimeWarning: 
 Sim "Pregnancy" has different results keys:
-Extra: pregnancy_cbr, pregnancy_n_postpartum, pregnancy_n_pregnant, pregnancy_pregnancies, pregnancy_births, pregnancy_n_fecund
-Missing: births_cbr, births_cumulative, births_new
+Extra: pregnancy_n_fecund, pregnancy_cbr, pregnancy_n_pregnant, pregnancy_births, pregnancy_n_postpartum, pregnancy_pregnancies
+Missing: births_cbr, births_new, births_cumulative
 Results may not plot correctly (i.e. axes titles may not be correct for all sims)
   ss.warn(warnmsg)</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Figure(896x672)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>

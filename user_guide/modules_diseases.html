@@ -589,7 +589,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Time units</span></a>
+ <span class="menu-text">Time</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -707,7 +707,13 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li>Handles network-based transmission automatically</li>
 <li>Applies network-specific betas and agent susceptibility/transmissibility</li>
 </ul>
-<p><strong>Important:</strong> Almost all diseases should inherit from <code>ss.Infection</code>. Do <strong>not</strong> write your own <code>infect()</code> method unless you have very specific requirements - the built-in method correctly handles: - Looping over agents in each network - Applying network- and disease-specific transmission probabilities - Managing agent transmissibility and susceptibility - Mixing pool logic</p>
+<p><strong>Important:</strong> Almost all diseases should inherit from <code>ss.Infection</code>. Do <strong>not</strong> write your own <code>infect()</code> method unless you have very specific requirements - the built-in method correctly handles:</p>
+<ul>
+<li>Looping over agents in each network</li>
+<li>Applying network- and disease-specific transmission probabilities</li>
+<li>Managing agent transmissibility and susceptibility</li>
+<li>Mixing pool logic</li>
+</ul>
 </section>
 </section>
 <section id="key-implementation-methods" class="level2">

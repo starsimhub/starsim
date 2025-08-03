@@ -592,7 +592,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Time units</span></a>
+ <span class="menu-text">Time</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -737,11 +737,11 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.34 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.39 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.43 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.47 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.51 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.14 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.16 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.18 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.20 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.22 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 </div>
@@ -2933,8 +2933,8 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x744f6c11fd30&gt; mode='r'&gt;
-&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x744f6c11fd30&gt; mode='r'&gt;</code></pre>
+<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7860eec91f30&gt; mode='r'&gt;
+&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7860eec91f30&gt; mode='r'&gt;</code></pre>
 </div>
 </div>
 <div id="57" class="cell" data-execution_count="25">
@@ -2967,7 +2967,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 42.3 ms</code></pre>
+<pre><code>Elapsed time: 14.3 ms</code></pre>
 </div>
 </div>
 <div id="64" class="cell" data-execution_count="29">
@@ -2975,7 +2975,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 3.38 ms</code></pre>
+<pre><code>Elapsed time: 0.885 ms</code></pre>
 </div>
 </div>
 <p>The <code>preload</code> option populates the entire cache in advance. This makes creating the <code>Samples</code> object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.</p>
@@ -2983,7 +2983,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <div class="sourceCode cell-code" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>    res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, preload<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 56.7 ms</code></pre>
+<pre><code>Elapsed time: 14.1 ms</code></pre>
 </div>
 </div>
 <div id="67" class="cell" data-execution_count="31">
@@ -2991,7 +2991,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 2.31 ms</code></pre>
+<pre><code>Elapsed time: 0.965 ms</code></pre>
 </div>
 </div>
 <div id="68" class="cell" data-execution_count="32">
@@ -2999,7 +2999,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 2.97 ms</code></pre>
+<pre><code>Elapsed time: 0.708 ms</code></pre>
 </div>
 </div>
 <p>Together, these options provide some flexibility in terms of memory and time demands to suit analyses at various different scales.</p>
@@ -3667,8 +3667,8 @@ Raw values: [0.00000000e+00 2.31481481e-11 4.62962963e-11 6.94444444e-11
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/advanced_time.html" class="pagination-link" aria-label="Time units">
-        <span class="nav-page-text">Time units</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/advanced_time.html" class="pagination-link" aria-label="Time">
+        <span class="nav-page-text">Time</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

@@ -554,7 +554,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Time units</span></a>
+ <span class="menu-text">Time</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -772,6 +772,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li>Modules can now be used like dictionaries for accessing user-defined states, e.g.&nbsp;<code>module['my_custom_state']</code> is an alias for <code>module.my_custom_state</code>.</li>
 <li><code>module.states</code> has been renamed <code>module.state_list</code>. <code>module.statesdict</code> has been renamed <code>module.state_dict</code>. There is also a <code>module.auto_state_list</code> property, referring specifically to <code>ss.BoolState</code> attributes.</li>
 <li>Built-in modules now have function signatures that look like this example for <code>ss.Births()</code>: <code>def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, **kwargs):</code>. Although <code>_</code> is simply <code>None</code>, this notation is short-hand for indicating that (a) the named arguments are the available parameters for the module, (b) their actual values are set by the <code>define_pars()</code> method.</li>
+<li>Modules now have a much briefer <code>__repr__</code>, typically one line. The full module information can still be obtained via <code>module.disp()</code>.</li>
 </ul>
 </section>
 <section id="changes-to-networks" class="level4">
@@ -848,6 +849,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <li>Result plotting has been improved, in terms of module labels and correct x-axis labels.</li>
 <li><code>ss.MultiSim()</code> plotting has been improved to display legends correctly.</li>
 <li>Plotting arguments are now handled by <code>ss.plot_args()</code>, which will parse different arguments among figure, plot, scatter, and other functions, e.g.&nbsp;<code>ss.plot_args(dpi=150, linewidth=3)</code> will set the figure DPI and the plot line width.</li>
+<li>Sim results are now automatically skipped during plotting if they were never updated (e.g., <code>n_deaths</code> if there were no deaths).</li>
 </ul>
 </section>
 <section id="array-and-results-updates" class="level4">

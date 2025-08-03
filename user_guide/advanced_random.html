@@ -589,7 +589,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Time units</span></a>
+ <span class="menu-text">Time</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -722,7 +722,7 @@ Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
 <li>Simulation B is identical to Simulation A, except that agent 0 is banned from fishing.</li>
 </ul>
 <p>Both simulations will use the same random number seed. Because the agents do not interact (they’re not actually competing for the same fish!), the only difference in outcomes should be that agent 0 does not go fishing and therefore will never catch a fish. However, because of the way random numbers are generated, the two simulations will use the same random numbers for different purposes. This means that banning agent 0 from fishing will <em>change which other agents go fishing and catch fish</em>!</p>
-<p><strong>NOTE:</strong> We have to specifically disable Starsim’s CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the <code>_centralized</code> option to <code>True</code> in this example.</p>
+<p><strong>NOTE:</strong> We have to specifically disable Starsim’s CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the <code>single_rng</code> option to <code>True</code> in this example.</p>
 <p>As a first step, we will create a Fishing module:</p>
 <div id="918c0ff8" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -794,9 +794,9 @@ Time step 0:
 </div>
 <p>In simulation A, agents 16 and 18 catch fish on the first time step, but in simulation B, agents 17 and 19 catch fish. Then on the second timestep, we can see that different agents go fishing and that 1, 15, and 19 catch fish in A but only 3 is lucky in B – what?! All we did was to ban agent 0 from fishing. The agents do not interact, so there should not have been a difference!</p>
 <p>What we are seeing here is a simple example of the stochastic branching problem. This “random number noise” could easily make it look like banning agent 0 could result in more fish being caught, which should be physically impossible as there are fewer agents fishing.</p>
-<p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>_centralized</code> option to its default value of <code>False</code>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing:</p>
+<p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>single_rng</code> option to its default value of <code>False</code>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing:</p>
 <div id="2334bf58" class="cell" data-execution_count="4">
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the _centralized option to False (this is the default, so you don't have to do this)</span></span>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the single_rng option to False (this is the default, so you don't have to do this)</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">False</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'SIMULATION A: WITHOUT BANNED AGENTS'</span>, <span class="st">'-'</span><span class="op">*</span><span class="dv">25</span>)</span>

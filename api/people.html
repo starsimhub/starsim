@@ -449,6 +449,18 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">products</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/analyzers.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">analyzers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/connectors.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">connectors</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -497,6 +509,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../api/timeline.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">timeline</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../api/distributions.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">distributions</span></a>
   </div>
@@ -517,6 +535,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <div class="sidebar-item-container"> 
   <a href="../api/settings.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">settings</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/debugtools.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">debugtools</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -664,62 +688,66 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td>Add a Module to the People instance</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.people.People.disp">disp</a></td>
+<td>Full object information</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.people.People.filter">filter</a></td>
 <td>Store indices to allow for easy filtering of the People object.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.get_age_dist">get_age_dist</a></td>
 <td>Return an age distribution based on provided data</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.grow">grow</a></td>
 <td>Increase the number of agents</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.init_mock">init_mock</a></td>
 <td>Initialize with a mock simulation (for debugging purposes only)</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.init_vals">init_vals</a></td>
 <td>Populate states with initial values, the final step of initialization</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.link_sim">link_sim</a></td>
 <td>Initialization</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.person">person</a></td>
 <td>Get all the properties for a single person.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.plot">plot</a></td>
 <td>Plot all the properties of the People object</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.plot_ages">plot_ages</a></td>
 <td>Plot the age pyramid for males and females.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.remove_dead">remove_dead</a></td>
 <td>Remove dead agents</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.request_death">request_death</a></td>
 <td>External-facing function to request an agent die at the current timestep</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.scale_flows">scale_flows</a></td>
 <td>Return the scaled versions of the flows – replacement for len(inds)</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.step_die">step_die</a></td>
 <td>Carry out any deaths that took place this timestep</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.people.People.to_df">to_df</a></td>
 <td>Export to dataframe</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.people.People.update_post">update_post</a></td>
 <td>Final updates at the very end of the timestep</td>
 </tr>
@@ -732,9 +760,14 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <p>This method is used to add a module to the People. It will register any module states with this people instance for dynamic resizing, and expose the states contained in the module to the user via <code>People.states.&lt;module_name&gt;.&lt;state_name&gt;</code></p>
 <p>The entries created below make it possible to do <code>sim.people.hiv.susceptible</code> or <code>sim.people.states['hiv.susceptible']</code> and have both of them work</p>
 </section>
+<section id="starsim.people.People.disp" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.people.People.disp">disp</h5>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>people.People.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Full object information</p>
+</section>
 <section id="starsim.people.People.filter" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.filter">filter</h5>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>people.People.<span class="bu">filter</span>(criteria<span class="op">=</span><span class="va">None</span>, uids<span class="op">=</span><span class="va">None</span>, split<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>people.People.<span class="bu">filter</span>(criteria<span class="op">=</span><span class="va">None</span>, uids<span class="op">=</span><span class="va">None</span>, split<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Store indices to allow for easy filtering of the People object.</p>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
@@ -801,7 +834,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.people.People.get_age_dist" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.get_age_dist">get_age_dist</h5>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>people.People.get_age_dist(age_data)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>people.People.get_age_dist(age_data)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Return an age distribution based on provided data</p>
 <p>The data should be provided in the form of either an Nx2 array, a pandas series with age as the index and counts/probability as the value, or a pandas DataFrame with “age” and “value” as columns. Each of these should look like e.g.:</p>
 <pre><code>age      value
@@ -861,7 +894,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.people.People.grow" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.grow">grow</h5>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>people.People.grow(n<span class="op">=</span><span class="va">None</span>, new_slots<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>people.People.grow(n<span class="op">=</span><span class="va">None</span>, new_slots<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Increase the number of agents</p>
 <section id="parameters-3" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
@@ -899,22 +932,22 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.people.People.init_mock" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.init_mock">init_mock</h5>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>people.People.init_mock()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>people.People.init_mock()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Initialize with a mock simulation (for debugging purposes only)</p>
 </section>
 <section id="starsim.people.People.init_vals" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.init_vals">init_vals</h5>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>people.People.init_vals()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>people.People.init_vals()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Populate states with initial values, the final step of initialization</p>
 </section>
 <section id="starsim.people.People.link_sim" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.link_sim">link_sim</h5>
-<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>people.People.link_sim(sim, init<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>people.People.link_sim(sim, init<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Initialization</p>
 </section>
 <section id="starsim.people.People.person" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.person">person</h5>
-<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>people.People.person(ind)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>people.People.person(ind)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Get all the properties for a single person.</p>
 <p><strong>Example</strong>:</p>
 <pre><code>sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
@@ -922,15 +955,15 @@ print(sim.people.person(5)) # The 5th agent in the simulation</code></pre>
 </section>
 <section id="starsim.people.People.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.plot">plot</h5>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>people.People.plot(</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    key<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    alive<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    bins<span class="op">=</span><span class="dv">50</span>,</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    hist_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    max_plots<span class="op">=</span><span class="dv">20</span>,</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    figsize<span class="op">=</span>(<span class="dv">16</span>, <span class="dv">12</span>),</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>people.People.plot(</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    key<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    alive<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    bins<span class="op">=</span><span class="dv">50</span>,</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    hist_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    max_plots<span class="op">=</span><span class="dv">20</span>,</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    figsize<span class="op">=</span>(<span class="dv">16</span>, <span class="dv">12</span>),</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Plot all the properties of the People object</p>
 <section id="parameters-4" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
@@ -992,7 +1025,7 @@ print(sim.people.person(5)) # The 5th agent in the simulation</code></pre>
 </section>
 <section id="starsim.people.People.plot_ages" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.plot_ages">plot_ages</h5>
-<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>people.People.plot_ages(bins<span class="op">=</span><span class="va">None</span>, absolute<span class="op">=</span><span class="va">False</span>, fig_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>people.People.plot_ages(bins<span class="op">=</span><span class="va">None</span>, absolute<span class="op">=</span><span class="va">False</span>, fig_kw<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Plot the age pyramid for males and females.</p>
 <section id="parameters-5" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
@@ -1033,12 +1066,12 @@ sim.people.plot_age()</code></pre>
 </section>
 <section id="starsim.people.People.remove_dead" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.remove_dead">remove_dead</h5>
-<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>people.People.remove_dead()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>people.People.remove_dead()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Remove dead agents</p>
 </section>
 <section id="starsim.people.People.request_death" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.request_death">request_death</h5>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>people.People.request_death(uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>people.People.request_death(uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>External-facing function to request an agent die at the current timestep</p>
 <p>In general, users should not directly interact with <code>People.ti_dead</code> to minimize interactions between modules (e.g., if a module requesting a future death, overwrites death due to a different module taking place at the current timestep).</p>
 <p>Modules that have a future time of death (e.g., due to disease duration) should keep track of that internally. When the module is ready to cause the agent to die, it should call this method, and can update its own results for the cause of death. This way, if multiple modules request death on the same day, they can each record a death due to their own cause.</p>
@@ -1092,29 +1125,29 @@ sim.people.plot_age()</code></pre>
 </section>
 <section id="starsim.people.People.scale_flows" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.scale_flows">scale_flows</h5>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>people.People.scale_flows(inds)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>people.People.scale_flows(inds)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Return the scaled versions of the flows – replacement for len(inds) followed by scale factor multiplication</p>
 </section>
 <section id="starsim.people.People.step_die" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.step_die">step_die</h5>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>people.People.step_die()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>people.People.step_die()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Carry out any deaths that took place this timestep</p>
 </section>
 <section id="starsim.people.People.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.to_df">to_df</h5>
-<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>people.People.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>people.People.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Export to dataframe</p>
 </section>
 <section id="starsim.people.People.update_post" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.update_post">update_post</h5>
-<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>people.People.update_post()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>people.People.update_post()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Final updates at the very end of the timestep</p>
 </section>
 </section>
 </section>
 <section id="starsim.people.Person" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.people.Person">Person</h3>
-<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>people.Person()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>people.Person()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>A simple class to hold all attributes of a person</p>
 <p><strong>Example</strong>:</p>
 <pre><code>sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
@@ -1137,7 +1170,7 @@ print(sim.people.person(5)) # The 5th agent in the simulation</code></pre>
 </table>
 <section id="starsim.people.Person.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.Person.to_df">to_df</h5>
-<div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>people.Person.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>people.Person.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Convert to a dataframe</p>
 
 

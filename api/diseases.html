@@ -449,6 +449,18 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
  <span class="menu-text">products</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/analyzers.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">analyzers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/connectors.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">connectors</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -497,6 +509,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../api/timeline.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">timeline</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../api/distributions.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">distributions</span></a>
   </div>
@@ -517,6 +535,12 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <div class="sidebar-item-container"> 
   <a href="../api/settings.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">settings</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/debugtools.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">debugtools</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -801,7 +825,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <blockquote class="blockquote">
 <blockquote class="blockquote">
 <blockquote class="blockquote">
-<p>Disease.log.append(source, target, t)</p>
+<p>Disease.infection_log.append(source, target, t)</p>
 </blockquote>
 </blockquote>
 </blockquote>
@@ -809,7 +833,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <blockquote class="blockquote">
 <blockquote class="blockquote">
 <blockquote class="blockquote">
-<p>Disease.log.append(source, target, t, network=‘msm’)</p>
+<p>Disease.infection_log.append(source, target, t, network=‘msm’)</p>
 </blockquote>
 </blockquote>
 </blockquote>
@@ -817,7 +841,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <blockquote class="blockquote">
 <blockquote class="blockquote">
 <blockquote class="blockquote">
-<p>Disease.log.add_data(source, t_dead=2024.25)</p>
+<p>Disease.infection_log.add_data(source, t_dead=2024.25)</p>
 </blockquote>
 </blockquote>
 </blockquote>
@@ -838,8 +862,8 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <td>Record extra infection data</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.diseases.InfectionLog.line_list">line_list</a></td>
-<td>Return a tabular representation of the log</td>
+<td><a href="#starsim.diseases.InfectionLog.to_df">to_df</a></td>
+<td>Return a tabular representation of the log as a line list dataframe</td>
 </tr>
 </tbody>
 </table>
@@ -876,10 +900,10 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </table>
 </section>
 </section>
-<section id="starsim.diseases.InfectionLog.line_list" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.diseases.InfectionLog.line_list">line_list</h5>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>diseases.InfectionLog.line_list()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Return a tabular representation of the log</p>
+<section id="starsim.diseases.InfectionLog.to_df" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.diseases.InfectionLog.to_df">to_df</h5>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>diseases.InfectionLog.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Return a tabular representation of the log as a line list dataframe</p>
 <p>This function returns a dataframe containing columns for all quantities recorded in the log. Note that the log will contain <code>NaN</code> for quantities that are defined for some edges and not others (and which are missing for a particular entry)</p>
 </section>
 </section>
