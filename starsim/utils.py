@@ -409,6 +409,7 @@ plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'mar
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
+plotting_kw.return_fig = ['do_show', 'is_jupyter', 'is_reticulate']
 
 def plot_args(kwargs=None, _debug=False, **defaults):
     """
@@ -439,6 +440,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
         - style: 'font', 'fontsize', 'interactive'
+        - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
 
     **Examples**:
 
@@ -458,7 +460,11 @@ def plot_args(kwargs=None, _debug=False, **defaults):
             args = {k:k for k in args}
         for inkey,outkey in args.items():
             val = kwargs.pop(inkey, _None) # Handle None as a valid argument
-            if _debug: print('  In, out, value: ', inkey, outkey, val)
+            if _debug: # Just for debugging, since the logic is complex
+                if inkey == outkey:
+                    print(f'    {inkey} = {val}')
+                else:
+                    print(f'    {inkey} → {outkey} = {val}')
             if val is not _None:
                 kw[subtype][outkey] = val
 
@@ -488,8 +494,12 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
         return key.replace('.','_').lower()
 
-    # Get results
-    flat = results if flattened else results.flatten()
+    # Handle accessing subdicts
+    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
+        flat = results[key].flatten() # e.g. sim.results['sis']
+        key = None # We've already used the key, so reset it
+    else: # Main use case: flatten the dict, e.g. sim.plot()
+        flat = results if flattened else results.flatten()
 
     # Configuration
     flat_orig = flat # Copy reference before we modify in place
@@ -520,7 +530,7 @@ def get_result_plot_label(res, show_module=None):
     # Sanitize
     if show_module is None:
         show_module = 26 # Default maximum length
-    elif isinstance(show_module):
+    elif isinstance(show_module, bool):
         if show_module is True:
             show_module = 999
         else:
@@ -566,12 +576,13 @@ def show(**kwargs):
 
 def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
-    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
-    is_reticulate = ss.options.reticulate
-    do_show = ss.options.show
+    do_show = kwargs.pop('do_show', ss.options.show) # TODO: make this more consistent with other implementations, e.g. plot_args()
+    is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
+    is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
     if is_jupyter or is_reticulate:
         print(fig)
-        plt.show()
+        if do_show != False:
+            plt.show()
         return None
     else:
         if do_show:

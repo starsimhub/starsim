@@ -1,12 +1,12 @@
 """
 Networks that connect people within a population
 """
-import networkx as nx
 import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+import networkx as nx # Also used by InfectionLog, so we can't lazily import it, and only 100 ms
 
 # This has a significant impact on runtime, surprisingly
 ss_float = ss.dtypes.float
@@ -23,7 +23,9 @@ class Route(ss.Module):
     """
     A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
     """
-    pass
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
+        errormsg = 'compute_transmission() must be defined by Route subclasses'
+        raise NotImplementedError(errormsg)
 
 
 class Network(Route):
@@ -132,16 +134,18 @@ class Network(Route):
         except: return 0
 
     def __repr__(self, **kwargs):
-        """ Convert to a dataframe for printing """
-        try:
-            namestr = self.name
-            labelstr = f'"{self.label}"' if self.label else '<no label>'
-            keys_str = ', '.join(self.edges.keys())
-            output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
-            output += self.to_df().__repr__()
-        except:
-            output = sc.prepr(self, vals=False)
-        return output
+        """ Same as default, except with length """
+        out = self.brief(output=True)
+        len_str = f'n_edges={len(self)}; '
+        pos = out.find('pars=')
+        out = out[:pos] + len_str + out[pos:]
+        return out
+
+    def __str__(self):
+        """ Slightly more detailed, show the dataframe as well """
+        out = self.brief(output=True)
+        out += '\n' + self.to_df().__repr__()
+        return out
 
     def __contains__(self, item):
         """
@@ -329,7 +333,12 @@ class Network(Route):
             G = self.to_graph(max_edges=max_edges, random=random)
             nx.draw_networkx(G, alpha=alpha, ax=ax, **kwargs)
             if max_edges:
-                plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
+                n_edges = len(self)
+                if n_edges > max_edges:
+                    edgestr = f'{max_edges:n} of {len(self):n} connections shown'
+                else:
+                    edgestr = f'{len(self):n} connections'
+                plt.title(f'{self.label}: {edgestr}')
         return ss.return_fig(fig)
 
     def find_contacts(self, inds, as_array=True):
@@ -637,18 +646,25 @@ class RandomSafeNet(DynamicNetwork):
 
     This network is similar to `ss.RandomNet()`, but is random-number safe
     (i.e., the addition of a single new agent will not perturb the entire rest
-    of the network). However, it is somewhat slowever than `ss.RandomNet()`,
+    of the network). However, it is somewhat slower than `ss.RandomNet()`,
     so should be used where CRN safety is important (e.g., scenario analysis).
 
+    Note: `ss.RandomNet` uses `n_contacts`, which is the total number of contacts
+    per agent. `ss.RandomSateNet` users `n_edges`, which is the total number of
+    *edges* per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges.
+    For example, `ss.RandomNet(n_contacts=10)` will give (nearly) identical results
+    to `ss.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
+    a distribution, `n_edges` can only be an integer.
+
     Args:
-        n_contacts (int/`ss.Dist`): the average number of (bi-directional) contacts between agents
+        n_edges (int): the average number of (bi-directional) edges between agents
         dur (int/`ss.dur`): the duration of each contact
         beta (float): the default beta value for each edge
     """
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, **kwargs):
+    def __init__(self, pars=None, n_edges=_, dur=_, beta=_, **kwargs):
         super().__init__()
         self.define_pars(
-            n_contacts = 10,
+            n_edges = 5,
             dur = 0, # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
         )
@@ -659,7 +675,7 @@ class RandomSafeNet(DynamicNetwork):
     def rep_rand(self, uids, sort=True):
         """ Reproducible repeated random numbers """
         n_agents = len(uids)
-        n_conn = self.pars.n_contacts
+        n_conn = self.pars.n_edges
         r_list = []
         for i in range(n_conn):
             r = self.dist.rvs(uids)
@@ -1170,6 +1186,15 @@ class MixingPool(Route):
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
         return
 
+    def shrink(self):
+        """ Shrink the size of the mixing pool for saving to disk """
+        super().shrink()
+        shrunk = ss.utils.shrink()
+        self.diseases = shrunk
+        self.src_uids = shrunk
+        self.dst_uids = shrunk
+        return
+
     def __len__(self):
         try:
             return len(self.pars.dst)
@@ -1215,7 +1240,7 @@ class MixingPool(Route):
                 self.pars[key] = inds.remove(uids)
         return
 
-    def compute_transmission(self, rel_sus, rel_trans, disease_beta):
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
         """
         Calculate transmission
 
@@ -1228,14 +1253,14 @@ class MixingPool(Route):
         Returns:
             UIDs of agents who acquired the disease at this step
         """
-        if disease_beta == 0:
+        if (disease_beta == 0) or (disease not in self.diseases):
             return []
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
         if isinstance(beta, ss.Rate):
             ss.warn('In mixing pools, beta should typically be a float')
-            beta = beta * self.t.dt
+            beta = beta.to_prob(self.t.dt)
         if sc.isnumber(beta) and beta == 0:
             return []
 

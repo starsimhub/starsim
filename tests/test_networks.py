@@ -244,6 +244,25 @@ def test_null():
 
 
 @sc.timer()
+def test_dhs():
+    sc.heading('Testing DHS networks...')
+    # Construct DHS data
+    n = 100
+    age_strings = []
+    for i in range(n):
+        household_size = np.random.randint(1,6)
+        ages = np.random.randint(0, 80, household_size)
+        age_strings.append(sc.strjoin(ages))
+    dhs_data = sc.dataframe(hh_id=np.arange(n), ages=age_strings)
+
+    # Create the network and run
+    household_dhs = sse.HouseholdDHSNet(dhs_data=dhs_data)
+    sim = ss.Sim(n_agents=small, diseases='sis', networks=household_dhs)
+    sim.run()
+    return sim
+
+
+@sc.timer()
 def test_other():
     sc.heading('Other network tests...')
 
@@ -278,6 +297,7 @@ if __name__ == '__main__':
     erdo = test_erdosrenyi()
     disk = test_disk()
     null = test_null()
+    dhs  = test_dhs()
     oth  = test_other()
 
     T.toc()

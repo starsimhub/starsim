@@ -3,5 +3,5 @@
 
 for d in tutorials user_guide; do
   echo "Running in $d..."
-  (cd "$d" && jcache project execute -e local-parallel)
+  (cd "$d" && jcache notebook add *.ipynb && jcache project execute -e local-parallel)
 done

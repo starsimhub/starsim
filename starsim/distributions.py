@@ -719,7 +719,7 @@ class Dist:
                 if issubclass(timepar_type, ss.dur):
                     self._pars[key] = v/self.module.dt
                 elif issubclass(timepar_type, ss.Rate):
-                    self._pars[key] = v*self.module.dt
+                    self._pars[key] = v*self.module.dt # Usually to_prob, but may be n_events
                 else:
                     errormsg = f'Unknown timepar type {v}'
                     raise NotImplementedError(errormsg)
@@ -728,65 +728,6 @@ class Dist:
                     self._pars[key] = self._pars[key].astype(float)
                 except:
                     pass
-
-    # def convert_timepars2(self):
-    #     """
-    #     Convert time parameters (durations and rates) to scalars
-
-    #     This function converts time parameters into bare numbers that will be returned by rvs() depending
-    #     on the timestep of the parent module for this `Dist`. The conversion for these types is
-
-    #     - Durations are divided by `dt` (so the eresult will be a number of timesteps)
-    #     - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
-    #     """
-    #     # Nonscalar types have to be handled separately
-    #     nonscalar_types = [ss.datedur]
-
-    #     # Check through and see if anything is a timepar
-    #     timepar_dict = dict()
-    #     for key,val in self._pars.items():
-    #         if isinstance(val, ss.TimePar):
-    #             timepar_type = type(val)
-    #             timepar_dict[key] = timepar_type
-    #             if self.unit is None:
-    #                 if timepar_type in nonscalar_types:
-    #                     # warnmsg = f'Trying to use a nonscalar timepar, {timepar_type}, as the Dist unit; automatically converting to ss.years instead'
-    #                     # ss.warn(warnmsg) # Don't think we actually need this warning, should always be safe to convert to ss.years?
-    #                     timepar_type = ss.years # Fallback for working with dates
-    #                 self.unit = timepar_type # Reset with the first found timepar
-
-    #     # Convert timepars, if any found
-    #     for key in timepar_dict.keys():
-    #         val = self._pars[key]
-
-    #         # Incompatible types: fail
-    #         self_type = self.unit.timepar_type # TODO: are different subtypes (prob vs rate) ok?
-    #         other_type = val.timepar_type
-    #         if self_type != other_type:
-    #             errormsg = f'Cannot convert timepars of incompatible types: dist={self_type} vs. {key}={other_type}'
-    #             raise TypeError(errormsg)
-
-    #         # Same type, different base: convert
-    #         if self.unit.base != val.base or self.unit.timepar_subtype != val.timepar_subtype:
-    #             val = self.unit(val) # e.g. ss.weeks(ss.years(2))
-
-    #         # Now that they're all consistent, replace the timepar with its value, and then postprocess
-    #         # self._pars[key] = val.value # TODO: try to make this work -- it's fine for e.g. normal, but fails for Poisson since dt changes the shape of the distribution. Need is_scalable parameter!
-
-    #         # Convert back to a timepar if needed -- note, previously this was auto-scaled by dt
-    #         print('WARNING, auto-scaling by dt', self) # TODO: Should not do this in future
-    #         print('BEFORE', val)
-    #         if isinstance(val, ss.Dur):
-    #             val = val/self.module.dt
-    #         elif isinstance(val, ss.Rate):
-    #             val = val*self.module.dt
-    #         else:
-    #             raise NotImplementedError
-    #         self._pars[key] = val
-
-    #         print('AFTER', val)
-    #     return
-
 
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
@@ -890,17 +831,6 @@ class Dist:
         """ Return default random numbers for array parameters; not for the user """
         rvs = self.dist.ppf(rands)
         return rvs
-
-    # def postprocess_timepar(self, rvs):
-    #     """ Scale random variates after generation; not for the user """
-    #     timepar = self._timepar # Shorten
-    #     self._timepar = None # Remove the timepar which is no longer needed
-    #     timepar.v = rvs # Replace the base value with the random variates
-    #     timepar.update_cached() # Recalculate the factor and values with the time scaling
-    #     rvs = timepar.values # Replace the rvs with the scaled version
-    #     if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
-    #         rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
-    #     return rvs
 
     def rvs(self, n=1, round=False, reset=False):
         """
@@ -1474,31 +1404,6 @@ class bernoulli(Dist):
         """ Alias to filter(uids, both=True) """
         return self.filter(uids=uids, both=True)
 
-    # This order (callable then timepar conversion) is now used by default?
-    # def call_par(self, key, val, size, uids):
-    #     """ Reverse the usual order of processing so callable is processed first, and then the timepar conversion """
-    #     is_timepar = isinstance(val, ss.TimePar)
-    #
-    #     if is_timepar: # If it's a time parameter, pull out the value
-    #         timepar = sc.dcp(val) # Rename to make more sense within the context of this method
-    #         val = timepar.v # Pull out the base value; we'll deal with the transformation later
-    #         self._timepar = timepar # This is used, then destroyed, by postprocess_timepar() below
-    #         if isinstance(timepar, ss.Dur): # Validation
-    #             errormsg = f'Bernoulli distributions can only be used with ss.time_prob() or ss.rate(), not {timepar}'
-    #             raise TypeError(errormsg)
-    #
-    #     # As normal: if the parameter is callable, then call it (types can appear as callable)
-    #     if callable(val) and not isinstance(val, type):
-    #         val = self.convert_callable(key, val, size, uids)
-    #
-    #     # Process as a timepar
-    #     if is_timepar:
-    #         val = self.postprocess_timepar(val) # Note: this is processing the parameter rather than the rvs as usual
-    #
-    #     # Store in the parameters and return
-    #     self._pars[key] = val
-    #     return val
-
 
 class choice(Dist):
     """
@@ -1679,15 +1584,13 @@ class multi_random(sc.prettyobj):
         return rvs
 
 
-
-
 #%% Dist exceptions
 
 class DistNotInitializedError(RuntimeError):
     """ Raised when Dist object is called when not initialized. """
     def __init__(self, dist=None, msg=None):
         if msg is None:
-            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.init()'
+            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.mock() or dist.init().'
         super().__init__(msg)
         return
 

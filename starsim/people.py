@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 __all__ = ['People', 'Person']
 
 
-class People(sc.prettyobj):
+class People:
     """
     A class to perform all the operations on the people
     This class is usually created automatically by the sim. The only required input
@@ -43,6 +43,7 @@ class People(sc.prettyobj):
         self._states = {}
         self.version = ss.__version__  # Store version info
         self.initialized = False
+        self.n_agents_init = n_agents
 
         # Handle the three fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, and AUIDs for tracking alive agents
@@ -79,6 +80,27 @@ class People(sc.prettyobj):
             self.init_mock()
 
         return
+
+    def brief(self, output=False):
+        n = self.n_agents_init
+        alive = len(self)
+        alive_str = f'{alive=:n}; ' if alive != n else ''
+        age_mean = self.age.mean()
+        age_std = self.age.std()
+        out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
+        return out if output else print(out)
+
+    def __repr__(self):
+        return self.brief(output=True)
+
+    def __str__(self):
+        out = self.brief(output=True)[:-1] # Remove trailing parenthesis
+        out += f'; states=[{sc.strjoin(self.states.keys())}])'
+        return out
+
+    def disp(self):
+        """ Full object information """
+        return sc.pr(self)
 
     @staticmethod
     def get_age_dist(age_data):
@@ -199,7 +221,7 @@ class People(sc.prettyobj):
     @property
     def n_agents(self):
         """ Alias for len(people) """
-        return len(self.auids)
+        return len(self)
 
     @property
     def n_uids(self):
@@ -571,7 +593,7 @@ class Person(sc.objdict):
 
 class Filter(sc.prettyobj):
     """
-    A filter on states
+    A filter on states; see `ss.People.filter()` for details.
     """
     def __init__(self, people, uids=None):
         self.people = people
@@ -666,6 +688,22 @@ class Filter(sc.prettyobj):
             criteria (bool array): a boolean array for the filtering critria
             uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate filter objects matching both True and False
+
+        **Example**:
+
+            sim = ss.Sim(n_agents=100e3, dur=10, networks='random', diseases='sir', verbose=0)
+            sim.run()
+            ppl = sim.people
+
+            # Traditional filtering
+            f1 = ppl.female == True
+            f2 = f1 * (ppl.age>5)
+            f3 = f2 * (~ppl.sir.infected)
+
+            # Equivalent using filter
+            f1 = ppl.filter('female')
+            f2 = f1('age')>5
+            f3 = ~f2('sir.infected')
         """
         if new is True:
             filtered = Filter(self)

@@ -129,12 +129,13 @@ def test_ncd():
     sc.heading('Testing NCDs')
 
     ppl = ss.People(n_agents)
-    ncd = ss.NCD(log=True)
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1)) # Since using ncd directly below
+    ncd = ss.NCD()
+    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1), analyzers='infection_log') # Since using ncd directly below
     sim.run()
+    log = sim.analyzers[0].logs[0]
 
-    assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
-    df = ncd.log.line_list()  # Check generation of line-list
+    assert len(log.out_edges) == log.number_of_edges()
+    df = log.to_df()  # Check generation of line-list
     assert df.source.isna().all()
 
     plt.figure()

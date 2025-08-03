@@ -7,11 +7,13 @@ import numpy as np
 import pandas as pd
 import scipy.stats as sps
 import sciris as sc
-import optuna as op
 import starsim as ss
 import matplotlib.pyplot as plt
-import seaborn as sns
-import optuna.visualization.matplotlib as vis
+
+# Lazy imports (do not import unless actually used, saves 500 ms on load time)
+op = sc.importbyname('optuna', lazy=True)
+sns = sc.importbyname('seaborn', lazy=True)
+vis = sc.importbyname('optuna.visualization.matplotlib', lazy=True)
 
 __all__ = ['Calibration']
 

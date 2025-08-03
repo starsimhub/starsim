@@ -4,6 +4,8 @@ CRN-safe embedding networks
 import numpy as np
 import starsim as ss
 
+__all__ = ['EmbeddingNet']
+
 class EmbeddingNet(ss.MFNet):
     """
     Heterosexual age-assortative network based on a one-dimensional embedding.

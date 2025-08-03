@@ -36,24 +36,12 @@ cd example
 uv add starsim
 ```
 
-To run a Starsim script with uv:
+Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, clone first this repository, then run:
 ```sh
-uv run python your_script.py
+pip install -e .[dev]
 ```
 
-For development with optional dependencies:
-```sh
-uv add starsim[dev]
-```
-
-Starsim can also be installed locally. To do this, clone first this repository, then run:
-```sh
-pip install -e .
-```
-
-Don't forget the dot at the end!
-
-(Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here[(https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
+(Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here](https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
 
 
 ### R
@@ -121,29 +109,32 @@ The model consists of core classes including `Sim`, `People`, `Disease`, `Networ
 
 The submodules of the Starsim folder are as follows:
 
-* `arrays.py`: Classes to handle, store, and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
-* `calibration.py`: Class to handle automated calibration of the model to data.
-* `calib_components.py`: Classes to handle additional operations related to calibration (e.g., the likelihood function).
-* `demographics.py`: Classes to transform initial condition input parameters for use in building and utilizing networks.
-* `disease.py`: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
-* `distributions.py`: Classes that handle statistical distributions used throughout Starsim to produce random numbers.
-* `interventions.py`: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it. 
-* `loop.py`: The logic for the main simulation integration loop.
-* `modules.py`: Class to handle "module" logic, such as updates (diseases, networks, etc). The Analyzers class (for performing analyses on the sim while it's running), and other classes and functions for analyzing simulations.
-* `networks.py`: Classes for creating simple and dynamic networks of people based on input parameters.
-* `parameters.py`: Classes for creating the simulation parameters.
-* `people.py`: The People class, for handling updates of state for each person.
-* `products.py`: Classes to manage the deployment of vaccines and treatments.
-* `results.py`: Classes to analyze and save results from simulations.
-* `run.py`: Classes for running simulations (e.g. parallel runs and the Scenarios and MultiSim classes).
-* `samples.py`: Class to store data from a large number of simulations.
-* `settings.py`: User-customizable options for Starsim (e.g. default font size).
-* `sim.py`: The Sim class, which performs most of the heavy lifting: initializing the model, running, and plotting.
-* `time.py`: The Time class, which coordinates time between the Sim and different modules.
-* `utils.py`: Helper functions.
-* `version.py`: Version, date, and license information.
+- `analyzers.py`: The Analyzers class (for performing analyses on the sim while it's running), and other classes and functions for analyzing simulations.
+- `arrays.py`: Classes to handle, store, and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
+- `calibration.py`: Class to handle automated calibration of the model to data.
+- `connectors.py`: Classes for modulating interactions between modules (e.g. between two diseases).
+- `debugtools.py`: Helper functions and classes to aid with debugging model results and performance.
+- `demographics.py`: Classes to transform initial condition input parameters for use in building and utilizing networks.
+- `diseases.py`: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
+- `distributions.py`: Classes that handle statistical distributions used throughout Starsim to produce random numbers.
+- `interventions.py`: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it. 
+- `loop.py`: The logic for the main simulation integration loop.
+- `modules.py`: Class to handle "module" logic, such as updates (diseases, networks, etc). 
+- `networks.py`: Classes for creating simple and dynamic networks of people based on input parameters.
+- `parameters.py`: Classes for creating the simulation parameters.
+- `people.py`: The People class, for handling updates of state for each person.
+- `products.py`: Classes to manage the deployment of vaccines and treatments.
+- `results.py`: Classes to analyze and save results from simulations.
+- `run.py`: Classes for running simulations (e.g. parallel runs and the Scenarios and MultiSim classes).
+- `samples.py`: Class to store data from a large number of simulations.
+- `settings.py`: User-customizable options for Starsim (e.g. default font size).
+- `sim.py`: The Sim class, which performs most of the heavy lifting: initializing the model, running, and plotting.
+- `time.py`: Time classes, such as dates, durations, probabilities, and frequencies.
+- `timeline.py`: The Timeline class, which coordinates time between the Sim and different modules.
+- `utils.py`: Helper functions.
+- `version.py`: Version, date, and license information.
 
-The `diseases` folder within the Starsim package contains definitions of different types of diseases, including STIs, Ebola, and cholera.
+Starsim also includes a `starsim_examples` folder, which contains definitions of different examples of diseases, including STIs, Ebola, and cholera. **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. [STIsim](https://stisim.org).
 
 ## Contributing
 

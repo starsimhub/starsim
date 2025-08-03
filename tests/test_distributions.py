@@ -431,18 +431,6 @@ def test_timepar_callable():
     p_young = 0.1
     p_old = 0.2
 
-    # TODO: not sure if this should be valid? Where is it getting scaled by dt?
-    # def age_prob(module, sim, uids):
-    #     out = ss.freq(np.zeros(len(uids)))
-    #     out[young] = p_young
-    #     out[old]   = p_old
-    #     assert out.value.sum() > 0
-    #     return out
-
-    # ber1 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
-    # ber1.rvs(uids)
-
-    # Higher-performance option - perform the time conversion on the parameter here
     def age_prob(module, sim, uids):
         dt = module.t.dt
         out = np.zeros_like(uids)
@@ -460,7 +448,6 @@ def test_timepar_callable():
     ber2 = ss.bernoulli(age_prob, module=mock_mods.year, strict=False).init(sim=sim)
     a = ber2.rvs(uids).mean()
 
-    # TODO: waiting for implementing ss.months()
     ber3 = ss.bernoulli(age_prob, module=mock_mods.month, strict=False).init(sim=sim)
     b = ber3.rvs(uids).mean()
 

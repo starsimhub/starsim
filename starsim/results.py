@@ -431,7 +431,7 @@ class Results(ss.ndict):
         lengths = [len(res) for res in self.flatten().values()]
         return len(set(lengths)) == 1
 
-    def flatten(self, sep='_', only_results=True, keep_case=False, **kwargs):
+    def flatten(self, sep='_', only_results=True, only_auto=False, keep_case=False, **kwargs):
         """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
         out = sc.flattendict(self, sep=sep)
         if not keep_case:
@@ -443,6 +443,8 @@ class Results(ss.ndict):
                     out[k] = v.resample(new_unit=resample, output_form='result', **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
+            if only_auto:
+                out = sc.objdict({k:v for k,v in out.items() if v.auto_plot})
         return out
 
     def to_df(self, sep='_', descend=False, **kwargs):

@@ -85,8 +85,8 @@ class Ebola(ss.SIR):
     def set_prognoses(self, uids, sources=None):
         """ Set prognoses for those who get infected """
          # We don't want to call super().set_prognoses(), but we could also do ss.Disease.set_prognoses(self, uids, sources)
-        if self.pars.log:
-            self.log_infections(uids, sources)
+        if self.infection_log:
+            self.infection_log.add_entries(uids, sources, self.now)
 
         ti = self.ti
         self.susceptible[uids] = False
