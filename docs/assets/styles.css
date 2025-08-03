@@ -4,9 +4,9 @@ body, p {
   font-size: 1.0em;
 }
 
-/* Prevent excessive spacing in terminal output */
+/* Prevent excessive spacing in terminal output -- need a better solution for when ansi codes are present */
 pre {
-  line-height: 1.0;
+  line-height: 1.2;
 }
 
 /* Do not insert a space between a paragraph and a list */
