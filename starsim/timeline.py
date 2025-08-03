@@ -240,10 +240,6 @@ class Timeline:
             self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
             self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
-        # # Convert e.g. dt=ss.datedur(days=3) to ss.days(3); we don't want to allow a dt like ss.datedur(months=1, days=-1)!
-        # if isinstance(self.dt, ss.datedur):
-        #     self.dt = self.dt.to_dur()
-
         # Check to see if any inputs were provided as durations: if so, reset the default type
         args = [self.start, self.stop, self.dur, self.dt]
         if isinstance(self.dt, str): # e.g. dt='year'
@@ -356,11 +352,10 @@ class Timeline:
         self.stop = stop
         self.dur = dur
 
-        if self.dt is None:
-            self.dt = self.default_dt
+        # We should have figured out the default type by now, so use that to set the appropriate dt
+        if self.dt is None or sc.isnumber(self.dt):
+            self.dt = self.default_type(sc.ifelse(self.dt, 1.0)) # Defaults to 1.0 if not provided at all
 
-        if sc.isnumber(self.dt):
-            self.dt = self.default_type(self.dt)
         return
 
     def init(self, sim=None, max_steps=20_000):
