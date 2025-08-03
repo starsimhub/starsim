@@ -555,7 +555,7 @@ class Module(Base):
         """
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_rates() # Add module dt to the timepars
             sim.pars[self.name] = self.pars
