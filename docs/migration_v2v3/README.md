@@ -320,6 +320,18 @@ param = ss.peryear(1.5)
 
 `ss.Timeline.abstvec` (commonly accessed as `t.abstvec`) has been removed; in most cases, `t.tvec` should be used instead (although `t.yearvec`, `t.datevec` or `t.timevec` may be preferable in some cases).
 
+Since `t.timevec` is now an array of dates instead of an array of floating-point years, `t.timevec.years` may be preferable instead.
+
+For example, code such as this:
+```py
+for y in years:
+    self.inds += sc.findnearest(sim.timevec, y)
+```
+should be migrated to this:
+```py
+for y in years:
+    self.inds += sc.findnearest(sim.timevec.years, y)
+```
 
 ## Other changes
 
