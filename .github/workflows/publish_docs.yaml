@@ -3,8 +3,8 @@ name: Publish Starsim docs (manual)
 on: workflow_dispatch
 
 jobs:
-  install:
-    name: Install Starsim
+  publish:
+    name: Install Starsim and publish docs
     runs-on: ubuntu-latest
 
     steps:
@@ -17,14 +17,7 @@ jobs:
         python-version: "3.x"
     - name: Install Starsim
       run: pip install -e .[dev]
-
-  publish:
-    name: Publish Starsim docs
-    needs: install
-    runs-on: ubuntu-latest
-
-    steps:
     - name: Quarto publish
-      working-directory: ../docs # Not sure how we ended up in /starsim/starsim, but we did
+      working-directory: ./docs
       run: ./publish
       shell: bash
