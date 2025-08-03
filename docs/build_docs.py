@@ -15,13 +15,14 @@ To skip tidying up (normalizing notebooks and removing outputs), use
 """
 import os
 import sys
+import subprocess
 import sciris as sc
 import starsim as ss
 
 def run(cmd):
     sc.printgreen(f'\n> {cmd}\n')
     if not debug:
-        return sc.runcommand(cmd, wait=False)
+        return subprocess.run(cmd, check=True, shell=True)
 
 debug = False
 execute = None
