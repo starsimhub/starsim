@@ -37,7 +37,7 @@ class Result(ss.BaseArr):
         self.name = name
         self.label = label
         self.module = module
-        self.scale = scale
+        self.scale = scale # TODO: should default to True for ints, False for floats
         self.auto_plot = auto_plot
         self.timevec = timevec
         self.low = low
