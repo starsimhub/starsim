@@ -47,9 +47,9 @@ def test_timeline():
     # assert np.array_equal(s1.t.timevec, s1.t.yearvec)
     assert len(s1.t.timevec) == 21
     assert t1.npts == sc.daydiff('2001-01-01', '2001-06-30')//2 + 1
-    assert isinstance(s1.t.start, ss.date)
+    assert isinstance(s1.t.start, ss.years)
     assert isinstance(t1.start, ss.date)
-    assert s1.t.tvec[-1] == ss.date('2002-01-01')
+    assert s1.t.tvec[-1] == ss.years(2002)
     assert t1.tvec[-1] == ss.date('2001-06-30')
 
     print('Testing weeks vs. days')
@@ -112,6 +112,7 @@ def test_timeline_syntax():
         g = 'stop and dur',
         h = 'multiple',
     )
+    dd20 = ss.date(2010) - ss.date(1990) # This is ss.datedur(days=7305), not ss.datedur(years=20), since the latter is ambiguous
 
     # Test start
     kw.a1 = [dict(start=None, stop=None, dur=None, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
@@ -121,59 +122,66 @@ def test_timeline_syntax():
     kw.a5 = [dict(start=ss.date(1990), stop=None, dur=None, dt=None)  , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.years(50), dt=ss.years(1))]
     kw.a6 = [dict(start=ss.days(5), stop=None, dur=None, dt=None)     , dict(start=ss.days(5), stop=ss.days(55), dur=ss.days(50), dt=ss.days(1))]
 
-
+    # Test stop
     kw.b1 = [dict(start=None, stop=2010, dur=None, dt=None)           , dict(start=ss.years(1960), stop=ss.years(2010), dur=ss.years(50), dt=ss.years(1))]
     kw.b2 = [dict(start=None, stop=1990, dur=None, dt=None)           , dict(start=ss.years(1940), stop=ss.years(1990), dur=ss.years(50), dt=ss.years(1))]
     kw.b3 = [dict(start=None, stop='1990.1.1', dur=None, dt=None)     , dict(start=ss.date(1940), stop=ss.date(1990), dur=ss.years(50), dt=ss.years(1))]
     kw.b4 = [dict(start=None, stop=ss.years(2010), dur=None, dt=None) , dict(start=ss.years(1960), stop=ss.years(2010), dur=ss.years(50), dt=ss.years(1))]
     kw.b5 = [dict(start=None, stop=ss.date(2050), dur=None, dt=None)  , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.years(1))]
-    kw.b6 = [dict(start=None, stop=ss.days(100), dur=None, dt=None)   , dict(start=ss.days(50), stop=ss.days(100), dur=ss.days(50), dt=ss.days(1))]
+    kw.b6 = [dict(start=None, stop=ss.days(100), dur=None, dt=None)   , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))]
 
+    # Test dur
     kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)                    , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
     kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None)          , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
-    kw.c3 = [dict(start=None, stop=None, dur=ss.datedur(months=24), dt=None) , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.datedur(months=24), dt=ss.years(1))]
+    kw.c3 = [dict(start=None, stop=None, dur=ss.datedur(months=24), dt=None) , dict(start=ss.date(2000), stop=ss.date(2002), dur=ss.datedur(months=24), dt=ss.years(1))]
     kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
     kw.c5 = [dict(start=None, stop=None, dur='1990.1.1', dt=None)            , 'exception']
 
+    # Test dt
     kw.d1 = [dict(start=None, stop=None, dur=None, dt=1)                    , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.d2 = [dict(start=None, stop=None, dur=None, dt=ss.years(1))          , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.d3 = [dict(start=None, stop=None, dur=None, dt=ss.days(1))           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
     kw.d4 = [dict(start=None, stop=None, dur=None, dt='month')              , dict(start=ss.months(0), stop=ss.months(50), dur=ss.months(50), dt=ss.months(1))]
     kw.d5 = [dict(start=None, stop=None, dur=None, dt=ss.datedur(months=1)) , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.datedur(months=1))]
 
+    # Test start and stop
     kw.e1 = [dict(start=1990, stop=2010, dur=None, dt=None)                , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
     kw.e2 = [dict(start=ss.years(1990), stop=2010, dur=None, dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
     kw.e3 = [dict(start=1990, stop=ss.years(2010), dur=None, dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
-    kw.e4 = [dict(start=ss.date(1990), stop=2010, dur=None, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.years(1))]
-    kw.e5 = [dict(start=1990, stop=ss.date(2010), dur=None, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.years(1))]
+    kw.e4 = [dict(start=ss.date(1990), stop=2010, dur=None, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.years(1))]
+    kw.e5 = [dict(start=1990, stop=ss.date(2010), dur=None, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.years(1))]
     kw.e6 = [dict(start=ss.years(0), stop=ss.days(365), dur=None, dt=None) , dict(start=ss.years(0), stop=ss.years(1), dur=ss.years(1), dt=ss.years(1))]
 
+    # Test start and dur
     kw.f1 = [dict(start=1990, stop=None, dur=20, dt=None)                   , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
     kw.f2 = [dict(start=1990, stop=None, dur=ss.years(20), dt=None)         , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
-    kw.f3 = [dict(start=1990, stop=None, dur=ss.datedur(years=20), dt=None) , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.datedur(years=50), dt=ss.years(1))]
+    kw.f3 = [dict(start=1990, stop=None, dur=ss.datedur(years=20), dt=None) , dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.datedur(years=20), dt=ss.years(1))]
     kw.f4 = [dict(start=1990, stop=None, dur='year', dt=None)               , 'exception']
 
+    # Test stop and dur
     kw.g1 = [dict(start=None, stop=1990, dur=20, dt=None)                   , dict(start=ss.years(1970), stop=ss.years(1990), dur=ss.years(20), dt=ss.years(1))]
     kw.g2 = [dict(start=None, stop=ss.date(1990), dur=20, dt=None)          , dict(start=ss.date(1970), stop=ss.date(1990), dur=ss.years(20), dt=ss.years(1))]
     kw.g3 = [dict(start=None, stop=ss.date('1990-01-21'), dur=ss.days(20), dt=None) , dict(start=ss.date('1990.1.1'), stop=ss.date('1990.1.21'), dur=ss.days(20), dt=ss.days(1))]
     kw.g4 = [dict(start=1990, stop=2020, dur=20, dt=None)                   , 'exception']
 
-    kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.months(1))]
-    kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=ss.datedur(years=20), dt=ss.datedur(months=1))]
+    # Test multiple
+    kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.months(1))]
+    kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=dd20, dt=ss.datedur(months=1))]
 
     mismatches = []
     for key in kw:
         category = keymap[key[0]]
         sc.printcyan(f'\nTesting {category}: {key}')
         args,expected = kw[key]
-        try:
+        if expected != 'exception':
             t = ss.Timeline(**args).init()
             actual = dict(start=t.start, stop=t.stop, dur=t.dur, dt=t.dt)
-        except Exception as e:
-            if expected == 'exception':
+        else:
+            try:
+                t = ss.Timeline(**args).init()
+                actual = 'passed'
+            except:
                 actual = expected
-            else:
-                raise e
 
         print('Input:    ', args)
         print('Expected: ', expected)
@@ -182,9 +190,16 @@ def test_timeline_syntax():
             sc.printgreen('✓ Success')
         else:
             sc.printred('× Mismatch :(')
-            mismatches.append(sc.objdict(args=args, expected=expected, actual=actual))
+            mismatches.append(sc.objdict(key=key, args=args, expected=expected, actual=actual))
 
-    assert len(mismatches) == 0, 'Output(s) did not match expected value(s)'
+    if len(mismatches):
+        errormsg = f'{len(mismatches)} output(s) did not match expected value(s):\n'
+        for m in mismatches:
+            errormsg += f'\n  Key: {m.key}'
+            errormsg += f'\n  Input:    {m.args}'
+            errormsg += f'\n  Expected: {m.expected}'
+            errormsg += f'\n  Actual:   {m.actual}\n'
+        raise ValueError(errormsg)
 
     return kw
 

@@ -371,8 +371,12 @@ class Timeline:
 
         return
 
-    def init(self, sim=None, max_steps=20_000):
+    def init(self, sim=None, max_steps=20_000, force=False):
         """ Initialize all vectors """
+
+        # Don't re-initialize if already initialized
+        if self.initialized and not force:
+            return self
 
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
