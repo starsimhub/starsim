@@ -28,6 +28,7 @@ TimePar  # All time parameters
 """
 import numbers
 import datetime as dt
+import dateutil.relativedelta as drd
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -374,7 +375,7 @@ class date(pd.Timestamp):
             return self._timestamp_add(other.value)
         elif isinstance(other, ss.dur):
             return date(self.to_year() + other.years)
-        elif isinstance(other, pd.DateOffset):
+        elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
@@ -395,12 +396,13 @@ class date(pd.Timestamp):
             return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.dur):
             return ss.date(self.to_year() - other.years)
-        elif isinstance(other, pd.DateOffset):
+        elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return ss.date(self.to_pandas() - other)
-        elif isinstance(other, (ss.date, dt.date, dt.datetime)):
-            if not isinstance(other, pd.Timestamp):
-                other = pd.Timestamp(other)
-            return ss.datedur(self.to_pandas() - other)
+        elif isinstance(other, (ss.date, pd.Timestamp, dt.date, dt.datetime)):
+            if isinstance(other, pd.Timestamp):
+                other = other.to_pydatetime()
+            delta = drd.relativedelta(self.to_pydatetime(), other)
+            return ss.datedur(delta)
         else:
             errormsg = f'Attempted to subtract "{other}" ({type(other)}) from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
             raise TypeError(errormsg)
@@ -767,6 +769,9 @@ class TimePar:
         else:
             return tuple(years)
 
+    def disp(self):
+        return sc.pr(self)
+
     def to_numpy(self):
         return self.to_array()
 
@@ -1091,6 +1096,7 @@ class datedur(dur):
             - Single positional argument
                 - A float number of years
                 - A pd.DateOffset
+                - A dateutil.relativedelta
                 - A dur instance
             - Keyword arguments
                 - Argument names that match time periods in `ss.time.factors` e.g., 'years', 'months'
@@ -1118,8 +1124,10 @@ class datedur(dur):
                 self.value = self.round_duration(years=arg)
             elif isinstance(arg, pd.Timedelta):
                 self.value = self.round_duration(days=arg.days)
+            elif isinstance(arg, drd.relativedelta):
+                self.value = pd.DateOffset(years=arg.years, months=arg.months, days=arg.days)
             else:
-                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, or pd.DateOffset'
+                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, pd.DateOffset, or dateutil.relativedelta'
                 raise TypeError(errormsg)
         else:
             if 'value' in kwargs:
