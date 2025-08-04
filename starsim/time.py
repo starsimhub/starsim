@@ -158,15 +158,18 @@ class DateArray(np.ndarray):
         if inplace:
             self[:] = vals
         else:
-            return ss.DateArray(vals)
+            return ss.DateArray(vals, unit=ss.date)
 
-    def to_float(self, inplace=False):
+    def to_float(self, inplace=False, to_numpy=False):
         """ Convert to a float, returning a new DateArray unless inplace=True """
         vals = [float(x) for x in self]
         if inplace:
             self[:] = vals
         else:
-            return ss.DateArray(vals)
+            if to_numpy:
+                return np.array(vals)
+            else:
+                return ss.DateArray(vals, unit=self.unit) # Keep the unit information
 
     def to_human(self):
         """
