@@ -10,7 +10,10 @@ Notebook execution options are:
 Additional arguments are passed to quarto render, e.g.:
     ./build_docs.py quarto --cache-refresh
 
-To skip tidying up (normalizing notebooks and removing outputs), use
+To do a full build as for publishing, use (alias to the above):
+    ./build_docs.py full
+
+To skip tidying up (normalizing notebooks and removing outputs), use:
     ./build_docs.py notidy
 """
 import os
@@ -29,11 +32,16 @@ execute = None
 folders = ['tutorials', 'user_guide']
 valid = ['jupyter', 'quarto', 'none']
 args = list(sys.argv)
+argstr = ''
 if 'notidy' in args:
     args.remove('notidy')
     tidy = False
 else:
     tidy = True
+if 'full' in args:
+    args.remove('full')
+    execute = 'quarto'
+    argstr = '--cache-refresh'
 
 if len(args) > 1:
     execute = args[1]
@@ -42,9 +50,8 @@ if len(args) > 1:
         errormsg = f'{execute} not a valid choice; choices are {sc.strjoin(valid)}'
         raise ValueError(errormsg)
     argstr = sc.strjoin(args[2:], sep=' ')
-else:
+elif execute is None:
     execute = 'jupyter'
-    argstr = ''
 
 if execute == 'jupyter' and not all([os.path.exists(f'./{folder}/.jupyter_cache') for folder in folders]):
     print('Falling back to quarto docs build since Jupyter cache not yet initialized')
