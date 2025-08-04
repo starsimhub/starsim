@@ -108,14 +108,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=GTM-NK4K647"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
 
 <script type="text/javascript">
 
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
 
@@ -598,7 +598,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Advanced indexing</span></a>
+ <span class="menu-text">Array indexing</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -717,7 +717,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <pre><code>Initializing sim with 50 agents</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="3">
-<pre><code>Sim(n=50; years(2000)—years(2050); networks=randomnet; diseases=sir)</code></pre>
+<pre><code>Sim(n=50; 2000—2050; networks=randomnet; diseases=sir)</code></pre>
 </div>
 </div>
 <p>We can easily take a look at the list of edges between agents. All networks are stored in <code>sim.networks</code>, and individual networks can be found at their class name after conversion to lower case. So for this example, <code>sim.networks.randomnet.edges</code> has all the information about which agents (referenced by their UID) are paired with which other agents as well as a per-edge transmission multiplier called <code>beta</code> and a per-edge duration, <code>dur</code>.</p>
@@ -893,18 +893,18 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/121) (0.00 s)  ———————————————————— 1%
-  Running 2000.11.01 (10/121) (0.27 s)  •——————————————————— 9%
-  Running 2001.09.01 (20/121) (0.35 s)  •••————————————————— 17%
-  Running 2002.07.02 (30/121) (0.43 s)  •••••——————————————— 26%
-  Running 2003.05.03 (40/121) (0.51 s)  ••••••—————————————— 34%
-  Running 2004.03.02 (50/121) (0.59 s)  ••••••••———————————— 42%
-  Running 2005.01.01 (60/121) (0.67 s)  ••••••••••—————————— 50%
-  Running 2005.11.01 (70/121) (0.75 s)  •••••••••••————————— 59%
-  Running 2006.09.01 (80/121) (0.83 s)  •••••••••••••——————— 67%
-  Running 2007.07.02 (90/121) (0.91 s)  •••••••••••••••————— 75%
-  Running 2008.05.02 (100/121) (0.99 s)  ••••••••••••••••———— 83%
-  Running 2009.03.03 (110/121) (1.07 s)  ••••••••••••••••••—— 92%
-  Running 2010.01.01 (120/121) (1.15 s)  •••••••••••••••••••• 100%
+  Running 2000.11.01 (10/121) (0.29 s)  •——————————————————— 9%
+  Running 2001.09.01 (20/121) (0.39 s)  •••————————————————— 17%
+  Running 2002.07.02 (30/121) (0.48 s)  •••••——————————————— 26%
+  Running 2003.05.03 (40/121) (0.56 s)  ••••••—————————————— 34%
+  Running 2004.03.02 (50/121) (0.65 s)  ••••••••———————————— 42%
+  Running 2005.01.01 (60/121) (0.73 s)  ••••••••••—————————— 50%
+  Running 2005.11.01 (70/121) (0.81 s)  •••••••••••————————— 59%
+  Running 2006.09.01 (80/121) (0.89 s)  •••••••••••••——————— 67%
+  Running 2007.07.02 (90/121) (0.96 s)  •••••••••••••••————— 75%
+  Running 2008.05.02 (100/121) (1.04 s)  ••••••••••••••••———— 83%
+  Running 2009.03.03 (110/121) (1.12 s)  ••••••••••••••••••—— 92%
+  Running 2010.01.01 (120/121) (1.20 s)  •••••••••••••••••••• 100%
 
 Figure(1152x864)</code></pre>
 </div>
@@ -1406,7 +1406,7 @@ Figure(1152x864)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

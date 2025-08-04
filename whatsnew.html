@@ -73,14 +73,14 @@ ul.task-list li input[type="checkbox"] {
     "search-label": "Search"
   }
 }</script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=GTM-NK4K647"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
 
 <script type="text/javascript">
 
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
 
@@ -560,7 +560,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Advanced indexing</span></a>
+ <span class="menu-text">Array indexing</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -615,6 +615,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul class="collapse">
+  <li><a href="#version-3.0.1-2025-08-04" id="toc-version-3.0.1-2025-08-04" class="nav-link" data-scroll-target="#version-3.0.1-2025-08-04">Version 3.0.1 (2025-08-04)</a></li>
   <li><a href="#version-3.0.0-2025-08-02" id="toc-version-3.0.0-2025-08-02" class="nav-link" data-scroll-target="#version-3.0.0-2025-08-02">Version 3.0.0 (2025-08-02)</a>
   <ul class="collapse">
   <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
@@ -722,6 +723,17 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term “Regression information”.</p>
+<section id="version-3.0.1-2025-08-04" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.0.1-2025-08-04">Version 3.0.1 (2025-08-04)</h2>
+<ul>
+<li>Minor updates following the v3 release.</li>
+<li>The logic for initializing <code>ss.Timeline</code> has been changed. Now, <code>start</code> and <code>stop</code> will not be converted to dates unless at least one argument is a date (e.g.&nbsp;<code>start=ss.years(2000)</code> will remain <code>ss.years()</code>). <code>ss.Timeline</code> is also now much more robust about handling different types of input, and choosing sensible defaults for missing inputs (e.g.&nbsp;with <code>stop=ss.days(20)</code>, the new default is <code>start=ss.days(0)</code>).</li>
+<li>Subtracting dates now yields a <code>relativedelta</code>, e.g.&nbsp;<code>ss.date(2025) - ss.date(2015)</code> now gives <code>ss.datedur(years=10)</code> (previously it converted to days).</li>
+<li><code>ss.DateArray</code> now has a <code>unit</code> attribute, allowing more reliable conversion to years.</li>
+<li>Timepars now have a <code>disp()</code> method.</li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1029">1029</a></li>
+</ul>
+</section>
 <section id="version-3.0.0-2025-08-02" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.0.0-2025-08-02">Version 3.0.0 (2025-08-02)</h2>
 <section id="summary" class="level3">
@@ -2032,7 +2044,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

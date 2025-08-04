@@ -108,14 +108,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=GTM-NK4K647"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
 
 <script type="text/javascript">
 
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
 
@@ -595,7 +595,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Advanced indexing</span></a>
+ <span class="menu-text">Array indexing</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -687,21 +687,21 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "random" with 10000 agents
-Initializing sim "randomsafe" with 10000 agents
-  Running "random": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+<pre><code>Initializing sim "randomsafe" with 10000 agents
+Initializing sim "random" with 10000 agents
   Running "randomsafe": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "random": 2010.01.01 (10/51) (0.17 s)  ••••———————————————— 22%
+  Running "random": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running "random": 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
   Running "randomsafe": 2010.01.01 (10/51) (0.18 s)  ••••———————————————— 22%
   Running "random": 2020.01.01 (20/51) (0.20 s)  ••••••••———————————— 41%
-  Running "random": 2030.01.01 (30/51) (0.24 s)  ••••••••••••———————— 61%
+  Running "random": 2030.01.01 (30/51) (0.23 s)  ••••••••••••———————— 61%
   Running "randomsafe": 2020.01.01 (20/51) (0.24 s)  ••••••••———————————— 41%
-  Running "random": 2040.01.01 (40/51) (0.28 s)  ••••••••••••••••———— 80%
-  Running "randomsafe": 2030.01.01 (30/51) (0.31 s)  ••••••••••••———————— 61%
-  Running "random": 2050.01.01 (50/51) (0.32 s)  •••••••••••••••••••• 100%
+  Running "random": 2040.01.01 (40/51) (0.27 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2030.01.01 (30/51) (0.30 s)  ••••••••••••———————— 61%
+  Running "random": 2050.01.01 (50/51) (0.30 s)  •••••••••••••••••••• 100%
 
-  Running "randomsafe": 2040.01.01 (40/51) (0.37 s)  ••••••••••••••••———— 80%
-  Running "randomsafe": 2050.01.01 (50/51) (0.42 s)  •••••••••••••••••••• 100%
+  Running "randomsafe": 2040.01.01 (40/51) (0.35 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2050.01.01 (50/51) (0.41 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -789,18 +789,18 @@ Figure(768x576)</code></pre>
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'High contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">10</span>))</span>
 <span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>ss.parallel(s1, s2).plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Low contacts" with 10000 agents
-Initializing sim "High contacts" with 10000 agents
-  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+<pre><code>Initializing sim "High contacts" with 10000 agentsInitializing sim "Low contacts" with 10000 agents
+
+  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
   Running "Low contacts": 2010.01.01 (10/51) (0.15 s)  ••••———————————————— 22%
   Running "High contacts": 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
   Running "Low contacts": 2020.01.01 (20/51) (0.18 s)  ••••••••———————————— 41%
   Running "High contacts": 2020.01.01 (20/51) (0.20 s)  ••••••••———————————— 41%
   Running "Low contacts": 2030.01.01 (30/51) (0.21 s)  ••••••••••••———————— 61%
-  Running "High contacts": 2030.01.01 (30/51) (0.23 s)  ••••••••••••———————— 61%
+  Running "High contacts": 2030.01.01 (30/51) (0.24 s)  ••••••••••••———————— 61%
   Running "Low contacts": 2040.01.01 (40/51) (0.24 s)  ••••••••••••••••———— 80%
-  Running "Low contacts": 2050.01.01 (50/51) (0.26 s)  •••••••••••••••••••• 100%
+  Running "Low contacts": 2050.01.01 (50/51) (0.27 s)  •••••••••••••••••••• 100%
 
   Running "High contacts": 2040.01.01 (40/51) (0.27 s)  ••••••••••••••••———— 80%
   Running "High contacts": 2050.01.01 (50/51) (0.31 s)  •••••••••••••••••••• 100%
@@ -824,11 +824,11 @@ Figure(768x576)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.19 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.23 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.27 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.30 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.15 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.18 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.22 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.26 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.29 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -848,7 +848,7 @@ Figure(672x480)</code></pre>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>s1.plot() <span class="co"># This also works, because it was run in place</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 1" with 10000 agentsInitializing sim "Sim 0" with 10000 agents
+<pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
 
 Figure(768x576)</code></pre>
 </div>
@@ -868,15 +868,15 @@ Figure(768x576)</code></pre>
 <span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>s1.run().plot() <span class="co"># This now works, because the sim was *not* run in place</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
-
+<pre><code>Initializing sim "Sim 1" with 10000 agents
+Initializing sim "Sim 0" with 10000 agents
 Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.04 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.07 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.10 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.13 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.16 s)  •••••••••••••••••••• 100%
+  Running 2020.01.01 (20/51) (0.08 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.11 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.14 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.17 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -1399,7 +1399,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

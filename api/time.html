@@ -108,14 +108,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=GTM-NK4K647"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
 
 <script type="text/javascript">
 
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
 
@@ -752,7 +752,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.DateArray.to_float" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.DateArray.to_float">to_float</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.to_float(inplace<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>time.DateArray.to_float(inplace<span class="op">=</span><span class="va">False</span>, to_numpy<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Convert to a float, returning a new DateArray unless inplace=True</p>
 </section>
 <section id="starsim.time.DateArray.to_human" class="level5">
@@ -1462,18 +1462,11 @@ ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
 </table>
 <section id="starsim.time.dur.arange" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.dur.arange">arange</h5>
-<div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>time.dur.arange(start, stop, step, inclusive<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>time.dur.arange(start, stop, step<span class="op">=</span><span class="fl">1.0</span>, inclusive<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Construct an array of dur instances</p>
-<p>For this function, the start, stop, and step must ALL be specified, and they must all be dur instances. Mixing dur types (years and datedur) is permitted.</p>
 <section id="parameters-8" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h6>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 8%">
-<col style="width: 40%">
-<col style="width: 37%">
-<col style="width: 12%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Name</th>
@@ -1485,21 +1478,21 @@ ss.date('2024-10-01').to_year() # Returns 2024.7486</code></pre>
 <tbody>
 <tr class="odd">
 <td>start</td>
-<td><code>ss</code>.<code>dur</code></td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <code>ss</code>.<code>dur</code></td>
 <td>Starting point, e.g., ss.years(0)</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>stop</td>
-<td><code>ss</code>.<code>dur</code></td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <code>ss</code>.<code>dur</code></td>
 <td>Ending point, e.g.&nbsp;ss.years(20)</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>step</td>
-<td><code>ss</code>.<code>dur</code></td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <code>ss</code>.<code>dur</code></td>
 <td>Step size, e.g.&nbsp;ss.years(2)</td>
-<td><em>required</em></td>
+<td><code>1.0</code></td>
 </tr>
 </tbody>
 </table>
@@ -2113,7 +2106,7 @@ p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

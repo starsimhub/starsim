@@ -108,14 +108,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=GTM-NK4K647"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
 
 <script type="text/javascript">
 
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
 
@@ -595,7 +595,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Advanced indexing</span></a>
+ <span class="menu-text">Array indexing</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -719,7 +719,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
   Running 2010.01.01 (10/51) (0.14 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.15 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.16 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.18 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.17 s)  ••••••••••••••••———— 80%
   Running 2050.01.01 (50/51) (0.19 s)  •••••••••••••••••••• 100%
 
     uid  slot  alive  female      age  ti_dead  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
@@ -776,7 +776,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
 <pre><code>Initializing sim with 10000 agents</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="3">
-<pre><code>Sim(n=10000; years(2000)—years(2050); networks=randomnet; diseases=sir)</code></pre>
+<pre><code>Sim(n=10000; 2000—2050; networks=randomnet; diseases=sir)</code></pre>
 </div>
 </div>
 <p>The call to <code>sim.init()</code> means that the <code>SIR</code> module gets added to <code>sim.diseases</code> and the <code>RandomNet</code> network gets added to <code>sim.networks</code>. In addition, the following updates are made: * the parameters of the modules are added to the sim’s centralized parameter dictionary, so you can access them via either <code>sim.pars.sir.init_prev</code> or <code>sim.diseases.sir.pars.init_prev</code> * the states specific to each module are added to <code>People</code>, so you can access them via <code>sim.diseases.sir.infected</code> or <code>sim.people.sir.infected</code> * the results specific to each module are added to the centralized Results dictionary of the <code>Sim</code>, so you can access them via <code>sim.diseases.sir.results.n_infected</code> or <code>sim.results.sir.n_infected</code>.</p>
@@ -1220,7 +1220,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -108,14 +108,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=GTM-NK4K647"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
 
 <script type="text/javascript">
 
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
 
@@ -595,7 +595,7 @@ gtag('config', 'GTM-NK4K647', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Advanced indexing</span></a>
+ <span class="menu-text">Array indexing</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -955,21 +955,14 @@ Standard Deviation: 1.0
 <span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 100 agents
-  Running 0.0 ( 0/16) (0.00 s)  •——————————————————— 6%</code></pre>
-</div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/time.py:293: RuntimeWarning: 
-Dates with years &lt; 1 are not valid (year = 0); returning ss.datedur instead
-  ss.warn(warnmsg)</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>  Running 10.0 (10/16) (0.13 s)  •••••••••••••——————— 69%
+  Running 0.0 ( 0/16) (0.00 s)  •——————————————————— 6%
+  Running 10.0 (10/16) (0.12 s)  •••••••••••••——————— 69%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="advanced_distributions_files/figure-html/cell-7-output-4.png" width="758" height="566" class="figure-img"></p>
+<p><img src="advanced_distributions_files/figure-html/cell-7-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -977,7 +970,7 @@ Figure(768x576)</code></pre>
 <p>It’s easy to inspect distributions, for example <code>dur_inf</code> of the <code>SIR</code> module using <code>plot_hist</code>.</p>
 <p><strong>NOTE:</strong> in the code below that we access <code>dur_inf</code> at <code>sim.diseases.sir.pars</code> rather than at <code>sir.pars</code> (referencing the module in the previous cell) because Starsim makes a copy. The <code>sir</code> is not initialized and does not have the <code>sim</code> context.</p>
 <div id="b38d3311" class="cell" data-execution_count="7">
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> sim.diseases.sir.pars.dur_inf.plot_hist()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> sim.diseases.sir.pars.dur_inf.plot_hist()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -999,23 +992,23 @@ Figure(768x576)</code></pre>
 </ol>
 <p>It should return a numpy array of the same length as <code>uids</code> containing the parameter value for each agent, or a scalar if the parameter is the same for all agents.</p>
 <div id="eb3bdf00" class="cell" data-execution_count="8">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> set_p_by_age(<span class="va">self</span>, sim, uids):</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full(<span class="bu">len</span>(uids), fill_value<span class="op">=</span><span class="fl">0.10</span>)  <span class="co"># Default 10% infection probability</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    p[sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>] <span class="op">=</span> <span class="fl">0.25</span>  <span class="co"># 25% for ages &lt; 15</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># For demonstration, print the age and probability for each agent:</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> uid, age, prob <span class="kw">in</span> <span class="bu">zip</span>(uids, sim.people.age[uids], p):</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Agent </span><span class="sc">{</span>uid<span class="sc">}</span><span class="ss"> | Age: </span><span class="sc">{</span>age<span class="sc">:5.2f}</span><span class="ss"> |  Infection Seed Probability: </span><span class="sc">{</span>prob<span class="sc">:.0%}</span><span class="ss">"</span>)</span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(</span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set init_prev as a dynamic parameter</span></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>set_p_by_age),</span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>, diseases<span class="op">=</span>[sir], dur<span class="op">=</span><span class="dv">30</span>)</span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> set_p_by_age(<span class="va">self</span>, sim, uids):</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full(<span class="bu">len</span>(uids), fill_value<span class="op">=</span><span class="fl">0.10</span>)  <span class="co"># Default 10% infection probability</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    p[sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>] <span class="op">=</span> <span class="fl">0.25</span>  <span class="co"># 25% for ages &lt; 15</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># For demonstration, print the age and probability for each agent:</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> uid, age, prob <span class="kw">in</span> <span class="bu">zip</span>(uids, sim.people.age[uids], p):</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Agent </span><span class="sc">{</span>uid<span class="sc">}</span><span class="ss"> | Age: </span><span class="sc">{</span>age<span class="sc">:5.2f}</span><span class="ss"> |  Infection Seed Probability: </span><span class="sc">{</span>prob<span class="sc">:.0%}</span><span class="ss">"</span>)</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set init_prev as a dynamic parameter</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>set_p_by_age),</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>, diseases<span class="op">=</span>[sir], dur<span class="op">=</span><span class="dv">30</span>)</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10 agents
 Agent 0 | Age: 25.15 |  Infection Seed Probability: 10%
@@ -1035,7 +1028,7 @@ Agent 9 | Age: 27.23 |  Infection Seed Probability: 10%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="8">
-<pre><code>Sim(n=10; years(2000)—years(2030); diseases=sir)</code></pre>
+<pre><code>Sim(n=10; 2000—2030; diseases=sir)</code></pre>
 </div>
 </div>
 </section>
@@ -1044,67 +1037,67 @@ Agent 9 | Age: 27.23 |  Infection Seed Probability: 10%
 <p>To demonstrate the use and power of distributions in the Starsim framework, we next create an intervention that delivers a vaccine to a random subset of agents using a Bernoulli distribution. The default distribution will be fixed, the same for all agents, but we’ll make it a parameter to that the user can change it without having to modify the source code.</p>
 <p><strong>NOTE:</strong> That we create the distribution only one time in the <code>__init__</code> method of the intervention. Here, the distribution is part of the parameters, so will appear at <code>self.pars.p_vx</code>. Alternatively, we could create a distribution between <code>update_pars</code> and <code>return</code>, as noted. Please avoid recreating a Starsim distribution on every time step.</p>
 <div id="aecf25a8" class="cell" data-execution_count="9">
-<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyVx(ss.Intervention):</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'vaccinated'</span>, label<span class="op">=</span><span class="st">"Vaccinated"</span>, default<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Create a Bernoulli distribution as a module parameter</span></span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>            <span class="co"># The value p=0.1 is a placeholder, the user will override</span></span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>            p_vx <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.1</span>, name<span class="op">=</span><span class="st">"Vaccination Probability"</span>)</span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars<span class="op">=</span>pars, <span class="op">**</span>kwargs)</span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># </span><span class="al">NOTE</span><span class="co">, this is a great place to create other distributions, for example</span></span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>        <span class="co"># self.my_dist = ss.normal(loc=0, scale=1)</span></span>
-<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
-<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
-<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_results(</span>
-<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>            ss.Result(<span class="st">'new_vx'</span>, dtype<span class="op">=</span><span class="bu">int</span>, label<span class="op">=</span><span class="st">"Newly Vaccinated"</span>)</span>
-<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Choose which agents to vaccinate</span></span>
-<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>        novx <span class="op">=</span> <span class="va">self</span>.vaccinated <span class="op">==</span> <span class="va">False</span> <span class="co"># Boolean mask</span></span>
-<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Filter to select agents for which the Bernoulli sample is True</span></span>
-<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>        vx_uids <span class="op">=</span> <span class="va">self</span>.pars.p_vx.<span class="bu">filter</span>(novx) <span class="co"># &lt;-- can pass in mask or uids</span></span>
-<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.vaccinated[vx_uids] <span class="op">=</span> <span class="va">True</span>  <span class="co"># Set the state to vaccinated</span></span>
-<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>        sim.diseases.sir.rel_sus[vx_uids] <span class="op">=</span> <span class="fl">0.0</span>  <span class="co"># Set susceptibility to 0 for vaccinated agents</span></span>
-<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Store the results</span></span>
-<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results.new_vx[sim.ti] <span class="op">=</span> <span class="bu">len</span>(vx_uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyVx(ss.Intervention):</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'vaccinated'</span>, label<span class="op">=</span><span class="st">"Vaccinated"</span>, default<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Create a Bernoulli distribution as a module parameter</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>            <span class="co"># The value p=0.1 is a placeholder, the user will override</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>            p_vx <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.1</span>, name<span class="op">=</span><span class="st">"Vaccination Probability"</span>)</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars<span class="op">=</span>pars, <span class="op">**</span>kwargs)</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># </span><span class="al">NOTE</span><span class="co">, this is a great place to create other distributions, for example</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>        <span class="co"># self.my_dist = ss.normal(loc=0, scale=1)</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_results(</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>            ss.Result(<span class="st">'new_vx'</span>, dtype<span class="op">=</span><span class="bu">int</span>, label<span class="op">=</span><span class="st">"Newly Vaccinated"</span>)</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Choose which agents to vaccinate</span></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>        novx <span class="op">=</span> <span class="va">self</span>.vaccinated <span class="op">==</span> <span class="va">False</span> <span class="co"># Boolean mask</span></span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Filter to select agents for which the Bernoulli sample is True</span></span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>        vx_uids <span class="op">=</span> <span class="va">self</span>.pars.p_vx.<span class="bu">filter</span>(novx) <span class="co"># &lt;-- can pass in mask or uids</span></span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.vaccinated[vx_uids] <span class="op">=</span> <span class="va">True</span>  <span class="co"># Set the state to vaccinated</span></span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>        sim.diseases.sir.rel_sus[vx_uids] <span class="op">=</span> <span class="fl">0.0</span>  <span class="co"># Set susceptibility to 0 for vaccinated agents</span></span>
+<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Store the results</span></span>
+<span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results.new_vx[sim.ti] <span class="op">=</span> <span class="bu">len</span>(vx_uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Now that we have created the intervention, we can configure it with a custom <code>p_vx_func</code> in “user space” and run the simulation.</p>
 <div id="6d78112f" class="cell" data-execution_count="10">
-<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> p_vx_func(<span class="va">self</span>, sim, uids):</span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the probability of vaccination for each agent in uids</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This is the "dynamic" callable for p_vx</span></span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Let's only administer the vaccine on the 5th time step</span></span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> sim.ti <span class="op">!=</span> <span class="dv">5</span>:</span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">0.0</span> </span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set vaccination probability proportional to age</span></span>
-<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> sim.people.age[uids] <span class="op">/</span> <span class="fl">100.0</span>  <span class="co"># Normalize age to a probability between 0 and 1</span></span>
-<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> p.clip(<span class="fl">0.0</span>, <span class="fl">1.0</span>)  <span class="co"># Ensure probabilities are between 0 and 1</span></span>
-<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p <span class="co"># p has the same length as uids</span></span>
-<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>vx_intv <span class="op">=</span> MyVx(p_vx <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>p_vx_func))</span>
-<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
-<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dur<span class="op">=</span><span class="dv">10</span>, dt<span class="op">=</span><span class="dv">1</span>, start<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a>    diseases<span class="op">=</span>ss.SIR(), <span class="co"># Default SIR disease model</span></span>
-<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>    interventions<span class="op">=</span>[vx_intv],</span>
-<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span>ss.RandomNet()</span>
-<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a>sim.run().plot(<span class="st">'myvx'</span>) <span class="co"># Verify vaccinations only on the 5th time step</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> p_vx_func(<span class="va">self</span>, sim, uids):</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the probability of vaccination for each agent in uids</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This is the "dynamic" callable for p_vx</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Let's only administer the vaccine on the 5th time step</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> sim.ti <span class="op">!=</span> <span class="dv">5</span>:</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">0.0</span> </span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set vaccination probability proportional to age</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> sim.people.age[uids] <span class="op">/</span> <span class="fl">100.0</span>  <span class="co"># Normalize age to a probability between 0 and 1</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> p.clip(<span class="fl">0.0</span>, <span class="fl">1.0</span>)  <span class="co"># Ensure probabilities are between 0 and 1</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p <span class="co"># p has the same length as uids</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>vx_intv <span class="op">=</span> MyVx(p_vx <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>p_vx_func))</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dur<span class="op">=</span><span class="dv">10</span>, dt<span class="op">=</span><span class="dv">1</span>, start<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    diseases<span class="op">=</span>ss.SIR(), <span class="co"># Default SIR disease model</span></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>    interventions<span class="op">=</span>[vx_intv],</span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span>ss.RandomNet()</span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>sim.run().plot(<span class="st">'myvx'</span>) <span class="co"># Verify vaccinations only on the 5th time step</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 1000 agents
   Running 0.0 ( 0/11) (0.00 s)  •——————————————————— 9%
@@ -1112,15 +1105,10 @@ Agent 9 | Age: 27.23 |  Infection Seed Probability: 10%
 
 Figure(768x576)</code></pre>
 </div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/time.py:293: RuntimeWarning: 
-Dates with years &lt; 1 are not valid (year = 0); returning ss.datedur instead
-  ss.warn(warnmsg)</code></pre>
-</div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="advanced_distributions_files/figure-html/cell-11-output-3.png" width="758" height="566" class="figure-img"></p>
+<p><img src="advanced_distributions_files/figure-html/cell-11-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1545,8 +1533,8 @@ Dates with years &lt; 1 are not valid (year = 0); returning ss.datedur instead
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/advanced_indexing.html" class="pagination-link" aria-label="Advanced indexing">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Advanced indexing</span>
+      <a href="../user_guide/advanced_indexing.html" class="pagination-link" aria-label="Array indexing">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Array indexing</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
@@ -1562,7 +1550,7 @@ Dates with years &lt; 1 are not valid (year = 0); returning ss.datedur instead
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.0 (2025-08-02).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
