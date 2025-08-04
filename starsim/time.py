@@ -74,11 +74,16 @@ class DateArray(np.ndarray):
                         unit = ss.date
                     except: # Otherwise, assume years
                         unit = ss.years
-                out.unit = unit
+                out._unit = unit
             return out
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
+
+    @property
+    def unit(self):
+        try:    return self._unit
+        except: return ss.date
 
     def __add__(self, other):
         cls = self.__class__

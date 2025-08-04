@@ -234,7 +234,8 @@ class Timeline:
             self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
             self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
-            self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
+            if self.start is None or self.stop is None: # Only set dur if start or stop is not specified
+                self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
         # Convert strings to other types, starting with dt
         if isinstance(self.dt, str): # e.g. dt='year'
