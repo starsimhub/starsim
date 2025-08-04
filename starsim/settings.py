@@ -95,7 +95,7 @@ class Options(sc.objdict):
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
         optdesc.warn_convert = 'Whether to warn about automatic time conversions'
-        options.warn_convert = sc.parse_env('STARSIM_WARN CONVERT', True, bool)
+        options.warn_convert = sc.parse_env('STARSIM_WARN_CONVERT', True, bool)
 
         optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
@@ -141,15 +141,21 @@ class Options(sc.objdict):
 
     def __setitem__(self, key, value):
         """ Do not allow accidental modifications """
+
         try:
             assert self.getattribute('_locked') # This handles False, not present, etc.
+            locked = True
+        except:
+            locked = False
+
+        if locked:
             if key in self:
                 self.set(key=key, value=value)
             else:
-                errormsg = f'Cannot set option {key}; valid options are:\n{sc.strjoin(self.keys())}\nSee ss.options.disp() for details.'
+                errormsg = f'Cannot set option "{key}"; valid options are:\n{sc.newlinejoin(sorted(self.keys()))}\n\nSee ss.options.disp() for details.'
                 raise sc.KeyNotFoundError(errormsg)
-        except:
-            return super().__setitem__(self, key, value)
+        else:
+            return super().__setitem__(key, value)
 
     def to_dict(self):
         ''' Pull out only the settings from the options object '''

@@ -8,6 +8,7 @@ import starsim as ss
 baseline_filename  = sc.thisdir(__file__, 'baseline.yaml')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.yaml')
 sc.options(interactive=False) # Assume not running interactively
+# ss.options.warnings = 'error' # For additional debugging
 
 # Define the parameters
 pars = sc.objdict(
@@ -154,7 +155,6 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-    ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
 
     T = sc.timer()
 

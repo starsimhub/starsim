@@ -8,7 +8,7 @@ website:
   title: "Starsim"
   image: /assets/starsim-logo.png
   favicon: /assets/favicon.ico
-  google-analytics: "GTM-NK4K647"
+  google-analytics: "G-SVDSQH04EM"
 
   repo-url: https://github.com/starsimhub/starsim
   repo-actions: [issue]

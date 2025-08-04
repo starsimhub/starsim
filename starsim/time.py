@@ -28,6 +28,7 @@ TimePar  # All time parameters
 """
 import numbers
 import datetime as dt
+import dateutil.relativedelta as drd
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -59,13 +60,30 @@ def approx_compare(a, op='==', b=None, **kwargs):
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
-    def __new__(cls, arr=None):
+    def __new__(cls, arr=None, unit=None):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            return arr.view(cls)
+            out = arr.view(cls)
+            if unit is None:
+                try:
+                    assert isinstance(arr[0], (ss.date, ss.dur))
+                    unit = type(arr[0]) # Get the unit from the input
+                except:
+                    try: # Else, if the input is datelike (>1), assume date
+                        assert np.all(arr >= 1.0)
+                        unit = ss.date
+                    except: # Otherwise, assume years
+                        unit = ss.years
+                out._unit = unit
+            return out
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
+
+    @property
+    def unit(self):
+        try:    return self._unit
+        except: return ss.date
 
     def __add__(self, other):
         cls = self.__class__
@@ -124,7 +142,7 @@ class DateArray(np.ndarray):
     @property
     def years(self):
         """ Represent the dates as floating point years """
-        return np.array([d.years for d in self])
+        return np.array([self.unit(d).years for d in self]) # Convert to the stored unit's type, then convert to years
 
     def to_date(self, inplace=False, day_round=None, die=True):
         """ Convert to ss.date
@@ -146,15 +164,18 @@ class DateArray(np.ndarray):
         if inplace:
             self[:] = vals
         else:
-            return ss.DateArray(vals)
+            return ss.DateArray(vals, unit=ss.date)
 
-    def to_float(self, inplace=False):
+    def to_float(self, inplace=False, to_numpy=False):
         """ Convert to a float, returning a new DateArray unless inplace=True """
         vals = [float(x) for x in self]
         if inplace:
             self[:] = vals
         else:
-            return ss.DateArray(vals)
+            if to_numpy:
+                return np.array(vals)
+            else:
+                return ss.DateArray(vals, unit=self.unit) # Keep the unit information
 
     def to_human(self):
         """
@@ -359,7 +380,7 @@ class date(pd.Timestamp):
             return self._timestamp_add(other.value)
         elif isinstance(other, ss.dur):
             return date(self.to_year() + other.years)
-        elif isinstance(other, pd.DateOffset):
+        elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
@@ -380,12 +401,13 @@ class date(pd.Timestamp):
             return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.dur):
             return ss.date(self.to_year() - other.years)
-        elif isinstance(other, pd.DateOffset):
+        elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return ss.date(self.to_pandas() - other)
-        elif isinstance(other, (ss.date, dt.date, dt.datetime)):
-            if not isinstance(other, pd.Timestamp):
-                other = pd.Timestamp(other)
-            return ss.datedur(self.to_pandas() - other)
+        elif isinstance(other, (ss.date, pd.Timestamp, dt.date, dt.datetime)):
+            if isinstance(other, pd.Timestamp):
+                other = other.to_pydatetime()
+            delta = drd.relativedelta(self.to_pydatetime(), other)
+            return ss.datedur(delta)
         else:
             errormsg = f'Attempted to subtract "{other}" ({type(other)}) from a date, which is not supported. Only durations can be subtracted from dates e.g., "ss.years({other})" or "ss.days({other})"'
             raise TypeError(errormsg)
@@ -752,6 +774,9 @@ class TimePar:
         else:
             return tuple(years)
 
+    def disp(self):
+        return sc.pr(self)
+
     def to_numpy(self):
         return self.to_array()
 
@@ -901,17 +926,21 @@ class dur(TimePar):
         return
 
     def __repr__(self):
-        if self.is_scalar and self.value == 1:
-            return f'{self.base.removesuffix("s")}()' # e.g. 'year()'
+        if self.is_scalar:
+            valstr = f'{self.value:g}'  # e.g. 2031.35
         else:
-            if self.is_scalar:
-                valstr = f'{self.value:g}'  # e.g. 2031.35
-            else:
-                valstr = f'{self.value}' # e.g. 2000, or an array
-            return f'{self.base}({valstr})'
+            valstr = f'{self.value}' # e.g. 2000, or an array
+        return f'{self.base}({valstr})'
+
+    def __str__(self):
+        """ Same as repr, but show e.g. ss.days(1) as "day" """
+        if self.is_scalar and self.value == 1:
+            return f'{self.base.removesuffix("s")}' # e.g. 'year'
+        else:
+            return self.__repr__()
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
-    # That would mean that dur(years=1)==dur(1) returns True - probably less confusing than having it return False?
+    # This means that ss.years(1) == ss.days(365) returns True -- probably less confusing than having it return False?
     def __hash__(self):
         return hash(self.years)
 
@@ -973,11 +1002,26 @@ class dur(TimePar):
 
     def __truediv__(self, other):
         if isinstance(other, dur):
-            return self.years/other.years
+            if type(other) == type(self): # e.g. ss.days(10) / ss.days(5)
+                return self.value/other.value
+            else: # e.g. ss.years(5) / ss.days(30)
+                return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
         else:
             return self.__class__(self.value / other)
+
+    def __rtruediv__(self, other):
+        # If a dur is divided by a dur then we will call __truediv__
+        # If a float is divided by a dur, then we should return a rate
+        # If a rate is divided by a dur, then we will call Rate.__truediv__
+        # We also need divide the duration by the numerator when calculating the rate
+        if self.years == 0:
+            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
+        elif (sc.isnumber(other) and other == 0) or isinstance(other, dur) and other.years == 0:
+            return ss.freq(0)
+        else:
+            return ss.freq(other, self)
 
     def __neg__(self):
         return -1*self
@@ -1014,38 +1058,23 @@ class dur(TimePar):
         a,b,impl = self._compare_args(other)
         return a != b if impl else NotImplemented
 
-    def __rtruediv__(self, other):
-        # If a dur is divided by a dur then we will call __truediv__
-        # If a float is divided by a dur, then we should return a rate
-        # If a rate is divided by a dur, then we will call Rate.__truediv__
-        # We also need divide the duration by the numerator when calculating the rate
-        if self.years == 0:
-            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
-        elif (sc.isnumber(other) and other == 0) or isinstance(other, dur) and other.years == 0:
-            return ss.freq(0)
-        else:
-            return ss.freq(other, self)
-
     def __abs__(self):
         return self.__class__(abs(self.value))
 
     @classmethod
-    def arange(cls, start, stop, step, inclusive=True): # TODO: remove? ss.dur(arr) is preferable to array(ss.dur) for performance
-        """
-        Construct an array of dur instances
-
-        For this function, the start, stop, and step must ALL be specified, and they must
-        all be dur instances. Mixing dur types (years and datedur) is permitted.
+    def arange(cls, start, stop, step=1.0, inclusive=True): # TODO: this creates an array of objects, so is less performant than DateArray
+        """ Construct an array of dur instances
 
         Args:
-            start (ss.dur): Starting point, e.g., ss.years(0)
-            stop (ss.dur): Ending point, e.g. ss.years(20)
-            step (ss.dur): Step size, e.g. ss.years(2)
+            start (float/ss.dur): Starting point, e.g., ss.years(0)
+            stop (float/ss.dur): Ending point, e.g. ss.years(20)
+            step (float/ss.dur): Step size, e.g. ss.years(2)
         """
-        args = [start, stop, step]
-        if not all([isinstance(arg, ss.dur) for arg in args]):
-            errormsg = f'All inputs must be ss.dur, not {args}'
-            raise TypeError(errormsg)
+        args = [start, stop, step] # Pack
+        for i,arg in enumerate(args):
+            if not isinstance(arg, cls):
+                args[i] = cls(arg) # Convert to this dur's class (e.g. ss.years)
+        start, stop, step = args # Unpack
 
         tvec = []
         t = start
@@ -1072,6 +1101,7 @@ class datedur(dur):
             - Single positional argument
                 - A float number of years
                 - A pd.DateOffset
+                - A dateutil.relativedelta
                 - A dur instance
             - Keyword arguments
                 - Argument names that match time periods in `ss.time.factors` e.g., 'years', 'months'
@@ -1099,8 +1129,10 @@ class datedur(dur):
                 self.value = self.round_duration(years=arg)
             elif isinstance(arg, pd.Timedelta):
                 self.value = self.round_duration(days=arg.days)
+            elif isinstance(arg, drd.relativedelta):
+                self.value = pd.DateOffset(years=arg.years, months=arg.months, days=arg.days)
             else:
-                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, or pd.DateOffset'
+                errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, pd.DateOffset, or dateutil.relativedelta'
                 raise TypeError(errormsg)
         else:
             if 'value' in kwargs:
@@ -1917,8 +1949,27 @@ __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', 
             'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
             'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear'] # Rates
 
+
+# Value at which to switch over from interpreting a value from a year duration to a calendar year
+cal_year_threshold = 1900
+def assume_cal_year(val):
+    """ Whether a value should be interpreted as a calendar year -- by default, a number greater than 1900 """
+    is_date    = isinstance(val, ss.date) # e.g. ss.date('1990.1.1')
+    is_cal_dur = isinstance(val, ss.dur) and val.years >= cal_year_threshold # e.g. ss.years(2000)
+    is_cal_num = sc.isnumber(val) and val >= cal_year_threshold # e.g. 2010
+    return is_date or is_cal_dur or is_cal_num
+
+
 # Durations
-class years(dur):  base = 'years'
+class years(dur):
+    base = 'years'
+    def __str__(self):
+        """ As this is the "default" Starsim unit, show its value simply for calendar years, e.g. 2020.5 """
+        if ss.time.assume_cal_year(self.value):
+            return f'{self.value:g}'
+        else:
+            return super().__str__()
+
 class months(dur): base = 'months'
 class weeks(dur):  base = 'weeks'
 class days(dur):   base = 'days'
@@ -1958,10 +2009,15 @@ reverse_class_map = {
     months: ['m', 'month', 'months', month, months],
     years:  ['y', 'year', 'years', year, years],
 
-    perday:   ['perday', 'probperday', perday],
-    perweek:  ['perweek', 'probperweek', perweek],
-    permonth: ['permonth', 'probpermonth', permonth],
-    peryear:  ['peryear', 'probperyear', peryear],
+    perday:   ['perday', perday],
+    perweek:  ['perweek', perweek],
+    permonth: ['permonth', permonth],
+    peryear:  ['peryear', peryear],
+
+    probperday:   ['probperday', probperday],
+    probperweek:  ['probperweek', probperweek],
+    probpermonth: ['probpermonth', probpermonth],
+    probperyear:  ['probperyear', probperyear],
 
     freqperday:   ['freqperday', freqperday],
     freqperweek:  ['freqperweek', freqperweek],

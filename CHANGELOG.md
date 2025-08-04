@@ -2,6 +2,16 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+
+## Version 3.0.1 (2025-08-04)
+- Minor updates following the v3 release.
+- The logic for initializing `ss.Timeline` has been changed. Now, `start` and `stop` will not be converted to dates unless at least one argument is a date (e.g. `start=ss.years(2000)` will remain `ss.years()`). `ss.Timeline` is also now much more robust about handling different types of input, and choosing sensible defaults for missing inputs (e.g. with `stop=ss.days(20)`, the new default is `start=ss.days(0)`).
+- Subtracting dates now yields a `relativedelta`, e.g. `ss.date(2025) - ss.date(2015)` now gives `ss.datedur(years=10)` (previously it converted to days).
+- `ss.DateArray` now has a `unit` attribute, allowing more reliable conversion to years.
+- Timepars now have a `disp()` method.
+- *GitHub info*: PR [1029](https://github.com/starsimhub/starsim/pull/1029)
+
+
 ## Version 3.0.0 (2025-08-02)
 
 ### Summary

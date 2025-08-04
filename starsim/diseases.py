@@ -663,7 +663,7 @@ class SIS(Infection):
         """ Initialize results """
         super().init_results()
         self.define_results(
-            ss.Result('rel_sus', dtype=float, label='Relative susceptibility')
+            ss.Result('rel_sus', dtype=float, scale=False, label='Relative susceptibility')
         )
         return
 
