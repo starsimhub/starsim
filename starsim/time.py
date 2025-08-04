@@ -977,11 +977,26 @@ class dur(TimePar):
 
     def __truediv__(self, other):
         if isinstance(other, dur):
-            return self.years/other.years
+            if type(other) == type(self): # e.g. ss.days(10) / ss.days(5)
+                return self.value/other.value
+            else: # e.g. ss.years(5) / ss.days(30)
+                return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
         else:
             return self.__class__(self.value / other)
+
+    def __rtruediv__(self, other):
+        # If a dur is divided by a dur then we will call __truediv__
+        # If a float is divided by a dur, then we should return a rate
+        # If a rate is divided by a dur, then we will call Rate.__truediv__
+        # We also need divide the duration by the numerator when calculating the rate
+        if self.years == 0:
+            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
+        elif (sc.isnumber(other) and other == 0) or isinstance(other, dur) and other.years == 0:
+            return ss.freq(0)
+        else:
+            return ss.freq(other, self)
 
     def __neg__(self):
         return -1*self
@@ -1017,18 +1032,6 @@ class dur(TimePar):
     def __ne__(self, other):
         a,b,impl = self._compare_args(other)
         return a != b if impl else NotImplemented
-
-    def __rtruediv__(self, other):
-        # If a dur is divided by a dur then we will call __truediv__
-        # If a float is divided by a dur, then we should return a rate
-        # If a rate is divided by a dur, then we will call Rate.__truediv__
-        # We also need divide the duration by the numerator when calculating the rate
-        if self.years == 0:
-            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
-        elif (sc.isnumber(other) and other == 0) or isinstance(other, dur) and other.years == 0:
-            return ss.freq(0)
-        else:
-            return ss.freq(other, self)
 
     def __abs__(self):
         return self.__class__(abs(self.value))

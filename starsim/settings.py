@@ -141,15 +141,21 @@ class Options(sc.objdict):
 
     def __setitem__(self, key, value):
         """ Do not allow accidental modifications """
+
         try:
             assert self.getattribute('_locked') # This handles False, not present, etc.
+            locked = True
+        except:
+            locked = False
+
+        if locked:
             if key in self:
                 self.set(key=key, value=value)
             else:
-                errormsg = f'Cannot set option {key}; valid options are:\n{sc.strjoin(self.keys())}\nSee ss.options.disp() for details.'
+                errormsg = f'Cannot set option "{key}"; valid options are:\n{sc.newlinejoin(sorted(self.keys()))}\n\nSee ss.options.disp() for details.'
                 raise sc.KeyNotFoundError(errormsg)
-        except:
-            return super().__setitem__(self, key, value)
+        else:
+            return super().__setitem__(key, value)
 
     def to_dict(self):
         ''' Pull out only the settings from the options object '''

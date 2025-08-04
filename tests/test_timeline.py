@@ -101,6 +101,19 @@ def test_timeline_syntax():
 
     kw = sc.objdict()
 
+    # Categories of tests
+    keymap = dict(
+        a = 'start',
+        b = 'stop',
+        c = 'dur',
+        d = 'dt',
+        e = 'start and stop',
+        f = 'start and dur',
+        g = 'stop and dur',
+        h = 'multiple',
+    )
+
+    # Test start
     kw.a1 = [dict(start=None, stop=None, dur=None, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.a2 = [dict(start=1990, stop=None, dur=None, dt=None)           , dict(start=ss.years(1990), stop=ss.years(2040), dur=ss.years(50), dt=ss.years(1))]
     kw.a3 = [dict(start=ss.years(1990), stop=None, dur=None, dt=None) , dict(start=ss.years(1990), stop=ss.years(2040), dur=ss.years(50), dt=ss.years(1))]
@@ -108,17 +121,18 @@ def test_timeline_syntax():
     kw.a5 = [dict(start=ss.date(1990), stop=None, dur=None, dt=None)  , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.years(50), dt=ss.years(1))]
     kw.a6 = [dict(start=ss.days(5), stop=None, dur=None, dt=None)     , dict(start=ss.days(5), stop=ss.days(55), dur=ss.days(50), dt=ss.days(1))]
 
+
     kw.b1 = [dict(start=None, stop=2010, dur=None, dt=None)           , dict(start=ss.years(1960), stop=ss.years(2010), dur=ss.years(50), dt=ss.years(1))]
-    # kw.b2 = [dict(start=None, stop=1990, dur=None, dt=None)           , dict(start=ss.years(1940), stop=ss.years(1990), dur=ss.years(50), dt=ss.years(1))]
-    # kw.b3 = [dict(start=None, stop='1990.1.1', dur=None, dt=None)     , dict(start=ss.date(1940), stop=ss.date(1990), dur=ss.years(50), dt=ss.years(1))]
+    kw.b2 = [dict(start=None, stop=1990, dur=None, dt=None)           , dict(start=ss.years(1940), stop=ss.years(1990), dur=ss.years(50), dt=ss.years(1))]
+    kw.b3 = [dict(start=None, stop='1990.1.1', dur=None, dt=None)     , dict(start=ss.date(1940), stop=ss.date(1990), dur=ss.years(50), dt=ss.years(1))]
     kw.b4 = [dict(start=None, stop=ss.years(2010), dur=None, dt=None) , dict(start=ss.years(1960), stop=ss.years(2010), dur=ss.years(50), dt=ss.years(1))]
-    # kw.b5 = [dict(start=None, stop=ss.date(2050), dur=None, dt=None)  , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.years(1))]
+    kw.b5 = [dict(start=None, stop=ss.date(2050), dur=None, dt=None)  , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.b6 = [dict(start=None, stop=ss.days(100), dur=None, dt=None)   , dict(start=ss.days(50), stop=ss.days(100), dur=ss.days(50), dt=ss.days(1))]
 
-    # kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)                    , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
-    # kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None)          , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
-    # kw.c3 = [dict(start=None, stop=None, dur=ss.datedur(months=24), dt=None) , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.datedur(months=24), dt=ss.years(1))]
-    # kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
+    kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)                    , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
+    kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None)          , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
+    kw.c3 = [dict(start=None, stop=None, dur=ss.datedur(months=24), dt=None) , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.datedur(months=24), dt=ss.years(1))]
+    kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
     kw.c5 = [dict(start=None, stop=None, dur='1990.1.1', dt=None)            , 'exception']
 
     kw.d1 = [dict(start=None, stop=None, dur=None, dt=1)                    , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
@@ -140,16 +154,17 @@ def test_timeline_syntax():
     kw.f4 = [dict(start=1990, stop=None, dur='year', dt=None)               , 'exception']
 
     kw.g1 = [dict(start=None, stop=1990, dur=20, dt=None)                   , dict(start=ss.years(1970), stop=ss.years(1990), dur=ss.years(20), dt=ss.years(1))]
-    # kw.g2 = [dict(start=None, stop=ss.date(1990), dur=20, dt=None)          , dict(start=ss.date(1970), stop=ss.date(1990), dur=ss.years(20), dt=ss.years(1))]
-    # kw.g3 = [dict(start=None, stop=ss.date('1990-01-21'), dur=ss.days(20), dt=None) , dict(start=ss.date('1990.1.1'), stop=ss.date('1990.1.21'), dur=ss.days(20), dt=ss.days(1))]
+    kw.g2 = [dict(start=None, stop=ss.date(1990), dur=20, dt=None)          , dict(start=ss.date(1970), stop=ss.date(1990), dur=ss.years(20), dt=ss.years(1))]
+    kw.g3 = [dict(start=None, stop=ss.date('1990-01-21'), dur=ss.days(20), dt=None) , dict(start=ss.date('1990.1.1'), stop=ss.date('1990.1.21'), dur=ss.days(20), dt=ss.days(1))]
     kw.g4 = [dict(start=1990, stop=2020, dur=20, dt=None)                   , 'exception']
 
-    # kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.months(1))]
+    kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.months(1))]
     kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=ss.datedur(years=20), dt=ss.datedur(months=1))]
 
     mismatches = []
     for key in kw:
-        sc.printcyan('\nTest ' + key)
+        category = keymap[key[0]]
+        sc.printcyan(f'\nTesting {category}: {key}')
         args,expected = kw[key]
         try:
             t = ss.Timeline(**args).init()
@@ -168,6 +183,8 @@ def test_timeline_syntax():
         else:
             sc.printred('× Mismatch :(')
             mismatches.append(sc.objdict(args=args, expected=expected, actual=actual))
+
+    assert len(mismatches) == 0, 'Output(s) did not match expected value(s)'
 
     return kw
 
