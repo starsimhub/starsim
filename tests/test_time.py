@@ -5,7 +5,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-ss.options.warnings = 'error'
+# ss.options.warnings = 'error' # For additional debugging
 
 
 @sc.timer()

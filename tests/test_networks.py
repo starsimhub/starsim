@@ -11,7 +11,7 @@ import scipy.stats as sps
 import matplotlib.pyplot as plt
 
 sc.options.interactive = False # Assume not running interactively
-ss.options.warnings = 'error'
+# ss.options.warnings = 'error' # For additional debugging
 
 small = 100
 medium = 1000

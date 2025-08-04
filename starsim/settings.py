@@ -95,7 +95,7 @@ class Options(sc.objdict):
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
         optdesc.warn_convert = 'Whether to warn about automatic time conversions'
-        options.warn_convert = sc.parse_env('STARSIM_WARN CONVERT', True, bool)
+        options.warn_convert = sc.parse_env('STARSIM_WARN_CONVERT', True, bool)
 
         optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)

@@ -29,7 +29,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             p = 0.1, # Probability of each edge
-            dur = ss.dur(0), # Duration of zero ensures that new random edges are formed on each time step
+            dur = ss.years(0), # Duration of zero ensures that new random edges are formed on each time step
         )
         self.update_pars(pars, **kwargs)
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges

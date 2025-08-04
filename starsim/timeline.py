@@ -395,8 +395,10 @@ class Timeline:
         # prioritise one or the other depending on what type of quantity the user has specified for start
         self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
         n_steps = len(self.datevec)
-        if n_steps > max_steps:
-            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable.'
+        if n_steps > max_steps and ss.options.warn_convert:
+            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
+            warnmsg += 'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
+            warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
             ss.warn(warnmsg)
 
         if isinstance(self.dt, ss.datedur):
