@@ -59,10 +59,22 @@ def approx_compare(a, op='==', b=None, **kwargs):
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
-    def __new__(cls, arr=None):
+    def __new__(cls, arr=None, unit=None):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            return arr.view(cls)
+            out = arr.view(cls)
+            if unit is None:
+                try:
+                    assert isinstance(arr[0], (ss.date, ss.dur))
+                    unit = type(arr[0]) # Get the unit from the input
+                except:
+                    try: # Else, if the input is datelike (>1), assume date
+                        assert np.all(arr >= 1.0)
+                        unit = ss.date
+                    except: # Otherwise, assume years
+                        unit = ss.years
+                out.unit = unit
+            return out
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
@@ -124,7 +136,7 @@ class DateArray(np.ndarray):
     @property
     def years(self):
         """ Represent the dates as floating point years """
-        return np.array([d.years for d in self])
+        return np.array([self.unit(d).years for d in self]) # Convert to the stored unit's type, then convert to years
 
     def to_date(self, inplace=False, day_round=None, die=True):
         """ Convert to ss.date
