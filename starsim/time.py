@@ -901,17 +901,21 @@ class dur(TimePar):
         return
 
     def __repr__(self):
-        if self.is_scalar and self.value == 1:
-            return f'{self.base.removesuffix("s")}()' # e.g. 'year()'
+        if self.is_scalar:
+            valstr = f'{self.value:g}'  # e.g. 2031.35
         else:
-            if self.is_scalar:
-                valstr = f'{self.value:g}'  # e.g. 2031.35
-            else:
-                valstr = f'{self.value}' # e.g. 2000, or an array
-            return f'{self.base}({valstr})'
+            valstr = f'{self.value}' # e.g. 2000, or an array
+        return f'{self.base}({valstr})'
+
+    def __str__(self):
+        """ Same as repr, but show e.g. ss.days(1) as "day" """
+        if self.is_scalar and self.value == 1:
+            return f'{self.base.removesuffix("s")}' # e.g. 'year'
+        else:
+            return self.__repr__()
 
     # NB. Durations are considered to be equal if their year-equivalent duration is equal
-    # That would mean that dur(years=1)==dur(1) returns True - probably less confusing than having it return False?
+    # This means that ss.years(1) == ss.days(365) returns True -- probably less confusing than having it return False?
     def __hash__(self):
         return hash(self.years)
 
@@ -1030,22 +1034,19 @@ class dur(TimePar):
         return self.__class__(abs(self.value))
 
     @classmethod
-    def arange(cls, start, stop, step, inclusive=True): # TODO: remove? ss.dur(arr) is preferable to array(ss.dur) for performance
-        """
-        Construct an array of dur instances
-
-        For this function, the start, stop, and step must ALL be specified, and they must
-        all be dur instances. Mixing dur types (years and datedur) is permitted.
+    def arange(cls, start, stop, step=1.0, inclusive=True): # TODO: this creates an array of objects, so is less performant than DateArray
+        """ Construct an array of dur instances
 
         Args:
-            start (ss.dur): Starting point, e.g., ss.years(0)
-            stop (ss.dur): Ending point, e.g. ss.years(20)
-            step (ss.dur): Step size, e.g. ss.years(2)
+            start (float/ss.dur): Starting point, e.g., ss.years(0)
+            stop (float/ss.dur): Ending point, e.g. ss.years(20)
+            step (float/ss.dur): Step size, e.g. ss.years(2)
         """
-        args = [start, stop, step]
-        if not all([isinstance(arg, ss.dur) for arg in args]):
-            errormsg = f'All inputs must be ss.dur, not {args}'
-            raise TypeError(errormsg)
+        args = [start, stop, step] # Pack
+        for i,arg in enumerate(args):
+            if not isinstance(arg, cls):
+                args[i] = cls(arg) # Convert to this dur's class (e.g. ss.years)
+        start, stop, step = args # Unpack
 
         tvec = []
         t = start
@@ -1917,8 +1918,27 @@ __all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', 
             'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
             'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear'] # Rates
 
+
+# Value at which to switch over from interpreting a value from a year duration to a calendar year
+cal_year_threshold = 1900
+def assume_cal_year(val):
+    """ Whether a value should be interpreted as a calendar year -- by default, a number greater than 1900 """
+    is_date    = isinstance(val, ss.date) # e.g. ss.date('1990.1.1')
+    is_cal_dur = isinstance(val, ss.dur) and val.years >= cal_year_threshold # e.g. ss.years(2000)
+    is_cal_num = sc.isnumber(val) and val >= cal_year_threshold # e.g. 2010
+    return is_date or is_cal_dur or is_cal_num
+
+
 # Durations
-class years(dur):  base = 'years'
+class years(dur):
+    base = 'years'
+    def __str__(self):
+        """ As this is the "default" Starsim unit, show its value simply for calendar years, e.g. 2020.5 """
+        if ss.time.assume_cal_year(self.value):
+            return f'{self.value:g}'
+        else:
+            return super().__str__()
+
 class months(dur): base = 'months'
 class weeks(dur):  base = 'weeks'
 class days(dur):   base = 'days'
@@ -1958,10 +1978,15 @@ reverse_class_map = {
     months: ['m', 'month', 'months', month, months],
     years:  ['y', 'year', 'years', year, years],
 
-    perday:   ['perday', 'probperday', perday],
-    perweek:  ['perweek', 'probperweek', perweek],
-    permonth: ['permonth', 'probpermonth', permonth],
-    peryear:  ['peryear', 'probperyear', peryear],
+    perday:   ['perday', perday],
+    perweek:  ['perweek', perweek],
+    permonth: ['permonth', permonth],
+    peryear:  ['peryear', peryear],
+
+    probperday:   ['probperday', probperday],
+    probperweek:  ['probperweek', probperweek],
+    probpermonth: ['probpermonth', probpermonth],
+    probperyear:  ['probperyear', probperyear],
 
     freqperday:   ['freqperday', freqperday],
     freqperweek:  ['freqperweek', freqperweek],

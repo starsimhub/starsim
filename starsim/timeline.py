@@ -61,12 +61,12 @@ class Timeline:
         self.dur = dur
 
         # Set defaults
-        default_type = ss.years # The default Dur type, e.g. ss.years; this is reset after all the parameters are reconciled
-        self.default_type  = default_type
-        self.default_dur   = default_type(50)
-        self.default_start = default_type(2000)
-        self.default_dt    = default_type(1.0)
-        self.calendar_year_threshold = 1900.0 # Value at which to switch over from interpreting a value from a year duration to a calendar year
+        self.default_type = ss.years # The default ss.dur type, e.g. ss.years; this is reset after all the parameters are reconciled
+        self.default_year_start = 2000
+        self.default_rel_start = 0
+        self.default_start = None # This is set to year_start or rel_start depending on default_type (in reconcile_args())
+        self.default_dur = 50
+        self.default_dt = 1.0
 
         # Populated later
         self.ti = 0 # The time index, e.g. 0, 1, 2
@@ -230,131 +230,144 @@ class Timeline:
     def reconcile_args(self, sim=None):
         """ Reconcile the different options for the input parameters """
 
-        def is_calendar_year(val):
-            """ Whether a number should be interpreted as a calendar year -- by default, a number greater than 1900 """
-            return sc.isnumber(val) and val >= self.calendar_year_threshold
-
         if sim is not None:
             self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
             self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
             self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
-        # Check to see if any inputs were provided as durations: if so, reset the default type
-        args = [self.start, self.stop, self.dur, self.dt]
+        # Convert strings to other types, starting with dt
         if isinstance(self.dt, str): # e.g. dt='year'
             dur_class = ss.time.get_dur_class(self.dt)
             self.dt = dur_class(1)
-            self.default_type = dur_class
-        else:
-            for arg in args:
-                if isinstance(arg, ss.dur) and not isinstance(arg, ss.datedur):
-                    self.default_type = type(arg)
-                    break # Stop at the first one
+
+        # Convert start and stop from strings to dates
+        if isinstance(self.start, str):
+            self.start = ss.date(self.start)
+        if isinstance(self.stop, str):
+            self.stop = ss.date(self.stop)
+
+        # Check to see if any inputs were provided as durations: if so, reset the default type
+        args = [self.dt, self.start, self.stop, self.dur]
+        for arg in args:
+            if isinstance(arg, ss.dur) and not isinstance(arg, ss.datedur):
+                self.default_type = type(arg)
+                break # Stop at the first one
+
+        # Decide if the time provided is "datelike" (actual dates or a date-like starting year)
+        args = [self.start, self.stop, self.dur, self.dt] # These are modified from the above
+        cal_year_like = self.default_type.base == 'years' # The default default_type is ss.years(), so this is True
+        use_dates = False
+        for arg in args:
+            if isinstance(arg, (ss.date, ss.datedur)):
+                cal_year_like = True
+                use_dates = True
+                break # Dates take precedence, so stop the loop here
+            elif ss.time.assume_cal_year(arg):
+                cal_year_like = True # Use 2000 as the start, but do not convert to dates
+
+        # Set the default start based on whether we have datelike inputs
+        self.default_start = self.default_year_start if cal_year_like else self.default_rel_start # Sets to the start to 2000 or 0
 
         # Check to see if all inputs are numeric
-        all_none_or_num = all(arg is None or sc.isnumber(arg) for arg in args)
-        at_least_one_num = any(sc.isnumber(arg) for arg in args)
-        self.is_numeric = all_none_or_num and at_least_one_num
+        self.is_numeric = all(arg is None or sc.isnumber(arg) for arg in args) # All inputs are either None or a number # Note: not currently used, although could be for setting timevec defaults
 
         # Ensure dur is valid
+        self.default_dur = self.default_type(self.default_dur) # TODO: should this be ss.datedur() if use_dates = True? If so can move to the if block below
         if sc.isnumber(self.dur):
             self.dur = self.default_type(self.dur)
         if not (self.dur is None or isinstance(self.dur, ss.dur)):
             errormsg = f'Timeline.dur must be a number, a dur object or None, not {self.dur}'
             raise TypeError(errormsg)
 
-        # Now, figure out start, stop, and dur
+        # Ensure dt is valid
+        if not isinstance(self.dt, ss.dur):
+            if self.dt is None: # Very fancy code to set self.dt to 1
+                self.dt = self.default_dt
+            if sc.isnumber(self.dt): # We have the right default type by now, so use that to set the appropriate dt
+                self.dt = self.default_type(self.dt) # Defaults to 1.0 if not
+
+        # Convert start and stop from numbers to either durations or dates
+        if use_dates:
+            if self.start is not None: self.start = ss.date(self.start)  # Convert numbers, durations, etc. to dates
+            if self.stop  is not None: self.stop  = ss.date(self.stop)
+            self.default_start = ss.date(self.default_start) # e.g. ss.date('2000.01.01')
+        else:
+            if sc.isnumber(self.start): self.start = self.default_type(self.start) # Only convert numbers to durations
+            if sc.isnumber(self.stop):  self.stop  = self.default_type(self.stop)
+            self.default_start = self.default_type(self.default_start) # e.g. ss.years(2000)
+
+        # Validate durations: dt and dur
+        for attr in ['dt', 'dur']:
+            val = getattr(self, attr)
+            if not (val is None or isinstance(val, ss.dur)):
+                errormsg = f'Failed to parse {attr} = {val}: expecting ss.dur or None, not {type(val)}'
+                raise TypeError(errormsg)
+
+        # Validate start and stop
+        for attr in ['start', 'stop']:
+            val = getattr(self, attr)
+            if not (val is None or isinstance(val, (ss.date, ss.dur))):
+                errormsg = f'Failed to parse {attr} = {val}: expecting ss.date, ss.dur, or None, not {type(val)}'
+                raise TypeError(errormsg)
+
+        # Now, figure out start, stop, and dur: by this point, any supplied values should be of the correct type (date or dur, not str)
         match (self.start, self.stop, self.dur):
-            case (None, None, None):
-                start = self.default_start
-                dur = self.default_dur
-                stop = start + dur
+            case (None, None, None): # e.g. ss.Sim()
+                start = self.default_start # e.g. ss.years(2000)
+                dur = self.default_dur # e.g. ss.years(50)
+                stop = start + dur # e.g. ss.years(2050)
 
-            case (start, None, None):
-                if isinstance(start, ss.dur):
-                    pass  # Already a dur which is fine
-                elif is_calendar_year(start):
-                    start = ss.date(start)
-                else:
-                    start = ss.years(start)
-                dur = self.default_dur
-                stop = start + dur
+            case (start, None, None): # e.g. ss.Sim(start=2000) or ss.Sim(start=ss.years(2000) or ss.Sim(start='2000.1.1')
+                dur = self.default_dur # e.g. ss.years(50)
+                stop = start + dur # e.g. ss.years(2050) or ss.date(2050)
 
-            case (None, stop, None):
-                if isinstance(stop, ss.dur):
+            case (None, stop, None): # e.g. ss.Sim(stop=20) or ss.Sim(stop=2020) or ss.Sim(stop=ss.date(2020))
+                if isinstance(stop, ss.dur) and not ss.time.assume_cal_year(stop):  # e.g. stop of ss.years(20), start will be ss.years(0)
                     start = stop.__class__(value=0)
-                elif is_calendar_year(stop):
-                    stop = ss.date(stop)
-                    start = ss.date(self.default_start)
-                else:
-                    stop = ss.years(stop)
-                    start = ss.years(0)
-                dur = stop - start
+                    dur = stop - start
+                else: # e.g. stop of ss.years(2040), start will be ss.years(1990)
+                    dur = self.default_dur
+                    start = stop - dur
 
-            case (None, None, dur):
-                start = self.default_start
-                stop = start+dur
+            case (None, None, dur): # e.g. ss.Sim(dur=20)
+                start = self.default_start # e.g. ss.years(2000)
+                stop = start + dur # e.g. ss.years(2020)
 
-            case (start, None, dur):
-                if isinstance(start, ss.dur):
-                    pass
-                elif is_calendar_year(start):
-                    start = ss.years(start)
-                else:
-                    start = ss.date(start)
-                stop = start + dur
+            case (start, None, dur): # e.g. ss.Sim(start=0, dur=20)
+                stop = start + dur # e.g. ss.years(20)
 
-            case (None, stop, dur):
-                if isinstance(stop, ss.dur):
-                    pass
-                elif is_calendar_year(stop):
-                    stop = ss.date(stop)
-                else:
-                    stop = ss.years(stop)
-                start = stop - dur
+            case (None, stop, dur): # e.g. ss.Sim(stop=2040, dur=20) or ss.Sim(stop=ss.date(2040), dur=20)
+                start = stop - dur # e.g. ss.years(2020) or ss.date(2020)
 
-            case (start, stop, dur):
-                # Note that this block will run if dur is None and if it is not None, which is fine because
-                # we are ignoring dur in this case (if the user specifies start and stop, they'll be used)
-                if sc.isstring(start):
-                    start = ss.date(start)
-                if sc.isstring(stop):
-                    stop = ss.date(stop)
+            case (start, stop, None): # e.g. ss.Sim(start=2010, stop=2030)
+                dur = stop - start # e.g. ss.years(20) or ss.datedur(years=20) (actually usually days)
 
-                if sc.isnumber(start) and sc.isnumber(stop):
-                    if is_calendar_year(start):
-                        start = ss.date(start)
-                        stop = ss.date(stop)
-                    else:
-                        start = ss.years(start)
-                        stop = ss.years(stop)
-                elif sc.isnumber(start):
-                    start = stop.__class__(start)
-                elif sc.isnumber(stop):
-                    stop = start.__class__(stop)
-                dur = stop - start
-            case _:
-                errormsg = f'Failed to match {start = }, {stop = }, and {dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.dur objects.'
-                raise ValueError(errormsg) # This should not occur
+            case (start, stop, dur): # e.g. ss.Sim(start=2010, stop=2030, dur=50)
+                if dur != stop - start: # This is fine unless they don't match
+                    errormsg = f'You supplied {start = }, {stop = }, and {dur = }, but {dur = } ≠ stop - start = {stop - start}'
+                    raise ValueError(errormsg)
 
+            case _: # This should not occur since we matched all 8 cases above
+                errormsg = f'Failed to match {self.start = }, {self.stop = }, and {self.dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.dur objects.'
+                raise ValueError(errormsg)
+
+        # Additional validation
         start_type = type(start)
         stop_type = type(start)
         assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
         assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
+        assert isinstance(dur, ss.dur), f'Duration must be ss.dur, not {type(dur)}'
         assert start_type is stop_type, f'Start and stop must be the same type, not {start_type} and {stop_type}'
         assert start <= stop, f'Start must be before stop, not {start} and {stop}'
+        if (stop - start) < self.dt:
+            warnmsg = f'The difference between {start = } and {stop = } is less than dt = {self.dt}; no timesteps will be run.'
+            ss.warn(warnmsg)
 
-        # Figure out type and store everything
-        if issubclass(start_type, ss.dur) and not start_type == ss.datedur: # Don't use datedur as a default type
-            self.default_type = start_type # Now that we've reconciled everything, reset the default type if needed
+        # Store everything
         self.start = start
         self.stop = stop
         self.dur = dur
-
-        # We should have figured out the default type by now, so use that to set the appropriate dt
-        if self.dt is None or sc.isnumber(self.dt):
-            self.dt = self.default_type(sc.ifelse(self.dt, 1.0)) # Defaults to 1.0 if not provided at all
 
         return
 
@@ -364,66 +377,64 @@ class Timeline:
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
 
-        # The sim is provided and matches the current object: copy from the sim
-        if sim is not None and sim.t.initialized and \
-                all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in ('start', 'stop', 'dt')]) and \
-                all([getattr(self, key) == getattr(sim.t, key) for key in ('start', 'stop', 'dt')]):
+        # If the sim is provided and matches the current object: copy from the sim
+        tvkeys = ['start', 'stop', 'dt']
+        if sim is not None: # Sim is provided
+            if sim.t.initialized: # It's initialized
+                if all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in tvkeys]): # Types match
+                    if all([getattr(self, key) == getattr(sim.t, key) for key in tvkeys]): # Values match
+                        for attr in self._time_vecs: # Copy the time vectors over
+                            new = sc.dcp(getattr(sim.t, attr))
+                            setattr(self, attr, new)
+                        self.initialized = True
+                        return self
 
-            for attr in self._time_vecs:
-                new = sc.dcp(getattr(sim.t, attr))
-                setattr(self, attr, new)
-            self.initialized = True
-            return self
-
-        # We need to make the tvec (dates/Durs) the yearvec (years), and the datevec (dates). However, we
+        # We need to make the tvec (ss.dates/ss.durs) the yearvec (years), and the datevec (dates). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
         # prioritise one or the other depending on what type of quantity the user has specified for start
         self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
         n_steps = len(self.datevec)
         if n_steps > max_steps:
-            warnmsg = f'You are creating a simulation with {n_steps:n} timesteps, which is above the recommended maximum of {max_steps:n}. This is valid, but inadvisable.'
+            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable.'
             ss.warn(warnmsg)
 
         if isinstance(self.dt, ss.datedur):
-            if isinstance(self.start, ss.dur):
-                self.tvec = ss.dur.arange(self.start, self.stop, self.dt) # TODO: potentially remove/refactor
-            else:
+            if isinstance(self.start, ss.dur): # e.g. ss.Sim(start=ss.years(2000), dt=ss.datedur(months=1))
+                self.tvec = ss.dur.arange(self.start, self.stop, self.dt)
+            else: # e.g. ss.Sim(start=ss.date(2000), dt=ss.datedur(months=1))
                 self.tvec = ss.date.arange(self.start, self.stop, self.dt)
             self.yearvec = np.array([x.years for x in self.tvec])
 
-        else: # self.dt = ss.years, ss.days etc
+        else: # e.g. self.dt = ss.years, ss.days
             if isinstance(self.start, ss.dur): # Use durations
                 start = self.start
                 stop = self.stop
                 dt = self.dt
                 eps = 1e-6 # Avoid rounding errors
-                decimals = 12 # Ditto
-                if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: do directly
+                if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
                     self.tvec = sc.inclusiverange(start.value, stop.value+eps, dt.value)
                     self.tvec = self.default_type(self.tvec)
                     self.yearvec = self.tvec.years
-                else: # They don't match, convert to years
+                else: # They don't match: convert to years, then create the tvec
+                    decimals = 12 # Also for avoiding rounding errors
                     start = self.start.years
                     stop = self.stop.years
                     dt = self.dt.years
                     self.yearvec = np.round(start + sc.inclusiverange(0, stop-start+eps, dt), decimals=decimals)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
                     self.tvec = self.default_type(ss.years(self.yearvec))
-            elif isinstance(self.start, ss.date):
+            elif isinstance(self.start, ss.date): # e.g. ss.Sim(ss.date(2000))
                 self.tvec = self.datevec
-                self.yearvec = np.array([x.years for x in self.datevec])
+                self.yearvec = self.datevec.years
             else:
                 errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
-        # Ensure tvec is a DateArray
-        self.tvec = ss.DateArray(self.tvec)
 
-        # The most human-friendly version of the dates: dates if possible, else floats
-        self.timevec = self.tvec.to_human()
-
-        # Simple time indices
-        self.tivec = np.arange(self.npts)
+        # Finalize timevecs
+        self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray
+        self.tivec = np.arange(self.npts) # Simple time indices
+        self.timevec = self.tvec.to_human() # The most human-friendly version of the dates: dates if possible, else floats
 
         # Finally, create a vector of relative times in the sim's time unit (if available)
         try:
@@ -432,22 +443,28 @@ class Timeline:
         except:
             date0 = self.datevec[0]
             dt = self.dt
-        if isinstance(date0, ss.date) and not sc.isnumber(dt): # Checks to avoid this step for mock modules -- TODO, make tidier
-            date_durs = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
-            dur_class = type(dt) # Not ss.time.get_dur_class since we're not keeping the unit
-            if dur_class == ss.datedur:
+
+        # Get the class for dt, which we use as the unit for the durations
+        if isinstance(dt, ss.dur):
+            dur_class = type(dt)
+            if dur_class == ss.datedur: # Don't use ss.datedur for dt, since we want something numeric
                 dur_class = type(dt.to_dur())
-            dur_vec = dur_class(date_durs)
-            self.relvec = dur_vec.to_array() # Only keep the array
-        else: # If that fails, use the yearvec
-            self.relvec = self.yearvec - self.yearvec[0]
+        else:
+            dur_class = self.default_type
+
+        if isinstance(date0, ss.date): # This check is necessary for skipping this step for mock modules -- TODO, make tidier
+            dur_vec = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
+        else: # If it's not, use years
+            dur_vec = ss.years(self.yearvec - self.yearvec[0])
+        dur_vec = dur_class(dur_vec) # Convert to the intended class
+        self.relvec = dur_vec.to_array() # Only keep the numeric array
 
         # Check that everything is the same
         for k,v in self.to_dict().items():
             if len(v) != len(self):
                 errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={len(self)}'
                 raise ValueError(errormsg)
-                # print(errormsg)
 
+        # We're done, phew
         self.initialized = True
         return self
