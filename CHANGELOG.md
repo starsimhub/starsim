@@ -2,6 +2,12 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+
+## Version 3.0.1 (2025-08-04)
+- Minor updates following the v3 release.
+- *GitHub info*: PR [1008](https://github.com/starsimhub/starsim/pull/1008)
+
+
 ## Version 3.0.0 (2025-08-02)
 
 ### Summary
