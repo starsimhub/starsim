@@ -82,7 +82,7 @@ website:
           - section: "Introduction"
             contents:
             - user_guide/intro_starsim.ipynb
-            - user_guide/intro_spokes.ipynb
+            - user_guide/intro_models.ipynb
           - section: "Basic concepts"
             contents:
             - user_guide/basics_model.ipynb
