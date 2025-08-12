@@ -383,7 +383,10 @@ class Pregnancy(Demographics):
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
         else:
-            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
+            conception_time = self.t.now('year')-self.pars.dur_pregnancy.years
+            if isinstance(conception_time, ss.years):
+                conception_time = conception_time.years
+            year_ind = sc.findnearest(frd.index, conception_time)
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
