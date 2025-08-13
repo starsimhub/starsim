@@ -405,6 +405,8 @@ class Pregnancy(Demographics):
                 infecund_age_counts = np.zeros(len(age_bins))
                 infecund_age_counts[v] = c
 
+                if self.ti == 46:
+                    print('hi')
                 num_to_make = new_rate * age_counts  # Number that we need to make pregnant
                 new_denom = age_counts - infecund_age_counts  # New denominator for rates
                 np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
@@ -413,6 +415,7 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
+        fertility_rate = np.clip(fertility_rate, a_min=0, a_max=None)  # Fertility rates should not be >1 or <0
         fertility_prob = ss.prob.array_to_prob(fertility_rate, self.t.dt)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
