@@ -1820,8 +1820,6 @@ class prob(Rate):
         else: # Assume arr is an array of values, that would be the values of a prob with unit=ss.years(1)
             factor = dur / ss.years(1)
             scaled_vals = arr * v
-            if ((1 - scaled_vals) <= 0).any():
-                raise ValueError(f'Cannot convert {arr} to probabilities')
             rate = - np.log(1 - scaled_vals)
             return 1 - np.exp(-rate * factor)
 
