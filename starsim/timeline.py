@@ -184,7 +184,7 @@ class Timeline:
             now = vec[self.ti]
         else:
             now = self.tvec[0] + self.dt*self.ti
-            if key == 'year':
+            if key == 'yearvec':
                 now = float(now)
 
         if to_str:
