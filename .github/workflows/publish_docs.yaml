@@ -25,7 +25,7 @@ jobs:
 
     - name: Install Quarto interlinks
       working-directory: ./docs
-      run: quarto add machow/quartodoc
+      run: quarto add machow/quartodoc --no-prompt
 
     - name: Custom Quarto publish
       working-directory: ./docs

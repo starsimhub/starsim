@@ -19,4 +19,4 @@ To build the docs, follow these steps:
 
 3.  Build the documents with `./build_docs` (requires Starsim to be installed as well).
 
-4.  The built documents will be in `./_build`.
+4.  The built documents will be in `./_site`.

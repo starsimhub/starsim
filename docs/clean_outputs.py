@@ -2,5 +2,5 @@
 """
 Remove auto-generated files
 """
-import utils as ut
+import docutils as ut
 ut.clean_outputs()

@@ -2,5 +2,5 @@
 """
 Normalize Jupyter notebooks
 """
-import utils as ut
+import docutils as ut
 ut.normalize_notebooks()

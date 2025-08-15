@@ -75,6 +75,9 @@ else:
 sc.heading('Building API documentation...')
 run('python -m quartodoc build')
 
+sc.heading('Customizing API aliases...')
+run('./customize_aliases.py')
+
 sc.heading('Building docs links...')
 run('python -m quartodoc interlinks')
 
@@ -99,4 +102,4 @@ if tidy:
     run('./normalize_notebooks.py')
 
 T.toc('Docs built')
-print(f"\nIndex:\n{os.getcwd()}/_build/index.html")
+print(f"\nIndex:\n{os.getcwd()}/_site/index.html")
