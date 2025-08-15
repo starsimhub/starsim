@@ -133,7 +133,7 @@ def execute_notebooks(*args, folders=None):
     # Wrapper to chdir before execution
     def execute_with_chdir(path):
         os.chdir(path.parent)
-        return execute(path.name)
+        return execute_notebook(path.name)
 
     sc.heading(f'Running {len(notebooks)} notebooks...')
     out = sc.parallelize(execute_with_chdir, notebooks, maxcpu=0.9, interval=0.3)
