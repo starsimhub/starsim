@@ -75,6 +75,9 @@ else:
 sc.heading('Building API documentation...')
 run('python -m quartodoc build')
 
+sc.heading('Customizing API aliases...')
+run('./customize_aliases.py')
+
 sc.heading('Building docs links...')
 run('python -m quartodoc interlinks')
 
