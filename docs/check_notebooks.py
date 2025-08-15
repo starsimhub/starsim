@@ -8,4 +8,3 @@ encountered, and print a summary of results.
 """
 import docutils as ut
 results = ut.execute_notebooks(*sys.argv[1:])
-
