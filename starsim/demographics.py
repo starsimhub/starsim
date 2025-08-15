@@ -23,20 +23,21 @@ class Demographics(ss.Module):
 
 
 class Births(Demographics):
+    """
+    Create births based on rates, rather than based on pregnancy.
+
+    Births are generated using population-level birth rates that can vary
+    by year. The number of births per timestep is determined by applying
+    the birth rate to the current population size.
+
+    Args:
+        birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
+        rel_birth (float): constant used to scale all birth rates
+        rate_units (float): units for birth rates (default assumes per 1000)
+        metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
+    """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
-        """
-        Create births based on rates, rather than based on pregnancy.
-
-        Births are generated using population-level birth rates that can vary
-        by year. The number of births per timestep is determined by applying
-        the birth rate to the current population size.
-
-        Args:
-            birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
-            rel_birth (float): constant used to scale all birth rates
-            rate_units (float): units for birth rates (default assumes per 1000)
-            metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
-        """
+        
         super().__init__()
         self.define_pars(
             birth_rate = ss.peryear(20),
@@ -150,34 +151,34 @@ class Births(Demographics):
 
 
 class Deaths(Demographics):
+    """
+    Configure disease-independent "background" deaths.
+
+    The probability of death for each agent on each timestep is determined
+    by the `death_rate` parameter and the time step. The default value of
+    this parameter is 0.01, indicating that all agents will
+    face a 1% chance of death per year.
+
+    However, this function can be made more realistic by using a dataframe
+    for the `death_rate` parameter, to allow it to vary by year, sex, and
+    age.  The separate 'metadata' argument can be used to configure the
+    details of the input datafile.
+
+    Alternatively, it is possible to override the `death_rate` parameter
+    with a bernoulli distribution containing a constant value of function of
+    your own design.
+
+    Args:
+        pars: dict with arguments including:
+            rel_death: constant used to scale all death rates
+            death_rate: float, dict, or pandas dataframe/series containing mortality data
+            rate_units: units for death rates (see in-line comment on par dict below)
+
+        metadata: data about the data contained within the data input.
+            "data_cols" is is a dictionary mapping standard keys, like "year" to the
+            corresponding column name in data. Similar for "sex_keys". Finally,
+    """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
-        """
-        Configure disease-independent "background" deaths.
-
-        The probability of death for each agent on each timestep is determined
-        by the `death_rate` parameter and the time step. The default value of
-        this parameter is 0.01, indicating that all agents will
-        face a 1% chance of death per year.
-
-        However, this function can be made more realistic by using a dataframe
-        for the `death_rate` parameter, to allow it to vary by year, sex, and
-        age.  The separate 'metadata' argument can be used to configure the
-        details of the input datafile.
-
-        Alternatively, it is possible to override the `death_rate` parameter
-        with a bernoulli distribution containing a constant value of function of
-        your own design.
-
-        Args:
-            pars: dict with arguments including:
-                rel_death: constant used to scale all death rates
-                death_rate: float, dict, or pandas dataframe/series containing mortality data
-                rate_units: units for death rates (see in-line comment on par dict below)
-
-            metadata: data about the data contained within the data input.
-                "data_cols" is is a dictionary mapping standard keys, like "year" to the
-                corresponding column name in data. Similar for "sex_keys". Finally,
-        """
         super().__init__()
         self.define_pars(
             rel_death = 1,
@@ -296,31 +297,31 @@ class Deaths(Demographics):
 
 
 class Pregnancy(Demographics):
+    """
+    Create births via pregnancies for each agent.
+
+    This module models conception, pregnancy, and birth at the individual level using
+    age-specific fertility rates. Supports prenatal and postnatal transmission
+    networks, maternal and neonatal mortality, and burn-in of existing
+    pregnancies at simulation start.
+
+    Args:
+        dur_pregnancy (float/dur): duration of pregnancy (default 9 months)
+        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+        fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
+        rel_fertility (float): constant used to scale all fertility rates
+        p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
+        p_neonatal_death (float): probability of neonatal death (default 0.0)
+        sex_ratio (float): probability of female births (default 0.5)
+        min_age (float): minimum age for pregnancy (default 15)
+        max_age (float): maximum age for pregnancy (default 50)
+        rate_units (float): units for fertility rates (default assumes per 1000)
+        burnin (bool): whether to seed pregnancies from before simulation start (default true)
+        metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
+    """
     def __init__(self, pars=None, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
                  p_maternal_death=_, p_neonatal_death=_, sex_ratio=_, min_age=_, max_age=_,
                  rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
-        """
-        Create births via pregnancies for each agent.
-
-        This module models conception, pregnancy, and birth at the individual level using
-        age-specific fertility rates. Supports prenatal and postnatal transmission
-        networks, maternal and neonatal mortality, and burn-in of existing
-        pregnancies at simulation start.
-
-        Args:
-            dur_pregnancy (float/dur): duration of pregnancy (default 9 months)
-            dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
-            fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
-            rel_fertility (float): constant used to scale all fertility rates
-            p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
-            p_neonatal_death (float): probability of neonatal death (default 0.0)
-            sex_ratio (float): probability of female births (default 0.5)
-            min_age (float): minimum age for pregnancy (default 15)
-            max_age (float): maximum age for pregnancy (default 50)
-            rate_units (float): units for fertility rates (default assumes per 1000)
-            burnin (bool): whether to seed pregnancies from before simulation start (default true)
-            metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
-        """
         super().__init__()
         self.define_pars(
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
