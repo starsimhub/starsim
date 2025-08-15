@@ -1,6 +1,6 @@
 project:
   type: website
-  output-dir: _build
+  output-dir: _site
   title: "Starsim"
   execute-dir: file
 
@@ -168,7 +168,7 @@ filters:
   - interlinks
 
 interlinks:
-  fast: true
+  fast: false
   sources:
     python:
       url: https://docs.python.org/3/

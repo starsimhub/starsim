@@ -99,4 +99,4 @@ if tidy:
     run('./normalize_notebooks.py')
 
 T.toc('Docs built')
-print(f"\nIndex:\n{os.getcwd()}/_build/index.html")
+print(f"\nIndex:\n{os.getcwd()}/_site/index.html")
