@@ -384,7 +384,10 @@ class Pregnancy(Demographics):
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
         else:
-            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
+            conception_time = self.t.now('year')-self.pars.dur_pregnancy.years
+            if isinstance(conception_time, ss.years):
+                conception_time = conception_time.years
+            year_ind = sc.findnearest(frd.index, conception_time)
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
@@ -411,6 +414,7 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
+        fertility_rate = np.clip(fertility_rate, a_min=0, a_max=1-ss.options.time_eps)  # Fertility rates should not be >1 or <0
         fertility_prob = ss.prob.array_to_prob(fertility_rate, self.t.dt)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
