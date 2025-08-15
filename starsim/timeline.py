@@ -109,7 +109,13 @@ class Timeline:
 
     @property
     def dt_year(self):
+        """ The timestep size in years """
         return self.dt.years
+
+    @property
+    def year(self):
+        """ The current time in years """
+        return self.now('year')
 
     def __bool__(self):
         """ Always truthy """
