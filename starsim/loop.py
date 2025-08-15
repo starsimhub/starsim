@@ -77,7 +77,12 @@ class Loop:
         func_name = func.__name__
 
         # Get the name if it's defined, the class otherwise; these must match abs_tvecs
-        module = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
+        if isinstance(parent, ss.Module):
+            module = parent.name
+        elif isinstance(parent, ss.Sim):
+            module = 'sim'
+        else:
+            module = parent.__class__.__name__.lower()
 
         # Create the row and append it to the function list
         func_path = f'{parent.__class__.__module__}.{func_name}'
