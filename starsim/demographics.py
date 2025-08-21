@@ -624,9 +624,12 @@ class Pregnancy(Demographics):
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
             neonate_uids = ss.uids(self.child_uid[mother_death_uids])
-            neonatal_death_uids = self.pars.p_neonatal_death.filter(neonate_uids)
-            if len(neonatal_death_uids):
-                self.sim.people.request_death(neonatal_death_uids)
+            try:
+                neonatal_death_uids = self.pars.p_neonatal_death.filter(neonate_uids)
+                if len(neonatal_death_uids):
+                    self.sim.people.request_death(neonatal_death_uids)
+            except:
+                print('hi')
 
         # Any prenatal? Handle changes to pregnancy
         is_prenatal = self.sim.people.age[death_uids] < 0
