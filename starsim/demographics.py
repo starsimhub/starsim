@@ -367,17 +367,23 @@ class Pregnancy(Demographics):
         self.n_births = 0
         return
 
-    @staticmethod
-    def make_fertility_prob_fn(self, sim, uids):
+    def make_p_fertility(self, filter_uids=None):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
+        sim = self.sim
+        ppl = sim.people
 
+        # Filter UIDS and age
+        may_conceive = ppl.female & (ppl.age >= self.pars.min_age) & (ppl.age <= self.pars.max_age)
+        uids = may_conceive
+        if filter_uids is not None: uids = filter_uids & uids
         age = sim.people.age[uids]
 
+        # Get data, check it's in the right form
         frd = self.fertility_rate_data
-
         if sc.isnumber(frd):
             raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
 
+        # Initialize rate as an array the length of raw UIDs, so we can index it with UIDs
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
@@ -412,12 +418,8 @@ class Pregnancy(Demographics):
             fertility_rate[uids] = new_rate[age_bin_all] * (self.pars.rate_units * self.pars.rel_fertility)  # Prob per year
 
         # Scale from rate to probability
-        invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_rate = np.clip(fertility_rate, a_min=0, a_max=1-ss.options.time_eps)  # Fertility rates should not be >1 or <0
-        fertility_prob = ss.prob.array_to_prob(fertility_rate, self.t.dt)
-        fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
-        fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
-        fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
+        fertility_rate[(~self.fecund).uids] = 0  # Currently infecund women cannot become pregnant
+        fertility_prob = ss.per(fertility_rate[filter_uids], 'year')  # Only return rates for requested UIDs
         return fertility_prob
 
     def standardize_fertility_data(self):
@@ -444,7 +446,6 @@ class Pregnancy(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.p_fertility.set(p=self.make_fertility_prob_fn)
 
         low = sim.pars.n_agents + 1
         high = int(self.pars.slot_scale*sim.pars.n_agents)
@@ -537,6 +538,8 @@ class Pregnancy(Demographics):
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         eligible_uids = self.sim.people.female.uids
+        p_fertility = self.make_p_fertility(eligible_uids)
+        self.pars.p_fertility.set(p_fertility)
         conceive_uids = self.pars.p_fertility.filter(eligible_uids)
 
         if len(conceive_uids) == 0:
