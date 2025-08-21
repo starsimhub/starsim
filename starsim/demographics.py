@@ -198,7 +198,7 @@ class Deaths(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
-        self.pars.death_rate = ss.bernoulli(p=self.make_death_prob_fn)
+        self.pars.p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
         self.n_deaths = 0 # For results tracking
         return
 
@@ -215,10 +215,11 @@ class Deaths(Demographics):
             return ss.peryear(death_rate)
         return death_rate
 
-    @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
-    def make_death_prob_fn(self, sim, uids):
+    def make_p_death(self):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
+        sim = self.sim
         drd = self.death_rate_data
+
         # We are going to set up death_rate as a prob with unit=ss.years(1). That is the probability of death in 1 year
         if sc.isnumber(drd):
             death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a prob with unit=ss.years(1) by ss.prob.array_to_prob
@@ -232,13 +233,10 @@ class Deaths(Demographics):
         # Process data
         else:
             ppl = sim.people
-
-            # Performance optimization - the Deaths module checks for deaths for all agents
-            # Therefore the UIDs requested should match all UIDs
-            assert len(uids) == len(ppl.auids)
+            uids = ppl.auids  # Get the UIDs of all alive people
 
             available_years = drd.index.get_level_values('year')
-            year_ind = sc.findnearest(available_years, sim.t.now('year')) # TODO: make work with different timesteps
+            year_ind = sc.findnearest(available_years, sim.t.now('year'))  # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
             death_rate = np.empty(uids.shape, dtype=ss_float)
@@ -256,13 +254,13 @@ class Deaths(Demographics):
                 death_rate[:] = s.values[binned_ages]
             death_rate *= self.pars.rate_units * self.pars.rel_death
 
-        # Scale from rate to probability. Consider an exponential here.
-        death_prob = ss.prob.array_to_prob(death_rate, self.t.dt)
-        death_prob = np.clip(death_prob, a_min=0, a_max=1)
+        # Scale from rate to probability
+        death_rate = ss.peryear(death_rate)  # Only return rates for requested UIDs
+        p_death = death_rate.to_prob(self.t.dt)  # Convert to probability per timestep
 
         if sc.isnumber(drd) or isinstance(drd, ss.Rate):
-            death_prob = death_prob[0] # TODO: what???
-        return death_prob
+            p_death = p_death[0] # TODO: what???
+        return p_death
 
     def init_results(self):
         super().init_results()
@@ -275,7 +273,9 @@ class Deaths(Demographics):
 
     def step(self):
         """ Select people to die """
-        death_uids = self.pars.death_rate.filter()
+        p_death = self.make_p_death()  # Get the probability of death for each agent
+        self.pars.p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
+        death_uids = self.pars.p_death.filter()
         self.sim.people.request_death(death_uids)
         self.n_deaths = len(death_uids)
         return self.n_deaths
@@ -339,7 +339,7 @@ class Pregnancy(Demographics):
         )
         self.update_pars(pars, **kwargs)
 
-        self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
+        self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_p_fertility
 
         # Other, e.g. postpartum, on contraception...
         self.define_states(
@@ -419,8 +419,9 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         fertility_rate[(~self.fecund).uids] = 0  # Currently infecund women cannot become pregnant
-        fertility_prob = ss.per(fertility_rate[filter_uids], 'year')  # Only return rates for requested UIDs
-        return fertility_prob
+        fertility_rate = ss.peryear(fertility_rate[filter_uids])  # Only return rates for requested UIDs
+        p_fertility = fertility_rate.to_prob(self.t.dt)  # Convert to probability per timestep
+        return p_fertility
 
     def standardize_fertility_data(self):
         """
@@ -540,7 +541,8 @@ class Pregnancy(Demographics):
         eligible_uids = self.sim.people.female.uids
         p_fertility = self.make_p_fertility(eligible_uids)
         self.pars.p_fertility.set(p_fertility)
-        conceive_uids = self.pars.p_fertility.filter(eligible_uids)
+        dist = self.pars.p_fertility
+        conceive_uids = dist.filter(eligible_uids)
 
         if len(conceive_uids) == 0:
             return ss.uids()
