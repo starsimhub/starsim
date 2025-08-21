@@ -255,7 +255,7 @@ class Deaths(Demographics):
             death_rate *= self.pars.rate_units * self.pars.rel_death
 
         # Scale from rate to probability
-        death_rate = ss.peryear(death_rate)  # Only return rates for requested UIDs
+        death_rate = ss.peryear(death_rate)
         p_death = death_rate.to_prob(self.t.dt)  # Convert to probability per timestep
 
         if sc.isnumber(drd) or isinstance(drd, ss.Rate):
