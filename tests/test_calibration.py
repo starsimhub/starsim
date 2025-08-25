@@ -20,17 +20,16 @@ do_plot = True
 
 def make_sim():
     sir = ss.SIR(
-        beta = ss.beta(0.075),
+        beta = ss.peryear(0.075),
         init_prev = ss.bernoulli(0.02),
     )
     random = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(
         n_agents = n_agents,
-        start = sc.date('2020-01-01'),
-        stop = sc.date('2020-02-12'),
-        dt = 1,
-        unit = 'day',
+        start = ss.date('2020-01-01'),
+        stop = ss.date('2020-02-12'),
+        dt = ss.days(1),
         diseases = sir,
         networks = random,
         verbose = 0,
@@ -54,7 +53,7 @@ def build_sim(sim, calib_pars, **kwargs):
 
         v = pars['value']
         if k == 'beta':
-            sir.pars.beta = ss.beta(v)
+            sir.pars.beta = v
         elif k == 'init_prev':
             sir.pars.init_prev = ss.bernoulli(v)
         elif k == 'n_contacts':
@@ -72,6 +71,7 @@ def build_sim(sim, calib_pars, **kwargs):
 
 #%% Define the tests
 
+@sc.timer()
 @pytest.mark.skip(reason="Test requires performance enhancement")
 def test_onepar_normal(do_plot=True):
     sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
@@ -114,6 +114,7 @@ def test_onepar_normal(do_plot=True):
         n_workers = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
+        continue_db=False,
     )
 
     # Perform the calibration
@@ -134,6 +135,7 @@ def test_onepar_normal(do_plot=True):
 
 
 
+@sc.timer()
 def test_onepar_custom(do_plot=True):
     sc.heading('Testing a single parameter (beta) with a custom likelihood')
 
@@ -181,6 +183,7 @@ def test_onepar_custom(do_plot=True):
     assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
 
+@sc.timer()
 @pytest.mark.skip(reason="Feature requires further debugging")
 def test_twopar_betabin_gammapois(do_plot=True):
     sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
@@ -256,6 +259,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
     assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
 
+@sc.timer()
 @pytest.mark.skip(reason="Feature requires further debugging")
 def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     sc.heading('Testing a three parameters (beta, initial prevalence, and number of contacts) with a DirichletMultinomial likelihood')

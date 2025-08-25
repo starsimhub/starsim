@@ -4,7 +4,18 @@ files/
 tests/figs/*
 tests/devtests/figs/*
 figs/*
-modules.rst
+archive/
+fonts_installed_successfully
+
+# Quarto-generated files
+.jupyter_cache/
+.virtual_documents/
+docs/_build/
+docs/_extensions/
+docs/_inv/
+docs/api/
+objects.json
+objects.txt
 
 # Other files
 .idea
@@ -82,12 +93,6 @@ instance/
 
 # Scrapy stuff:
 .scrapy
-
-# Sphinx documentation
-docs/_build/
-docs/modules.rst
-docs/starsim.*.rst
-docs/api/_autosummary/
 
 # PyBuilder
 target/

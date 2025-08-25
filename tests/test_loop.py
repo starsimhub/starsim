@@ -9,13 +9,14 @@ import starsim as ss
 sc.options(interactive=False) # Assume not running interactively
 
 pars = sc.objdict(
-    dur      = 20,
+    dur      = ss.years(20),
     n_agents = 1000,
     diseases = 'sis',
     networks = 'random',
 )
 
 
+@sc.timer()
 def test_run_options():
     sc.heading('Testing run options...')
     s1 = ss.Sim(pars).init()
@@ -34,6 +35,7 @@ def test_run_options():
     return s2.loop
 
 
+@sc.timer()
 def test_loop_plotting():
     sc.heading('Testing loop plotting...')
     sim = ss.Sim(pars).run()

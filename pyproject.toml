@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "starsim"
 dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
-readme = "README.rst"
-requires-python = ">=3.8"
+readme = "README.md"
+requires-python = ">=3.9"
 license = {file = "LICENSE"}
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
@@ -23,21 +23,21 @@ authors = [
 
 classifiers = [
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12"
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13"
 ]
 
 dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
-    "sciris>=3.2.0",
-    "numba",
+    "sciris>=3.2.4",
+    "numba>=0.57.0",
     "scipy",
     "networkx",
     "matplotlib",
@@ -47,7 +47,15 @@ dependencies = [
 
 [project.optional-dependencies]
 fastmath = ["intel-cmplr-lib-rt"]
-test = ["pytest>=7.3", "pytest-cov", "pytest-env", "pytest-xdist"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov",
+    "pytest-env", 
+    "pytest-xdist",
+    "quartodoc",
+    "jupyter",
+    "jupyter-cache"
+]
 
 [project.urls]
 "Website" = "https://starsim.org"
@@ -58,7 +66,7 @@ where = ["."]
 include = ["starsim*"]
 
 [tool.setuptools.package-data]
-mypkg = ["*.ipynb", "*.rst", "*.csv"]
+starsim = ["*.ipynb", "*.rst", "*.csv"]
 
 [tool.setuptools.dynamic]
 version = {attr = "starsim.version.__version__"}

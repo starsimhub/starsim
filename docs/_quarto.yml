@@ -1,0 +1,237 @@
+project:
+  type: website
+  output-dir: _build
+  title: "Starsim"
+  execute-dir: file
+
+website:
+  title: "Starsim"
+  image: /assets/starsim-logo.png
+  favicon: /assets/favicon.ico
+  google-analytics: "G-SVDSQH04EM"
+
+  repo-url: https://github.com/starsimhub/starsim
+  repo-actions: [issue]
+  page-navigation: true
+  search:
+    type: overlay
+
+  page-footer:
+    center: "The docs were built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2025, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
+    right:
+      - icon: github
+        href: https://github.com/starsimhub/starsim
+        aria-label: GitHub
+      - icon: envelope-at-fill
+        href: mailto:info@starsim.org
+      - icon: globe
+        href: https://starsim.org/
+
+  navbar:
+    logo: /assets/starsim-logo.png
+    title: false
+    collapse-below: lg
+
+    tools:
+      - icon: github
+        href: https://github.com/starsimhub/starsim
+      - icon: envelope-at-fill
+        href: mailto:info@starsim.org
+      - icon: slack
+        href: https://starsim-idm.slack.com
+      - icon: globe
+        href: https://starsim.org
+
+    left:
+      - href: index.qmd
+        text: Home
+      - href: whatsnew.qmd
+        text: What's new
+      - href: tutorials.qmd
+        text: Tutorials
+      - href: user_guide.qmd
+        text: User guide
+      - href: conduct.qmd
+        text: Code of conduct
+      - href: contributing.qmd
+        text: Contributing
+      - href: api/index.qmd
+        text: API reference
+
+  sidebar:
+    - id: main
+      collapse-level: 3
+      contents:
+        - href: index.qmd
+          text: "**Home**"
+        - href: whatsnew.qmd
+          text: "**What's new**"
+        - href: api/index.qmd
+          text: "**API reference**"
+        - section: "**Tutorials**"
+          contents:
+            - tutorials/t1_intro.ipynb
+            - tutorials/t2_model.ipynb
+            - tutorials/t3_demographics.ipynb
+            - tutorials/t4_diseases.ipynb
+            - tutorials/t5_networks.ipynb
+            - tutorials/t6_interventions.ipynb
+            - tutorials/solutions.ipynb
+        - section: "**User guide**"
+          contents:
+          - section: "Introduction"
+            contents:
+            - user_guide/intro_starsim.ipynb
+            - user_guide/intro_spokes.ipynb
+          - section: "Basic concepts"
+            contents:
+            - user_guide/basics_model.ipynb
+            - user_guide/basics_sim.ipynb
+            - user_guide/basics_people.ipynb
+            - user_guide/basics_parameters.ipynb
+          - section: "Modules"
+            contents:
+            - user_guide/modules_diseases.ipynb
+            - user_guide/modules_networks.ipynb
+            - user_guide/modules_demographics.ipynb
+            - user_guide/modules_interventions.ipynb
+            - user_guide/modules_analyzers.ipynb
+            - user_guide/modules_connectors.ipynb
+          - section: "Workflows"
+            contents:
+            - user_guide/workflows_run.ipynb
+            - user_guide/workflows_calibration.ipynb
+            - user_guide/workflows_deploy.ipynb
+            - user_guide/workflows_samples.ipynb
+          - section: "Advanced topics"
+            contents:
+            - user_guide/advanced_time.ipynb
+            - user_guide/advanced_indexing.ipynb
+            - user_guide/advanced_distributions.ipynb
+            - user_guide/advanced_random.ipynb
+            - user_guide/advanced_profiling.ipynb
+            - user_guide/advanced_nonstandard.ipynb
+        - href: conduct.qmd
+          text: "**Code of conduct**"
+        - href: contributing.qmd
+          text: "**Contributing**"
+    - id: api
+      collapse-level: 2
+      contents:
+        - href: index.qmd
+          text: "**Home**"
+        - href: api/index.qmd
+          text: "**API reference**"
+        - section: "**Basics**"
+          contents:
+            - api/sim.qmd
+            - api/loop.qmd
+            - api/people.qmd
+            - api/parameters.qmd
+        - section: "**Modules**"
+          contents:
+            - api/modules.qmd
+            - api/diseases.qmd
+            - api/networks.qmd
+            - api/demographics.qmd
+            - api/interventions.qmd
+            - api/products.qmd
+            - api/analyzers.qmd
+            - api/connectors.qmd
+        - section: "**Workflows**"
+          contents:
+            - api/run.qmd
+            - api/calibration.qmd
+        - section: "**Utilities**"
+          contents:
+            - api/arrays.qmd
+            - api/time.qmd
+            - api/timeline.qmd
+            - api/distributions.qmd
+            - api/results.qmd
+            - api/samples.qmd
+            - api/settings.qmd
+            - api/debugtools.qmd
+            - api/utils.qmd
+
+format:
+  html:
+    theme: 
+      light: [cosmo, ./assets/styles-light.scss]
+      dark: [cosmo, ./assets/styles-dark.scss]
+    css: ./assets/styles.css
+    toc: true
+    toc-depth: 3
+    highlight-style: github
+
+filters:
+  - interlinks
+
+interlinks:
+  fast: true
+  sources:
+    python:
+      url: https://docs.python.org/3/
+    numpy:
+      url: https://numpy.org/doc/stable/
+    pandas:
+      url: https://pandas.pydata.org/pandas-docs/stable/
+    scipy:
+      url: https://docs.scipy.org/doc/scipy/
+    matplotlib:
+      url: https://matplotlib.org/stable/
+    # sciris: # TODO: need to build this first
+    #   url: https://docs.sciris.org/
+  autolink: true
+  aliases:
+    numpy: [np]
+    pandas: [pd]
+    matplotlib: [plt]
+    sciris: [sc]
+    starsim: [null, ss]
+
+quartodoc:
+  package: starsim
+  title: API reference
+  style: pkgdown
+  dir: api
+  parser: google
+  render_interlinks: true
+  sections:
+    - title: API reference
+      desc: Full details on all Starsim classes and functions.
+      contents:
+        - analyzers
+        - arrays
+        - calibration
+        - connectors
+        - debugtools
+        - demographics
+        - diseases
+        - distributions
+        - interventions
+        - loop
+        - modules
+        - networks
+        - parameters
+        - people
+        - products
+        - results
+        - run
+        - samples
+        - settings
+        - sim
+        - time
+        - timeline
+        - utils
+
+jupyter: python3
+execute:
+  enabled: false # NB, this is controlled via build_docs
+  daemon: true  # Use Jupyter daemon mode
+  cache: true   # Cache execution results
+  freeze: false # Use caching rather than freezing to store results
+  error: false
+  echo: true
+  warning: true
+  kernel: python3

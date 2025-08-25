@@ -1,0 +1,114 @@
+# Run downstream tests on Starsim spokes.
+#
+# Current supported spokes are:
+#   1. STIsim
+#   2. FPsim
+#
+# Coming soon:
+# - HPVsim
+# - TBsim
+# - Typhoidsim
+# - Rotasim
+
+name: Starsim spoke tests
+on:
+  workflow_dispatch:
+  # For now, only run manually, then once all the spokes are ported, run automatically.
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+
+jobs:
+
+  test_stisim:
+    name: STIsim tests
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        os: ['ubuntu-latest']
+        python-version: ['3.12']
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+
+      - name: Install STIsim
+        run: pip install -e .
+
+      - name: Check out HPVsim
+        uses: actions/checkout@v4
+        with:
+          repository: 'starsimhub/stisim'
+          path: 'stisim'
+
+      - name: Install STIsim
+        working-directory: ./stisim
+        run: pip install -e .
+
+      - name: Install STIsim tests
+        working-directory: ./stisim/tests
+        run: pip install -r requirements.txt
+
+      - name: Run STIsim tests
+        working-directory: ./stisim/tests
+        run: pytest test_*.py --durations=0 --junitxml=stisim-test-results.xml # Run actual tests
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test_results
+          path: stisim/tests/stisim-test-results.xml
+
+  test_fpsim:
+    name: FPsim tests
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        os: ['ubuntu-latest']
+        python-version: ['3.12']
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+
+      - name: Install FPsim
+        run: pip install -e .
+
+      - name: Check out HPVsim
+        uses: actions/checkout@v4
+        with:
+          repository: 'fpsim/fpsim'
+          path: 'fpsim'
+
+      - name: Install FPsim
+        working-directory: ./fpsim
+        run: pip install -e .
+
+      - name: Install FPsim tests
+        working-directory: ./fpsim/tests
+        run: pip install -r requirements.txt
+
+      - name: Run FPsim tests
+        working-directory: ./fpsim/tests
+        run: pytest test_*.py --durations=0 --junitxml=fpsim-test-results.xml # Run actual tests
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test_results
+          path: fpsim/tests/fpsim-test-results.xml

@@ -3,7 +3,6 @@ Utilities for running in parallel
 """
 import numpy as np
 import sciris as sc
-import matplotlib.pyplot as plt
 import starsim as ss
 
 __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
@@ -31,10 +30,13 @@ class MultiSim:
                 base_sim = sims
                 sims = None
             elif isinstance(sims, list):
+                if not sims:
+                    errormsg = 'You must supply at least one sim to create a MultiSim'
+                    raise ValueError(errormsg)
                 base_sim = sims[0]
             else:
-                errormsg = (f'If base_sim is not supplied, sims must be either a single sim'
-                            f' (treated as base_sim) or a list of sims, not {type(sims)}')
+                errormsg = 'If base_sim is not supplied, sims must be either a single sim '
+                errormsg += '(treated as base_sim) or a list of sims, not {type(sims)}'
                 raise TypeError(errormsg)
 
         # Set properties
@@ -83,7 +85,7 @@ class MultiSim:
         Args:
             output (bool): if true, return a string instead of printing output
 
-        **Example**::
+        **Example**:
 
             msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
             msim.run()
@@ -130,7 +132,7 @@ class MultiSim:
 
     def run(self, **kwargs):
         """
-        Run the sims; see ``ss.multi_run()`` for additional arguments
+        Run the sims; see `ss.multi_run()` for additional arguments
 
         Args:
             n_runs (int): how many replicates of each sim to run (if a list of sims is not provided)
@@ -220,7 +222,7 @@ class MultiSim:
             bounds (float): if use_mean=True, the multiplier on the standard deviation for upper and lower bounds (default 2)
             output (bool): whether to return the "reduced" sim (in any case, modify the multisim in-place)
 
-        **Example**::
+        **Example**:
 
             msim = ss.MultiSim(ss.Sim())
             msim.run()
@@ -252,11 +254,26 @@ class MultiSim:
 
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
+        length_mismatches = sc.ddict(int)
         for rkey in rkeys:
-            raw[rkey] = np.zeros((len(rflat[rkey]), len(self.sims)))
+            raw[rkey] = np.full((len(rflat[rkey]), len(self.sims)), np.nan)
             for s, sim in enumerate(self.sims):
                 flat = sim.results.flatten()
-                raw[rkey][:, s] = flat[rkey]
+                this_raw = raw[rkey]
+                this_flat = flat[rkey]
+                l1 = this_raw.shape[0]
+                l2 = this_flat.shape[0]
+                if l1 == l2:
+                    length = l1
+                else:
+                    length_mismatches[sim.label] += 1
+                    length = min(l1, l2)
+                this_raw[:length, s] = this_flat[:length]
+        if length_mismatches:
+            warnmsg = 'Sim results have mismatched lengths; results have been truncated but are not necessarily aligned. Mismatches:\n'
+            for k,v in length_mismatches.items():
+                warnmsg += f'{k}: {v} mismatched results\n'
+            ss.warn(warnmsg)
 
         for rkey in rkeys:
             res = rflat[rkey]
@@ -282,7 +299,7 @@ class MultiSim:
         if output:
             return self.base_sim
         else:
-            return
+            return self
 
     def mean(self, bounds=None, **kwargs):
         """
@@ -337,7 +354,7 @@ class MultiSim:
 
         return summary
 
-    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
+    def plot(self, key=None, fig=None, legend=True, **kwargs):
         """
         Plot all results in the MultiSim object.
 
@@ -347,47 +364,78 @@ class MultiSim:
         Args:
             key (str): the results key to plot (by default, all)
             fig (Figure): if provided, plot results into an existing figure
-            fig_kw (dict): passed to ``plt.subplots()``
-            plot_kw (dict): passed to ``plt.plot()``
-            fill_kw (dict): passed to ``plt.fill_between()``
+            fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+            plot_kw (dict): passed to `plt.plot()`
+            data_kw (dict): passed to `plt.scatter()`, for plotting the data
+            style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
+            fill_kw (dict): passed to `plt.fill_between()`
+            legend_kw (dict): passed to `plt.legend()`
+            legend (bool): whether to show the legend
+            **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
         """
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
-            alpha = 0.7 if len(self) < 5 else 0.5
-            plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
-            with ss.options.context(jupyter=False): # Always return the figure
+            res_keys = None
+            kw = ss.plot_args(kwargs)
+            alpha = kw.plot.get('alpha', 0.7 if len(self) < 5 else 0.5) # Set default alpha
+            if key is None: # Set keys
                 for sim in self.sims:
-                    fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
-            plt.legend()
+                    sim_keys = set(sim.results.flatten(only_auto=True).keys()) # Check if keys match for auto-plotting results
+                    if res_keys is None:
+                        res_keys = sim_keys
+                    else:
+                        if res_keys != sim_keys: # TODO: would be good to fix and plot all, but hard with sim.plot()
+                            missing = res_keys - sim_keys
+                            extra = sim_keys - res_keys
+                            extratxt = f'\nExtra: {sc.strjoin(extra)}'
+                            missingtxt = f'\nMissing: {sc.strjoin(missing)}'
+                            warnmsg = f'Sim "{sim.label}" has different results keys:{extratxt}{missingtxt}\nResults may not plot correctly (i.e. axes titles may not be correct for all sims)'
+                            ss.warn(warnmsg)
+            for sim in self.sims: # Actually plot
+                fig = sim.plot(key=key, fig=fig, alpha=alpha, is_jupyter=False, do_show=False, **kwargs)
+            if legend:
+                leg = None
+                shape = getattr(fig, '_subplots_shape', None) # Sciris-generated figure
+                if shape: # If we have empty space on the bottom right, put the legend there
+                    n = np.prod(shape)
+                    if len(fig.axes) != n: # Bottom-right axes is empty
+                        ax = fig.add_subplot(shape[0], shape[1], n)
+                        leg = sc.movelegend(fig.axes[0], ax, **kw.legend)
+                if leg is None: # Otherwise, just put it in the last axes anyway
+                    fig.axes[-1].legend(**kw.legend)
 
         # Has been reduced, plot with uncertainty bounds
         else:
-            flat = self.results
-            n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
+            # Get arguments
+            n_ticks = kwargs.pop('n_ticks', None)
+            show_module = kwargs.pop('show_module', None)
+            show_skipped = kwargs.pop('show_skipped', None)
+
+            # Figure out the flat structure of results to plot
+            flat = ss.utils.match_result_keys(self.results, key, show_skipped=show_skipped, flattened=True)
+
+            # Set figure size
+            n_cols,_ = sc.getrowscols(len(flat))
             default_figsize = np.array([8, 6])
             figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
             figsize = default_figsize*figsize_factor
-            fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
-            fig_kw = sc.mergedicts(fig_kw)
-            fill_kw = sc.mergedicts({'alpha':0.2}, fill_kw)
-            plot_kw = sc.mergedicts({'lw':2, 'alpha':0.8}, plot_kw)
-            with sc.options.with_style('simple'):
-                if key is not None:
-                    flat = {k:v for k,v in flat.items() if k.startswith(key)}
+            kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, fill_alpha=0.2, lw=2)
+
+            # Get ready to plot
+            with ss.style(**kw.style):
                 if fig is None:
-                    fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 else:
                     axs = sc.toarray(fig.axes)
 
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
-                    ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
-                    ax.plot(res.timevec, res, **plot_kw)
-                    ax.set_title(getattr(res, 'label', key))
-                    ax.set_xlabel('Year')
+                    ax.fill_between(res.timevec, res.low, res.high, **kw.fill)
+                    ax.plot(res.timevec, res, **kw.plot)
+                    ss.utils.format_axes(ax, res, n_ticks, show_module)
 
-        return ss.return_fig(fig)
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,
@@ -412,7 +460,7 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
     Returns:
         sim (Sim): a single sim object with results
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
         sim = ss.Sim() # Create a default simulation
@@ -430,7 +478,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     if reseed:
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
-        ss.set_seed() # Note: may not be needed
 
     # Handle additional arguments
     for key, val in sim_args.items():
@@ -438,8 +485,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')
             sim.pars[key] = val
-            if key == 'rand_seed':
-                ss.set_seed() # Note: may not be needed
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 
@@ -449,7 +494,7 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     # Shrink the sim to save memory
     if shrink:
-        sim.shrink()
+        sim.shrink(die=False)
 
     return sim
 
@@ -460,6 +505,10 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
     For running multiple sims in parallel. If the first argument is a list of sims
     rather than a single sim, exactly these will be run and most other arguments
     will be ignored.
+
+    Note: `n_cpus=1` is *not* the same thing as setting `parallel=False`. The former
+    still uses the parallelization methods (just on a single core), while the latter
+    simply runs in a loop.
 
     Args:
         sim         (Sim/list): the sim instance to be run, or a list of sims.
@@ -472,7 +521,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         par_args    (dict)  : arguments passed to sc.parallelize()
         do_run      (bool)  : whether to actually run the sim (if not, just initialize it)
         parallel    (bool)  : whether to run in parallel using multiprocessing (else, just run in a loop)
-        n_cpus      (int)   : the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args)
+        n_cpus      (int)   : the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args, and use all cores)
         verbose     (int)   : detail to print
         kwargs      (dict)  : also passed to the sim
 
@@ -480,7 +529,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         If combine is True, a single sim object with the combined results from each sim.
         Otherwise, a list of sim objects (default).
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
         sim = ss.Sim()
@@ -521,35 +570,14 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
 
     # Actually run
     if parallel:
-        try:
-            sims = sc.parallelize(single_run, iterkwargs=iterkwargs, kwargs=kwargs, **par_args)  # Run in parallel
-        except RuntimeError as E:  # Handle if run outside __main__ on Windows
-            if 'freeze_support' in E.args[0]:  # For this error, add additional information
-                errormsg = '''
- Uh oh! It appears you are trying to run with multiprocessing on Windows outside
- of the __main__ block; please see https://docs.python.org/3/library/multiprocessing.html
- for more information. The correct syntax to use is e.g.
-
-     import starsim as ss
-     sim = ss.Sim()
-     msim = ss.MultiSim(sim)
-
-     if __name__ == '__main__':
-         msim.run()
-
-Alternatively, to run without multiprocessing, set parallel=False.
- '''
-                raise RuntimeError(errormsg) from E
-            else:  # For all other runtime errors, raise the original exception
-                raise E
+        sims = sc.parallelize(single_run, iterkwargs=iterkwargs, kwargs=kwargs, **par_args)  # Run in parallel
     else:  # Run in serial, not in parallel
         sims = []
         n_sims = len(list(iterkwargs.values())[0])  # Must have length >=1 and all entries must be the same length
         for s in range(n_sims):
             this_iter = {k: v[s] for k, v in iterkwargs.items()}  # Pull out items specific to this iteration
             this_iter.update(kwargs)  # Merge with the kwargs
-            this_iter['sim'] = this_iter[
-                'sim'].copy()  # Ensure we have a fresh sim; this happens implicitly on pickling with multiprocessing
+            this_iter['sim'] = this_iter['sim'].copy()  # Ensure we have a fresh sim; this happens implicitly on pickling with multiprocessing
             sim = single_run(**this_iter)  # Run in series
             sims.append(sim)
 
@@ -558,7 +586,7 @@ Alternatively, to run without multiprocessing, set parallel=False.
 
 def parallel(*args, **kwargs):
     """
-    A shortcut to ``ss.MultiSim()``, allowing the quick running of multiple simulations
+    A shortcut to `ss.MultiSim()`, allowing the quick running of multiple simulations
     at once.
 
     Args:
@@ -568,7 +596,7 @@ def parallel(*args, **kwargs):
     Returns:
         A run MultiSim object.
 
-    **Examples**::
+    **Examples**:
 
         s1 = ss.Sim(n_agents=1000, label='Small', diseases='sis', networks='random')
         s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')

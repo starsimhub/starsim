@@ -1,20 +1,19 @@
 """
-Numerical utilities
+Numerical utilities and other helper functions
 """
 import warnings
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import starsim as ss
 
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig']
-
+__all__ = ['ndict', 'warn', 'find_contacts', 'standardize_netkey', 'standardize_data',
+           'validate_sim_data', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 class ndict(sc.objdict):
     """
@@ -26,7 +25,7 @@ class ndict(sc.objdict):
         strict (bool): If True, only items with the specified attribute will be accepted.
         overwrite (bool): whether to allow adding a key when one has already been added
 
-    **Examples**::
+    **Examples**:
 
         networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
         networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
@@ -137,6 +136,26 @@ class ndict(sc.objdict):
         return self
 
 
+def nlist_to_dict(nlist, die=True):
+    """ Convert a list of named items (e.g. modules, states) to a dictionary; not for the user """
+    out = sc.objdict()
+    collisions = []
+    for obj in nlist:
+        key = obj.name
+        if key not in out:
+            out[key] = obj
+        else:
+            collisions.append(key)
+    if collisions:
+        errormsg = f'Cannot list modules as a dict since one or more modules have the same name; use the list version instead. Collisions:\n{collisions}'
+        if die:
+            raise ValueError(errormsg)
+        else:
+            ss.warn(errormsg)
+    else:
+        return out
+
+
 def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- shortcut to warnings.warn """
 
@@ -185,49 +204,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-def check_requires(sim, requires, *args):
-    """ Check that the module's requirements (of other modules) are met """
-    errs = sc.autolist()
-    all_classes = [m.__class__ for m in sim.modules]
-    all_names = [m.name for m in sim.modules]
-    for req in sc.mergelists(requires, *args):
-        if req not in all_classes + all_names:
-            errs += req
-    if len(errs):
-        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
-        raise AttributeError(errormsg)
-    return
-
-
-def set_seed(seed=None):
-    '''
-    Reset the random seed -- complicated because of Numba, which requires special
-    syntax to reset the seed. This function also resets Python's built-in random
-    number generated.
-
-    Args:
-        seed (int): the random seed
-    '''
-
-    @nb.njit(cache=True)
-    def set_seed_numba(seed):
-        return np.random.seed(seed)
-
-    def set_seed_regular(seed):
-        return np.random.seed(seed)
-
-    # Dies if a float is given
-    if seed is not None:
-        seed = int(seed)
-
-    set_seed_regular(seed)  # If None, reinitializes it
-    if seed is None:  # Numba can't accept a None seed, so use our just-reinitialized Numpy stream to generate one
-        seed = np.random.randint(1e9)
-    set_seed_numba(seed)
-
-    return
-
-
 # %% Data cleaning and processing
 
 def standardize_netkey(key):
@@ -241,36 +217,36 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
 
     Input data can arrive in many different forms. This function accepts a variety of data
     structures, and converts them into a Pandas Series containing one variable, based on
-    specified metadata, or an ``ss.Dist`` if the data is already an ``ss.Dist`` object.
+    specified metadata, or an `ss.Dist` if the data is already an `ss.Dist` object.
 
     The metadata is a dictionary that defines columns of the dataframe or keys
     of the dictionary to use as indices in the output Series. It should contain:
 
-    - ``metadata['data_cols']['value']`` specifying the name of the column/key to draw values from
-    - ``metadata['data_cols']['year']`` optionally specifying the column containing year values; otherwise the default year will be used
-    - ``metadata['data_cols']['age']`` optionally specifying the column containing age values; otherwise the default age will be used
-    - ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
+    - `metadata['data_cols']['value']` specifying the name of the column/key to draw values from
+    - `metadata['data_cols']['year']` optionally specifying the column containing year values; otherwise the default year will be used
+    - `metadata['data_cols']['age']` optionally specifying the column containing age values; otherwise the default age will be used
+    - `metadata['data_cols'][<arbitrary>]` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
 
-    If a ``sex`` column is part of the index, the metadata can also optionally specify a string mapping to convert
+    If a `sex` column is part of the index, the metadata can also optionally specify a string mapping to convert
     the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
-    an additional key like ``metadata['sex_keys'] = {'Female':'f','Male':'m'}`` which in this case would map the strings
+    an additional key like `metadata['sex_keys'] = {'Female':'f','Male':'m'}` which in this case would map the strings
     'Female' and 'Male' in the original data into 'm'/'f' for Starsim.
 
     Args:
         data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
         metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
-        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of ``-np.inf``
+        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of `-np.inf`
 
     Returns:
 
-        - A `pd.Series` for all supported formats of `data` *except* an ``ss.Dist``. This series will contain index columns for 'year'
+        - A `pd.Series` for all supported formats of `data` *except* an `ss.Dist`. This series will contain index columns for 'year'
           and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
           they appeared in the metadata (except for year and age appearing first).
-        - An ``ss.Dist`` instance - if the ``data`` input is an ``ss.Dist``, that same object will be returned by this function
+        - An `ss.Dist` instance - if the `data` input is an `ss.Dist`, that same object will be returned by this function
     """
     # It's a format that can be used directly: return immediately
-    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.TimePar)):
+    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.Rate)):
         return data
 
     # Convert series and dataframe inputs into dicts
@@ -385,7 +361,7 @@ def combine_rands(a, b):
 
 def load(filename, **kwargs):
     """
-    Alias to Sciris sc.loadany()
+    Alias to Sciris `sc.loadany()`
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
     this function. This can also be used to load other objects of known type
@@ -393,7 +369,7 @@ def load(filename, **kwargs):
 
     Args:
         filename (str/path): the name of the file to load
-        kwargs (dict): passed to sc.loadany()
+        kwargs (dict): passed to `sc.loadany()`
 
     Returns:
         The loaded object
@@ -403,7 +379,7 @@ def load(filename, **kwargs):
 
 def save(filename, obj, **kwargs):
     """
-    Alias to Sciris sc.save()
+    Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
@@ -411,7 +387,7 @@ def save(filename, obj, **kwargs):
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to sc.save()
+        kwargs (dict): passed to `sc.save()`
     """
     return sc.save(filename=filename, obj=obj, **kwargs)
 
@@ -423,13 +399,192 @@ class shrink:
         return s
 
 
+#%% Plotting helper functions
+
+# Specify known/common keywords
+plotting_kw = sc.objdict()
+plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
+plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
+plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
+plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
+plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
+plotting_kw.return_fig = ['do_show', 'is_jupyter', 'is_reticulate']
+
+def plot_args(kwargs=None, _debug=False, **defaults):
+    """
+    Process known plotting kwargs.
+
+    This function handles arguments to `sim.plot()` and other plotting functions
+    by splitting known kwargs among all the different aspects of the plot.
+
+    Note: the kwargs supplied to the parent function should be supplied as the
+    first argument of this function; keyword arguments to this function are treated
+    as default values that will be overwritten by user-supplied values in `kwargs`.
+    The argument "_debug" is used internally to print debugging output, but is
+    not typically set by the user.
+
+    Args:
+        fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+        plot_kw (dict): passed to `plt.plot()`
+        data_kw (dict): passed to `plt.scatter()`, for plotting the data
+        style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
+        **kwargs (dict): parsed among the above dictionaries
+
+    Returns:
+        A dict-of-dicts with plotting arguments, for use with subsequent plotting commands
+
+    Valid kwarg arguments are:
+
+        - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
+        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - data: 'data_alpha', 'data_color', 'data_size'
+        - style: 'font', 'fontsize', 'interactive'
+        - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
+
+    **Examples**:
+
+        kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
+        kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
+    """
+    suffix='_kw',
+    _None = '<None>'
+    kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
+    kw = sc.objdict() # Output arguments
+    for subtype,args in plotting_kw.items():
+        if _debug: print('Subtype & args:', subtype, args)
+        kw[subtype] = sc.objdict() # e.g. kw.fig
+
+        # Handle kwargs, e.g. "figsize"
+        if isinstance(args, list): # Ensure everything's a dict, although only kw.data is
+            args = {k:k for k in args}
+        for inkey,outkey in args.items():
+            val = kwargs.pop(inkey, _None) # Handle None as a valid argument
+            if _debug: # Just for debugging, since the logic is complex
+                if inkey == outkey:
+                    print(f'    {inkey} = {val}')
+                else:
+                    print(f'    {inkey} → {outkey} = {val}')
+            if val is not _None:
+                kw[subtype][outkey] = val
+
+        # Handle dicts of kwargs, e.g. "fig_kw"
+        subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
+        if subtype_dict:
+            if _debug: print('Subtype dict:', subtype_dict)
+            kw[subtype].update(subtype_dict)
+
+    # Expect everything has been converted
+    if len(kwargs):
+        valid = f'\n\nValid:\n{plotting_kw}\n'
+        converted = f'\n\nConverted:\n{kw}\n'
+        unconverted = f'\n\nUnconverted:\n{sc.newlinejoin(kwargs.keys())}'
+        errormsg = f'Did not successfully convert all plotting keys:{valid}{converted}{unconverted}'
+        raise sc.KeyNotFoundError(errormsg)
+
+    if _debug: print('Final output:', kw)
+
+    return kw
+
+
+def match_result_keys(results, key, show_skipped=False, flattened=False):
+    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
+
+    def normkey(key):
+        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
+        return key.replace('.','_').lower()
+
+    # Handle accessing subdicts
+    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
+        flat = results[key].flatten() # e.g. sim.results['sis']
+        key = None # We've already used the key, so reset it
+    else: # Main use case: flatten the dict, e.g. sim.plot()
+        flat = results if flattened else results.flatten()
+
+    # Configuration
+    flat_orig = flat # Copy reference before we modify in place
+    if not show_skipped: # Skip plots with auto_plot set to False
+        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
+            res = flat[k]
+            if isinstance(res, ss.Result) and not res.auto_plot:
+                flat.pop(k)
+
+    if key is not None:
+        if isinstance(key, str):
+            flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+            if len(flat) != 1:
+                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+        else:
+            try:
+                flat = {k.lower():flat[normkey(k)] for k in key}
+            except sc.KeyNotFoundError as e:
+                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
+                raise sc.KeyNotFoundError(errormsg) from e
+
+    return flat
+
+
+def get_result_plot_label(res, show_module=None):
+    """ Helper function for getting the label to plot for a result; not for the user """
+    # Sanitize
+    if show_module is None:
+        show_module = 26 # Default maximum length
+    elif isinstance(show_module, bool):
+        if show_module is True:
+            show_module = 999
+        else:
+            show_module = 0
+    if not isinstance(show_module, int):
+        errormsg = f'"show_module" must be a bool or int, not {show_module}'
+        raise TypeError(errormsg)
+
+    # Decide how/if to show the module
+    if show_module == -1:
+        label = res.full_label.replace(':', '\n')
+    elif len(res.full_label) > show_module:
+        label = sc.ifelse(res.label, res.name)
+    else:
+        label = res.full_label
+
+    return label
+
+
+def format_axes(ax, res, n_ticks=None, show_module=None):
+    """ Standard formatting for axis results; not for the user """
+    if n_ticks is None:
+        n_ticks = (2,5)
+
+    # Set y axis -- commas
+    sc.commaticks(ax)
+
+    # Set x axis -- date formatting
+    if res.has_dates:
+        locator = mpl.dates.AutoDateLocator(minticks=n_ticks[0], maxticks=n_ticks[1]) # Fewer ticks since lots of plots
+        sc.dateformatter(ax, locator=locator)
+
+    # Set the axes title
+    label = ss.utils.get_result_plot_label(res, show_module)
+    ax.set_title(label)
+    return
+
+
+def show(**kwargs):
+    """ Shortcut for matplotlib.pyplot.show() """
+    return plt.show(**kwargs)
+
+
 def return_fig(fig, **kwargs):
-    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead """
-    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
-    is_reticulate = ss.options.reticulate
+    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
+    do_show = kwargs.pop('do_show', ss.options.show) # TODO: make this more consistent with other implementations, e.g. plot_args()
+    is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
+    is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
     if is_jupyter or is_reticulate:
         print(fig)
-        plt.show()
+        if do_show != False:
+            plt.show()
         return None
     else:
+        if do_show:
+            plt.show()
         return fig

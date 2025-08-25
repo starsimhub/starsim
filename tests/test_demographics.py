@@ -12,6 +12,7 @@ sc.options(interactive=False) # Assume not running interactively
 datadir = ss.root / 'tests/test_data'
 
 
+@sc.timer()
 def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     """
     Make a Nigeria sim with demographic modules
@@ -24,16 +25,16 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 
     if which == 'births':
         birth_rates = pd.read_csv(datadir/'nigeria_births.csv')
-        births = ss.Births(pars={'birth_rate': birth_rates})
+        births = ss.Births(birth_rate=birth_rates)
         demographics += births
 
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(datadir/'nigeria_asfr.csv')
-        pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates, 'rel_fertility': 1})  # 4/3
+        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1)  # 4/3
         demographics += pregnancy
 
     death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
-    death = ss.Deaths(pars={'death_rate': death_rates, 'rate_units': 1})
+    death = ss.Deaths(death_rate=death_rates, rate_units=1)
     demographics += death
 
     # Make people
@@ -123,10 +124,11 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, birth_rate=10, death_rate=10/1010*1000, dur=200, rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, birth_rate=ss.freqperyear(10), death_rate=ss.freqperyear(10/1010*1000), dur=ss.years(200), rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
@@ -137,17 +139,19 @@ def test_constant_pop(do_plot=False):
     return sim
 
 
+@sc.timer()
 def test_module_adding():
     """ Test that modules can't be added twice """
     sc.heading('Testing module duplication')
-    births = ss.Births(pars={'birth_rate': 10})
-    deaths = ss.Deaths(pars={'death_rate': 10})
+    births = ss.Births(birth_rate=ss.freqperyear(10))
+    deaths = ss.Deaths(death_rate=ss.freqperyear(10))
     demographics = [births, deaths]
     with pytest.raises(ValueError):
-        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
+        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.freqperyear(10), death_rate=ss.freqperyear(10)).run()
     return demographics
 
 
+@sc.timer()
 def test_aging():
     """ Test that aging is configured properly """
     sc.heading('Testing aging')

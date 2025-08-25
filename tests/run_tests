@@ -5,6 +5,7 @@
 
 # Non-interactive plots
 export SCIRIS_BACKEND='agg'
+export STARSIM_SHOW=0
 
 # Run the tests
-pytest test_*.py -n auto --ignore=manual --durations=0
+pytest test_*.py -n auto --durations=0
