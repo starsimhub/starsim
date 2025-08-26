@@ -1703,6 +1703,8 @@ class prob(Rate):
                     errormsg = f'Negative values are not permitted for rates or probabilities. {valstr}'
                 elif gt1:
                     errormsg = f'Values greater than 1 are not permitted for probabilities, please use ss.per() or ss.freq() instead. {valstr}'
+                else:
+                    errormsg = 'Something else has gone wrong'
 
                 raise ValueError(errormsg)
         Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
