@@ -1684,7 +1684,10 @@ class prob(Rate):
                 errormsg = f'You can supply value or rate, but not both ({value = } and {rate = })'
                 raise ValueError(errormsg)
             try:
-                assert 0 <= value <= 1, 'Value must be between 0 and 1'
+                if sc.isnumber(value):
+                    assert 0 <= value <= 1, 'Value must be between 0 and 1'
+                elif isinstance(value, np.ndarray):
+                    assert np.all((0 <= value) & (value <= 1)), 'All values must be between 0 and 1'
             except Exception: # Something went wrong, let's figure it out -- either a value error, or value is an array instead of a scalar
                 if sc.isnumber(value):
                     valstr = f'Value provided: {value}'
@@ -1781,9 +1784,9 @@ class prob(Rate):
         elif isinstance(dur, np.ndarray):
             self.array_mul_error()
         elif isinstance(dur, ss.dur): # Main use case
-            if self._rate == 0:
+            if sc.isnumber(self._rate) and (self._rate == 0):
                 return 0
-            elif not np.isfinite(self._rate):
+            elif sc.isnumber(self._rate) and not np.isfinite(self._rate):
                 return 1
             else: # Main use case
                 if self.unit is None: # Final check before we proceed.
