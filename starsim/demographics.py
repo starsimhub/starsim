@@ -176,7 +176,7 @@ class Deaths(Demographics):
 
         metadata: data about the data contained within the data input.
             "data_cols" is is a dictionary mapping standard keys, like "year" to the
-            corresponding column name in data. Similar for "sex_keys". Finally,
+            corresponding column name in data. Similar for "sex_keys". 
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
         super().__init__()
