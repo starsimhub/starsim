@@ -10,7 +10,7 @@ fonts_installed_successfully
 # Quarto-generated files
 .jupyter_cache/
 .virtual_documents/
-docs/_build/
+docs/_site/
 docs/_extensions/
 docs/_inv/
 docs/api/

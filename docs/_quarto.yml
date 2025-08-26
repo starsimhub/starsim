@@ -1,6 +1,6 @@
 project:
   type: website
-  output-dir: _build
+  output-dir: _site
   title: "Starsim"
   execute-dir: file
 
@@ -82,7 +82,7 @@ website:
           - section: "Introduction"
             contents:
             - user_guide/intro_starsim.ipynb
-            - user_guide/intro_spokes.ipynb
+            - user_guide/intro_models.ipynb
           - section: "Basic concepts"
             contents:
             - user_guide/basics_model.ipynb
@@ -168,7 +168,7 @@ filters:
   - interlinks
 
 interlinks:
-  fast: true
+  fast: false
   sources:
     python:
       url: https://docs.python.org/3/

@@ -292,6 +292,7 @@ class Sim(ss.Base):
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),
+            ss.Result('new_emigrants', label='Emigrants', **kw),
             ss.Result('cum_deaths', label='Cumulative deaths', **kw),
         ]
         return

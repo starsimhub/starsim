@@ -66,6 +66,7 @@ class People:
             ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
             ss.FloatArr('age', default=self.get_age_dist(age_data)), # NaN until conceived
             ss.FloatArr('ti_dead'),  # Time index for death
+            ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
         states.extend(extra_states)
@@ -372,10 +373,18 @@ class People:
         self.ti_dead[uids] = self.sim.ti
         return
 
+    def request_removal(self, uids):
+        """
+        Request an agent to be removed from the simulation
+        Similar to request_death, but in this case the agent will be recorded as removed instead of dead
+        """
+        self.ti_removed[uids] = self.sim.ti
+        return
+
     def step_die(self):
-        """ Carry out any deaths that took place this timestep """
-        death_uids = (self.ti_dead <= self.sim.ti).uids
-        self.alive[death_uids] = False
+        """ Carry out any deaths or removals that took place this timestep """
+        death_uids = ((self.ti_dead <= self.sim.ti) | (self.ti_removed <= self.sim.ti)).uids
+        self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
@@ -387,7 +396,7 @@ class People:
 
     def remove_dead(self):
         """
-        Remove dead agents
+        Remove agents who are exiting the population (death, migration, etc)
         """
         uids = self.dead.uids
         if len(uids):
@@ -406,6 +415,7 @@ class People:
         res = self.sim.results
         res.n_alive[ti] = np.count_nonzero(self.alive)
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+        res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 
@@ -416,7 +426,7 @@ class People:
 
     @property
     def dead(self):
-        """ Dead boolean """
+        """ Dead boolean. Also includes removed agents """
         return ~self.alive
 
     @property

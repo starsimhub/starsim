@@ -2,5 +2,5 @@
 """
 Run tutorials
 """
-import utils as ut
+import docutils as ut
 ut.execute_notebooks(folders='tutorials')

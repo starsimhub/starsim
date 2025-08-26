@@ -3,6 +3,15 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+## Version 3.0.2 (2025-08-25)
+- Additional minor updates following the v3 release.
+- Cleans up some of the logic for convertin rates to probabilities in the demographic modules
+- Adds a `request_removal` method to People, which can be used to remove people from the population for reasons other than death (e.g. migration)
+- Fixes a bug that prevented `ss.prob` from accepting arrays
+- Adds a `year` property to Timelines, so `sim.t.now('year')` can be rewritten as `sim.t.year`
+- *GitHub info*: PR [1032](https://github.com/starsimhub/starsim/pull/1032)
+
+
 ## Version 3.0.1 (2025-08-04)
 - Minor updates following the v3 release.
 - The logic for initializing `ss.Timeline` has been changed. Now, `start` and `stop` will not be converted to dates unless at least one argument is a date (e.g. `start=ss.years(2000)` will remain `ss.years()`). `ss.Timeline` is also now much more robust about handling different types of input, and choosing sensible defaults for missing inputs (e.g. with `stop=ss.days(20)`, the new default is `start=ss.days(0)`).
