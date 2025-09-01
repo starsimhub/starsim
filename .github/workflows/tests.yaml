@@ -18,7 +18,7 @@ jobs:
     name: Install and test
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - uses: actions/setup-python@master
         with:
           python-version: ${{ matrix.python-version }}
