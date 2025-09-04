@@ -3,6 +3,11 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+## Version 3.0.3 (2025-09-05)
+- Minor update, removes p_death from the parameters for the Deaths module
+- *GitHub info*: TBC
+
+
 ## Version 3.0.2 (2025-08-25)
 - Additional minor updates following the v3 release.
 - Cleans up some of the logic for convertin rates to probabilities in the demographic modules
