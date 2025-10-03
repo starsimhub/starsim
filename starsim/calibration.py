@@ -1503,14 +1503,14 @@ class Normal(CalibComponent):
             n_a = np.maximum(n_a, eps)
             a_x = a_x / n_a
         
-        # Parse per-row uncertainty (using _e suffix from merge)
+        # Parse per-row uncertainty (no suffix needed - these columns only exist in expected)
         if self.has_sigma2:
-            sigma2 = combined['sigma2_e'].values.astype(float)
+            sigma2 = combined['sigma2'].values.astype(float)
         elif self.has_sigma:
-            sigma2 = (combined['sigma_e'].values.astype(float)) ** 2
+            sigma2 = (combined['sigma'].values.astype(float)) ** 2
         elif self.has_ci:
             # Convert 95% confidence interval width to variance
-            ci_width = combined['ci95_high_e'].values.astype(float) - combined['ci95_low_e'].values.astype(float)
+            ci_width = combined['ci95_high'].values.astype(float) - combined['ci95_low'].values.astype(float)
             sigma2 = (ci_width / (2 * 1.96)) ** 2
         else:
             raise ValueError("No uncertainty specification found")
