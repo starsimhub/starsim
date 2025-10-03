@@ -300,6 +300,7 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
             'x_4': [40, 60], # Friday
             'x_5': [40, 60], # Saturday
             'x_6': [40, 60], # Sunday
+            'kappa': [10.0, 15.0], # Concentration parameters per survey
 
             # incident conform will compute different in comulative counts between the
             # end of step t1 and the end of step t

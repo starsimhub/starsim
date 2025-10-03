@@ -1043,34 +1043,109 @@ class Binomial(CalibComponent):
         return
 
 class DirichletMultinomial(CalibComponent):
+    def __init__(self, *args, alpha_smooth=1e-3, **kwargs):
+        """
+        Dirichlet-Multinomial likelihood with user-specified concentration kappa.
+        Uses simulation data only to estimate category probabilities, with user-controlled
+        dispersion parameter kappa stored in the expected DataFrame.
+        
+        The expected DataFrame must contain:
+        - x_0, x_1, ..., x_k: Integer counts for each category (>=0)
+        - kappa: Concentration parameter per survey (>0)
+        - Standard time columns (t, t1 if applicable)
+        
+        Parameters:
+        -----------
+        alpha_smooth : float, default 1e-3
+            Small smoothing parameter added to each category before normalizing
+            to prevent degenerate probabilities on the simplex.
+        """
+        from pandas.api.types import is_integer_dtype, is_numeric_dtype
+        super().__init__(*args, **kwargs)
+        
+        # Find x_vars columns and sort for consistent ordering
+        x_vars = sorted([col for col in self.expected.columns if col.startswith('x_')])
+        if not x_vars:
+            raise ValueError("expected DataFrame must contain columns starting with 'x_' for category counts")
+        
+        # Validate x_vars are integer counts >= 0
+        for xvar in x_vars:
+            if not is_integer_dtype(self.expected[xvar]) or (self.expected[xvar] < 0).any():
+                raise ValueError(f'expected["{xvar}"] must be integer counts (>=0)')
+        
+        # Require kappa column in expected
+        if 'kappa' not in self.expected.columns:
+            raise ValueError("expected DataFrame must contain 'kappa' column")
+        if not is_numeric_dtype(self.expected['kappa']) or (self.expected['kappa'] <= 0).any():
+            raise ValueError("All kappa values must be positive numbers")
+        
+        # Copy expected and cap kappa for numerical stability
+        self.expected = self.expected.copy()
+        self.expected['kappa'] = np.minimum(self.expected['kappa'], 1e9)
+        
+        # Store consistent x_vars ordering and parameters
+        self.x_vars = x_vars
+        self.alpha_smooth = alpha_smooth
+        self._eps = 1e-10
+
     def compute_nll(self, expected, actual, **kwargs):
         """
-        The Dirichlet-multinomial negative log-likelihood is the
-        multi-dimensional analog of the beta-binomial likelihood. We begin with
-        a Dirichlet(1,1,...,1) prior and subsequently observe:
-            actual['x1'], actual['x2'], ..., actual['xk']
-        successes (positives). The result is a
-            Dirichlet(alpha=actual[x_vars]+1)
-        We then compare this to the real data, which has outcomes:
-            expected['x1'], expected['x2'], ..., expected['xk']
-
-        The count variables are any keys in the expected dataframe that start with 'x'.
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        Dirichlet-Multinomial negative log-likelihood.
+        
+        Uses simulation only for category probability estimation with simplex smoothing.
+        Applies user-controlled concentration: alpha = kappa * pi
+        
+        Dispersion controlled by per-survey kappa from expected DataFrame.
         """
-
         logLs = []
-        x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
-        for t, rep_t in actual.groupby('t'):
-            for idx, rep in rep_t.iterrows():
-                e_x = expected.loc[t, x_vars].values.flatten()
-                n = e_x.sum()
-                a_x = rep[x_vars].astype('float')
-                logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=a_x+1)
+        
+        # Use consistent x_vars ordering from __init__
+        x_vars = self.x_vars
+        K = len(x_vars)  # Number of categories
+        
+        # Group by time and compute likelihood for each survey
+        for t_idx in expected.index:
+            expected_t = expected.loc[[t_idx]]
+            
+            # Get the time value for filtering actual data
+            if isinstance(t_idx, tuple):
+                # Multi-index case (t, t1)
+                t_val = t_idx[0]  # Use first level (t) for matching
+                actual_t = actual[actual['t'] == t_val] if 't' in actual.columns else actual[actual.index == t_val]
+            else:
+                # Single index case
+                t_val = t_idx
+                actual_t = actual[actual.index == t_val] if actual.index.name == 't' else actual[actual['t'] == t_val]
+            
+            # Extract expected data for this timepoint
+            e_x = expected_t[x_vars].iloc[0].to_numpy(dtype=int)  # observed counts by category
+            n = e_x.sum()  # total observed count
+            kappa = expected_t['kappa'].iloc[0]  # concentration parameter
+            
+            # Process each simulation replicate for this timepoint
+            for _, rep in actual_t.iterrows():
+                # Sim counts -> probabilities with smoothing on simplex
+                c_sim = rep[x_vars].to_numpy(dtype=float)
+                total_sim = c_sim.sum() + K * self.alpha_smooth
+                
+                if total_sim <= self._eps:
+                    # Degenerate case: uniform probabilities
+                    pi = np.full(K, 1.0 / K, dtype=float)
+                else:
+                    # Smoothed probabilities on simplex
+                    pi = (c_sim + self.alpha_smooth) / total_sim
+                
+                # Apply concentration parameter
+                alpha = kappa * pi
+                
+                # Ensure alpha values are valid (> eps)
+                alpha = np.maximum(alpha, self._eps)
+                
+                # Compute Dirichlet-Multinomial likelihood
+                logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=alpha)
                 logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
+        
+        return -np.nan_to_num(np.array(logLs), nan=-np.inf)
 
     def plot(self, actual=None, **kwargs):
         if actual is None:
@@ -1079,7 +1154,7 @@ class DirichletMultinomial(CalibComponent):
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
+        x_vars = self.x_vars
         actual = actual \
             .reset_index() \
             [['t', 'calibrated', 'rand_seed']+x_vars] \
@@ -1096,7 +1171,7 @@ class DirichletMultinomial(CalibComponent):
         return g.fig
 
     def plot_facet(self, data, color, **kwargs):
-        # It's challenging to plot the Dirichlet-multinomial likelihood, so we use Beta binomial as a stand-in
+        """Plot marginal beta-binomial approximation for each category"""
         t = data.iloc[0]['t']
         var = data.iloc[0]['var']
         cal = data.iloc[0]['calibrated']
@@ -1105,28 +1180,100 @@ class DirichletMultinomial(CalibComponent):
         actual = kwargs.get('full_actual', self.actual)
         actual = actual[(actual['t'] == t) & (actual['calibrated'] == cal)]
 
-        x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
+        # Use consistent x_vars ordering
+        x_vars = self.x_vars
+        K = len(x_vars)
+        e_x = expected[var].iloc[0]  # observed count for this category
+        e_n = expected[x_vars].sum(axis=1).iloc[0]  # total observed count  
+        kappa = expected['kappa'].iloc[0]  # concentration parameter
 
-        e_x = expected[var].values.flatten()[0]
-        e_n = expected[x_vars].sum(axis=1)
-
-        kk = np.arange(0, int(2*e_x))
+        kk = np.arange(0, int(2*e_x + 10))
         for seed, row in actual.groupby('rand_seed'):
+            # Get simulation data for this replicate
             a = row.set_index('var')['x']
-            a_x = a[var]
-            a_n = a[x_vars].sum()
-            alpha = a_x + 1
-            beta = a_n - a_x + 1
+            c_sim = a[x_vars].to_numpy(dtype=float)
+            
+            # Apply simplex smoothing
+            total_sim = c_sim.sum() + K * self.alpha_smooth
+            if total_sim <= self._eps:
+                pi = np.full(K, 1.0 / K, dtype=float)
+            else:
+                pi = (c_sim + self.alpha_smooth) / total_sim
+            
+            # Get probability for this specific category
+            var_idx = x_vars.index(var)
+            p_cat = pi[var_idx]
+            
+            # Beta-binomial approximation using kappa and category probability
+            alpha = kappa * p_cat
+            beta = kappa * (1 - p_cat)
+            
+            # Ensure valid parameters
+            alpha = max(alpha, self._eps)
+            beta = max(beta, self._eps)
+            
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             yy = q.pmf(kk)
-            plt.step(kk, yy, color=color, label=f"{seed}")
-            yy = q.pmf(e_x)
-            darker = [0.8*c for c in color]
-            plt.plot(e_x, yy, 'x', ms=10, color=darker)
-        plt.axvline(e_x, color='k', linestyle='--')
+            plt.step(kk, yy, color=color, alpha=0.7, label=f"{seed}")
+            yy_obs = q.pmf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=8, color='black')
+            
+        plt.axvline(e_x, color='k', linestyle='--', alpha=0.8)
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """Plot bootstrap distribution using marginal beta-binomial approximation"""
+        t = data.iloc[0]['t']
+        var = data.iloc[0]['var']
+        
+        expected = self.expected.loc[[t]]
+        x_vars = self.x_vars
+        K = len(x_vars)
+        e_x = expected[var].iloc[0]
+        e_n = expected[x_vars].sum(axis=1).iloc[0]
+        kappa = expected['kappa'].iloc[0]
+        
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            if self.combine_reps is None:
+                actual = data.set_index('rand_seed').loc[use_seeds]
+            else:
+                actual = data.set_index('rand_seed').loc[use_seeds].groupby(['t']).aggregate(func=self.combine_reps, **self.combine_kwargs)
+                
+            # Calculate bootstrap mean
+            total_mean = 0
+            n_reps = 0
+            for _, row in actual.iterrows():
+                # Extract simulation counts for all categories  
+                c_sim = np.array([row[xv] for xv in x_vars], dtype=float)
+                
+                # Apply simplex smoothing
+                total_sim = c_sim.sum() + K * self.alpha_smooth
+                if total_sim <= self._eps:
+                    pi = np.full(K, 1.0 / K, dtype=float)
+                else:
+                    pi = (c_sim + self.alpha_smooth) / total_sim
+                
+                # Get probability for this category and create beta-binomial
+                var_idx = x_vars.index(var)
+                p_cat = pi[var_idx]
+                alpha = max(kappa * p_cat, self._eps)
+                beta = max(kappa * (1 - p_cat), self._eps)
+                
+                q = sps.betabinom(n=e_n, a=alpha, b=beta)
+                total_mean += q.mean()
+                n_reps += 1
+                
+            means[bi] = total_mean / n_reps if n_reps > 0 else 0
+        
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
+        plt.axvline(e_x, color='k', linestyle='--')
         return
 
 class GammaPoisson(CalibComponent):
