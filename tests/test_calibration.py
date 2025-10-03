@@ -90,6 +90,7 @@ def test_onepar_normal(do_plot=True):
 
         expected = pd.DataFrame({
             'x': [0.13, 0.16, 0.06],    # Prevalence of infection
+            'sigma2': [0.01, 0.02, 0.005],  # Per-row uncertainty (variance)
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
@@ -97,9 +98,6 @@ def test_onepar_normal(do_plot=True):
             'n': sim.results.n_alive,
         }, index=pd.Index(sim.results.timevec, name='t')),
 
-        # User can specify sigma2, e.g.:
-        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
-        #sigma2 = np.array([0.05, 0.25, 0.01])
     )
 
     # Make the calibration

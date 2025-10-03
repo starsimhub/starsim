@@ -698,7 +698,7 @@ class BetaBinomial(CalibComponent):
                 - 'n': sample sizes (positive integers) 
                 - 'x': positive cases (non-negative integers ≤ n)
                 - EITHER 'kappa': concentration parameters (positive floats)
-                - OR 'ci_low' AND 'ci_high': 95% confidence interval bounds (0 ≤ low < high ≤ 1)
+                - OR 'ci95_low' AND 'ci95_high': 95% confidence interval bounds (0 ≤ low < high ≤ 1)
             extract_fn (callable): Function to extract simulated data in same format
             conform (str|callable): How to align timepoints ('prevalent', 'incident', etc.)
             weight (float): Weight for this component in overall likelihood
@@ -734,10 +734,10 @@ class BetaBinomial(CalibComponent):
             
         # Check for dispersion parameters (kappa or CI bounds)
         has_kappa = 'kappa' in expected.columns
-        has_ci = 'ci_low' in expected.columns and 'ci_high' in expected.columns
+        has_ci = 'ci95_low' in expected.columns and 'ci95_high' in expected.columns
         
         if has_kappa and has_ci:
-            raise ValueError("Provide either 'kappa' column OR 'ci_low'/'ci_high' columns, not both")
+            raise ValueError("Provide either 'kappa' column OR 'ci95_low'/'ci95_high' columns, not both")
         
         # Process expected DataFrame
         self.expected = expected.copy()
@@ -764,8 +764,8 @@ class BetaBinomial(CalibComponent):
         # Extract arrays for vectorized operations
         n_obs = self.expected['n'].values
         x_obs = self.expected['x'].values
-        ci_lower = self.expected['ci_low'].values
-        ci_upper = self.expected['ci_high'].values
+        ci_lower = self.expected['ci95_low'].values
+        ci_upper = self.expected['ci95_high'].values
         
         # Numerical guard: ensure p ∈ (ε, 1-ε) to avoid division by zero in p*(1-p)
         p_hat = x_obs / n_obs
@@ -851,7 +851,11 @@ class BetaBinomial(CalibComponent):
         import warnings
         
         logLs = []
-        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        # Dynamic merge key detection (fixes hardcoded ['t'] bug)
+        merge_keys = [name for name in self.expected.index.names if name is not None]
+        if not merge_keys:
+            merge_keys = ['t']  # fallback for edge cases
+        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), on=merge_keys, suffixes=('_e', '_a'))
         eps = 1e-10
         
         # Issue warning once if using fallback
@@ -1418,121 +1422,209 @@ class GammaPoisson(CalibComponent):
 
 
 class Normal(CalibComponent):
-    def __init__(self, name, expected, extract_fn, conform, weight=1, sigma2=None, **kwargs):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, **kwargs):
+        """
+        Normal likelihood component with per-row uncertainty specification.
+        
+        This component evaluates observed data using a normal distribution with
+        per-row uncertainty that can be specified in multiple formats.
+        
+        Args:
+            name (str): Name of this component
+            expected (pd.DataFrame): Real observed data with required columns:
+                - 'x': observed values (floats)
+                - EXACTLY ONE of:
+                    - 'sigma2': variance for each observation
+                    - 'sigma': standard deviation for each observation  
+                    - 'ci95_low' AND 'ci95_high': 95% confidence interval bounds
+            extract_fn (callable): Function to extract simulated data in same format
+            conform (str|callable): How to align timepoints ('prevalent', 'incident', etc.)
+            weight (float): Weight for this component in overall likelihood
+            **kwargs: Additional arguments passed to parent class
+            
+        The likelihood uses: x^obs ~ Normal(μ=x_sim, σ²) where σ² varies by row.
+        """
         super().__init__(name, expected, extract_fn, conform, weight, **kwargs)
-        self.sigma2 = sigma2
-        return
-
+        
+        # Check for required per-row uncertainty columns
+        self.has_sigma2 = 'sigma2' in expected.columns
+        self.has_sigma = 'sigma' in expected.columns  
+        self.has_ci = 'ci95_low' in expected.columns and 'ci95_high' in expected.columns
+        
+        # Validate exactly one uncertainty method provided
+        uncertainty_methods = sum([self.has_sigma2, self.has_sigma, self.has_ci])
+        if uncertainty_methods == 0:
+            raise ValueError("Must provide per-row uncertainty: 'sigma2', 'sigma', or 'ci95_low'/'ci95_high' columns")
+        if uncertainty_methods > 1:
+            raise ValueError("Provide only one uncertainty method: 'sigma2', 'sigma', or 'ci95_low'/'ci95_high' columns")
+        
+        # Validate expected data
+        if not all(np.isfinite(expected['x'])):
+            raise ValueError("expected['x'] must contain finite values")
+            
+        if self.has_ci:
+            # Validate 95% confidence interval bounds
+            if not all(expected['ci95_low'] < expected['ci95_high']):
+                raise ValueError("ci95_low must be less than ci95_high for all observations")
+        
+        self.expected = expected.copy()
+        
     def compute_nll(self, expected, actual, **kwargs):
         """
-        Normal log-likelihood component.
-
-        Note that minimizing the negative log likelihood of a Gaussian likelihood is
-        equivalent to minimizing the Euclidean distance between the expected and
-        actual values.
-
-        User-provided variance can be passed as a keyword argument named sigma2 when creating this component.
-
+        Normal negative log-likelihood with per-row uncertainty.
+        
         Args:
-            expected (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from the reference dataset.
-            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset.
-            kwargs (dict): contains any eval_kwargs that were specified when instantiating the Calibration
-
+            expected (pd.DataFrame): Real observed data (not used directly, uses self.expected)
+            actual (pd.DataFrame): Simulated data with 'x' column (and optionally 'n' for ratios)
+            kwargs: Additional evaluation arguments
+            
         Returns:
-            nll (float): negative Euclidean distance between expected and predicted values.
+            ndarray: Negative log likelihoods for each data point
         """
-
-        logLs = []
-        sigma2 = self.sigma2
-        compute_var = sigma2 is None
-
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
-            e_x = rep['x_e']
-            a_x = rep['x_a']
-
-            # TEMP TODO calculate rate if 'n' supplied
-            if 'n' in rep:
-                a_x = rep['x_a'] / rep['n']
-
-            if compute_var:
-                sigma2 = self.compute_var(expected['x'], a_x)
-
-            logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=np.sqrt(sigma2))
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
-
-    def compute_var(self, expected_x, actual_x):
-        """
-        Compute the maximum-likelihood variance of the residuals between expected and actual values.
-        """
-        diffs = expected_x - actual_x
-        SSE = np.sum(diffs**2)
-        N = len(expected_x) if sc.isiterable(expected_x) else 1
-        sigma2 = SSE/N
-        return sigma2
-
+        # Dynamic merge key detection (fixes hardcoded ['t'] bug)
+        merge_keys = [name for name in self.expected.index.names if name is not None]
+        if not merge_keys:
+            merge_keys = ['t']  # fallback for edge cases
+        
+        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), 
+                           on=merge_keys, suffixes=('_e', '_a'))
+        
+        # Numerical epsilon for guards
+        eps = 1e-10
+        
+        # Extract arrays for vectorized operations and ensure float type
+        e_x = combined['x_e'].values.astype(float)
+        a_x = combined['x_a'].values.astype(float)
+        
+        # Handle ratio calculations if 'n' column present in actual data
+        if 'n_a' in combined.columns:
+            n_a = combined['n_a'].values.astype(float)
+            # Guard against division by zero/very small numbers
+            n_a = np.maximum(n_a, eps)
+            a_x = a_x / n_a
+        
+        # Parse per-row uncertainty (using _e suffix from merge)
+        if self.has_sigma2:
+            sigma2 = combined['sigma2_e'].values.astype(float)
+        elif self.has_sigma:
+            sigma2 = (combined['sigma_e'].values.astype(float)) ** 2
+        elif self.has_ci:
+            # Convert 95% confidence interval width to variance
+            ci_width = combined['ci95_high_e'].values.astype(float) - combined['ci95_low_e'].values.astype(float)
+            sigma2 = (ci_width / (2 * 1.96)) ** 2
+        else:
+            raise ValueError("No uncertainty specification found")
+        
+        # Numerical guards for variance and sigma
+        sigma2 = np.maximum(sigma2, eps)  # Ensure σ² ≥ ε
+        sigma = np.sqrt(sigma2)
+        sigma = np.clip(sigma, eps, np.inf)  # Clip σ ≥ ε
+        
+        # Vectorized normal log-likelihood
+        logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=sigma)
+        nll = -logL
+        
+        # Handle any NaN/inf values that might have slipped through
+        nll = np.nan_to_num(nll, nan=np.inf, posinf=np.inf, neginf=-np.inf)
+        
+        return nll
+    
     def plot_facet(self, data, color, **kwargs):
+        """
+        Plot normal likelihood facet with per-row uncertainties.
+        """
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
         e_x = expected['x'].values.flatten()[0]
-        nll = 0
+        
+        # Numerical epsilon for guards
+        eps = 1e-10
+        
+        # Get per-row uncertainty for this timepoint and ensure float type
+        if self.has_sigma2:
+            sigma2 = float(expected['sigma2'].values[0])
+        elif self.has_sigma:
+            sigma2 = float(expected['sigma'].values[0]) ** 2
+        elif self.has_ci:
+            ci_high = float(expected['ci95_high'].values[0])
+            ci_low = float(expected['ci95_low'].values[0])
+            ci_width = ci_high - ci_low
+            sigma2 = (ci_width / (2 * 1.96)) ** 2
+        else:
+            raise ValueError("No uncertainty specification found")
+        
+        # Numerical guard for sigma
+        sigma2 = max(sigma2, eps)
+        sigma = np.sqrt(sigma2)
+        sigma = max(sigma, eps)
+        
         for idx, row in data.iterrows():
-            a_x = row['x']
-
-            # TEMP TODO calculate rate if 'n' supplied
+            a_x = float(row['x'])
+            
+            # Handle ratio calculation if 'n' column present
             if 'n' in row:
-                a_x = row['x'] / row['n'] # row[['x']].values[0] / row[['n']].values[0]
-
-            sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
-            if isinstance(sigma2, (list, np.ndarray)):
-                assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
-                # User provided a vector of variances
-                ti = self.expected.index.get_loc(t)
-                sigma2 = sigma2[ti]
-
-            sigma = np.sqrt(sigma2)
+                n_val = max(float(row['n']), eps)  # Guard against division by zero
+                a_x = a_x / n_val
+            
+            # Plot normal distribution centered on simulated value
             kk = np.linspace(a_x - 1.96*sigma, a_x + 1.96*sigma, 1000)
             q = sps.norm(loc=a_x, scale=sigma)
-
+            
             yy = q.pdf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pdf(e_x)
-            nll += -q.logpdf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            
+            # Mark observed value
+            yy_obs = q.pdf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=10, color='k')
+        
+        # Mark expected value
         plt.axvline(e_x, color='k', linestyle='--')
         return
-
+    
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """
+        Plot bootstrap distribution of means.
+        """
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]] # Gracefully handle Series and DataFrame, if 't1' in index
-        e_x = expected['x'].values.flatten()[0] # Due to possible presence of 't1' in the index
-
+        expected = self.expected.loc[[t]]
+        e_x = expected['x'].values.flatten()[0]
+        
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
-        for bi in np.arange(n_boot):
+        
+        for bi in range(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-
+            
             if self.combine_reps is None:
                 actual = data.set_index('rand_seed').loc[use_seeds]
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
-
+            
+            # Calculate mean for this bootstrap sample with numerical guards
+            eps = 1e-10
+            boot_mean = 0.0
+            count = 0
             for idx, row in actual.iterrows():
-                a_x = row['x']
-
-                # TEMP TODO calculate rate if 'n' supplied
+                a_x = float(row['x'])
+                
+                # Handle ratio calculation if 'n' column present
                 if 'n' in row:
-                    a_x = row['x'] / row['n'] #row['x'].values / row['n'].values
-
-                # No need to form the sps.norm involving sigma2 because the mean will be a_x
-                means[bi] = a_x
-
-        ax = sns.kdeplot(means)
-        sns.rugplot(means, ax=ax)
+                    n_val = max(float(row['n']), eps)  # Guard against division by zero
+                    a_x = a_x / n_val
+                
+                boot_mean += a_x
+                count += 1
+            
+            # Guard against empty actual data
+            if count > 0:
+                means[bi] = boot_mean / count
+            else:
+                means[bi] = 0.0
+        
+        # Plot bootstrap distribution
+        sns.kdeplot(means)
+        sns.rugplot(means)
         plt.axvline(e_x, color='k', linestyle='--')
         return
