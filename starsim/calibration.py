@@ -684,64 +684,250 @@ class CalibComponent(sc.prettyobj):
         return g.fig
 
 class BetaBinomial(CalibComponent):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, alpha_prior=1, beta_prior=1, include_fn=None, n_boot=None, combine_reps=None):
+        """
+        Beta-binomial likelihood component with per-timepoint concentration parameters.
+        
+        This component maps simulated prevalence to a detection probability q(x̃), then
+        evaluates observed data using a beta-binomial distribution with concentration
+        parameter kappa that reflects survey-level variability (not simulation uncertainty).
+        
+        Args:
+            name (str): Name of this component
+            expected (pd.DataFrame): Real observed data with required columns:
+                - 'n': sample sizes (positive integers) 
+                - 'x': positive cases (non-negative integers ≤ n)
+                - EITHER 'kappa': concentration parameters (positive floats)
+                - OR 'ci_low' AND 'ci_high': 95% confidence interval bounds (0 ≤ low < high ≤ 1)
+            extract_fn (callable): Function to extract simulated data in same format
+            conform (str|callable): How to align timepoints ('prevalent', 'incident', etc.)
+            weight (float): Weight for this component in overall likelihood
+            alpha_prior (float): Prior parameter for prevalence estimation (default=1)
+            beta_prior (float): Prior parameter for prevalence estimation (default=1) 
+            include_fn (callable): Optional filter for which simulations to include
+            n_boot (int): Optional bootstrap samples
+            combine_reps (str): How to combine replicates ('mean', 'sum', etc.)
+            
+        The likelihood uses: s^obs ~ BetaBinomial(n^obs, α=κ*q, β=κ*(1-q))
+        where q = (x_sim + alpha_prior) / (n_sim + alpha_prior + beta_prior)
+        and κ can vary by timepoint to reflect different survey characteristics.
+        """
+        super().__init__(name, expected, extract_fn, conform, weight, include_fn, n_boot, combine_reps)
+        
+        # Validate priors
+        if alpha_prior <= 0:
+            raise ValueError(f"alpha_prior must be positive, got {alpha_prior}")
+        if beta_prior <= 0:
+            raise ValueError(f"beta_prior must be positive, got {beta_prior}")
+        self.alpha_prior = alpha_prior
+        self.beta_prior = beta_prior
+        
+        # Validate expected data contains integers for counts
+        if not all(expected['x'].apply(lambda x: isinstance(x, (int, np.integer)) and x >= 0)):
+            raise ValueError("expected['x'] must contain non-negative integers (observed positive cases)")
+        if not all(expected['n'].apply(lambda x: isinstance(x, (int, np.integer)) and x > 0)):
+            raise ValueError("expected['n'] must contain positive integers (sample sizes)")
+        
+        # Validate that x <= n for all observations
+        if not all(expected['x'] <= expected['n']):
+            raise ValueError("observed positive cases (x) cannot exceed sample size (n)")
+            
+        # Validate parameter source and process expected DataFrame
+        has_kappa = 'kappa' in expected.columns
+        has_ci = 'ci_low' in expected.columns and 'ci_high' in expected.columns
+        
+        if has_kappa and has_ci:
+            raise ValueError("Provide either 'kappa' column OR 'ci_low'/'ci_high' columns, not both")
+        elif not has_kappa and not has_ci:
+            raise ValueError("expected DataFrame must contain either 'kappa' column or both 'ci_low'/'ci_high' columns")
+        
+        # Process expected DataFrame
+        self.expected = expected.copy()
+        
+        if has_ci:
+            # Calculate kappa from confidence intervals
+            self.expected['kappa'] = self._calculate_kappa_from_ci()
+        
+        # Validate all kappa values are positive
+        if not all(self.expected['kappa'] > 0):
+            raise ValueError("All kappa values must be positive")
+            
+    def _calculate_kappa_from_ci(self):
+        """Calculate kappa values from confidence interval columns using vectorized operations"""
+        import warnings
+        
+        # Single epsilon for all numerical guards
+        eps = 1e-10
+        
+        # Extract arrays for vectorized operations
+        n_obs = self.expected['n'].values
+        x_obs = self.expected['x'].values
+        ci_lower = self.expected['ci_low'].values
+        ci_upper = self.expected['ci_high'].values
+        
+        # Numerical guard: ensure p ∈ (ε, 1-ε) to avoid division by zero in p*(1-p)
+        p_hat = x_obs / n_obs
+        p_hat = np.clip(p_hat, eps, 1 - eps)
+
+        # Validate CI bounds (vectorized checks)
+        invalid_bounds = (ci_lower < 0) | (ci_upper > 1) | (ci_lower >= ci_upper)
+        if invalid_bounds.any():
+            bad_indices = self.expected.index[invalid_bounds].tolist()
+            raise ValueError(f"Invalid confidence intervals at indices {bad_indices}: must have 0 ≤ low < high ≤ 1")
+
+        outside_ci = (p_hat < ci_lower) | (p_hat > ci_upper)
+        if outside_ci.any():
+            bad_indices = self.expected.index[outside_ci].tolist()
+            bad_props = p_hat[outside_ci]
+            bad_cis = list(zip(ci_lower[outside_ci], ci_upper[outside_ci]))
+            raise ValueError(f"Observed proportions {bad_props} not within confidence intervals {bad_cis} at indices {bad_indices}")
+
+        # Calculate standard error from CI (vectorized)
+        se_hat = (ci_upper - ci_lower) / (2 * 1.96)
+
+        # Calculate ICC and convert to kappa
+        # For n=1: design effect = 1, equivalent to binomial (rho=0, kappa=large)
+        # For n>1: calculate rho from ICC formula
+        rho = np.zeros_like(n_obs, dtype=float)
+        
+        # Calculate rho only for n > 1 cases
+        valid = n_obs > 1
+        if np.any(valid):
+            n_v, se_v, p_v = n_obs[valid], se_hat[valid], p_hat[valid]
+            # Ensure denominator > 0 to prevent division by zero
+            denom = np.maximum(p_v * (1 - p_v), eps)
+            rho[valid] = (n_v * se_v**2) / denom - 1 / (n_v - 1)
+        
+        # Numerical guard: clip negative rho to 0 (ensures valid ICC ≥ 0)
+        rho = np.maximum(rho, 0)
+
+        # Check for problematic cases where rho >= 1 (implies kappa <= 0)
+        # This happens when CI is too tight for the given p and n combination
+        problematic_rho = rho >= 1
+        if problematic_rho.any():
+            bad_indices = self.expected.index[problematic_rho].tolist()
+            bad_rho_values = rho[problematic_rho]
+            warnings.warn(
+                f"Confidence intervals at indices {bad_indices} are too tight for the observed data, "
+                f"implying ρ ≥ 1 (ρ = {bad_rho_values}), which would give κ ≤ 0. "
+                f"This is inconsistent with the beta-binomial model. "
+                f"Capping ρ at {1 - eps:.6f} to ensure positive κ.",
+                UserWarning
+            )
+        
+        # Cap rho to ensure positive kappa
+        # For kappa > 0: (1/rho) - 1 > 0 => 1/rho > 1 => rho < 1
+        max_rho = 1 - eps  # This gives kappa ≈ eps/(1-eps) ≈ eps, very small but positive
+        rho = np.minimum(rho, max_rho)
+        
+        # Convert to kappa: κ = (1/ρ) - 1
+        # Handle rho=0 case (design effect=1, binomial limit) without division by zero
+        kappa = np.full_like(rho, 1e6, dtype=float)  # Default to large kappa
+        nonzero = rho > 0
+        if np.any(nonzero):
+            kappa[nonzero] = (1 / rho[nonzero]) - 1
+
+        # Numerical guard: cap huge kappa values for SciPy numerical stability (can't handle ∞)
+        kappa = np.minimum(kappa, 1e6)
+        return kappa
+
     def compute_nll(self, expected, actual, **kwargs):
         """
-        For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
-        and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
-        The result is a Beta(actual['x']+1, actual['n']-actual['x']+1) posterior.
-        We then compare this to the real data, which has expected['x'] successes (positives) in expected['n'] trials (total observations).
-        To do so, we use a beta-binomial likelihood:
-        p(x|n, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
-        where
-          x=expected['x']
-          n=expected['n']
-          a=actual['x']+1
-          b=actual['n']-actual['x']+1
-        and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
-
-        We return the log of p(x|n, a, b)
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        Beta-binomial negative log-likelihood with per-timepoint kappa values.
+        
+        Maps simulated state to detection probability q(x̃) and evaluates observed data
+        using a beta-binomial distribution with per-timepoint concentration parameters.
+        
+        Steps:
+        1. Extract prevalence from simulation: q = (x_sim + α_prior) / (n_sim + α_prior + β_prior)  
+        2. Apply beta-binomial likelihood: s^obs ~ BetaBinomial(n^obs, α=κ*q, β=κ*(1-q))
+        3. Use per-timepoint κ values from expected DataFrame
+        
+        Args:
+            expected (pd.DataFrame): Real observed data (not used directly, uses self.expected)
+            actual (pd.DataFrame): Simulated data with 'n' and 'x' columns  
+            kwargs: Additional evaluation arguments
+            
+        Returns:
+            ndarray: Negative log likelihoods for each data point
         """
-
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
-            e_n, e_x = rep['n_e'], rep['x_e']
+        # Use self.expected which has kappa column, merge with simulated data
+        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        eps = 1e-10
+        for _, rep in combined.iterrows():
+            # Real observed data and its kappa
+            e_n, e_x, e_kappa = rep['n_e'], rep['x_e'], rep['kappa']
+            
+            # Simulated data (extract prevalence with Bayesian adjustment)
             a_n, a_x = rep['n_a'], rep['x_a']
-
-            logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
+            
+            # Compute prevalence q from simulation with prior
+            q = (a_x + self.alpha_prior) / (a_n + self.alpha_prior + self.beta_prior)
+            
+            # Numerical guard: ensure q ∈ (ε, 1-ε) for numerical stability
+            q = np.clip(q, eps, 1 - eps)
+            
+            # Beta-binomial parameters using per-timepoint concentration kappa
+            alpha = e_kappa * q
+            beta = e_kappa * (1 - q)
+            
+            # Numerical guard: ensure α, β > ε for valid beta-binomial
+            alpha = max(alpha, eps)
+            beta = max(beta, eps)
+            
+            # Evaluate likelihood of observed data given simulated prevalence
+            logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=alpha, b=beta)
             logLs.append(logL)
 
         nlls = -np.array(logLs)
         return nlls
 
     def plot_facet(self, data, color, **kwargs):
+        """Plot beta-binomial likelihood facet using per-timepoint kappa."""
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
+        expected_t = self.expected.loc[t]
+        e_n, e_x, e_kappa = expected_t['n'], expected_t['x'], expected_t['kappa']
         kk = np.arange(0, int(2*e_x))
+        
         for idx, row in data.iterrows():
-            alpha = row['x'] + 1
-            beta = row['n'] - row['x'] + 1
-            q = sps.betabinom(n=e_n, a=alpha, b=beta)
-            yy = q.pmf(kk)
+            # Compute prevalence from simulation with prior
+            a_n, a_x = row['n'], row['x']
+            q = (a_x + self.alpha_prior) / (a_n + self.alpha_prior + self.beta_prior)
+            
+            # Numerical guard: ensure q ∈ (ε, 1-ε) for numerical stability
+            eps = 1e-10
+            q = np.clip(q, eps, 1 - eps)
+            
+            # Beta-binomial parameters using per-timepoint concentration kappa
+            alpha = e_kappa * q
+            beta = e_kappa * (1 - q)
+            
+            # Numerical guard: ensure α, β > ε for valid beta-binomial
+            alpha = max(alpha, eps)
+            beta = max(beta, eps)
+            
+            # Create distribution and plot
+            bb_dist = sps.betabinom(n=e_n, a=alpha, b=beta)
+            yy = bb_dist.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pmf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            yy_obs = bb_dist.pmf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=10, color='k')
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """Plot bootstrap distribution using per-timepoint kappa."""
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
+        expected_t = self.expected.loc[t]
+        e_n, e_x, e_kappa = expected_t['n'], expected_t['x'], expected_t['kappa']
 
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
+        
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
             if self.combine_reps is None:
@@ -749,11 +935,26 @@ class BetaBinomial(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
-                alpha = row['x'] + 1
-                beta = row['n'] - row['x'] + 1
-                q = sps.betabinom(n=e_n, a=alpha, b=beta)
-                means[bi] = q.mean()
+            for _, row in actual.iterrows():
+                # Compute prevalence from simulation with prior
+                a_n, a_x = row['n'], row['x']  
+                q = (a_x + self.alpha_prior) / (a_n + self.alpha_prior + self.beta_prior)
+                
+                # Numerical guard: ensure q ∈ (ε, 1-ε) for numerical stability
+                eps = 1e-10
+                q = np.clip(q, eps, 1 - eps)
+                
+                # Beta-binomial parameters using per-timepoint concentration kappa
+                alpha = e_kappa * q
+                beta = e_kappa * (1 - q)
+                
+                # Numerical guard: ensure α, β > ε for valid beta-binomial
+                alpha = max(alpha, eps)
+                beta = max(beta, eps)
+                
+                # Get mean of distribution
+                bb_dist = sps.betabinom(n=e_n, a=alpha, b=beta)
+                means[bi] = bb_dist.mean()
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)

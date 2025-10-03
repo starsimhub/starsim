@@ -208,6 +208,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 35, 10],    # Number of individuals found to be infectious
+            'kappa': [5.0, 7.0, 6.0], # Concentration parameters per timepoint (varied)
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
