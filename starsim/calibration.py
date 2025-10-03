@@ -430,7 +430,14 @@ class Calibration(sc.prettyobj):
 
         for method in methods:
             try:
-                fig = getattr(vis, method)(self.study)
+                if method == 'plot_contour':
+                    # Remove 'rand_seed' if present
+                    params = list(self.calib_pars.keys())
+                    if 'rand_seed' in params:
+                        params.remove('rand_seed')
+                    fig = vis.plot_contour(self.study, params=params)
+                else:
+                    fig = getattr(vis, method)(self.study)
                 figs.append(fig)
             except Exception as E:
                 print(f'Could not run {method}: {str(E)}')
