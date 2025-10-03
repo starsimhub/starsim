@@ -228,6 +228,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n':  [100, 27, 54],   # Number of person-years
             'x':  [740, 325, 200], # Number of new infections
+            'k_size': [50.0, 30.0, 40.0], # Dispersion parameters per timepoint
             't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
             't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
         }).set_index(['t', 't1']),

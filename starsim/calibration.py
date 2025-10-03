@@ -1130,75 +1130,118 @@ class DirichletMultinomial(CalibComponent):
         return
 
 class GammaPoisson(CalibComponent):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, rate_smoothing=(1e-6, 1e-6), **kwargs):
+        """
+        Gamma-Poisson (NB2) likelihood with user-specified dispersion k_size.
 
-        assert self.expected['n'].dtype == int, 'The expected must have an integer column named "n" for the total number of person-years'
-        assert self.expected['x'].dtype == int, 'The expected must have an integer column named "x" for the total number of events'
-        return
+        Uses simulation data only to estimate the mean rate, with user-controlled
+        dispersion parameter k_size stored in the expected DataFrame.
+
+        Parameters:
+        -----------
+        rate_smoothing : tuple of (c0, e0), default (1e-6, 1e-6)
+            Small values added to simulated counts (c0) and exposure (e0) 
+            to prevent division by zero when computing rates.
+            rate = (sim_counts + c0) / (sim_exposure + e0)
+        """
+        from pandas.api.types import is_integer_dtype, is_numeric_dtype
+        super().__init__(*args, **kwargs)
+        
+        # Validate rate_smoothing parameter
+        if not isinstance(rate_smoothing, (tuple, list)) or len(rate_smoothing) != 2:
+            raise ValueError("rate_smoothing must be a tuple/list of length 2: (c0, e0)")
+        
+        # Validation: n numeric (not integer), x integer
+        if not is_numeric_dtype(self.expected['n']) or (self.expected['n'] <= 0).any():
+            raise ValueError('expected["n"] must be numeric exposure (>0)')
+        if not is_integer_dtype(self.expected['x']) or (self.expected['x'] < 0).any():
+            raise ValueError('expected["x"] must be integer counts (>=0)')
+        
+        # Require k_size column in expected
+        if 'k_size' not in self.expected.columns:
+            raise ValueError("expected DataFrame must contain 'k_size' column")
+        if not all(self.expected['k_size'] > 0):
+            raise ValueError("All k_size values must be positive")
+        
+        # Cap k_size values for numerical stability and copy expected
+        self.expected = self.expected.copy()
+        self.expected['k_size'] = np.minimum(self.expected['k_size'], 1e6)
+        
+        # Rate smoothing parameters (renamed for clarity)
+        self.c0, self.e0 = rate_smoothing
+        self._eps = 1e-10
 
     def compute_nll(self, expected, actual, **kwargs):
         """
-        The gamma-poisson likelihood is a Poisson likelihood with a
-        gamma-distributed rate parameter. Through a parameter transformation, we
-        end up calling a negative binomial, which is functionally equivalent.
-
-        For the gamma-poisson negative log-likelihood, we begin with a
-        gamma(1,1) and subsequently observe actual['x'] events (positives) in
-        actual['n'] trials (total person years). The result is a
-        gamma(alpha=1+actual['x'], beta=1+actual['n']) posterior.
-
-        To evaluate the gamma-poisson likelihood as a negative binomial, we use
-        the following: n = alpha, p = beta / (beta + 1)
-
-        However, the gamma is estimating a rate, and the observation is a count over a some period of time, say T person-years. To account for T other than 1, we scale beta by 1/T to arrive at beta' = beta / T. When passing into the negative binomial, alpha remains the same, but p = beta' / (beta' + 1) or equivalently p = beta / (beta + T).
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        Negative log-likelihood under NB2 with user-specified k_size.
+        
+        Uses simulation only for mean rate estimation: μ = n_obs × rate_sim
+        where rate_sim = (x_sim + c0) / (n_sim + e0).
+        
+        Dispersion controlled by per-timepoint k_size from expected DataFrame.
         """
-        logLs = []
-
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t', 't1'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
-            e_n, e_x = rep['n_e'], rep['x_e']
-            a_n, a_x = rep['n_a'], rep['x_a']
-            T = e_n
-            beta = 1 + a_n
-            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+T))
-            logL = np.nan_to_num(logL, nan=-np.inf)
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
+        # Merge expected/actual on ['t','t1'] 
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), 
+                           on=['t', 't1'], suffixes=('_e', '_a'), 
+                           how='inner', validate='one_to_one')
+        
+        # Extract arrays (vectorized)
+        c_obs = combined['x_e'].to_numpy(dtype=int)        # observed counts
+        e_obs = combined['n_e'].to_numpy(dtype=float)      # observed exposure  
+        c_sim = combined['x_a'].to_numpy(dtype=float)      # simulated counts
+        e_sim = combined['n_a'].to_numpy(dtype=float)      # simulated exposure
+        k_size = combined['k_size'].to_numpy(dtype=float)  # per-timepoint k_size
+        
+        # Calculate rate from simulation with smoothing (guard against divide by zero)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            rate_sim = (c_sim + self.c0) / np.maximum(e_sim + self.e0, self._eps)
+        rate_sim = np.maximum(rate_sim, 0.0)  # Ensure non-negative
+        
+        # Compute mean: μ = n_obs × rate_sim
+        mu = np.maximum(self._eps, e_obs * rate_sim)  # Clip mu >= eps
+        
+        # Always use NB2 likelihood with per-timepoint k_size
+        p = np.clip(k_size / (k_size + mu), self._eps, 1 - self._eps)
+        logL = sps.nbinom.logpmf(k=c_obs, n=k_size, p=p)
+        
+        return -np.nan_to_num(logL, nan=-np.inf)  # Return NLL per row
 
     def plot_facet(self, data, color, **kwargs):
+        """Plot likelihood distributions for each simulation replicate"""
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
-        e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
+        e_n, e_x, k_size = expected['n'].iloc[0], expected['x'].iloc[0], expected['k_size'].iloc[0]
+        
         kk = np.arange(0, int(2*e_x))
-        nll = 0
         for idx, row in data.iterrows():
-            a_n, a_x = row['n'], row['x']
-            beta = (a_n+1)
-            T = e_n
-            q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
-
+            c_sim, e_sim = row['x'], row['n']
+            
+            # Calculate rate and mean using new approach
+            rate_sim = (c_sim + self.c0) / max(e_sim + self.e0, self._eps)
+            mu = max(self._eps, e_n * rate_sim)
+            
+            # NB2 distribution
+            p = np.clip(k_size / (k_size + mu), self._eps, 1 - self._eps)
+            q = sps.nbinom(n=k_size, p=p)
+            
             yy = q.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pmf(e_x)
-            nll += -q.logpmf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            yy_obs = q.pmf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=10, color='k')
+        
         plt.axvline(e_x, color='k', linestyle='--')
-        return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """Plot bootstrap distribution of means"""
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
-        e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
+        e_n, e_x, k_size = expected['n'].iloc[0], expected['x'].iloc[0], expected['k_size'].iloc[0]
 
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
+        
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
 
@@ -1207,17 +1250,24 @@ class GammaPoisson(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).aggregate(func=self.combine_reps, **self.combine_kwargs)
 
+            # Calculate bootstrap mean using new approach  
+            total_rate = 0
+            n_reps = 0
             for idx, row in actual.iterrows():
-                a_n, a_x = row['n'], row['x']
-                beta = (a_n+1)
-                T = e_n
-                q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
-                means[bi] = q.mean()
+                c_sim, e_sim = row['x'], row['n']
+                rate_sim = (c_sim + self.c0) / max(e_sim + self.e0, self._eps)
+                mu = max(self._eps, e_n * rate_sim)
+                
+                p = np.clip(k_size / (k_size + mu), self._eps, 1 - self._eps)
+                q = sps.nbinom(n=k_size, p=p)
+                total_rate += q.mean()
+                n_reps += 1
+            
+            means[bi] = total_rate / max(n_reps, 1)
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
-        return
 
 
 class Normal(CalibComponent):
