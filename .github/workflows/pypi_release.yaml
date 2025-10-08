@@ -1,6 +1,10 @@
-name: Publish Starsim to PyPI (manual)
+name: Publish Starsim to PyPI
 
-on: workflow_dispatch
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
