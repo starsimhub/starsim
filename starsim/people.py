@@ -63,8 +63,8 @@ class People:
         extra_states = sc.promotetolist(extra_states)
         states = [
             ss.BoolState('alive', default=True),  # Time index for death
+            ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
             ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
-            ss.FloatArr('age', default=self.get_age_dist(age_data)), # NaN until conceived
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
