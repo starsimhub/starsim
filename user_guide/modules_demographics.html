@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.8.25">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -70,18 +70,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -292,7 +293,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -355,6 +357,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+      <a href="../index.html" class="sidebar-logo-link">
+      </a>
+      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -454,8 +460,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/intro_spokes.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Starsim “spokes”</span></a>
+  <a href="../user_guide/intro_models.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Starsim models</span></a>
   </div>
 </li>
       </ul>
@@ -555,6 +561,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Multiple runs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -683,7 +695,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
 <div id="050a676e" class="cell" data-execution_count="1">
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -696,7 +708,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Run both simulations and plot</span></span>
 <span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
@@ -711,7 +723,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="advanced-usage-pregnancy-and-births" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <code>Pregnancy</code> module instead of simple <code>Births</code>. The pregnancy module models:</p>
+<p>For more detailed modeling, you can use the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module instead of simple <a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>Births</code></a>. The pregnancy module models:</p>
 <ul>
 <li>Age-specific fertility rates</li>
 <li>Pregnancy duration and outcomes</li>
@@ -719,7 +731,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Mother-to-child transmission pathways</li>
 </ul>
 <div id="b3a58be0" class="cell" data-execution_count="2">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -781,22 +793,30 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
 <span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:394: RuntimeWarning: 
+Sim "Pregnancy" has different results keys:
+Extra: pregnancy_n_postpartum, pregnancy_n_fecund, pregnancy_cbr, pregnancy_pregnancies, pregnancy_n_pregnant, pregnancy_births
+Missing: births_cbr, births_cumulative, births_new
+Results may not plot correctly (i.e. axes titles may not be correct for all sims)
+  ss.warn(warnmsg)
+Exception ignored in: &lt;_io.BytesIO object at 0x7f5b88745da0&gt;
+Traceback (most recent call last):
+  File "&lt;string&gt;", line 1, in &lt;lambda&gt;
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f5b887458f0&gt;
+Traceback (most recent call last):
+  File "&lt;string&gt;", line 1, in &lt;lambda&gt;
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(896x672)</code></pre>
-</div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/run.py:394: RuntimeWarning: 
-Sim "Pregnancy" has different results keys:
-Extra: pregnancy_n_postpartum, pregnancy_pregnancies, pregnancy_n_fecund, pregnancy_cbr, pregnancy_n_pregnant, pregnancy_births
-Missing: births_cumulative, births_new, births_cbr
-Results may not plot correctly (i.e. axes titles may not be correct for all sims)
-  ss.warn(warnmsg)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="614" height="429" class="figure-img"></p>
+<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="602" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -823,7 +843,7 @@ Results may not plot correctly (i.e. axes titles may not be correct for all sims
 <ul>
 <li>Use <code>demographics=True</code> for default birth/death rates</li>
 <li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
-<li>Use <code>ss.Pregnancy()</code> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
+<li>Use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy()</code></a> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
 <li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
 </ul></li>
 </ul>
@@ -896,13 +916,14 @@ Results may not plot correctly (i.e. axes titles may not be correct for all sims
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
@@ -1263,7 +1284,7 @@ Results may not plot correctly (i.e. axes titles may not be correct for all sims
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.8.25">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -70,18 +70,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -292,7 +293,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -355,6 +357,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+      <a href="../index.html" class="sidebar-logo-link">
+      </a>
+      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -591,7 +597,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <section id="starsim.debugtools" class="level1">
 <h1>debugtools</h1>
-<p><code>debugtools</code></p>
+<p><a href="../api/debugtools.html#starsim.debugtools" title="0"><code>debugtools</code></a></p>
 <p>Utilities to help with debugging Starsim runs</p>
 <section id="classes" class="level2">
 <h2 class="anchored" data-anchor-id="classes">Classes</h2>
@@ -615,15 +621,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.debugtools.Debugger" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.Debugger">Debugger</h3>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger(</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>,</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>args,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    func,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    skip<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    run<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger(<span class="op">*</span>args, func, skip<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">True</span>, die<span class="op">=</span><span class="va">True</span>, run<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Step through one or more sims and pause or raise an exception when a condition is met</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -653,25 +651,25 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>skip</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>if provided, additional object names/types to skip (not check)</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>verbose</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to print progress during the run</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="odd">
 <td>die</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to raise an exception if the condition is met; alternatively ‘pause’ will pause execution, and False will just print</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="even">
 <td>run</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to run immediately</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -740,42 +738,41 @@ df.disp()</code></pre>
 </table>
 <section id="starsim.debugtools.Debugger.equal" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Debugger.equal">equal</h5>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal(<span class="op">*</span>sims)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal(<span class="op">*</span>sims)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Run all other tests</p>
 </section>
 <section id="starsim.debugtools.Debugger.equal_check" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Debugger.equal_check">equal_check</h5>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_check(e, which)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_check(e, which)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check if equality is false, and print a message or die</p>
 </section>
 <section id="starsim.debugtools.Debugger.equal_dists" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Debugger.equal_dists">equal_dists</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_dists(<span class="op">*</span>sims)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_dists(<span class="op">*</span>sims)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check if the dists are equal</p>
 </section>
 <section id="starsim.debugtools.Debugger.equal_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Debugger.equal_pars">equal_pars</h5>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_pars(<span class="op">*</span>sims, skip<span class="op">=</span><span class="st">'label'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_pars(<span class="op">*</span>sims, skip<span class="op">=</span><span class="st">'label'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check if SimPars are equal</p>
 </section>
 <section id="starsim.debugtools.Debugger.equal_people" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Debugger.equal_people">equal_people</h5>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_people(<span class="op">*</span>sims)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>debugtools.Debugger.equal_people(<span class="op">*</span>sims)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check if people are equal</p>
 </section>
 </section>
 </section>
 <section id="starsim.debugtools.Profile" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.Profile">Profile</h3>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile(</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>,</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    sim,</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    follow<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    do_run<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    plot<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    sim,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    follow<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    do_run<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    plot<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Class to profile the performance of a simulation</p>
 <p>Typically invoked via <code>sim.profile()</code>.</p>
 <section id="parameters-1" class="level4 doc-section doc-section-parameters">
@@ -792,7 +789,7 @@ df.disp()</code></pre>
 <tbody>
 <tr class="odd">
 <td>sim</td>
-<td><code>ss.Sim</code></td>
+<td><a href="../api/sim.html#starsim.sim.Sim" title="0"><code>ss.Sim</code></a></td>
 <td>the sim to profile</td>
 <td><em>required</em></td>
 </tr>
@@ -800,19 +797,19 @@ df.disp()</code></pre>
 <td>follow</td>
 <td><code>func</code> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>a list of functions/methods to follow in detail</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>do_run</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to immediately run the sim</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="even">
 <td>plot</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to plot time spent per module step</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="odd">
 <td>**kwargs</td>
@@ -861,22 +858,22 @@ prof.disp()</code></pre>
 </table>
 <section id="starsim.debugtools.Profile.disp" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Profile.disp">disp</h5>
-<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.disp(bytime<span class="op">=</span><span class="dv">1</span>, maxentries<span class="op">=</span><span class="dv">10</span>, skiprun<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.disp(bytime<span class="op">=</span><span class="dv">1</span>, maxentries<span class="op">=</span><span class="dv">10</span>, skiprun<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Same as sc.profile.disp(), but skip the run function by default</p>
 </section>
 <section id="starsim.debugtools.Profile.plot_cpu" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Profile.plot_cpu">plot_cpu</h5>
-<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.plot_cpu()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.plot_cpu()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shortcut to sim.loop.plot_cpu()</p>
 </section>
 <section id="starsim.debugtools.Profile.profile_init" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Profile.profile_init">profile_init</h5>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.profile_init()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.profile_init()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Handle sim init – both run it and profile it</p>
 </section>
 <section id="starsim.debugtools.Profile.run" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.debugtools.Profile.run">run</h5>
-<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>debugtools.Profile.run()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Profile the performance of the simulation</p>
 </section>
 </section>
@@ -924,12 +921,12 @@ prof.disp()</code></pre>
 </table>
 <section id="starsim.debugtools.check_requires" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.check_requires">check_requires</h3>
-<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>debugtools.check_requires(sim, requires, <span class="op">*</span>args)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>debugtools.check_requires(sim, requires, <span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check that the module’s requirements (of other modules) are met</p>
 </section>
 <section id="starsim.debugtools.check_version" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.check_version">check_version</h3>
-<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>debugtools.check_version(expected, die<span class="op">=</span><span class="va">False</span>, warn<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>debugtools.check_version(expected, die<span class="op">=</span><span class="va">False</span>, warn<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check the expected Starsim version with the one actually installed. The expected version string may optionally start with ‘&gt;=’ or ‘&lt;=’ (== is implied otherwise), but other operators (e.g.&nbsp;~=) are not supported. Note that ‘&gt;’ and ‘&lt;’ are interpreted to mean ‘&gt;=’ and ‘&lt;=’; ‘&gt;’ and ‘&lt;’ are not supported.</p>
 <section id="parameters-2" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
@@ -953,13 +950,13 @@ prof.disp()</code></pre>
 <td>die</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether or not to raise an exception if the check fails</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 <tr class="odd">
 <td>warn</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to raise a warning if the check fails</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -969,22 +966,22 @@ prof.disp()</code></pre>
 </section>
 <section id="starsim.debugtools.metadata" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.metadata">metadata</h3>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>debugtools.metadata(comments<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>debugtools.metadata(comments<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Store metadata; like <code>sc.metadata()</code>, but optimized for speed</p>
 </section>
 <section id="starsim.debugtools.mock_module" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.mock_module">mock_module</h3>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_module(dur<span class="op">=</span><span class="dv">10</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_module(dur<span class="op">=</span><span class="dv">10</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a minimal mock “Module” object</p>
 </section>
 <section id="starsim.debugtools.mock_people" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.mock_people">mock_people</h3>
-<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_people(n_agents<span class="op">=</span><span class="dv">100</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_people(n_agents<span class="op">=</span><span class="dv">100</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a minimal mock “People” object</p>
 </section>
 <section id="starsim.debugtools.mock_sim" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.mock_sim">mock_sim</h3>
-<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_sim(n_agents<span class="op">=</span><span class="dv">100</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_sim(n_agents<span class="op">=</span><span class="dv">100</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a minimal mock “Sim” object to initialize objects that require it</p>
 <section id="parameters-3" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h4>
@@ -1007,7 +1004,7 @@ prof.disp()</code></pre>
 <tr class="even">
 <td>**kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>ss.mock_time()</code></td>
+<td>passed to <a href="../api/debugtools.html#starsim.debugtools.mock_time" title="0"><code>ss.mock_time()</code></a></td>
 <td><code>{}</code></td>
 </tr>
 </tbody>
@@ -1016,7 +1013,7 @@ prof.disp()</code></pre>
 </section>
 <section id="starsim.debugtools.mock_time" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.debugtools.mock_time">mock_time</h3>
-<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_time(dt<span class="op">=</span><span class="fl">1.0</span>, dur<span class="op">=</span><span class="dv">10</span>, start<span class="op">=</span><span class="dv">2000</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>debugtools.mock_time(dt<span class="op">=</span><span class="fl">1.0</span>, dur<span class="op">=</span><span class="dv">10</span>, start<span class="op">=</span><span class="dv">2000</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a minimal mock “Time” object</p>
 
 
@@ -1089,13 +1086,14 @@ prof.disp()</code></pre>
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
@@ -1456,7 +1454,7 @@ prof.disp()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

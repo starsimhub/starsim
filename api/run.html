@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.8.25">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -70,18 +70,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -292,7 +293,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -355,6 +357,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+      <a href="../index.html" class="sidebar-logo-link">
+      </a>
+      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -586,7 +592,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <section id="starsim.run" class="level1">
 <h1>run</h1>
-<p><code>run</code></p>
+<p><a href="../api/run.html#starsim.run" title="0"><code>run</code></a></p>
 <p>Utilities for running in parallel</p>
 <section id="classes" class="level2">
 <h2 class="anchored" data-anchor-id="classes">Classes</h2>
@@ -606,17 +612,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.run.MultiSim" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.run.MultiSim">MultiSim</h3>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim(</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>,</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    sims<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    base_sim<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    label<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    n_runs<span class="op">=</span><span class="dv">4</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    initialize<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    inplace<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    debug<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    sims<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    base_sim<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    label<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    n_runs<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    initialize<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    inplace<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    debug<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Class for running multiple copies of a simulation.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -634,19 +639,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>sims</td>
 <td><a href="../api/sim.html#starsim.sim.Sim">Sim</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>a single sim or a list of sims</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>base_sim</td>
 <td><a href="../api/sim.html#starsim.sim.Sim">Sim</a></td>
 <td>the sim used for shared properties; if not supplied, the first of the sims provided</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>label</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
 <td>the name of the multisim</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>n_runs</td>
@@ -658,19 +663,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>initialize</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether or not to initialize the sims (otherwise, initialize them during run)</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 <tr class="even">
 <td>inplace</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to modify the sims in-place (default True); else return new sims</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="odd">
 <td>debug</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>if True, run in serial</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
@@ -725,7 +730,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td><a href="#starsim.run.MultiSim.run">run</a></td>
-<td>Run the sims; see <code>ss.multi_run()</code> for additional arguments</td>
+<td>Run the sims; see <a href="../api/run.html#starsim.run.multi_run" title="0"><code>ss.multi_run()</code></a> for additional arguments</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.run.MultiSim.show">show</a></td>
@@ -743,22 +748,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.run.MultiSim.brief" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.brief">brief</h5>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.brief()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.brief()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A single-line display of the MultiSim; same as print(multisim)</p>
 </section>
 <section id="starsim.run.MultiSim.disp" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.disp">disp</h5>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Display the full object</p>
 </section>
 <section id="starsim.run.MultiSim.init_sims" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.init_sims">init_sims</h5>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.init_sims(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.init_sims(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Initialize the sims</p>
 </section>
 <section id="starsim.run.MultiSim.mean" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.mean">mean</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.mean(bounds<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.mean(bounds<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias for reduce(use_mean=True). See reduce() for full description.</p>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
@@ -776,7 +781,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>bounds</td>
 <td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
 <td>multiplier on the standard deviation for the upper and lower bounds (default, 2)</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
@@ -790,7 +795,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.run.MultiSim.median" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.median">median</h5>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.median(quantiles<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.median(quantiles<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias for reduce(use_mean=False). See reduce() for full description.</p>
 <section id="parameters-2" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
@@ -808,7 +813,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>quantiles</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a> or <a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>upper and lower quantiles (default, 0.1 and 0.9)</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
@@ -822,7 +827,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.run.MultiSim.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.plot">plot</h5>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.plot(key<span class="op">=</span><span class="va">None</span>, fig<span class="op">=</span><span class="va">None</span>, legend<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.plot(key<span class="op">=</span><span class="va">None</span>, fig<span class="op">=</span><span class="va">None</span>, legend<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot all results in the MultiSim object.</p>
 <p>If the MultiSim object has been reduced (i.e.&nbsp;mean or median), then plot the best value and uncertainty bound. Otherwise, plot individual sims.</p>
 <section id="parameters-3" class="level6 doc-section doc-section-parameters">
@@ -841,18 +846,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>key</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
 <td>the results key to plot (by default, all)</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>fig</td>
 <td><code>Figure</code></td>
 <td>if provided, plot results into an existing figure</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>fig_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>sc.getrowscols()</code>, then <code>plt.subplots()</code> and <code>plt.figure()</code></td>
+<td>passed to <code>sc.getrowscols()</code>, then <code>plt.subplots()</code> and <a href="https://matplotlib.org/stable/api/figure_api.html#module-plt.figure" title="1"><code>plt.figure()</code></a></td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
@@ -882,19 +887,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tr class="even">
 <td>legend_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>plt.legend()</code></td>
+<td>passed to <a href="https://matplotlib.org/stable/api/legend_api.html#module-plt.legend" title="1"><code>plt.legend()</code></a></td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>legend</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to show the legend</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="even">
 <td>**kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>known arguments (e.g.&nbsp;figsize, font) split between the above dicts; see <code>ss.plot_args()</code> for all valid options</td>
+<td>known arguments (e.g.&nbsp;figsize, font) split between the above dicts; see <a href="../api/utils.html#starsim.utils.plot_args" title="0"><code>ss.plot_args()</code></a> for all valid options</td>
 <td><code>{}</code></td>
 </tr>
 </tbody>
@@ -903,7 +908,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.run.MultiSim.reduce" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.reduce">reduce</h5>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.<span class="bu">reduce</span>(quantiles<span class="op">=</span><span class="va">None</span>, use_mean<span class="op">=</span><span class="va">False</span>, bounds<span class="op">=</span><span class="va">None</span>, output<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.<span class="bu">reduce</span>(quantiles<span class="op">=</span><span class="va">None</span>, use_mean<span class="op">=</span><span class="va">False</span>, bounds<span class="op">=</span><span class="va">None</span>, output<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Combine multiple sims into a single sim statistically: by default, use the median value and the 10th and 90th percentiles for the lower and upper bounds. If use_mean=True, then use the mean and ±2 standard deviations for lower and upper bounds.</p>
 <section id="parameters-4" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
@@ -921,25 +926,25 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>quantiles</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>the quantiles to use, e.g.&nbsp;[0.1, 0.9] or {‘low : ’0.1, ’high’ : 0.9}</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>use_mean</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to use the mean instead of the median</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 <tr class="odd">
 <td>bounds</td>
 <td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
 <td>if use_mean=True, the multiplier on the standard deviation for upper and lower bounds (default 2)</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>output</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to return the “reduced” sim (in any case, modify the multisim in-place)</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -952,13 +957,13 @@ msim.summarize()</code></pre>
 </section>
 <section id="starsim.run.MultiSim.reset" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.reset">reset</h5>
-<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.reset()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.reset()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Undo reduce() by resetting the base sim, which, and results</p>
 </section>
 <section id="starsim.run.MultiSim.run" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.run">run</h5>
-<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.run(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>Run the sims; see <code>ss.multi_run()</code> for additional arguments</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.run(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Run the sims; see <a href="../api/run.html#starsim.run.multi_run" title="0"><code>ss.multi_run()</code></a> for additional arguments</p>
 <section id="parameters-5" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
 <table class="caption-top table">
@@ -1014,7 +1019,7 @@ msim.summarize()</code></pre>
 </section>
 <section id="starsim.run.MultiSim.show" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.show">show</h5>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.show(output<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.show(output<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Print a moderate length summary of the MultiSim. See also multisim.disp() (detailed output) and multisim.brief() (short output).</p>
 <section id="parameters-6" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h6>
@@ -1032,7 +1037,7 @@ msim.summarize()</code></pre>
 <td>output</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>if true, return a string instead of printing output</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1044,7 +1049,7 @@ msim.show() # Prints moderate length output</code></pre>
 </section>
 <section id="starsim.run.MultiSim.shrink" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.shrink">shrink</h5>
-<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.shrink(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.shrink(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Not to be confused with reduce(), this shrinks each sim in the msim; see sim.shrink() for more information.</p>
 <section id="parameters-7" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h6>
@@ -1070,7 +1075,7 @@ msim.show() # Prints moderate length output</code></pre>
 </section>
 <section id="starsim.run.MultiSim.summarize" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.run.MultiSim.summarize">summarize</h5>
-<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.summarize(method<span class="op">=</span><span class="st">'mean'</span>, quantiles<span class="op">=</span><span class="va">None</span>, how<span class="op">=</span><span class="st">'default'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>run.MultiSim.summarize(method<span class="op">=</span><span class="st">'mean'</span>, quantiles<span class="op">=</span><span class="va">None</span>, how<span class="op">=</span><span class="st">'default'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Summarize the simulations statistically.</p>
 <section id="parameters-8" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h6>
@@ -1094,7 +1099,7 @@ msim.show() # Prints moderate length output</code></pre>
 <td>quantiles</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>if method=‘median’, use these quantiles</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>how</td>
@@ -1125,7 +1130,7 @@ msim.show() # Prints moderate length output</code></pre>
 </tr>
 <tr class="even">
 <td><a href="#starsim.run.parallel">parallel</a></td>
-<td>A shortcut to <code>ss.MultiSim()</code>, allowing the quick running of multiple simulations</td>
+<td>A shortcut to <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim()</code></a>, allowing the quick running of multiple simulations</td>
 </tr>
 <tr class="odd">
 <td><a href="#starsim.run.single_run">single_run</a></td>
@@ -1135,7 +1140,7 @@ msim.show() # Prints moderate length output</code></pre>
 </table>
 <section id="starsim.run.multi_run" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.run.multi_run">multi_run</h3>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>run.multi_run(</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>run.multi_run(</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    sim,</span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    n_runs<span class="op">=</span><span class="dv">4</span>,</span>
 <span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    reseed<span class="op">=</span><span class="va">None</span>,</span>
@@ -1149,18 +1154,12 @@ msim.show() # Prints moderate length output</code></pre>
 <span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    n_cpus<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>For running multiple sims in parallel. If the first argument is a list of sims rather than a single sim, exactly these will be run and most other arguments will be ignored.</p>
 <p>Note: <code>n_cpus=1</code> is <em>not</em> the same thing as setting <code>parallel=False</code>. The former still uses the parallelization methods (just on a single core), while the latter simply runs in a loop.</p>
 <section id="parameters-9" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h4>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 6%">
-<col style="width: 7%">
-<col style="width: 76%">
-<col style="width: 8%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Name</th>
@@ -1172,81 +1171,81 @@ msim.show() # Prints moderate length output</code></pre>
 <tbody>
 <tr class="odd">
 <td>sim</td>
-<td>(Sim/list</td>
+<td><a href="../api/sim.html#starsim.sim.Sim">Sim</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>the sim instance to be run, or a list of sims.</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>n_runs</td>
-<td>(int)</td>
+<td>n_runs (int)</td>
+<td></td>
 <td>the number of parallel runs</td>
-<td><code>4</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>reseed</td>
-<td>(bool)</td>
+<td>reseed (bool)</td>
+<td></td>
 <td>whether or not to generate a fresh seed for each run (default: true for single, false for list of sims)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>iterpars</td>
-<td>(dict)</td>
+<td>iterpars (dict)</td>
+<td></td>
 <td>any other parameters to iterate over the runs; see sc.parallelize() for syntax</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>shrink</td>
-<td>(bool)</td>
+<td>shrink (bool)</td>
+<td></td>
 <td>whether to shrink the sim after the sim run</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>run_args</td>
-<td>(dict)</td>
+<td>run_args (dict)</td>
+<td></td>
 <td>arguments passed to sim.run()</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>sim_args</td>
-<td>(dict)</td>
+<td>sim_args (dict)</td>
+<td></td>
 <td>extra parameters to pass to the sim</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>par_args</td>
-<td>(dict)</td>
+<td>par_args (dict)</td>
+<td></td>
 <td>arguments passed to sc.parallelize()</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>do_run</td>
-<td>(bool)</td>
+<td>do_run (bool)</td>
+<td></td>
 <td>whether to actually run the sim (if not, just initialize it)</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>parallel</td>
-<td>(bool)</td>
+<td>parallel (bool)</td>
+<td></td>
 <td>whether to run in parallel using multiprocessing (else, just run in a loop)</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>n_cpus</td>
-<td>(int)</td>
+<td>n_cpus (int)</td>
+<td></td>
 <td>the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args, and use all cores)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>verbose</td>
-<td>(int)</td>
+<td>verbose (int)</td>
+<td></td>
 <td>detail to print</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>kwargs</td>
-<td>(dict)</td>
+<td>kwargs (dict)</td>
+<td></td>
 <td>also passed to the sim</td>
-<td><code>{}</code></td>
+<td><em>required</em></td>
 </tr>
 </tbody>
 </table>
@@ -1287,8 +1286,8 @@ sims = ss.multi_run(sim, n_runs=6)</code></pre>
 </section>
 <section id="starsim.run.parallel" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.run.parallel">parallel</h3>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>run.parallel(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p>A shortcut to <code>ss.MultiSim()</code>, allowing the quick running of multiple simulations at once.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>run.parallel(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>A shortcut to <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim()</code></a>, allowing the quick running of multiple simulations at once.</p>
 <section id="parameters-10" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h4>
 <table class="caption-top table">
@@ -1343,7 +1342,7 @@ msim = ss.parallel([s1, s2], shrink=False)</code></pre>
 </section>
 <section id="starsim.run.single_run" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.run.single_run">single_run</h3>
-<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>run.single_run(</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>run.single_run(</span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    sim,</span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    ind<span class="op">=</span><span class="dv">0</span>,</span>
 <span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    reseed<span class="op">=</span><span class="va">True</span>,</span>
@@ -1353,16 +1352,16 @@ msim = ss.parallel([s1, s2], shrink=False)</code></pre>
 <span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    do_run<span class="op">=</span><span class="va">True</span>,</span>
 <span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convenience function to perform a single simulation run. Mostly used for parallelization, but can also be used directly.</p>
 <section id="parameters-11" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-11">Parameters</h4>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 10%">
-<col style="width: 9%">
-<col style="width: 66%">
-<col style="width: 12%">
+<col style="width: 20%">
+<col style="width: 7%">
+<col style="width: 60%">
+<col style="width: 11%">
 </colgroup>
 <thead>
 <tr class="header">
@@ -1374,70 +1373,70 @@ msim = ss.parallel([s1, s2], shrink=False)</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td>sim</td>
-<td>(Sim)</td>
+<td>sim (Sim)</td>
+<td></td>
 <td>the sim instance to be run</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>ind</td>
-<td>(int)</td>
+<td>ind (int)</td>
+<td></td>
 <td>the index of this sim</td>
-<td><code>0</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>reseed</td>
-<td>(bool)</td>
+<td>reseed (bool)</td>
+<td></td>
 <td>whether to generate a fresh seed for each run</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>noise</td>
-<td>(float)</td>
+<td>noise (float)</td>
+<td></td>
 <td>the amount of noise to add to each run</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>noisepar</td>
-<td>(str)</td>
+<td>noisepar (str)</td>
+<td></td>
 <td>the name of the parameter to add noise to</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>shrink</td>
-<td>(bool)</td>
+<td>shrink (bool)</td>
+<td></td>
 <td>whether to shrink the sim after the sim run</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>run_args</td>
-<td>(dict)</td>
+<td>run_args (dict)</td>
+<td></td>
 <td>arguments passed to sim.run()</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>sim_args</td>
-<td>(dict)</td>
+<td>sim_args (dict)</td>
+<td></td>
 <td>extra parameters to pass to the sim, e.g.&nbsp;‘n_infected’</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>verbose</td>
-<td>(int)</td>
+<td>verbose (int)</td>
+<td></td>
 <td>detail to print</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>do_run</td>
-<td>(bool)</td>
+<td>do_run (bool)</td>
+<td></td>
 <td>whether to actually run the sim (if not, just initialize it)</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>kwargs</td>
-<td>(dict)</td>
+<td>kwargs (dict)</td>
+<td></td>
 <td>also passed to the sim</td>
-<td><code>{}</code></td>
+<td><em>required</em></td>
 </tr>
 </tbody>
 </table>
@@ -1536,13 +1535,14 @@ sim = ss.single_run(sim) # Run it, equivalent(ish) to sim.run()</code></pre>
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
@@ -1903,7 +1903,7 @@ sim = ss.single_run(sim) # Run it, equivalent(ish) to sim.run()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.8.25">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -70,18 +70,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -292,7 +293,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -355,6 +357,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+      <a href="../index.html" class="sidebar-logo-link">
+      </a>
+      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -587,7 +593,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <section id="starsim.calibration" class="level1">
 <h1>calibration</h1>
-<p><code>calibration</code></p>
+<p><a href="../api/calibration.html#starsim.calibration" title="0"><code>calibration</code></a></p>
 <p>Define the calibration class</p>
 <section id="classes" class="level2">
 <h2 class="anchored" data-anchor-id="classes">Classes</h2>
@@ -611,17 +617,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.calibration.CalibComponent" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.calibration.CalibComponent">CalibComponent</h3>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>calibration.CalibComponent(</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>,</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    name,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    expected,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    extract_fn,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    conform,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    weight<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    include_fn<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    n_boot<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    combine_reps<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>calibration.CalibComponent(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    name,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    expected,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    extract_fn,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    conform,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    weight<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    include_fn<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    n_boot<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    combine_reps<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A class to compare a single channel of observed data with output from a simulation. The Calibration class can use several CalibComponent objects to form an overall understanding of how will a given simulation reflects observed data.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -636,20 +641,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
-<td>name</td>
-<td>str)</td>
+<td>name (str)</td>
+<td></td>
 <td>the name of this component. Importantly, if extract_fn is None, the code will attempt to use the name, like “hiv.prevalence” to automatically extract data from the simulation.</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>expected</td>
-<td>df)</td>
+<td>expected (df)</td>
+<td></td>
 <td>pandas DataFrame containing calibration data. The index should be the time ‘t’ in either floating point years or datetime.</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>extract_fn</td>
-<td>callable)</td>
+<td>extract_fn (callable)</td>
+<td></td>
 <td>a function to extract predicted/actual data in the same format and with the same columns as <code>expected</code>.</td>
 <td><em>required</em></td>
 </tr>
@@ -669,19 +674,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>include_fn</td>
 <td><a href="https://docs.python.org/3/library/functions.html#callable">callable</a></td>
 <td>A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>n_boot</td>
 <td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
 <td>Experimental! Bootstrap sum sim results over seeds before comparing against expected results. Not appropriate for all component types.</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>combine_reps</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
 <td>How to combine multiple repetitions of the same pars. Options are None, ‘mean’, ‘sum’, or other such operation. Default is None, which evaluates replicates independently instead of first combining before likelihood evaluation.</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>kwargs</td>
@@ -710,47 +715,40 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.calibration.CalibComponent.eval" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.CalibComponent.eval">eval</h5>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>calibration.CalibComponent.<span class="bu">eval</span>(sim, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>calibration.CalibComponent.<span class="bu">eval</span>(sim, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Compute and return the negative log likelihood</p>
 </section>
 </section>
 </section>
 <section id="starsim.calibration.Calibration" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.calibration.Calibration">Calibration</h3>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration(</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>,</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    sim,</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    calib_pars,</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    n_workers<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    total_trials<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    reseed<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    build_fn<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    build_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    eval_fn<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    eval_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    components<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    prune_fn<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    label<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    study_name<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    keep_db<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    continue_db<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    storage<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    sampler<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    debug<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    sim,</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    calib_pars,</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    n_workers<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    total_trials<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    reseed<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    build_fn<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    build_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    eval_fn<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    eval_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    components<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    prune_fn<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    label<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    study_name<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    keep_db<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    continue_db<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    storage<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    sampler<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    debug<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter optimization library (optuna.org).</p>
 <section id="parameters-1" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h4>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 3%">
-<col style="width: 8%">
-<col style="width: 84%">
-<col style="width: 3%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Name</th>
@@ -761,130 +759,130 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
-<td>sim</td>
-<td>(Sim)</td>
+<td>sim (Sim)</td>
+<td></td>
 <td>the base simulation to calibrate</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>calib_pars</td>
-<td>(dict)</td>
+<td>calib_pars (dict)</td>
+<td></td>
 <td>a dictionary of the parameters to calibrate of the format <code>dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...)</code>, where kwargs can include “suggest_type” to choose the suggest method of the trial (e.g.&nbsp;suggest_float) and args passed to the trial suggest function like “log” and “step”</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>n_workers</td>
-<td>(int)</td>
+<td>n_workers (int)</td>
+<td></td>
 <td>the number of parallel workers (if None, will use all available CPUs)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>total_trials</td>
-<td>int)</td>
+<td>total_trials (int)</td>
+<td></td>
 <td>the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>reseed</td>
-<td>(bool)</td>
+<td>reseed (bool)</td>
+<td></td>
 <td>whether to generate new random seeds for each trial</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>build_fn</td>
-<td>(callable)</td>
+<td>build_fn (callable)</td>
+<td></td>
 <td>function that takes a sim object and calib_pars dictionary and returns a modified sim</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>build_kw</td>
-<td>(dict)</td>
+<td>build_kw (dict)</td>
+<td></td>
 <td>a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is <code>self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)</code>, where sim is a copy of the base simulation to be modified with calib_pars</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>components</td>
-<td>(list)</td>
+<td>components (list)</td>
+<td></td>
 <td>CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>prune_fn</td>
-<td>(callable)</td>
+<td>prune_fn (callable)</td>
+<td></td>
 <td>Function that takes a dictionary of parameters and returns True if the trial should be pruned</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>eval_fn</td>
-<td>(callable)</td>
+<td>eval_fn (callable)</td>
+<td></td>
 <td>Function mapping a sim to a float (e.g.&nbsp;negative log likelihood) to be maximized. If None, the default will use CalibComponents.</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>eval_kw</td>
-<td>(dict)</td>
+<td>eval_kw (dict)</td>
+<td></td>
 <td>Additional keyword arguments to pass to the eval_fn</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>label</td>
-<td>(str)</td>
+<td>label (str)</td>
+<td></td>
 <td>a label for this calibration object</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>study_name</td>
-<td>(str)</td>
+<td>study_name (str)</td>
+<td></td>
 <td>name of the optuna study</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>db_name</td>
-<td>(str)</td>
+<td>db_name (str)</td>
+<td></td>
 <td>the name of the database file (default: ‘starsim_calibration.db’)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>continue_db</td>
-<td>(bool)</td>
+<td>continue_db (bool)</td>
+<td></td>
 <td>whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>keep_db</td>
-<td>(bool)</td>
+<td>keep_db (bool)</td>
+<td></td>
 <td>whether to keep the database after calibration (default: false, the database will be deleted)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>storage</td>
-<td>(str)</td>
+<td>storage (str)</td>
+<td></td>
 <td>the location of the database (default: sqlite)</td>
-<td><code>None</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>sampler</td>
 <td><code>BaseSampler</code></td>
 <td>the sampler used by optuna, like optuna.samplers.TPESampler</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
-<td>die</td>
-<td>(bool)</td>
+<td>die (bool)</td>
+<td></td>
 <td>whether to stop if an exception is encountered (default: false)</td>
-<td><code>False</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>debug</td>
-<td>(bool)</td>
+<td>debug (bool)</td>
+<td></td>
 <td>if True, do not run in parallel</td>
-<td><code>False</code></td>
+<td><em>required</em></td>
 </tr>
 <tr class="odd">
-<td>verbose</td>
-<td>(bool)</td>
+<td>verbose (bool)</td>
+<td></td>
 <td>whether to print details of the calibration</td>
-<td><code>True</code></td>
+<td><em>required</em></td>
 </tr>
 </tbody>
 </table>
@@ -959,7 +957,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.calibration.Calibration.calibrate" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.calibrate">calibrate</h5>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.calibrate(calib_pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.calibrate(calib_pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Perform calibration.</p>
 <section id="parameters-2" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
@@ -977,7 +975,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>calib_pars</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>if supplied, overwrite stored calib_pars</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
@@ -991,27 +989,27 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.calibration.Calibration.check_fit" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.check_fit">check_fit</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.check_fit(do_plot<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.check_fit(do_plot<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Run before and after simulations to validate the fit</p>
 </section>
 <section id="starsim.calibration.Calibration.make_study" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.make_study">make_study</h5>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.make_study()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.make_study()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Make a study, deleting if it already exists and user does not want to continue_db</p>
 </section>
 <section id="starsim.calibration.Calibration.parse_study" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.parse_study">parse_study</h5>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.parse_study(study)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.parse_study(study)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Parse the study into a data frame – called automatically</p>
 </section>
 <section id="starsim.calibration.Calibration.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.plot">plot</h5>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.plot(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.plot(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>” Plot the calibration results. For a component-based likelihood, it only makes sense to directly call plot after calling eval_fn.</p>
 </section>
 <section id="starsim.calibration.Calibration.plot_final" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.plot_final">plot_final</h5>
-<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.plot_final(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.plot_final(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot sims after calibration</p>
 <section id="parameters-3" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
@@ -1037,42 +1035,42 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.calibration.Calibration.plot_optuna" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.plot_optuna">plot_optuna</h5>
-<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.plot_optuna(methods<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.plot_optuna(methods<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot Optuna’s visualizations</p>
 </section>
 <section id="starsim.calibration.Calibration.remove_db" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.remove_db">remove_db</h5>
-<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.remove_db()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.remove_db()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Remove the database file if keep_db is false and the path exists</p>
 </section>
 <section id="starsim.calibration.Calibration.run_sim" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.run_sim">run_sim</h5>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.run_sim(calib_pars<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.run_sim(calib_pars<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create and run a simulation</p>
 </section>
 <section id="starsim.calibration.Calibration.run_trial" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.run_trial">run_trial</h5>
-<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.run_trial(trial)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.run_trial(trial)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Define the objective for Optuna</p>
 </section>
 <section id="starsim.calibration.Calibration.run_workers" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.run_workers">run_workers</h5>
-<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.run_workers()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.run_workers()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Run multiple workers in parallel</p>
 </section>
 <section id="starsim.calibration.Calibration.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.to_df">to_df</h5>
-<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.to_df(top_k<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.to_df(top_k<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return the top K results as a dataframe, sorted by value</p>
 </section>
 <section id="starsim.calibration.Calibration.to_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.to_json">to_json</h5>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.to_json(filename<span class="op">=</span><span class="va">None</span>, indent<span class="op">=</span><span class="dv">2</span>, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.to_json(filename<span class="op">=</span><span class="va">None</span>, indent<span class="op">=</span><span class="dv">2</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert the results to JSON</p>
 </section>
 <section id="starsim.calibration.Calibration.worker" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.calibration.Calibration.worker">worker</h5>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.worker()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>calibration.Calibration.worker()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Run a single worker</p>
 </section>
 </section>
@@ -1104,7 +1102,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.calibration.linear_accum" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.calibration.linear_accum">linear_accum</h3>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>calibration.linear_accum(expected, actual)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>calibration.linear_accum(expected, actual)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Interpolate in the cumulative sum, then difference. Use for incident data (flows) like incidence or new_deaths. The accumulation is done between ‘t’ and ‘t1’, both of which must be present in the index of expected and actual dataframes.</p>
 <section id="parameters-4" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h4>
@@ -1136,7 +1134,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.calibration.linear_interp" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.calibration.linear_interp">linear_interp</h3>
-<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>calibration.linear_interp(expected, actual)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>calibration.linear_interp(expected, actual)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Simply interpolate, use for prevalent (stock) data like prevalence</p>
 <section id="parameters-5" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h4>
@@ -1168,7 +1166,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.calibration.step_containing" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.calibration.step_containing">step_containing</h3>
-<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>calibration.step_containing(expected, actual)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>calibration.step_containing(expected, actual)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Find the step containing the the timepoint. Use for prevalent data like prevalence where you want to match a specific time point rather than interpolate.</p>
 <section id="parameters-6" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h4>
@@ -1268,13 +1266,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
@@ -1635,7 +1634,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.8.25">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -69,18 +69,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -291,7 +292,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -354,6 +356,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+      <a href="../index.html" class="sidebar-logo-link">
+      </a>
+      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -592,7 +598,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <section id="starsim.utils" class="level1">
 <h1>utils</h1>
-<p><code>utils</code></p>
+<p><a href="../api/utils.html#starsim.utils" title="0"><code>utils</code></a></p>
 <p>Numerical utilities and other helper functions</p>
 <section id="classes" class="level2">
 <h2 class="anchored" data-anchor-id="classes">Classes</h2>
@@ -612,15 +618,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.utils.ndict" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.ndict">ndict</h3>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>utils.ndict(</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>,</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>args,</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    nameattr<span class="op">=</span><span class="st">'name'</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">type</span><span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    strict<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    overwrite<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>utils.ndict(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>args,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    nameattr<span class="op">=</span><span class="st">'name'</span>,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">type</span><span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    strict<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    overwrite<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A dictionary-like class that provides additional functionalities for handling named items.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -644,19 +649,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>type</td>
 <td><a href="https://docs.python.org/3/library/functions.html#type">type</a></td>
 <td>The expected type of items.</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>strict</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>If True, only items with the specified attribute will be accepted.</td>
-<td><code>True</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="even">
 <td>overwrite</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to allow adding a key when one has already been added</td>
-<td><code>False</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -691,17 +696,17 @@ networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})</code></pre>
 </table>
 <section id="starsim.utils.ndict.copy" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.utils.ndict.copy">copy</h5>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>utils.ndict.copy()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>utils.ndict.copy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shallow copy</p>
 </section>
 <section id="starsim.utils.ndict.extend" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.utils.ndict.extend">extend</h5>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>utils.ndict.extend(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>utils.ndict.extend(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Add new items to the ndict, by item, list, or dict</p>
 </section>
 <section id="starsim.utils.ndict.merge" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.utils.ndict.merge">merge</h5>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>utils.ndict.merge(other)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>utils.ndict.merge(other)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Merge another dictionary with this one</p>
 </section>
 </section>
@@ -761,13 +766,13 @@ networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})</code></pre>
 </table>
 <section id="starsim.utils.find_contacts" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.find_contacts">find_contacts</h3>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>utils.find_contacts(p1, p2, inds)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>utils.find_contacts(p1, p2, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Variation on Network.find_contacts() that avoids sorting.</p>
 <p>A set is returned here rather than a sorted array so that custom tracing interventions can efficiently add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be an int64 array since this is what’s returned by true() etc. functions by default.</p>
 </section>
 <section id="starsim.utils.load" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.load">load</h3>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>utils.load(filename, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>utils.load(filename, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias to Sciris <code>sc.loadany()</code></p>
 <p>Since Starsim uses Sciris for saving objects, they can be loaded back using this function. This can also be used to load other objects of known type (e.g.&nbsp;JSON), although this usage is discouraged.</p>
 <section id="parameters-1" class="level4 doc-section doc-section-parameters">
@@ -819,7 +824,7 @@ networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})</code></pre>
 </section>
 <section id="starsim.utils.plot_args" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.plot_args">plot_args</h3>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>utils.plot_args(kwargs<span class="op">=</span><span class="va">None</span>, _debug<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>defaults)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>utils.plot_args(kwargs<span class="op">=</span><span class="va">None</span>, _debug<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>defaults)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Process known plotting kwargs.</p>
 <p>This function handles arguments to <code>sim.plot()</code> and other plotting functions by splitting known kwargs among all the different aspects of the plot.</p>
 <p>Note: the kwargs supplied to the parent function should be supplied as the first argument of this function; keyword arguments to this function are treated as default values that will be overwritten by user-supplied values in <code>kwargs</code>. The argument “_debug” is used internally to print debugging output, but is not typically set by the user.</p>
@@ -838,7 +843,7 @@ networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})</code></pre>
 <tr class="odd">
 <td>fig_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>sc.getrowscols()</code>, then <code>plt.subplots()</code> and <code>plt.figure()</code></td>
+<td>passed to <code>sc.getrowscols()</code>, then <code>plt.subplots()</code> and <a href="https://matplotlib.org/stable/api/figure_api.html#module-plt.figure" title="1"><code>plt.figure()</code></a></td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
@@ -863,7 +868,7 @@ networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})</code></pre>
 <td>**kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>parsed among the above dictionaries</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -904,12 +909,12 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.return_fig" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.return_fig">return_fig</h3>
-<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>utils.return_fig(fig, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>utils.return_fig(fig, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Do postprocessing on the figure: by default, don’t return if in Jupyter, but show instead; not for the user</p>
 </section>
 <section id="starsim.utils.save" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.save">save</h3>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>utils.save(filename, obj, <span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>utils.save(filename, obj, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias to Sciris <code>sc.save()</code></p>
 <p>While some Starsim objects have their own save methods, this function can be used to save any arbitrary object. It can then be loaded with ss.load().</p>
 <section id="parameters-3" class="level4 doc-section doc-section-parameters">
@@ -948,21 +953,21 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.show" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.show">show</h3>
-<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>utils.show(<span class="op">**</span>kwargs)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>utils.show(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shortcut for matplotlib.pyplot.show()</p>
 </section>
 <section id="starsim.utils.standardize_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_data">standardize_data</h3>
-<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_data(</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_data(</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    min_year<span class="op">=</span><span class="dv">1800</span>,</span>
 <span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    out_of_range<span class="op">=</span><span class="dv">0</span>,</span>
 <span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    default_age<span class="op">=</span><span class="dv">0</span>,</span>
 <span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    default_year<span class="op">=</span><span class="dv">2024</span>,</span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Standardize formats of input data</p>
-<p>Input data can arrive in many different forms. This function accepts a variety of data structures, and converts them into a Pandas Series containing one variable, based on specified metadata, or an <code>ss.Dist</code> if the data is already an <code>ss.Dist</code> object.</p>
+<p>Input data can arrive in many different forms. This function accepts a variety of data structures, and converts them into a Pandas Series containing one variable, based on specified metadata, or an <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> if the data is already an <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> object.</p>
 <p>The metadata is a dictionary that defines columns of the dataframe or keys of the dictionary to use as indices in the output Series. It should contain:</p>
 <ul>
 <li><code>metadata['data_cols']['value']</code> specifying the name of the column/key to draw values from</li>
@@ -987,13 +992,13 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 <td>data</td>
 <td>(<a href="https://pandas.pydata.org/pandas-docs/stable/index.html#module-pandas">pandas</a>.<a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame">DataFrame</a>, <a href="https://pandas.pydata.org/pandas-docs/stable/index.html#module-pandas">pandas</a>.<a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html#pandas.Series">Series</a>, <a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>, <a href="https://docs.python.org/3/library/functions.html#int">int</a>, <a href="https://docs.python.org/3/library/functions.html#float">float</a>)</td>
 <td>An associative array or a number, with the input data to be standardized.</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>metadata</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>Dictionary specifiying index columns, the value column, and optionally mapping for sex labels</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>min_year</td>
@@ -1018,12 +1023,12 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.standardize_netkey" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_netkey">standardize_netkey</h3>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</p>
 </section>
 <section id="starsim.utils.validate_sim_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.validate_sim_data">validate_sim_data</h3>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>utils.validate_sim_data(data<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>utils.validate_sim_data(data<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate data intended to be compared to the sim outputs, e.g.&nbsp;for calibration</p>
 <section id="parameters-5" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h4>
@@ -1041,13 +1046,13 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 <td>data</td>
 <td><code>df</code> / <a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>a dataframe (or dict) of data, with a column “time” plus data columns of the form “module.result”, e.g.&nbsp;“hiv.new_infections”</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>die</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)</td>
-<td><code>None</code></td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1055,7 +1060,7 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.warn" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.warn">warn</h3>
-<div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>utils.warn(msg, category<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>utils.warn(msg, category<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to handle warnings – shortcut to warnings.warn</p>
 
 
@@ -1128,13 +1133,14 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
         }
-        return codeEl.innerText;
+      }
+      return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
@@ -1492,7 +1498,7 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.1 (2025-08-04).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
