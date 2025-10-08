@@ -1,6 +1,10 @@
-name: Publish Starsim docs (manual)
+name: Publish Starsim docs
 
-on: workflow_dispatch
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   publish:
