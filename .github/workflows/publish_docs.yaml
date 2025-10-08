@@ -10,11 +10,11 @@ jobs:
   publish:
     name: Install Starsim and publish docs
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      
     steps:
     - uses: actions/checkout@v4
-      with:
-        persist-credentials: false
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -33,4 +33,8 @@ jobs:
 
     - name: Custom Quarto publish
       working-directory: ./docs
-      run: ./publish
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "github-actions@users.noreply.github.com"
+        ./publish
+
