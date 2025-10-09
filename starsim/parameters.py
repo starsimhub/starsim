@@ -6,11 +6,12 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import datetime as dt
 
 __all__ = ['Pars', 'SimPars', 'make_pars']
 
 # Define classes to not descend into further -- based on sciris.sc_nested
-atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None))
+atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
 
 class Pars(sc.objdict):
