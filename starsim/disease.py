@@ -313,7 +313,6 @@ class Infection(Disease):
                 p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
-                        beta_per_dt = net.net_beta(disease_beta=beta, disease=self) # Compute beta for this network and timestep
                         beta_per_dt = route.net_beta(disease_beta=beta, disease=self) # Compute beta for this network and timestep
                         randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
                         args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
