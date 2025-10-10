@@ -57,6 +57,8 @@ dev = [
     "jupyter-cache"
 ]
 
+optuna = ["scikit-learn"]
+
 [project.urls]
 "Website" = "https://starsim.org"
 "Source" = "https://github.com/starsimhub/starsim/"

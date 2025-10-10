@@ -208,6 +208,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 35, 10],    # Number of individuals found to be infectious
+            'kappa': [5.0, 7.0, 6.0], # Concentration parameters per timepoint (varied)
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
@@ -227,6 +228,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n':  [100, 27, 54],   # Number of person-years
             'x':  [740, 325, 200], # Number of new infections
+            'k_size': [50.0, 30.0, 40.0], # Dispersion parameters per timepoint
             't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
             't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
         }).set_index(['t', 't1']),
@@ -298,6 +300,7 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
             'x_4': [40, 60], # Friday
             'x_5': [40, 60], # Saturday
             'x_6': [40, 60], # Sunday
+            'kappa': [10.0, 15.0], # Concentration parameters per survey
 
             # incident conform will compute different in comulative counts between the
             # end of step t1 and the end of step t
