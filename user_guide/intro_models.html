@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Demographics – Starsim</title>
+<title>Starsim models – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -20,41 +20,6 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
-/* CSS for syntax highlighting */
-html { -webkit-text-size-adjust: 100%; }
-pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
-pre > code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode > span { color: inherit; text-decoration: inherit; }
-div.sourceCode { margin: 1em 0; }
-pre.sourceCode { margin: 0; }
-@media screen {
-div.sourceCode { overflow: auto; }
-}
-@media print {
-pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
-}
-pre.numberSource code
-  { counter-reset: source-line 0; }
-pre.numberSource code > span
-  { position: relative; left: -4em; counter-increment: source-line; }
-pre.numberSource code > span > a:first-child::before
-  { content: counter(source-line);
-    position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; display: inline-block;
-    -webkit-touch-callout: none; -webkit-user-select: none;
-    -khtml-user-select: none; -moz-user-select: none;
-    -ms-user-select: none; user-select: none;
-    padding: 0 4px; width: 4em;
-  }
-pre.numberSource { margin-left: 3em;  padding-left: 4px; }
-div.sourceCode
-  {   }
-@media screen {
-pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
-}
 </style>
 
 
@@ -65,8 +30,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../user_guide/modules_interventions.html" rel="next">
-<link href="../user_guide/modules_networks.html" rel="prev">
+<link href="../user_guide/basics_model.html" rel="next">
+<link href="../user_guide/intro_starsim.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -347,7 +312,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/intro_starsim.html">Introduction</a></li><li class="breadcrumb-item"><a href="../user_guide/intro_models.html">Starsim models</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -460,7 +425,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/intro_models.html" class="sidebar-item-text sidebar-link">
+  <a href="../user_guide/intro_models.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Starsim models</span></a>
   </div>
 </li>
@@ -524,7 +489,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link active">
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Demographics</span></a>
   </div>
 </li>
@@ -655,24 +620,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
-    <h2 id="toc-title">On this page</h2>
-   
-  <ul>
-  <li><a href="#simple-usage" id="toc-simple-usage" class="nav-link active" data-scroll-target="#simple-usage">Simple usage</a></li>
-  <li><a href="#advanced-usage-pregnancy-and-births" id="toc-advanced-usage-pregnancy-and-births" class="nav-link" data-scroll-target="#advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</a></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
-  </ul>
-<div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+        
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/intro_starsim.html">Introduction</a></li><li class="breadcrumb-item"><a href="../user_guide/intro_models.html">Starsim models</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Demographics</h1>
+<h1 class="title">Starsim models</h1>
 </div>
 
 
@@ -689,164 +646,69 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<p>Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.</p>
-<p>Demographics modules are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics.</p>
-<section id="simple-usage" class="level2">
-<h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
-<p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
-<div id="050a676e" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulation parameters</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'No demographics'</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'With demographics'</span>, demographics<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Run both simulations and plot</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Figure(768x576)</code></pre>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
-</figure>
-</div>
-</div>
-</div>
-</section>
-<section id="advanced-usage-pregnancy-and-births" class="level2">
-<h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module instead of simple <a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>Births</code></a>. The pregnancy module models:</p>
-<ul>
-<li>Age-specific fertility rates</li>
-<li>Pregnancy duration and outcomes</li>
-<li>Maternal and neonatal mortality</li>
-<li>Mother-to-child transmission pathways</li>
-</ul>
-<div id="b3a58be0" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Create age-specific birth and fertility data</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>birth_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Year'</span>: [<span class="dv">2000</span>, <span class="dv">2005</span>, <span class="dv">2010</span>, <span class="dv">2015</span>, <span class="dv">2020</span>, <span class="dv">2025</span>, <span class="dv">2030</span>],</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">'CBR'</span>: [<span class="dv">40</span>, <span class="dv">35</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">32</span>, <span class="dv">30</span>, <span class="dv">28</span>]  <span class="co"># Age-specific birth rates</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>fertility_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Time'</span>: [<span class="dv">2020</span>]<span class="op">*</span><span class="dv">7</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'AgeGrp'</span>: [<span class="dv">15</span>, <span class="dv">20</span>, <span class="dv">25</span>, <span class="dv">30</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">45</span>],</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'ASFR'</span>: [<span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.20</span>, <span class="fl">0.15</span>, <span class="fl">0.10</span>, <span class="fl">0.05</span>, <span class="fl">0.01</span>]  <span class="co"># Age-specific fertility rates</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a simple births module</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(birth_rate<span class="op">=</span>birth_data)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a pregnancy module with custom parameters</span></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    fertility_rate <span class="op">=</span> fertility_data,</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    rel_fertility <span class="op">=</span> <span class="dv">1000</span>, <span class="co"># Whether data are per person or per 1000</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    dur_pregnancy <span class="op">=</span> ss.years(<span class="fl">0.75</span>),           <span class="co"># 9 months pregnancy</span></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    dur_postpartum <span class="op">=</span> ss.years(<span class="fl">0.5</span>),           <span class="co"># 6 months postpartum</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    p_maternal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.001</span>),   <span class="co"># 0.1% maternal mortality</span></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    p_neonatal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.02</span>),    <span class="co"># 2% neonatal mortality</span></span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    min_age <span class="op">=</span> <span class="dv">15</span>,</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    max_age <span class="op">=</span> <span class="dv">50</span>,</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Create deaths module</span></span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>deaths <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">8</span>))  <span class="co"># 8 deaths per 1000 per year</span></span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span> <span class="co"># Number of agents</span></span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span> <span class="co"># </span></span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, n_agents<span class="op">=</span>n_agents, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Births'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[births, deaths])</span>
-<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Pregnancy'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[pregnancy, deaths])</span>
-<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot histograms of the age distributions - simulated vs data at initialization</span></span>
-<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>sim1.init() <span class="co"># This creates the population</span></span>
-<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>bins <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">101</span>, <span class="dv">1</span>)</span>
-<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>init_scale <span class="op">=</span> nga_pop_1995 <span class="op">/</span> n_agents</span>
-<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>counts, bins <span class="op">=</span> np.histogram(sim1.people.age, bins)</span>
-<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>plt.bar(bins, age_data.value.values <span class="op">*</span> <span class="dv">1000</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'r'</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
-<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>plt.bar(bins[:<span class="op">-</span><span class="dv">1</span>], counts <span class="op">*</span> init_scale, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Simulated'</span>)</span>
-<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>plt.legend(loc<span class="op">=</span><span class="st">'upper right'</span>)</span>
-<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Population'</span>)</span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Age'</span>)</span>
-<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>sc.SIticks()</span>
-<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
-<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:394: RuntimeWarning: 
-Sim "Pregnancy" has different results keys:
-Extra: pregnancy_pregnancies, pregnancy_cbr, pregnancy_n_postpartum, pregnancy_n_pregnant, pregnancy_births, pregnancy_n_fecund
-Missing: births_cumulative, births_cbr, births_new
-Results may not plot correctly (i.e. axes titles may not be correct for all sims)
-  ss.warn(warnmsg)
-Exception ignored in: &lt;_io.BytesIO object at 0x7f5d74986f20&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/artist.py", line 1197, in _update_props
-    with cbook._setattr_cm(self, eventson=False):
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Figure(896x672)</code></pre>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="602" height="429" class="figure-img"></p>
-</figure>
-</div>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-4.png" width="918" height="662" class="figure-img"></p>
-</figure>
-</div>
-</div>
-</div>
-</section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<ul>
-<li><strong>Demographics modules</strong> enable realistic population dynamics in Starsim:
-<ul>
-<li><strong>Births</strong>: Simple constant or time-varying birth rates</li>
-<li><strong>Deaths</strong>: Background mortality separate from disease deaths<br>
-</li>
-<li><strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</li>
-</ul></li>
-<li><strong>Key considerations:</strong>
-<ul>
-<li>Use <code>demographics=True</code> for default birth/death rates</li>
-<li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
-<li>Use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy()</code></a> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
-<li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
-</ul></li>
-</ul>
+<p>The Starsim framework serves as a centralized “hub” for storing anything that is typically required to model the spread of diseases among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.</p>
+<p>Specific models that have been created using the Starsim framework are kept in their own separate repositories. As of May 2025, Starsim’s models include the following models:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="https://hpvsim.org">HPVsim</a></td>
+<td>Stable</td>
+<td>Human papillomavirus (HPV) and cervical cancer</td>
+</tr>
+<tr class="even">
+<td><a href="https://fpsim.org">FPsim</a></td>
+<td>Stable</td>
+<td>Family planning and reproductive health</td>
+</tr>
+<tr class="odd">
+<td><a href="https://github.com/starsimhub/stisim">STIsim</a></td>
+<td>Beta</td>
+<td>Sexually transmitted infections, including HIV, bacterial vaginosis, chlamydia, gonorrhea, syphilis, and trichomoniasis</td>
+</tr>
+<tr class="even">
+<td><a href="https://github.com/starsimhub/rotasim">Rotasim</a></td>
+<td>Pre-release</td>
+<td>Rotavirus, with a focus on genetic diversity</td>
+</tr>
+<tr class="odd">
+<td><a href="https://github.com/starsimhub/phcsim">PHCsim</a></td>
+<td>Pre-release</td>
+<td>Primary health care and health systems</td>
+</tr>
+<tr class="even">
+<td><a href="https://github.com/starsimhub/mighti">MIGHTI</a></td>
+<td>Pre-release</td>
+<td>Model of Inter-Generational Health, Transmission, and Interventions (HIV and other comorbidities)</td>
+</tr>
+<tr class="odd">
+<td><a href="https://github.com/starsimhub/tbsim">TBsim</a></td>
+<td>Pre-release</td>
+<td>Tuberculosis, including malnutrition</td>
+</tr>
+<tr class="even">
+<td><a href="https://github.com/starsimhub/RVFSim">RVFsim</a></td>
+<td>Pre-release</td>
+<td>Rift valley fever in cattle</td>
+</tr>
+<tr class="odd">
+<td>Typhoidsim</td>
+<td>Pre-release</td>
+<td>Typhoid, including environmental transmission</td>
+</tr>
+</tbody>
+</table>
+<p><em>If you’ve developed a model and want it included in this list, please <a href="mailto:info@starsim.org">get in touch</a>.</em></p>
+<p>One of the strengths of Starsim is that all of these models are inter-compatible. For example, an HIV-TB coinfection model can be created by combining the HIV module from STIsim and the TB module from TBsim.</p>
+<p>Note: the Starsim suite also includes <a href="https://github.com/institutefordiseasemodeling/covasim">Covasim</a> (for modeling COVID-19). Covasim is built on the same principles as Starsim, but unlike the above tools, it is a separate codebase and is not inter-operable with the other models.</p>
 
 
-</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
@@ -1264,13 +1126,13 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Networks">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Networks</span>
+      <a href="../user_guide/intro_starsim.html" class="pagination-link" aria-label="What is Starsim?">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">What is Starsim?</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/modules_interventions.html" class="pagination-link" aria-label="Interventions">
-        <span class="nav-page-text">Interventions</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/basics_model.html" class="pagination-link" aria-label="Model structure">
+        <span class="nav-page-text">Model structure</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
@@ -1282,7 +1144,7 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
     </div>   
     <div class="nav-footer-center">
 <p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
-<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
+<div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
     <li class="nav-item compact">

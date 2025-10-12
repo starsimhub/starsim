@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Demographics – Starsim</title>
+<title>Distributions – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -65,8 +65,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../user_guide/modules_interventions.html" rel="next">
-<link href="../user_guide/modules_networks.html" rel="prev">
+<link href="../user_guide/advanced_random.html" rel="next">
+<link href="../user_guide/advanced_indexing.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -347,7 +347,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/advanced_time.html">Advanced topics</a></li><li class="breadcrumb-item"><a href="../user_guide/advanced_distributions.html">Distributions</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -524,7 +524,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link active">
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Demographics</span></a>
   </div>
 </li>
@@ -612,7 +612,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/advanced_distributions.html" class="sidebar-item-text sidebar-link">
+  <a href="../user_guide/advanced_distributions.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Distributions</span></a>
   </div>
 </li>
@@ -660,9 +660,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#simple-usage" id="toc-simple-usage" class="nav-link active" data-scroll-target="#simple-usage">Simple usage</a></li>
-  <li><a href="#advanced-usage-pregnancy-and-births" id="toc-advanced-usage-pregnancy-and-births" class="nav-link" data-scroll-target="#advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</a></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#available-distributions" id="toc-available-distributions" class="nav-link active" data-scroll-target="#available-distributions">Available distributions</a></li>
+  <li><a href="#how-to-use-starsim-distributions" id="toc-how-to-use-starsim-distributions" class="nav-link" data-scroll-target="#how-to-use-starsim-distributions">How to use Starsim distributions</a>
+  <ul class="collapse">
+  <li><a href="#drawing-samples" id="toc-drawing-samples" class="nav-link" data-scroll-target="#drawing-samples">Drawing samples</a></li>
+  <li><a href="#visualizing-distributions" id="toc-visualizing-distributions" class="nav-link" data-scroll-target="#visualizing-distributions">Visualizing distributions</a></li>
+  <li><a href="#extracting-distribution-statistics" id="toc-extracting-distribution-statistics" class="nav-link" data-scroll-target="#extracting-distribution-statistics">Extracting distribution statistics</a></li>
+  </ul></li>
+  <li><a href="#setting-model-parameters-that-are-distributions" id="toc-setting-model-parameters-that-are-distributions" class="nav-link" data-scroll-target="#setting-model-parameters-that-are-distributions">Setting model parameters that are distributions</a></li>
+  <li><a href="#using-distributions-with-dynamic-parameters" id="toc-using-distributions-with-dynamic-parameters" class="nav-link" data-scroll-target="#using-distributions-with-dynamic-parameters">Using distributions with dynamic parameters</a></li>
+  <li><a href="#example-starsim-intervention-using-dynamic-distributions" id="toc-example-starsim-intervention-using-dynamic-distributions" class="nav-link" data-scroll-target="#example-starsim-intervention-using-dynamic-distributions">Example Starsim intervention using dynamic distributions</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -670,9 +677,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/advanced_time.html">Advanced topics</a></li><li class="breadcrumb-item"><a href="../user_guide/advanced_distributions.html">Distributions</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Demographics</h1>
+<h1 class="title">Distributions</h1>
 </div>
 
 
@@ -689,161 +696,436 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<p>Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.</p>
-<p>Demographics modules are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics.</p>
-<section id="simple-usage" class="level2">
-<h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
-<p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
-<div id="050a676e" class="cell" data-execution_count="1">
+<p>Agent-based models draw random numbers from distributions to simulate various phenomena. Realizations (also called draws or samples) from distributions are used to model everything from the duration of each infection to the number of contacts each individual has in a network to the outcomes of individual diagnostic tests. The Starsim framework includes state of the art functionality for specifying and sampling from statistical distributions.</p>
+<p>In this guide, you will:</p>
+<ul>
+<li>Learn which distributions are available in Starsim.</li>
+<li>See how to use Starsim framework functionality to create a frozen distribution, generate samples, visualize the distribution, and extract statistics.</li>
+<li>Set or update model parameters that are distributions.</li>
+<li>Use distributions with “dynamic parameters” that depend on agent attributes, the simulation time, or other factors.</li>
+<li>Build an example Starsim intervention that uses a distribution with dynamic parameters.</li>
+</ul>
+<p>One key advantage of Starsim distributions is that they enable low-variance comparison between simulations through a technique called “common random numbers” (CRN). To learn more about CRN, see the <a href="../user_guide/advanced_random.html">Common Random Numbers</a> guide.</p>
+<section id="available-distributions" class="level2">
+<h2 class="anchored" data-anchor-id="available-distributions">Available distributions</h2>
+<p>The starsim framework includes a wide range of distributions that can be used to model various phenomena. The following distributions are available:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 8%">
+<col style="width: 6%">
+<col style="width: 23%">
+<col style="width: 61%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Distribution</th>
+<th>Starsim Dist</th>
+<th>Parameters</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Random</td>
+<td>random</td>
+<td>None</td>
+<td>Random number between 0 and 1.</td>
+</tr>
+<tr class="even">
+<td>Uniform</td>
+<td>uniform</td>
+<td>low, high</td>
+<td>Random number between a specified minimum and maximum.</td>
+</tr>
+<tr class="odd">
+<td>Normal</td>
+<td>normal</td>
+<td>loc (mean), scale (standard deviation)</td>
+<td>Random number from a normal (Gaussian) distribution with specified mean and standard deviation.</td>
+</tr>
+<tr class="even">
+<td>Lognormal (implicit)</td>
+<td>lognormal_im</td>
+<td>mean, sigma (of the underlying normal distribution)</td>
+<td>Random number from a lognormal distribution specified by the mean and standard deviation of the underlying normal distribution.</td>
+</tr>
+<tr class="odd">
+<td>Lognormal (explicit)</td>
+<td>lognormal_ex</td>
+<td>mean, std (of the distribution itself; mean must be positive)</td>
+<td>Random number from a lognormal distribution specified by the mean and standard deviation of the distribution itself.</td>
+</tr>
+<tr class="even">
+<td>Exponential</td>
+<td>expon</td>
+<td>scale (mean of the distribution, equivalent to 1/λ)</td>
+<td>Random number from an exponential distribution with specified scale parameter.</td>
+</tr>
+<tr class="odd">
+<td>Poisson</td>
+<td>poisson</td>
+<td>lam</td>
+<td>Random number from a Poisson distribution with specified rate parameter.</td>
+</tr>
+<tr class="even">
+<td>Negative Binomial</td>
+<td>nbinom</td>
+<td>n, p (number of successes, probability of success)</td>
+<td>Random number from a negative binomial distribution with specified parameters.</td>
+</tr>
+<tr class="odd">
+<td>Weibull</td>
+<td>weibull</td>
+<td>c (shape parameter, sometimes called “k”), loc (shifts the distribution), scale (sometimes called “λ”)</td>
+<td>Random number from a Weibull distribution with specified parameters, uses scipy’s <code>weibull_min</code>.</td>
+</tr>
+<tr class="even">
+<td>Gamma</td>
+<td>gamma</td>
+<td>a (shape parameter, sometimes called “k”), loc (shifts the distribution), scale (sometimes called “θ”)</td>
+<td>Random number from a gamma distribution with specified shape and scale parameters.</td>
+</tr>
+<tr class="odd">
+<td>Beta</td>
+<td>beta_dist</td>
+<td>a (shape parameter, must be &gt; 0), b (shape parameter, must be &gt; 0)</td>
+<td>Random number from a beta distribution with specified shape parameters.</td>
+</tr>
+<tr class="even">
+<td>Constant</td>
+<td>constant</td>
+<td>v</td>
+<td>Constant value, useful for fixed parameters and testing.</td>
+</tr>
+<tr class="odd">
+<td>Random Integer</td>
+<td>randint</td>
+<td>low, high</td>
+<td>Random integer between a specified minimum and maximum.</td>
+</tr>
+<tr class="even">
+<td>Bernoulli</td>
+<td>bernoulli</td>
+<td>p</td>
+<td>Random number from a Bernoulli distribution with specified probability of success. Bernoulli distributions are used frequently to determine binary outcomes, such as whether an agent is infected or not.</td>
+</tr>
+<tr class="odd">
+<td>Choice</td>
+<td>choice</td>
+<td>a (int or list of choices), p (probability of each choice)</td>
+<td>Randomly select from a list of values. This distribution only supports fixed parameters.</td>
+</tr>
+<tr class="even">
+<td>Histogram</td>
+<td>histogram</td>
+<td>values, bins, density, data</td>
+<td>Random number from a histogram distribution specified by a list of values and their corresponding probabilities.</td>
+</tr>
+</tbody>
+</table>
+<p>See the <a href="https://docs.idmod.org/projects/starsim/en/latest/api/_autosummary/starsim.distributions.html">API reference</a> for more details.</p>
+<p>You can also create a custom distribution by extending the <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>Dist</code></a> class from Starsim.</p>
+</section>
+<section id="how-to-use-starsim-distributions" class="level2">
+<h2 class="anchored" data-anchor-id="how-to-use-starsim-distributions">How to use Starsim distributions</h2>
+<p>Parameters for Starsim distributions can have fixed parameters (the same for all agents) or vary dynamically. We will start with a simple normal distribution with fixed parameters:</p>
+<div id="e2cdacfe" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulation parameters</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'No demographics'</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'With demographics'</span>, demographics<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Run both simulations and plot</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a Normal distribution with mean 0 and standard deviation 1</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># The "strict" flag is needed only for this example to avoid warnings</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.normal(name<span class="op">=</span><span class="st">"Normal with fixed parameters"</span>, loc<span class="op">=</span><span class="dv">0</span>, scale<span class="op">=</span><span class="dv">1</span>, strict<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># ^^^ The above "d" object is the "frozen" distribution.</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Figure(768x576)</code></pre>
+<pre><code>ss.normal(loc=0, scale=1)</code></pre>
 </div>
+</div>
+<section id="drawing-samples" class="level3">
+<h3 class="anchored" data-anchor-id="drawing-samples">Drawing samples</h3>
+<p>Samples from a distribution can be drawn using the <code>rvs</code> method.</p>
+<p>While possible to request a specific number of samples, as shown below, please know that this is not the preferred way to use distribution in Starsim:</p>
+<div id="6f73ac94" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>draws <span class="op">=</span> d.rvs(<span class="dv">5</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(draws)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[-0.98800114  1.40033713 -0.00723223 -2.0299323  -1.02095412]</code></pre>
+</div>
+</div>
+<p>The above approach is better than calling <a href="https://numpy.org/doc/stable/reference/random/index.html#module-numpy.random" title="1"><code>numpy.random</code></a> directly, but still not ideal because it does not allow for dynamic parameter nor low-noise sampling. Therefore, please instead call the <code>rvs</code> method with the unique identifiers (uids) of the agents for which you need samples. Alternatively, you can pass a boolean mask of length equal to the number of agents in the simulation:</p>
+<div id="91f5f842" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a> <span class="co"># Create a simulation for context</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a> <span class="co"># [you will not need to do this when working within the framework]</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>).init()</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Specify the distribution, here a random integer between -10 and 10</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>d_sim <span class="op">=</span> ss.randint(name<span class="op">=</span><span class="st">"Random integer with fixed parameters"</span>, low<span class="op">=-</span><span class="dv">10</span>, high<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>d_sim.init(sim<span class="op">=</span>sim) <span class="co"># Initialize the distribution [done automatically in the framework]</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Instead of requesting 5 random numbers, the preferred pattern is to request</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co"># random numbers for specific agents by passing a list of agent IDs. Doing so</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="co"># enable the powerful dynamic parameters to be used while also supporting the</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="co"># low-noise common random number sampling.</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>draws <span class="op">=</span> d_sim.rvs([<span class="dv">3</span>, <span class="dv">5</span>, <span class="dv">2</span>, <span class="dv">9</span>, <span class="dv">4</span>]) <span class="co"># Draw samples for specific agents by UID</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Draws for agents 3, 5, 2, 9, and 4: </span><span class="sc">{</span>draws<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>mask <span class="op">=</span> sim.people.age <span class="op">&lt;</span> <span class="dv">25</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>draws_mask <span class="op">=</span> d_sim.rvs(mask) <span class="co"># Draw samples for agents under 25 from a boolean mask</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Draws for agents under 25: </span><span class="sc">{</span>draws_mask<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>draws_all <span class="op">=</span> d_sim.rvs(sim.people.uid) <span class="co"># Draw samples for all agents</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Draws for all agents (0, 1, 2, ..., n_agents): </span><span class="sc">{</span>draws_all<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10 agents
+Draws for agents 3, 5, 2, 9, and 4: [ 2 -9  1 -8  7]
+Draws for agents under 25: [-10  -1   9]
+Draws for all agents (0, 1, 2, ..., n_agents): [ 0  6  4 -9  3 -8  2  6 -9  8]</code></pre>
+</div>
+</div>
+</section>
+<section id="visualizing-distributions" class="level3">
+<h3 class="anchored" data-anchor-id="visualizing-distributions">Visualizing distributions</h3>
+<p>Let’s take a look at the distribution by plotting a histogram of samples:</p>
+<div id="5d5f54e6" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> d.plot_hist(n<span class="op">=</span><span class="dv">1000</span>, bins<span class="op">=</span><span class="dv">30</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
+<p><img src="advanced_distributions_files/figure-html/cell-5-output-1.png" width="593" height="449" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 </section>
-<section id="advanced-usage-pregnancy-and-births" class="level2">
-<h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module instead of simple <a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>Births</code></a>. The pregnancy module models:</p>
-<ul>
-<li>Age-specific fertility rates</li>
-<li>Pregnancy duration and outcomes</li>
-<li>Maternal and neonatal mortality</li>
-<li>Mother-to-child transmission pathways</li>
-</ul>
-<div id="b3a58be0" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Create age-specific birth and fertility data</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>birth_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Year'</span>: [<span class="dv">2000</span>, <span class="dv">2005</span>, <span class="dv">2010</span>, <span class="dv">2015</span>, <span class="dv">2020</span>, <span class="dv">2025</span>, <span class="dv">2030</span>],</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">'CBR'</span>: [<span class="dv">40</span>, <span class="dv">35</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">32</span>, <span class="dv">30</span>, <span class="dv">28</span>]  <span class="co"># Age-specific birth rates</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>fertility_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Time'</span>: [<span class="dv">2020</span>]<span class="op">*</span><span class="dv">7</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'AgeGrp'</span>: [<span class="dv">15</span>, <span class="dv">20</span>, <span class="dv">25</span>, <span class="dv">30</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">45</span>],</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'ASFR'</span>: [<span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.20</span>, <span class="fl">0.15</span>, <span class="fl">0.10</span>, <span class="fl">0.05</span>, <span class="fl">0.01</span>]  <span class="co"># Age-specific fertility rates</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a simple births module</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(birth_rate<span class="op">=</span>birth_data)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a pregnancy module with custom parameters</span></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    fertility_rate <span class="op">=</span> fertility_data,</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    rel_fertility <span class="op">=</span> <span class="dv">1000</span>, <span class="co"># Whether data are per person or per 1000</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    dur_pregnancy <span class="op">=</span> ss.years(<span class="fl">0.75</span>),           <span class="co"># 9 months pregnancy</span></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    dur_postpartum <span class="op">=</span> ss.years(<span class="fl">0.5</span>),           <span class="co"># 6 months postpartum</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    p_maternal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.001</span>),   <span class="co"># 0.1% maternal mortality</span></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    p_neonatal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.02</span>),    <span class="co"># 2% neonatal mortality</span></span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    min_age <span class="op">=</span> <span class="dv">15</span>,</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    max_age <span class="op">=</span> <span class="dv">50</span>,</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Create deaths module</span></span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>deaths <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">8</span>))  <span class="co"># 8 deaths per 1000 per year</span></span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span> <span class="co"># Number of agents</span></span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span> <span class="co"># </span></span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, n_agents<span class="op">=</span>n_agents, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Births'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[births, deaths])</span>
-<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Pregnancy'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[pregnancy, deaths])</span>
-<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot histograms of the age distributions - simulated vs data at initialization</span></span>
-<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>sim1.init() <span class="co"># This creates the population</span></span>
-<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>bins <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">101</span>, <span class="dv">1</span>)</span>
-<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>init_scale <span class="op">=</span> nga_pop_1995 <span class="op">/</span> n_agents</span>
-<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>counts, bins <span class="op">=</span> np.histogram(sim1.people.age, bins)</span>
-<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>plt.bar(bins, age_data.value.values <span class="op">*</span> <span class="dv">1000</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'r'</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
-<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>plt.bar(bins[:<span class="op">-</span><span class="dv">1</span>], counts <span class="op">*</span> init_scale, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Simulated'</span>)</span>
-<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>plt.legend(loc<span class="op">=</span><span class="st">'upper right'</span>)</span>
-<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Population'</span>)</span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Age'</span>)</span>
-<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>sc.SIticks()</span>
-<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
-<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:394: RuntimeWarning: 
-Sim "Pregnancy" has different results keys:
-Extra: pregnancy_pregnancies, pregnancy_cbr, pregnancy_n_postpartum, pregnancy_n_pregnant, pregnancy_births, pregnancy_n_fecund
-Missing: births_cumulative, births_cbr, births_new
-Results may not plot correctly (i.e. axes titles may not be correct for all sims)
-  ss.warn(warnmsg)
-Exception ignored in: &lt;_io.BytesIO object at 0x7f5d74986f20&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/artist.py", line 1197, in _update_props
-    with cbook._setattr_cm(self, eventson=False):
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
+<section id="extracting-distribution-statistics" class="level3">
+<h3 class="anchored" data-anchor-id="extracting-distribution-statistics">Extracting distribution statistics</h3>
+<p>We can quickly calculate statistics of the distribution by accessing the underlying “dist” property of the distribution:</p>
+<div id="642620e2" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>underlying_dist <span class="op">=</span> d.dist</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Mean:"</span>, underlying_dist.mean())</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Standard Deviation:"</span>, underlying_dist.std())</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"95% Interval:"</span>, underlying_dist.ppf([<span class="fl">0.025</span>, <span class="fl">0.975</span>]))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Figure(896x672)</code></pre>
+<pre><code>Mean: 0.0
+Standard Deviation: 1.0
+95% Interval: [-1.95996398  1.95996398]</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="setting-model-parameters-that-are-distributions" class="level2">
+<h2 class="anchored" data-anchor-id="setting-model-parameters-that-are-distributions">Setting model parameters that are distributions</h2>
+<p>Many Starsim modules directly expose distributions as parameters for user customization. For example, the <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>SIR</code></a> disease module has three parameters are distributions:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 44%">
+<col style="width: 33%">
+<col style="width: 22%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Parameter</th>
+<th>Meaning</th>
+<th>Default Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>init_prev</code></td>
+<td>Initial prevalence of infection</td>
+<td><code>ss.bernoulli(p=0.01)</code></td>
+</tr>
+<tr class="even">
+<td><code>dur_inf</code></td>
+<td>Duration of infection</td>
+<td><code>ss.lognorm_ex(mean=ss.dur(6))</code></td>
+</tr>
+<tr class="odd">
+<td><code>p_death</code></td>
+<td>Probability of death given infection</td>
+<td><code>ss.bernoulli(p=0.01)</code></td>
+</tr>
+</tbody>
+</table>
+<p>You can change these parameters away from their defaults by passing in a different distribution, as demonstrated below:</p>
+<div id="eee1019c" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the init_prev parameter to randomly infect 15% of the population</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.15</span>),</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the dur_inf parameter to a Weibull</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    dur_inf <span class="op">=</span> ss.weibull(c<span class="op">=</span><span class="dv">2</span>, loc<span class="op">=</span><span class="dv">1</span>, scale<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Alternatively, update parameters of a default distribution</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>sir.pars.p_death.<span class="bu">set</span>(p<span class="op">=</span><span class="fl">0.5</span>) <span class="co"># Update the death probability to 50%</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">100</span>, diseases<span class="op">=</span>sir, dur<span class="op">=</span><span class="dv">15</span>, dt<span class="op">=</span><span class="dv">1</span>, start<span class="op">=</span><span class="dv">0</span>, networks<span class="op">=</span>ss.RandomNet())</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 100 agents
+  Running 0.0 ( 0/16) (0.00 s)  •——————————————————— 6%
+  Running 10.0 (10/16) (0.26 s)  •••••••••••••——————— 69%
+Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="602" height="429" class="figure-img"></p>
+<p><img src="advanced_distributions_files/figure-html/cell-7-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
+</div>
+<p>It’s easy to inspect distributions, for example <code>dur_inf</code> of the <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>SIR</code></a> module using <code>plot_hist</code>.</p>
+<p><strong>NOTE:</strong> in the code below that we access <code>dur_inf</code> at <code>sim.diseases.sir.pars</code> rather than at <code>sir.pars</code> (referencing the module in the previous cell) because Starsim makes a copy. The <code>sir</code> is not initialized and does not have the <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> context.</p>
+<div id="b38d3311" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> sim.diseases.sir.pars.dur_inf.plot_hist()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-4.png" width="918" height="662" class="figure-img"></p>
+<p><img src="advanced_distributions_files/figure-html/cell-8-output-1.png" width="593" height="449" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 </section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<ul>
-<li><strong>Demographics modules</strong> enable realistic population dynamics in Starsim:
-<ul>
-<li><strong>Births</strong>: Simple constant or time-varying birth rates</li>
-<li><strong>Deaths</strong>: Background mortality separate from disease deaths<br>
-</li>
-<li><strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</li>
-</ul></li>
-<li><strong>Key considerations:</strong>
-<ul>
-<li>Use <code>demographics=True</code> for default birth/death rates</li>
-<li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
-<li>Use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy()</code></a> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
-<li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
-</ul></li>
-</ul>
+<section id="using-distributions-with-dynamic-parameters" class="level2">
+<h2 class="anchored" data-anchor-id="using-distributions-with-dynamic-parameters">Using distributions with dynamic parameters</h2>
+<p>Up to this point, the distributions we have used have had fixed parameters. Every agent draws will draw from the same distribution at every time step. But Starsim has a powerful feature to specify distributions with dynamic parameters that can change based on agent attributes, simulation time, or other factors.</p>
+<p>Let’s continue with the <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>SIR</code></a> example, but make the initial prevalence of infection depend on the age of the agent. Instead of a fixed probability for all agents, let’s make it so that children under 15 years old have a 25% chance of being selected as a “seed” infection and adults over 15 years old have a 10% chance.</p>
+<p>To implement dynamic parameters, we set the parameter (<code>p</code> in the case of a Bernoulli distribution) to a callable like a function. The callable must accept three arguments:</p>
+<ol type="1">
+<li><code>self</code>: The module that is calling the distribution</li>
+<li><a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>: The simulation object</li>
+<li><a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a>: The unique IDs of the agents being processed</li>
+</ol>
+<p>It should return a numpy array of the same length as <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> containing the parameter value for each agent, or a scalar if the parameter is the same for all agents.</p>
+<div id="eb3bdf00" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> set_p_by_age(<span class="va">self</span>, sim, uids):</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full(<span class="bu">len</span>(uids), fill_value<span class="op">=</span><span class="fl">0.10</span>)  <span class="co"># Default 10% infection probability</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    p[sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>] <span class="op">=</span> <span class="fl">0.25</span>  <span class="co"># 25% for ages &lt; 15</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># For demonstration, print the age and probability for each agent:</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> uid, age, prob <span class="kw">in</span> <span class="bu">zip</span>(uids, sim.people.age[uids], p):</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Agent </span><span class="sc">{</span>uid<span class="sc">}</span><span class="ss"> | Age: </span><span class="sc">{</span>age<span class="sc">:5.2f}</span><span class="ss"> |  Infection Seed Probability: </span><span class="sc">{</span>prob<span class="sc">:.0%}</span><span class="ss">"</span>)</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set init_prev as a dynamic parameter</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>set_p_by_age),</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>, diseases<span class="op">=</span>[sir], dur<span class="op">=</span><span class="dv">30</span>)</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10 agents
+Agent 0 | Age: 25.15 |  Infection Seed Probability: 10%
+Agent 1 | Age:  4.99 |  Infection Seed Probability: 25%
+Agent 2 | Age: 58.15 |  Infection Seed Probability: 10%
+Agent 3 | Age:  0.13 |  Infection Seed Probability: 25%
+Agent 4 | Age: 43.82 |  Infection Seed Probability: 10%
+Agent 5 | Age: 42.69 |  Infection Seed Probability: 10%
+Agent 6 | Age: 54.29 |  Infection Seed Probability: 10%
+Agent 7 | Age: 52.60 |  Infection Seed Probability: 10%
+Agent 8 | Age:  7.08 |  Infection Seed Probability: 25%
+Agent 9 | Age: 27.23 |  Infection Seed Probability: 10%
+  Running 2000.01.01 ( 0/31) (0.00 s)  ———————————————————— 3%
+  Running 2010.01.01 (10/31) (0.01 s)  •••••••————————————— 35%
+  Running 2020.01.01 (20/31) (0.01 s)  •••••••••••••——————— 68%
+  Running 2030.01.01 (30/31) (0.02 s)  •••••••••••••••••••• 100%
+</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="8">
+<pre><code>Sim(n=10; 2000—2030; diseases=sir)</code></pre>
+</div>
+</div>
+</section>
+<section id="example-starsim-intervention-using-dynamic-distributions" class="level2">
+<h2 class="anchored" data-anchor-id="example-starsim-intervention-using-dynamic-distributions">Example Starsim intervention using dynamic distributions</h2>
+<p>To demonstrate the use and power of distributions in the Starsim framework, we next create an intervention that delivers a vaccine to a random subset of agents using a Bernoulli distribution. The default distribution will be fixed, the same for all agents, but we’ll make it a parameter to that the user can change it without having to modify the source code.</p>
+<p><strong>NOTE:</strong> That we create the distribution only one time in the <code>__init__</code> method of the intervention. Here, the distribution is part of the parameters, so will appear at <code>self.pars.p_vx</code>. Alternatively, we could create a distribution between <code>update_pars</code> and <code>return</code>, as noted. Please avoid recreating a Starsim distribution on every time step.</p>
+<div id="aecf25a8" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyVx(ss.Intervention):</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'vaccinated'</span>, label<span class="op">=</span><span class="st">"Vaccinated"</span>, default<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Create a Bernoulli distribution as a module parameter</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>            <span class="co"># The value p=0.1 is a placeholder, the user will override</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>            p_vx <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.1</span>, name<span class="op">=</span><span class="st">"Vaccination Probability"</span>)</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars<span class="op">=</span>pars, <span class="op">**</span>kwargs)</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># </span><span class="al">NOTE</span><span class="co">, this is a great place to create other distributions, for example</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>        <span class="co"># self.my_dist = ss.normal(loc=0, scale=1)</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_results(</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>            ss.Result(<span class="st">'new_vx'</span>, dtype<span class="op">=</span><span class="bu">int</span>, label<span class="op">=</span><span class="st">"Newly Vaccinated"</span>)</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Choose which agents to vaccinate</span></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>        novx <span class="op">=</span> <span class="va">self</span>.vaccinated <span class="op">==</span> <span class="va">False</span> <span class="co"># Boolean mask</span></span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Filter to select agents for which the Bernoulli sample is True</span></span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>        vx_uids <span class="op">=</span> <span class="va">self</span>.pars.p_vx.<span class="bu">filter</span>(novx) <span class="co"># &lt;-- can pass in mask or uids</span></span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.vaccinated[vx_uids] <span class="op">=</span> <span class="va">True</span>  <span class="co"># Set the state to vaccinated</span></span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>        sim.diseases.sir.rel_sus[vx_uids] <span class="op">=</span> <span class="fl">0.0</span>  <span class="co"># Set susceptibility to 0 for vaccinated agents</span></span>
+<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Store the results</span></span>
+<span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results.new_vx[sim.ti] <span class="op">=</span> <span class="bu">len</span>(vx_uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Now that we have created the intervention, we can configure it with a custom <code>p_vx_func</code> in “user space” and run the simulation.</p>
+<div id="6d78112f" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> p_vx_func(<span class="va">self</span>, sim, uids):</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the probability of vaccination for each agent in uids</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This is the "dynamic" callable for p_vx</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Let's only administer the vaccine on the 5th time step</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> sim.ti <span class="op">!=</span> <span class="dv">5</span>:</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">0.0</span> </span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set vaccination probability proportional to age</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> sim.people.age[uids] <span class="op">/</span> <span class="fl">100.0</span>  <span class="co"># Normalize age to a probability between 0 and 1</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> p.clip(<span class="fl">0.0</span>, <span class="fl">1.0</span>)  <span class="co"># Ensure probabilities are between 0 and 1</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p <span class="co"># p has the same length as uids</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>vx_intv <span class="op">=</span> MyVx(p_vx <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>p_vx_func))</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Create, run, and plot a sim using the SIR disease model</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dur<span class="op">=</span><span class="dv">10</span>, dt<span class="op">=</span><span class="dv">1</span>, start<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    diseases<span class="op">=</span>ss.SIR(), <span class="co"># Default SIR disease model</span></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>    interventions<span class="op">=</span>[vx_intv],</span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span>ss.RandomNet()</span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>sim.run().plot(<span class="st">'myvx'</span>) <span class="co"># Verify vaccinations only on the 5th time step</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 1000 agents
+  Running 0.0 ( 0/11) (0.00 s)  •——————————————————— 9%
+  Running 10.0 (10/11) (0.04 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="advanced_distributions_files/figure-html/cell-11-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>See how vaccines were delivered only on time step 5? If we were to look at which agents received the vaccine, we would see probability increasing with age.</p>
 
 
 </section>
@@ -1264,13 +1546,13 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Networks">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Networks</span>
+      <a href="../user_guide/advanced_indexing.html" class="pagination-link" aria-label="Array indexing">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Array indexing</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/modules_interventions.html" class="pagination-link" aria-label="Interventions">
-        <span class="nav-page-text">Interventions</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/advanced_random.html" class="pagination-link" aria-label="Random numbers">
+        <span class="nav-page-text">Random numbers</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

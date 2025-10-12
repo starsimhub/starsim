@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Demographics – Starsim</title>
+<title>Multiple runs – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -65,8 +65,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../user_guide/modules_interventions.html" rel="next">
-<link href="../user_guide/modules_networks.html" rel="prev">
+<link href="../user_guide/workflows_sir_calibration.html" rel="next">
+<link href="../user_guide/modules_connectors.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -347,7 +347,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Workflows</a></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Multiple runs</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -524,7 +524,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link active">
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Demographics</span></a>
   </div>
 </li>
@@ -559,7 +559,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link">
+  <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Multiple runs</span></a>
   </div>
 </li>
@@ -660,9 +660,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#simple-usage" id="toc-simple-usage" class="nav-link active" data-scroll-target="#simple-usage">Simple usage</a></li>
-  <li><a href="#advanced-usage-pregnancy-and-births" id="toc-advanced-usage-pregnancy-and-births" class="nav-link" data-scroll-target="#advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</a></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#copies" id="toc-copies" class="nav-link active" data-scroll-target="#copies">Copies</a></li>
+  <li><a href="#advanced-workflows" id="toc-advanced-workflows" class="nav-link" data-scroll-target="#advanced-workflows">Advanced workflows</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -670,9 +669,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Workflows</a></li><li class="breadcrumb-item"><a href="../user_guide/workflows_run.html">Multiple runs</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Demographics</h1>
+<h1 class="title">Multiple runs</h1>
 </div>
 
 
@@ -689,161 +688,332 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<p>Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.</p>
-<p>Demographics modules are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics.</p>
-<section id="simple-usage" class="level2">
-<h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
-<p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
-<div id="050a676e" class="cell" data-execution_count="1">
+<p>Let’s be honest, there isn’t much you can do with a single sim run. So 99.9% of the time, you’ll be wanting to run multiple simulations and compare them.</p>
+<p>The easiest way to do this is with <a href="../api/run.html#starsim.run.parallel" title="0"><code>ss.parallel()</code></a>, which, as the name suggests, runs the sim in parallel on your computer using all available cores. Let’s say we want to see what difference swapping the network makes:</p>
+<div id="483cc98f" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulation parameters</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'No demographics'</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'With demographics'</span>, demographics<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Run both simulations and plot</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>) <span class="co"># Improve plot resolution</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'randomsafe'</span>, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'randomsafe'</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "random" with 10000 agentsInitializing sim "randomsafe" with 10000 agents
+
+  Running "random": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running "randomsafe": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running "random": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
+  Running "random": 2020.01.01 (20/51) (0.37 s)  ••••••••———————————— 41%
+  Running "randomsafe": 2010.01.01 (10/51) (0.33 s)  ••••———————————————— 22%
+  Running "random": 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
+  Running "randomsafe": 2020.01.01 (20/51) (0.42 s)  ••••••••———————————— 41%
+  Running "random": 2040.01.01 (40/51) (0.47 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2030.01.01 (30/51) (0.51 s)  ••••••••••••———————— 61%
+  Running "random": 2050.01.01 (50/51) (0.67 s)  •••••••••••••••••••• 100%
+
+  Running "randomsafe": 2040.01.01 (40/51) (0.72 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2050.01.01 (50/51) (0.81 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><a href="../api/run.html#starsim.run.parallel" title="0"><code>ss.parallel()</code></a> is just a wrapper for <a href="../api/run.html#starsim.run.MultiSim.run" title="0"><code>ss.MultiSim().run()</code></a> (and note how we can pass arguments to all of the sims, e.g.&nbsp;<code>verbose=0</code> here):</p>
+<div id="c1b72b99" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'randomsafe'</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim1, sim2]).run(verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "Sim 1" with 10000 agentsInitializing sim "Sim 0" with 10000 agents
+</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f7fd151e7a0&gt;
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 1771, in __init__
+    super().__init__(*args, **kwargs)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f7fd15d8770&gt;
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 1771, in __init__
+    super().__init__(*args, **kwargs)
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-3-output-4.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
-</section>
-<section id="advanced-usage-pregnancy-and-births" class="level2">
-<h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module instead of simple <a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>Births</code></a>. The pregnancy module models:</p>
-<ul>
-<li>Age-specific fertility rates</li>
-<li>Pregnancy duration and outcomes</li>
-<li>Maternal and neonatal mortality</li>
-<li>Mother-to-child transmission pathways</li>
-</ul>
-<div id="b3a58be0" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Create age-specific birth and fertility data</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>birth_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Year'</span>: [<span class="dv">2000</span>, <span class="dv">2005</span>, <span class="dv">2010</span>, <span class="dv">2015</span>, <span class="dv">2020</span>, <span class="dv">2025</span>, <span class="dv">2030</span>],</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">'CBR'</span>: [<span class="dv">40</span>, <span class="dv">35</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">32</span>, <span class="dv">30</span>, <span class="dv">28</span>]  <span class="co"># Age-specific birth rates</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>fertility_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Time'</span>: [<span class="dv">2020</span>]<span class="op">*</span><span class="dv">7</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'AgeGrp'</span>: [<span class="dv">15</span>, <span class="dv">20</span>, <span class="dv">25</span>, <span class="dv">30</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">45</span>],</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'ASFR'</span>: [<span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.20</span>, <span class="fl">0.15</span>, <span class="fl">0.10</span>, <span class="fl">0.05</span>, <span class="fl">0.01</span>]  <span class="co"># Age-specific fertility rates</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a simple births module</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(birth_rate<span class="op">=</span>birth_data)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a pregnancy module with custom parameters</span></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    fertility_rate <span class="op">=</span> fertility_data,</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    rel_fertility <span class="op">=</span> <span class="dv">1000</span>, <span class="co"># Whether data are per person or per 1000</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    dur_pregnancy <span class="op">=</span> ss.years(<span class="fl">0.75</span>),           <span class="co"># 9 months pregnancy</span></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    dur_postpartum <span class="op">=</span> ss.years(<span class="fl">0.5</span>),           <span class="co"># 6 months postpartum</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    p_maternal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.001</span>),   <span class="co"># 0.1% maternal mortality</span></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    p_neonatal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.02</span>),    <span class="co"># 2% neonatal mortality</span></span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    min_age <span class="op">=</span> <span class="dv">15</span>,</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    max_age <span class="op">=</span> <span class="dv">50</span>,</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Create deaths module</span></span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>deaths <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">8</span>))  <span class="co"># 8 deaths per 1000 per year</span></span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span> <span class="co"># Number of agents</span></span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span> <span class="co"># </span></span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, n_agents<span class="op">=</span>n_agents, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Births'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[births, deaths])</span>
-<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Pregnancy'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[pregnancy, deaths])</span>
-<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot histograms of the age distributions - simulated vs data at initialization</span></span>
-<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>sim1.init() <span class="co"># This creates the population</span></span>
-<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>bins <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">101</span>, <span class="dv">1</span>)</span>
-<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>init_scale <span class="op">=</span> nga_pop_1995 <span class="op">/</span> n_agents</span>
-<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>counts, bins <span class="op">=</span> np.histogram(sim1.people.age, bins)</span>
-<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>plt.bar(bins, age_data.value.values <span class="op">*</span> <span class="dv">1000</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'r'</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
-<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>plt.bar(bins[:<span class="op">-</span><span class="dv">1</span>], counts <span class="op">*</span> init_scale, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Simulated'</span>)</span>
-<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>plt.legend(loc<span class="op">=</span><span class="st">'upper right'</span>)</span>
-<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Population'</span>)</span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Age'</span>)</span>
-<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>sc.SIticks()</span>
-<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
-<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>In most cases, this is the most efficient workflow: make some sims (potentially via a loop), and then run them. But there are some other common workflows as well. One is to run the same simulation with different random seeds. This is what happens by default if you call <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim()</code></a> with a single sim:</p>
+<div id="b8ecfddd" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sim).run()</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:394: RuntimeWarning: 
-Sim "Pregnancy" has different results keys:
-Extra: pregnancy_pregnancies, pregnancy_cbr, pregnancy_n_postpartum, pregnancy_n_pregnant, pregnancy_births, pregnancy_n_fecund
-Missing: births_cumulative, births_cbr, births_new
-Results may not plot correctly (i.e. axes titles may not be correct for all sims)
-  ss.warn(warnmsg)
-Exception ignored in: &lt;_io.BytesIO object at 0x7f5d74986f20&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f80095ec0e0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/artist.py", line 1197, in _update_props
-    with cbook._setattr_cm(self, eventson=False):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
+    def __new__(cls, value=None, base=None, **kwargs):
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Figure(896x672)</code></pre>
+<pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="602" height="429" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-4-output-3.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
+</div>
+<p>In addition to plotting the individual sims, we can quickly compute stats on the sim by calling <code>msim.mean()</code> or <code>msim.median()</code> (or more generally, <code>msim.reduce()</code> if we want to specify e.g.&nbsp;quantiles):</p>
+<div id="7c306b79" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>msim.mean()</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(768x576)</code></pre>
+</div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-4.png" width="918" height="662" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-5-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>This looks a little wonky because the error bounds shown are ±2 standard deviations, but we know things like deaths can’t go negative. In cases like this, we get more reasonable results with <code>median()</code>, which by default shows the 10th and 90th quantiles:</p>
+<div id="c0c6f8a9" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>msim.median()</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-6-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<section id="copies" class="level2">
+<h2 class="anchored" data-anchor-id="copies">Copies</h2>
+<p>Both <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>ss.Sim</code></a> and <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim</code></a> objects let you control whether or not the objects passed into them are copied. By default, sims <em>do</em> copy inputs and multisims <em>don’t</em>. Let’s look at a few examples.</p>
+<p>Sims copy inputs by default because it’s common to want to reuse a module between sims, which wouldn’t be allowed if it wasn’t copied (since it’s modified in place during run). For example:</p>
+<div id="43b84dc4" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS(beta<span class="op">=</span><span class="fl">0.1</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Low contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">5</span>))</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'High contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">10</span>))</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>ss.parallel(s1, s2).plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "Low contacts" with 10000 agents
+Initializing sim "High contacts" with 10000 agents
+  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
+  Running "Low contacts": 2010.01.01 (10/51) (0.29 s)  ••••———————————————— 22%
+  Running "High contacts": 2010.01.01 (10/51) (0.32 s)  ••••———————————————— 22%
+  Running "Low contacts": 2020.01.01 (20/51) (0.35 s)  ••••••••———————————— 41%
+  Running "High contacts": 2020.01.01 (20/51) (0.38 s)  ••••••••———————————— 41%
+  Running "Low contacts": 2030.01.01 (30/51) (0.39 s)  ••••••••••••———————— 61%
+  Running "High contacts": 2030.01.01 (30/51) (0.43 s)  ••••••••••••———————— 61%
+  Running "Low contacts": 2040.01.01 (40/51) (0.44 s)  ••••••••••••••••———— 80%
+  Running "Low contacts": 2050.01.01 (50/51) (0.48 s)  •••••••••••••••••••• 100%
+
+  Running "High contacts": 2040.01.01 (40/51) (0.48 s)  ••••••••••••••••———— 80%
+  Running "High contacts": 2050.01.01 (50/51) (0.53 s)  •••••••••••••••••••• 100%
+</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f8008c0b150&gt;
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/weakref.py", line 452, in get
+    return self.data.get(ref(key),default)
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-7-output-4.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>But this can be confusing, because it means the <code>sis</code> in the simulation is a different object than the <code>sis</code> you created. If you want to keep it the same, set <code>copy_inputs=False</code>, for example, to use it directly afterwards:</p>
+<div id="ed9e5cb6" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(beta<span class="op">=</span><span class="fl">0.035</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>, copy_inputs<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>sir.plot() <span class="co"># This wouldn't work without copy_inputs=False</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.37 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.43 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.49 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.55 s)  •••••••••••••••••••• 100%
+
+Figure(672x480)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-8-output-2.png" width="614" height="429" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Conversely, <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim()</code></a> by default does <em>not</em> copy the input sims, so they are modified in place:</p>
+<div id="00198aa8" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>ss.parallel(s1, s2, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>s1.plot() <span class="co"># This also works, because it was run in place</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "Sim 1" with 10000 agentsInitializing sim "Sim 0" with 10000 agents
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-9-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>If you want to copy the sims before run, then set <code>inplace=False</code>:</p>
+<div id="1258e25b" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>ss.parallel(s1, s2, verbose<span class="op">=</span><span class="dv">0</span>, inplace<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>s1.run().plot() <span class="co"># This now works, because the sim was *not* run in place</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
+</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f7fd134a070&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.11 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.16 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.21 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.25 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-10-output-4.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 </section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<ul>
-<li><strong>Demographics modules</strong> enable realistic population dynamics in Starsim:
-<ul>
-<li><strong>Births</strong>: Simple constant or time-varying birth rates</li>
-<li><strong>Deaths</strong>: Background mortality separate from disease deaths<br>
-</li>
-<li><strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</li>
-</ul></li>
-<li><strong>Key considerations:</strong>
-<ul>
-<li>Use <code>demographics=True</code> for default birth/death rates</li>
-<li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
-<li>Use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy()</code></a> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
-<li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
-</ul></li>
-</ul>
+<section id="advanced-workflows" class="level2">
+<h2 class="anchored" data-anchor-id="advanced-workflows">Advanced workflows</h2>
+<p>A common pattern for more complex workflows is to write <code>make_sim()</code>. The example below, based on an STIsim application, shows how complex a <code>make_sim()</code> function can get (this is, after all, where most of the science happens!):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim(seed<span class="op">=</span><span class="dv">1</span>, n_agents<span class="op">=</span><span class="va">None</span>, start<span class="op">=</span><span class="dv">1990</span>, stop<span class="op">=</span><span class="dv">2030</span>, debug<span class="op">=</span><span class="va">False</span>, add_stis<span class="op">=</span><span class="va">True</span>, scenario<span class="op">=</span><span class="st">'treat'</span>):</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    total_pop <span class="op">=</span> {<span class="dv">1970</span>: <span class="fl">5.203e6</span>, <span class="dv">1980</span>: <span class="fl">7.05e6</span>, <span class="dv">1985</span>: <span class="fl">8.691e6</span>, <span class="dv">1990</span>: <span class="dv">9980999</span>, <span class="dv">2000</span>: <span class="fl">11.83e6</span>}[start]</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> n_agents <span class="kw">is</span> <span class="va">None</span>: n_agents <span class="op">=</span> [<span class="bu">int</span>(<span class="fl">10e3</span>), <span class="bu">int</span>(<span class="fl">5e2</span>)][debug]</span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> dt <span class="kw">is</span> <span class="va">None</span>: dt <span class="op">=</span> [<span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, <span class="dv">1</span>][debug]</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Demographic modules</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>    fertility_data <span class="op">=</span> pd.read_csv(<span class="ss">f'data/asfr.csv'</span>)</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>    pregnancy <span class="op">=</span> ss.Pregnancy(dt<span class="op">=</span><span class="st">'month'</span>, fertility_rate<span class="op">=</span>fertility_data)</span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    death_data <span class="op">=</span> pd.read_csv(<span class="ss">f'data/deaths.csv'</span>)</span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>    death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>death_data, rate_units<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># People and networks</span></span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>pd.read_csv(<span class="ss">f'data/age_dist_</span><span class="sc">{</span>start<span class="sc">}</span><span class="ss">.csv'</span>, index_col<span class="op">=</span><span class="st">'age'</span>)[<span class="st">'value'</span>])</span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>    sexual <span class="op">=</span> sti.FastStructuredSexual(</span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>        prop_f0<span class="op">=</span><span class="fl">0.79</span>,</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>        prop_m0<span class="op">=</span><span class="fl">0.83</span>,</span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>        f1_conc<span class="op">=</span><span class="fl">0.16</span>,</span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>        m1_conc<span class="op">=</span><span class="fl">0.11</span>,</span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>        p_pair_form<span class="op">=</span><span class="fl">0.58</span>,</span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>        condom_data<span class="op">=</span>pd.read_csv(<span class="ss">f'data/condom_use.csv'</span>),</span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a>    maternal <span class="op">=</span> ss.MaternalNet(dt<span class="op">=</span><span class="st">'month'</span>)</span>
+<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Diseases</span></span>
+<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a>    hiv <span class="op">=</span> make_hiv()</span>
+<span id="cb26-27"><a href="#cb26-27" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> [hiv]</span>
+<span id="cb26-28"><a href="#cb26-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> add_stis:</span>
+<span id="cb26-29"><a href="#cb26-29" aria-hidden="true" tabindex="-1"></a>        ng, ct, tv, bv <span class="op">=</span> make_stis()</span>
+<span id="cb26-30"><a href="#cb26-30" aria-hidden="true" tabindex="-1"></a>        stis <span class="op">=</span> [ng, ct, tv, bv]</span>
+<span id="cb26-31"><a href="#cb26-31" aria-hidden="true" tabindex="-1"></a>        diseases <span class="op">+=</span> stis  <span class="co"># Add the STIs to the list of diseases</span></span>
+<span id="cb26-32"><a href="#cb26-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-33"><a href="#cb26-33" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Interventions and analyzers</span></span>
+<span id="cb26-34"><a href="#cb26-34" aria-hidden="true" tabindex="-1"></a>    intvs <span class="op">=</span> make_hiv_intvs()</span>
+<span id="cb26-35"><a href="#cb26-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> add_stis:</span>
+<span id="cb26-36"><a href="#cb26-36" aria-hidden="true" tabindex="-1"></a>        intvs <span class="op">+=</span> make_testing(ng, ct, tv, bv, scenario<span class="op">=</span>scenario, poc<span class="op">=</span>poc, stop<span class="op">=</span>stop)</span>
+<span id="cb26-37"><a href="#cb26-37" aria-hidden="true" tabindex="-1"></a>        connectors <span class="op">=</span> [sti.hiv_ng(hiv, ng), sti.hiv_ct(hiv, ct), sti.hiv_tv(hiv, tv)]</span>
+<span id="cb26-38"><a href="#cb26-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb26-39"><a href="#cb26-39" aria-hidden="true" tabindex="-1"></a>        connectors <span class="op">=</span> []</span>
+<span id="cb26-40"><a href="#cb26-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-41"><a href="#cb26-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> analyzers <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb26-42"><a href="#cb26-42" aria-hidden="true" tabindex="-1"></a>        analyzers <span class="op">=</span> [sti.sw_stats(diseases<span class="op">=</span>[<span class="st">'ng'</span>, <span class="st">'ct'</span>, <span class="st">'tv'</span>]), ts()]</span>
+<span id="cb26-43"><a href="#cb26-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-44"><a href="#cb26-44" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Actually create the sim</span></span>
+<span id="cb26-45"><a href="#cb26-45" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb26-46"><a href="#cb26-46" aria-hidden="true" tabindex="-1"></a>        dt<span class="op">=</span>dt,</span>
+<span id="cb26-47"><a href="#cb26-47" aria-hidden="true" tabindex="-1"></a>        rand_seed<span class="op">=</span>seed,</span>
+<span id="cb26-48"><a href="#cb26-48" aria-hidden="true" tabindex="-1"></a>        total_pop<span class="op">=</span>total_pop,</span>
+<span id="cb26-49"><a href="#cb26-49" aria-hidden="true" tabindex="-1"></a>        start<span class="op">=</span>start,</span>
+<span id="cb26-50"><a href="#cb26-50" aria-hidden="true" tabindex="-1"></a>        stop<span class="op">=</span>stop,</span>
+<span id="cb26-51"><a href="#cb26-51" aria-hidden="true" tabindex="-1"></a>        people<span class="op">=</span>ppl,</span>
+<span id="cb26-52"><a href="#cb26-52" aria-hidden="true" tabindex="-1"></a>        diseases<span class="op">=</span>diseases,</span>
+<span id="cb26-53"><a href="#cb26-53" aria-hidden="true" tabindex="-1"></a>        networks<span class="op">=</span>[sexual, maternal],</span>
+<span id="cb26-54"><a href="#cb26-54" aria-hidden="true" tabindex="-1"></a>        demographics<span class="op">=</span>[pregnancy, death],</span>
+<span id="cb26-55"><a href="#cb26-55" aria-hidden="true" tabindex="-1"></a>        interventions<span class="op">=</span>intvs,</span>
+<span id="cb26-56"><a href="#cb26-56" aria-hidden="true" tabindex="-1"></a>        analyzers<span class="op">=</span>analyzers,</span>
+<span id="cb26-57"><a href="#cb26-57" aria-hidden="true" tabindex="-1"></a>        connectors<span class="op">=</span>connectors,</span>
+<span id="cb26-58"><a href="#cb26-58" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb26-59"><a href="#cb26-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-60"><a href="#cb26-60" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Store scenario</span></span>
+<span id="cb26-61"><a href="#cb26-61" aria-hidden="true" tabindex="-1"></a>    sim.scenario <span class="op">=</span> scenario</span>
+<span id="cb26-62"><a href="#cb26-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sim</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>If your <code>make_sim()</code> function is computationally expensive, you can parallelize it using <code>sc.parallelize()</code>, e.g.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the arguments</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>iterkwargs <span class="op">=</span> []</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">100</span>):</span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> n_agents <span class="kw">in</span> [<span class="fl">1e3</span>, <span class="fl">2e3</span>, <span class="fl">5e3</span>, <span class="fl">10e3</span>]:</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>        iterkwargs.append(<span class="bu">dict</span>(seed<span class="op">=</span>seed, n_agents<span class="op">=</span>n_agents))</span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sims</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>sims <span class="op">=</span> sc.parallelize(make_sim, iterkwargs<span class="op">=</span>iterkwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 
 
 </section>
@@ -1264,13 +1434,13 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Networks">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Networks</span>
+      <a href="../user_guide/modules_connectors.html" class="pagination-link" aria-label="Connectors">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Connectors</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/modules_interventions.html" class="pagination-link" aria-label="Interventions">
-        <span class="nav-page-text">Interventions</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/workflows_sir_calibration.html" class="pagination-link" aria-label="Fit stochastic SIR models to synthetic data">
+        <span class="nav-page-text">Fit stochastic SIR models to synthetic data</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

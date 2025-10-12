@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Demographics – Starsim</title>
+<title>T5 - Networks – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -58,15 +58,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </style>
 
 
-<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
 <script src="../site_libs/quarto-nav/headroom.min.js"></script>
 <script src="../site_libs/clipboard/clipboard.min.js"></script>
 <script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../user_guide/modules_interventions.html" rel="next">
-<link href="../user_guide/modules_networks.html" rel="prev">
+<link href="../tutorials/t6_interventions.html" rel="next">
+<link href="../tutorials/t4_diseases.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -118,6 +118,9 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
 
 
 <link rel="stylesheet" href="../assets/styles.css">
@@ -347,7 +350,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../tutorials/t1_intro.html"><strong>Tutorials</strong></a></li><li class="breadcrumb-item"><a href="../tutorials/t5_networks.html">T5 - Networks</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -416,7 +419,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../tutorials/t5_networks.html" class="sidebar-item-text sidebar-link">
+  <a href="../tutorials/t5_networks.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">T5 - Networks</span></a>
   </div>
 </li>
@@ -524,7 +527,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link active">
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Demographics</span></a>
   </div>
 </li>
@@ -660,9 +663,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#simple-usage" id="toc-simple-usage" class="nav-link active" data-scroll-target="#simple-usage">Simple usage</a></li>
-  <li><a href="#advanced-usage-pregnancy-and-births" id="toc-advanced-usage-pregnancy-and-births" class="nav-link" data-scroll-target="#advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</a></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#overview-of-starsims-contact-network-structure" id="toc-overview-of-starsims-contact-network-structure" class="nav-link active" data-scroll-target="#overview-of-starsims-contact-network-structure">Overview of Starsim’s contact network structure</a></li>
+  <li><a href="#sexual-networks" id="toc-sexual-networks" class="nav-link" data-scroll-target="#sexual-networks">Sexual networks</a></li>
+  <li><a href="#maternal-networks" id="toc-maternal-networks" class="nav-link" data-scroll-target="#maternal-networks">Maternal networks</a></li>
+  <li><a href="#making-your-own-contact-network" id="toc-making-your-own-contact-network" class="nav-link" data-scroll-target="#making-your-own-contact-network">Making your own contact network</a></li>
+  <li><a href="#introduction-to-mixing-pools" id="toc-introduction-to-mixing-pools" class="nav-link" data-scroll-target="#introduction-to-mixing-pools">Introduction to mixing pools</a></li>
+  <li><a href="#what-youve-learned" id="toc-what-youve-learned" class="nav-link" data-scroll-target="#what-youve-learned">What you’ve learned</a></li>
+  <li><a href="#exercises" id="toc-exercises" class="nav-link" data-scroll-target="#exercises">Exercises</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -670,9 +677,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../tutorials/t1_intro.html"><strong>Tutorials</strong></a></li><li class="breadcrumb-item"><a href="../tutorials/t5_networks.html">T5 - Networks</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Demographics</h1>
+<h1 class="title">T5 - Networks</h1>
 </div>
 
 
@@ -689,161 +696,292 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<p>Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.</p>
-<p>Demographics modules are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics.</p>
-<section id="simple-usage" class="level2">
-<h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
-<p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
-<div id="050a676e" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<div class="alert alert-info">
+<p>An interactive version of this notebook is available on <a href="https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/transmission.ipynb">Google Colab</a> or <a href="https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Ftransmission.ipynb">Binder</a>.</p>
+</div>
+<p>Many infectious diseases transmit when people come into contact with one another. In the basic SIR example that we covered in the first two tutorials, we used a ‘random’ contact network, which creates random pairings of people. Generally speaking, the structure of network that you use depends on what disease you’re modeling.</p>
+<p>Starsim contains two different approaches to disease transmission.</p>
+<p><strong>Contact network:</strong> Disease transmits on individual person-to-person relationships. These are networks in the sense that each agent (person) can be viewed as a node and each contact is an edge. Networks are undirected in the sense that an edge will allow transmission in both directions, however you can make transmission stronger one way (p1–&gt;p2) than the other (p2–&gt;p1). The framework includes several pre-built contact network algorithms, each of which manages a list of edges that can change on each simulation step. In addition to the ‘random’ network, the framework include algorithms representing basic sexual networks for modeling sexually transmitted infections (STIs) and a ‘maternal’ network for modeling mother-to-child transmission.</p>
+<p><strong>Mixing pools:</strong> Simulate well-mixed transmission from one group of agents to another. Each mixing pool simulates directed transmission from a group of source agents to a group of destination agents. Instead of simulating individual edges like in a contact network, mixing pools first compute the total “contagion” that is shed by the source group. This total contagion value is normalized by the number of agents in the source group to arrive at a value that represents a typical infectious source agent. Then, each destination agent is exposed to this typical (average) infectious agent, likely resulting in new infections in the destination group. Multiple mixing pools can be run simultaneously to simulate heterogeneous transmission between various source and destination groups. Mixing pools could be used with age contact matrices like those developed by Prem et al.</p>
+<p>Note that contact networks and mixing pools can be used together in a single simulation.</p>
+<p>In this tutorial, we’ll demonstrate a couple of the built-in contact networks, and give an overview of how you might create your own for your own disease modeling work. We’ll also demonstrate how to use mixing pools.</p>
+<section id="overview-of-starsims-contact-network-structure" class="level2">
+<h2 class="anchored" data-anchor-id="overview-of-starsims-contact-network-structure">Overview of Starsim’s contact network structure</h2>
+<p>Starsim’s networks are stored in the <code>networks.py</code> file. At the top of this file you’ll see the <a href="../api/networks.html#starsim.networks.Network" title="0"><code>Network</code></a> class, which provides the template for all the other networks. At a high level, all you need to know is that network stores various <em>parameters</em> that determine how pairs of people form and dissolve, and a collection of all the <em>edges</em> that exist at a given point in time. Let’s look at a simple example of the <a href="https://docs.python.org/3/library/random.html#module-random" title="1"><code>random</code></a> network:</p>
+<div id="04b07551" class="cell" data-tags="[]" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulation parameters</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'No demographics'</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'With demographics'</span>, demographics<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Run both simulations and plot</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Make random network</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>random <span class="op">=</span> ss.RandomNet()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>The network we just made stores two very important things: the list of contacts (found in <code>random.edges</code>) and the parameters (<code>random.pars</code>).</p>
+<p>If we just make a network on its own like this, it’s not very interesting. Like all components of Starsim, it needs to be initialized within a <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> before the database of contacts gets populated:</p>
+<div id="f2b1686b" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">50</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span>net) <span class="co"># Decreasing n_agents so we can plot the network below</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim.init()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 50 agents</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>Sim(n=50; 2000—2050; networks=randomnet; diseases=sir)</code></pre>
+</div>
+</div>
+<p>We can easily take a look at the list of edges between agents. All networks are stored in <code>sim.networks</code>, and individual networks can be found at their class name after conversion to lower case. So for this example, <code>sim.networks.randomnet.edges</code> has all the information about which agents (referenced by their UID) are paired with which other agents as well as a per-edge transmission multiplier called <code>beta</code> and a per-edge duration, <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a>.</p>
+<div id="a835439d" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim.networks.randomnet</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="4">
+<pre><code>randomnet(n_edges=250; pars=[n_contacts, dur, beta]; states=[participant])</code></pre>
+</div>
+</div>
+<p>Networks provide some basic functionality, for example to identify contacts. Additionally, the edge list can be quickly converted to a <a href="https://pandas.pydata.org/pandas-docs/stable/index.html#module-pandas" title="1"><code>pandas</code></a> dataframe or <code>networkx</code> graph for further analysis and manipulation:</p>
+<div id="09da79de" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> sim.networks.randomnet</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use the "find_contacts" function to find all contacts of agent with uid 0</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>contacts_of_agent_0 <span class="op">=</span> net.find_contacts([<span class="dv">0</span>])</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'The following agents were identified as contacts of agent 0:'</span>, contacts_of_agent_0)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert to a pandas DataFrame and manually find all edges involving agent with uid 0</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> net.to_df()</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>uid0_edges <span class="op">=</span> df.loc[(df[<span class="st">'p1'</span>]<span class="op">==</span><span class="dv">0</span>) <span class="op">|</span> (df[<span class="st">'p2'</span>]<span class="op">==</span><span class="dv">0</span>)]</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'</span><span class="ch">\n</span><span class="st">Edges involving UID 0 extracted from the edge list data frame:'</span>)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>display(uid0_edges)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the network using networkx</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>net.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>The following agents were identified as contacts of agent 0: [ 7  9 13 18 24 33 39 40 44 46]
+
+Edges involving UID 0 extracted from the edge list data frame:</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">p1</th>
+<th data-quarto-table-cell-role="th">p2</th>
+<th data-quarto-table-cell-role="th">beta</th>
+<th data-quarto-table-cell-role="th">dur</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">0</th>
+<td>0</td>
+<td>24</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">1</th>
+<td>0</td>
+<td>7</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">2</th>
+<td>0</td>
+<td>44</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">3</th>
+<td>0</td>
+<td>13</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">4</th>
+<td>0</td>
+<td>18</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">45</th>
+<td>9</td>
+<td>0</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">165</th>
+<td>33</td>
+<td>0</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">196</th>
+<td>39</td>
+<td>0</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">204</th>
+<td>40</td>
+<td>0</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">234</th>
+<td>46</td>
+<td>0</td>
+<td>1.0</td>
+<td>0.0</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(672x480)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t5_networks_files/figure-html/cell-6-output-4.png" width="540" height="408" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="sexual-networks" class="level2">
+<h2 class="anchored" data-anchor-id="sexual-networks">Sexual networks</h2>
+<p>Starsim contains a few basic sexual networks, including an <code>mf</code> network for modeling heterosexual partnerships and an <code>msm</code> network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here’s an example modeling syphilis:</p>
+<div id="dd802fdd" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the disease</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> sse.Syphilis(</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>]},    <span class="co"># See notes below </span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a heterosexual network</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>mf <span class="op">=</span> ss.MFNet(</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    duration<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">24</span>,  <span class="co"># Using very short relationships so that we get more transmission </span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    acts<span class="op">=</span><span class="dv">80</span>,        <span class="co"># Distribution of the number of coital acts/year</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, dur<span class="op">=</span><span class="dv">20</span>, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">12</span>)</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>pars, diseases<span class="op">=</span>syph, networks<span class="op">=</span>mf)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>The main difference here is that we’ve added the line <code>syph.pars['beta'] = {'mf': [0.25, 0.15]}</code>. Because STIs are generally more transmissible from males to females than vice versa, we can specify <code>beta</code> as a list, and we can also allow it to vary between networks. For instance, if we also had an MSM network here, we could set</p>
+<pre><code>syph.pars.update(beta = {'mf': [0.25, 0.15], 'msm': [0.4, 0.4]})</code></pre>
+<p>The sexual network itself is structurally similar to the <a href="https://docs.python.org/3/library/random.html#module-random" title="1"><code>random</code></a> network that we looked at previously, and can be customized by changing the <code>pars</code> dictionary that’s used to construct it.</p>
+</section>
+<section id="maternal-networks" class="level2">
+<h2 class="anchored" data-anchor-id="maternal-networks">Maternal networks</h2>
+<p>Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the maternal network. Here’s an example showing how you would do this for syphilis:</p>
+<div id="860b879b" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> sse.Syphilis(</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>], <span class="st">'maternal'</span>: [<span class="fl">0.99</span>, <span class="dv">0</span>]}</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Make demographic modules</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(fertility_rate<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span><span class="dv">15</span>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Make maternal network</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>maternal <span class="op">=</span> ss.MaternalNet()</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Make sim</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars<span class="op">=</span>pars, diseases<span class="op">=</span>syph, networks<span class="op">=</span>[mf, maternal], demographics<span class="op">=</span>[pregnancy, death], dur<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>sim.run().plot(show_module<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+  Running 2000.01.01 ( 0/121) (0.00 s)  ———————————————————— 1%
+  Running 2000.11.01 (10/121) (0.42 s)  •——————————————————— 9%
+  Running 2001.09.01 (20/121) (0.57 s)  •••————————————————— 17%
+  Running 2002.07.02 (30/121) (0.72 s)  •••••——————————————— 26%
+  Running 2003.05.03 (40/121) (0.87 s)  ••••••—————————————— 34%
+  Running 2004.03.02 (50/121) (1.02 s)  ••••••••———————————— 42%
+  Running 2005.01.01 (60/121) (1.17 s)  ••••••••••—————————— 50%
+  Running 2005.11.01 (70/121) (1.33 s)  •••••••••••————————— 59%
+  Running 2006.09.01 (80/121) (1.49 s)  •••••••••••••——————— 67%
+  Running 2007.07.02 (90/121) (1.64 s)  •••••••••••••••————— 75%
+  Running 2008.05.02 (100/121) (1.79 s)  ••••••••••••••••———— 83%
+  Running 2009.03.03 (110/121) (1.95 s)  ••••••••••••••••••—— 92%
+  Running 2010.01.01 (120/121) (2.10 s)  •••••••••••••••••••• 100%
+
+Figure(1152x864)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="t5_networks_files/figure-html/cell-8-output-2.png" width="1142" height="854" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="making-your-own-contact-network" class="level2">
+<h2 class="anchored" data-anchor-id="making-your-own-contact-network">Making your own contact network</h2>
+<p>If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make an <code>mf</code> network that has more age structure, you could do something like this:</p>
+<div id="90ebaea5" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> age_mf(ss.MFNet):</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> add_pairs(<span class="va">self</span>, people, ti<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom code to select pairs based on age</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> </span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>This network would operate exactly like the existing <code>mf</code> network, but you could control how new pairs were added.</p>
+</section>
+<section id="introduction-to-mixing-pools" class="level2">
+<h2 class="anchored" data-anchor-id="introduction-to-mixing-pools">Introduction to mixing pools</h2>
+<p>While contact networks model individual relationships, mixing pools model group-level transmission. This is useful for: - Large populations where individual contacts are impractical - Age-structured mixing (like school, work, household contacts) - When you have contact matrices from epidemiological studies</p>
+<p>Here’s a simple comparison:</p>
+<div id="67c881d2" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple mixing pool example</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>sir_mp <span class="op">=</span> ss.SIR()</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>sim_mp <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir_mp, networks<span class="op">=</span>mp, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Mixing Pool'</span>)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Equivalent contact network</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>sir_net <span class="op">=</span> ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="fl">0.1</span>))</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>sim_net <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir_net, networks<span class="op">=</span>net, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Contact Network'</span>)</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim_mp, sim_net]).run()</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
+<p><img src="t5_networks_files/figure-html/cell-10-output-2.png" width="759" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
+<p>Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts.</p>
 </section>
-<section id="advanced-usage-pregnancy-and-births" class="level2">
-<h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module instead of simple <a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>Births</code></a>. The pregnancy module models:</p>
-<ul>
-<li>Age-specific fertility rates</li>
-<li>Pregnancy duration and outcomes</li>
-<li>Maternal and neonatal mortality</li>
-<li>Mother-to-child transmission pathways</li>
-</ul>
-<div id="b3a58be0" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Create age-specific birth and fertility data</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>birth_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Year'</span>: [<span class="dv">2000</span>, <span class="dv">2005</span>, <span class="dv">2010</span>, <span class="dv">2015</span>, <span class="dv">2020</span>, <span class="dv">2025</span>, <span class="dv">2030</span>],</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">'CBR'</span>: [<span class="dv">40</span>, <span class="dv">35</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">32</span>, <span class="dv">30</span>, <span class="dv">28</span>]  <span class="co"># Age-specific birth rates</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>fertility_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Time'</span>: [<span class="dv">2020</span>]<span class="op">*</span><span class="dv">7</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'AgeGrp'</span>: [<span class="dv">15</span>, <span class="dv">20</span>, <span class="dv">25</span>, <span class="dv">30</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">45</span>],</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'ASFR'</span>: [<span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.20</span>, <span class="fl">0.15</span>, <span class="fl">0.10</span>, <span class="fl">0.05</span>, <span class="fl">0.01</span>]  <span class="co"># Age-specific fertility rates</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a simple births module</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(birth_rate<span class="op">=</span>birth_data)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a pregnancy module with custom parameters</span></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    fertility_rate <span class="op">=</span> fertility_data,</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    rel_fertility <span class="op">=</span> <span class="dv">1000</span>, <span class="co"># Whether data are per person or per 1000</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    dur_pregnancy <span class="op">=</span> ss.years(<span class="fl">0.75</span>),           <span class="co"># 9 months pregnancy</span></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    dur_postpartum <span class="op">=</span> ss.years(<span class="fl">0.5</span>),           <span class="co"># 6 months postpartum</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    p_maternal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.001</span>),   <span class="co"># 0.1% maternal mortality</span></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    p_neonatal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.02</span>),    <span class="co"># 2% neonatal mortality</span></span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    min_age <span class="op">=</span> <span class="dv">15</span>,</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    max_age <span class="op">=</span> <span class="dv">50</span>,</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Create deaths module</span></span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>deaths <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">8</span>))  <span class="co"># 8 deaths per 1000 per year</span></span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span> <span class="co"># Number of agents</span></span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span> <span class="co"># </span></span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, n_agents<span class="op">=</span>n_agents, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Births'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[births, deaths])</span>
-<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Pregnancy'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[pregnancy, deaths])</span>
-<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot histograms of the age distributions - simulated vs data at initialization</span></span>
-<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>sim1.init() <span class="co"># This creates the population</span></span>
-<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>bins <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">101</span>, <span class="dv">1</span>)</span>
-<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>init_scale <span class="op">=</span> nga_pop_1995 <span class="op">/</span> n_agents</span>
-<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>counts, bins <span class="op">=</span> np.histogram(sim1.people.age, bins)</span>
-<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>plt.bar(bins, age_data.value.values <span class="op">*</span> <span class="dv">1000</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'r'</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
-<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>plt.bar(bins[:<span class="op">-</span><span class="dv">1</span>], counts <span class="op">*</span> init_scale, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Simulated'</span>)</span>
-<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>plt.legend(loc<span class="op">=</span><span class="st">'upper right'</span>)</span>
-<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Population'</span>)</span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Age'</span>)</span>
-<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>sc.SIticks()</span>
-<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
-<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:394: RuntimeWarning: 
-Sim "Pregnancy" has different results keys:
-Extra: pregnancy_pregnancies, pregnancy_cbr, pregnancy_n_postpartum, pregnancy_n_pregnant, pregnancy_births, pregnancy_n_fecund
-Missing: births_cumulative, births_cbr, births_new
-Results may not plot correctly (i.e. axes titles may not be correct for all sims)
-  ss.warn(warnmsg)
-Exception ignored in: &lt;_io.BytesIO object at 0x7f5d74986f20&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/artist.py", line 1197, in _update_props
-    with cbook._setattr_cm(self, eventson=False):
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Figure(896x672)</code></pre>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="602" height="429" class="figure-img"></p>
-</figure>
-</div>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-4.png" width="918" height="662" class="figure-img"></p>
-</figure>
-</div>
-</div>
-</div>
+<section id="what-youve-learned" class="level2">
+<h2 class="anchored" data-anchor-id="what-youve-learned">What you’ve learned</h2>
+<p>Congratulations! You’ve now learned how to: - Use basic contact networks for disease transmission - Model disease-specific networks (sexual, maternal) - Create custom networks with your own connection rules - Understand the difference between contact networks and mixing pools</p>
+<p>For more advanced mixing pool techniques (age-structured mixing, contact matrices, multi-group models), see the Networks implementation guide.</p>
 </section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<ul>
-<li><strong>Demographics modules</strong> enable realistic population dynamics in Starsim:
-<ul>
-<li><strong>Births</strong>: Simple constant or time-varying birth rates</li>
-<li><strong>Deaths</strong>: Background mortality separate from disease deaths<br>
-</li>
-<li><strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</li>
-</ul></li>
-<li><strong>Key considerations:</strong>
-<ul>
-<li>Use <code>demographics=True</code> for default birth/death rates</li>
-<li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
-<li>Use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy()</code></a> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
-<li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
-</ul></li>
-</ul>
+<section id="exercises" class="level2">
+<h2 class="anchored" data-anchor-id="exercises">Exercises</h2>
+<ol type="1">
+<li><strong>Multi-network STI model</strong>: Adapt the syphilis example to include both MF and MSM transmission</li>
+<li><strong>Custom network parameters</strong>: Modify the AgeMFNet to have different age bins and mixing probabilities</li>
+<li><strong>Network comparison</strong>: Compare random vs age-structured networks - how do they affect epidemic dynamics?</li>
+</ol>
 
 
 </section>
@@ -1264,13 +1402,13 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Networks">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Networks</span>
+      <a href="../tutorials/t4_diseases.html" class="pagination-link" aria-label="T4 - Diseases">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">T4 - Diseases</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/modules_interventions.html" class="pagination-link" aria-label="Interventions">
-        <span class="nav-page-text">Interventions</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../tutorials/t6_interventions.html" class="pagination-link" aria-label="T6 - Interventions">
+        <span class="nav-page-text">T6 - Interventions</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

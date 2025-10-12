@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Demographics – Starsim</title>
+<title>People, States, and Arrays – Starsim</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -65,8 +65,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
-<link href="../user_guide/modules_interventions.html" rel="next">
-<link href="../user_guide/modules_networks.html" rel="prev">
+<link href="../user_guide/basics_parameters.html" rel="next">
+<link href="../user_guide/basics_sim.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -347,7 +347,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/basics_model.html">Basic concepts</a></li><li class="breadcrumb-item"><a href="../user_guide/basics_people.html">People, States, and Arrays</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -489,7 +489,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/basics_people.html" class="sidebar-item-text sidebar-link">
+  <a href="../user_guide/basics_people.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">People, States, and Arrays</span></a>
   </div>
 </li>
@@ -524,7 +524,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link active">
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Demographics</span></a>
   </div>
 </li>
@@ -660,9 +660,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#simple-usage" id="toc-simple-usage" class="nav-link active" data-scroll-target="#simple-usage">Simple usage</a></li>
-  <li><a href="#advanced-usage-pregnancy-and-births" id="toc-advanced-usage-pregnancy-and-births" class="nav-link" data-scroll-target="#advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</a></li>
-  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#starsim-states-and-arrays" id="toc-starsim-states-and-arrays" class="nav-link active" data-scroll-target="#starsim-states-and-arrays">Starsim States and Arrays</a></li>
+  <li><a href="#creating-default-people" id="toc-creating-default-people" class="nav-link" data-scroll-target="#creating-default-people">Creating default people</a></li>
+  <li><a href="#creating-custom-people" id="toc-creating-custom-people" class="nav-link" data-scroll-target="#creating-custom-people">Creating custom people</a></li>
+  <li><a href="#modifying-people-with-modules" id="toc-modifying-people-with-modules" class="nav-link" data-scroll-target="#modifying-people-with-modules">Modifying People with modules</a></li>
+  <li><a href="#debugging-and-analyzing" id="toc-debugging-and-analyzing" class="nav-link" data-scroll-target="#debugging-and-analyzing">Debugging and analyzing</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -670,9 +672,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <main class="content" id="quarto-document-content">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_demographics.html">Demographics</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/basics_model.html">Basic concepts</a></li><li class="breadcrumb-item"><a href="../user_guide/basics_people.html">People, States, and Arrays</a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title">Demographics</h1>
+<h1 class="title">People, States, and Arrays</h1>
 </div>
 
 
@@ -689,161 +691,256 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<p>Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.</p>
-<p>Demographics modules are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics.</p>
-<section id="simple-usage" class="level2">
-<h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
-<p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
-<div id="050a676e" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulation parameters</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'No demographics'</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'With demographics'</span>, demographics<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>pars)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Run both simulations and plot</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>msim.plot([<span class="st">'n_alive'</span>, <span class="st">'cum_deaths'</span>, <span class="st">'sis_n_susceptible'</span>, <span class="st">'sis_n_infected'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Starsim is a framework for creating agent-based models, and the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class is where we store the agents, so it should come as no surprise that this class serves as the fundamental heart of any Starsim model. In this page we provide alternative pathways for creating people and some guidance on how to adapt these workflows depending on your needs.</p>
+<p>We start by giving an overview on this page of Starsim’s custom <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> (array) classes, which are a separate but related Starsim class designed to neatly track data about people.</p>
+<section id="starsim-states-and-arrays" class="level2">
+<h2 class="anchored" data-anchor-id="starsim-states-and-arrays">Starsim States and Arrays</h2>
+<p>Starsim has a set of custom array classes for recording information about each agent in the population. The two fundamental types of array for storing such infomation are the <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a> class, which is a Boolean array, and the <a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a> class, which stores numbers (we don’t distinguish between floats and integers, so all numbers are stored in these arrays). Each of these is a subclass of the Starsim <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> class.</p>
+<p>The <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> class in Starsim is optimized for three key tasks that are common to almost all Starsim models:</p>
+<ol type="1">
+<li><em>Dynamic growth</em>: as the population grows over time, the size of the arrays dynamically update in a way that avoids costly concatenation operations;</li>
+<li><em>Indexing</em>: over time, there are agents in the population who die. It is desirable for these agents to remain in the arrays so that we can continue to access data about them, but the indexing is set up so that dead agents are automatically excluded from most operations.</li>
+<li><em>Stochastic states</em>: we often want to set the values of a state by sampling from a random variable (e.g.&nbsp;sex might be drawn as a Bernoulli random variable). Starsim’s <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> class can be initialized with a random variables; we will provide examples of this below.</li>
+</ol>
+<p>All agents have a <code>uid</code> (universal identifier), which corresponds to their position in the array. Starsim keeps track of a list of <code>auids</code> (active UIDs), corresponding to agents who are alive or are otherwise participating in the simulation. This way, Starsim knows to skip over dead agents (or otherwise removed, e.g.&nbsp;from migration) when calculating disease progression, aging, etc.</p>
+<p>In most cases, you shouldn’t need to worry about <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a>, <code>auids</code>, etc. However, this example illustrates how they work:</p>
+<div id="8f1d4735" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2020</span>, n_agents<span class="op">=</span><span class="dv">1000</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, demographics<span class="op">=</span><span class="va">True</span>, verbose<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>sc.heading(<span class="st">'Initial state'</span>)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> sim.people</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Number of agents before run:'</span>, <span class="bu">len</span>(ppl))</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Maximum UID:'</span>, ppl.uid.<span class="bu">max</span>())</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age:'</span>, ppl.age.mean())</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>sc.heading(<span class="st">'After running the sim'</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Number of agents after run:'</span>, <span class="bu">len</span>(ppl))</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Number of agents who were born:'</span>, sim.results.births.cumulative[<span class="op">-</span><span class="dv">1</span>])</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Number of agents who died:'</span>, sim.results.cum_deaths[<span class="op">-</span><span class="dv">1</span>])</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Maximum UID:'</span>, ppl.uid.<span class="bu">max</span>())</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Size of the raw arrays:'</span>, <span class="bu">len</span>(ppl.uid.raw))</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean age of alive agents:'</span>, ppl.age.mean())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Figure(768x576)</code></pre>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
-</figure>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+
+
+—————————————
+
+Initial state
+
+—————————————
+
+</span>
+
+Number of agents before run: 1000
+
+Maximum UID: 999
+
+Mean age: 30.130148
+
+<span class="ansi-cyan-fg">
+
+
+
+—————————————————————
+
+After running the sim
+
+—————————————————————
+
+</span>
+
+Number of agents after run: 1231
+
+Number of agents who were born: 471.0
+
+Number of agents who died: 222.0
+
+Maximum UID: 1470
+
+Size of the raw arrays: 1500
+
+Mean age of alive agents: 36.638798
+</pre>
 </div>
 </div>
 </div>
 </section>
-<section id="advanced-usage-pregnancy-and-births" class="level2">
-<h2 class="anchored" data-anchor-id="advanced-usage-pregnancy-and-births">Advanced usage: Pregnancy and births</h2>
-<p>For more detailed modeling, you can use the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module instead of simple <a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>Births</code></a>. The pregnancy module models:</p>
-<ul>
-<li>Age-specific fertility rates</li>
-<li>Pregnancy duration and outcomes</li>
-<li>Maternal and neonatal mortality</li>
-<li>Mother-to-child transmission pathways</li>
-</ul>
-<div id="b3a58be0" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Create age-specific birth and fertility data</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>birth_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Year'</span>: [<span class="dv">2000</span>, <span class="dv">2005</span>, <span class="dv">2010</span>, <span class="dv">2015</span>, <span class="dv">2020</span>, <span class="dv">2025</span>, <span class="dv">2030</span>],</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">'CBR'</span>: [<span class="dv">40</span>, <span class="dv">35</span>, <span class="dv">30</span>, <span class="dv">31</span>, <span class="dv">32</span>, <span class="dv">30</span>, <span class="dv">28</span>]  <span class="co"># Age-specific birth rates</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>fertility_data <span class="op">=</span> pd.DataFrame({</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">'Time'</span>: [<span class="dv">2020</span>]<span class="op">*</span><span class="dv">7</span>,</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">'AgeGrp'</span>: [<span class="dv">15</span>, <span class="dv">20</span>, <span class="dv">25</span>, <span class="dv">30</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">45</span>],</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'ASFR'</span>: [<span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.20</span>, <span class="fl">0.15</span>, <span class="fl">0.10</span>, <span class="fl">0.05</span>, <span class="fl">0.01</span>]  <span class="co"># Age-specific fertility rates</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a simple births module</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(birth_rate<span class="op">=</span>birth_data)</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a pregnancy module with custom parameters</span></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    fertility_rate <span class="op">=</span> fertility_data,</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    rel_fertility <span class="op">=</span> <span class="dv">1000</span>, <span class="co"># Whether data are per person or per 1000</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    dur_pregnancy <span class="op">=</span> ss.years(<span class="fl">0.75</span>),           <span class="co"># 9 months pregnancy</span></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    dur_postpartum <span class="op">=</span> ss.years(<span class="fl">0.5</span>),           <span class="co"># 6 months postpartum</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    p_maternal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.001</span>),   <span class="co"># 0.1% maternal mortality</span></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    p_neonatal_death <span class="op">=</span> ss.bernoulli(<span class="fl">0.02</span>),    <span class="co"># 2% neonatal mortality</span></span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    min_age <span class="op">=</span> <span class="dv">15</span>,</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    max_age <span class="op">=</span> <span class="dv">50</span>,</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="co"># Create deaths module</span></span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>deaths <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">8</span>))  <span class="co"># 8 deaths per 1000 per year</span></span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="co"># Create simulations</span></span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="dv">5_000</span> <span class="co"># Number of agents</span></span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>nga_pop_1995 <span class="op">=</span> <span class="dv">106819805</span> <span class="co"># </span></span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>age_data)</span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">1995</span>, people<span class="op">=</span>ppl, n_agents<span class="op">=</span>n_agents, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Births'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[births, deaths])</span>
-<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Pregnancy'</span>, <span class="op">**</span>pars, demographics<span class="op">=</span>[pregnancy, deaths])</span>
-<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot histograms of the age distributions - simulated vs data at initialization</span></span>
-<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>sim1.init() <span class="co"># This creates the population</span></span>
-<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>bins <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">101</span>, <span class="dv">1</span>)</span>
-<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>init_scale <span class="op">=</span> nga_pop_1995 <span class="op">/</span> n_agents</span>
-<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>counts, bins <span class="op">=</span> np.histogram(sim1.people.age, bins)</span>
-<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>plt.bar(bins, age_data.value.values <span class="op">*</span> <span class="dv">1000</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'r'</span>, label<span class="op">=</span><span class="st">'Data'</span>)</span>
-<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>plt.bar(bins[:<span class="op">-</span><span class="dv">1</span>], counts <span class="op">*</span> init_scale, alpha<span class="op">=</span><span class="fl">0.5</span>, label<span class="op">=</span><span class="st">'Simulated'</span>)</span>
-<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>plt.legend(loc<span class="op">=</span><span class="st">'upper right'</span>)</span>
-<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Population'</span>)</span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Age'</span>)</span>
-<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>sc.SIticks()</span>
-<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="co"># Run nd plot simulations</span></span>
-<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:394: RuntimeWarning: 
-Sim "Pregnancy" has different results keys:
-Extra: pregnancy_pregnancies, pregnancy_cbr, pregnancy_n_postpartum, pregnancy_n_pregnant, pregnancy_births, pregnancy_n_fecund
-Missing: births_cumulative, births_cbr, births_new
-Results may not plot correctly (i.e. axes titles may not be correct for all sims)
-  ss.warn(warnmsg)
-Exception ignored in: &lt;_io.BytesIO object at 0x7f5d74986f20&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/artist.py", line 1197, in _update_props
-    with cbook._setattr_cm(self, eventson=False):
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
+<section id="creating-default-people" class="level2">
+<h2 class="anchored" data-anchor-id="creating-default-people">Creating default people</h2>
+<p>When you create a sim, it automatically creates <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a>, and you can use the <code>n_agents</code> argument to control the population size:</p>
+<div id="f7abc0ec" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>)  <span class="co"># Create a sim with default people</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Figure(896x672)</code></pre>
+<pre><code>Initializing sim with 1000 agents</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="2">
+<pre><code>Sim(n=1000; 2000—2050)</code></pre>
+</div>
+</div>
+<p>The <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> that are added to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> come with the following default states and arrays:</p>
+<ul>
+<li><code>alive</code>, a <code>State</code> that records whether each agent is alive</li>
+<li><code>female</code>, a <code>State</code> that records whether each agent is female</li>
+<li><code>age</code>, a <a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a> that records agent ages</li>
+<li><code>ti_dead</code>, a <a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a> that records the time of death, NaN by default</li>
+<li><code>scale</code>, a <a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a> that records the number of people that each agent represents; 1 by default.</li>
+</ul>
+</section>
+<section id="creating-custom-people" class="level2">
+<h2 class="anchored" data-anchor-id="creating-custom-people">Creating custom people</h2>
+<p>Rather than relying on the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> to create people, you can create your own <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> and add them to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> as a separate argument. The example below is equivalent to the one immediately above:</p>
+<div id="816a2125" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>people <span class="op">=</span> ss.People(<span class="dv">1000</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>people)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>The main reason to create custom people is if you want to specify a particular age/sex distribution. The following example creates a population with the age distribution of Nigeria:</p>
+<div id="355d126c" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="fl">10e3</span>, age_data<span class="op">=</span>age_data)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, copy_inputs<span class="op">=</span><span class="va">False</span>).init()</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>ppl.plot_ages()<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10000 agents
+Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-3.png" width="602" height="429" class="figure-img"></p>
+<p><img src="basics_people_files/figure-html/cell-5-output-2.png" width="662" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_demographics_files/figure-html/cell-3-output-4.png" width="918" height="662" class="figure-img"></p>
-</figure>
 </div>
+<p>Another reason to create custom people is if there are additional attributes that you want to track. Let’s say we want to add a state to track urban/rural status. The example below also illustrates how you can add a stochastic state whose values are sampled from a distribution.</p>
+<div id="090f4d02" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> urban_function(n):</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" Make a function to randomly assign people to urban/rural locations """</span> </span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.random.choice(a<span class="op">=</span>[<span class="va">True</span>, <span class="va">False</span>], p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.5</span>], size<span class="op">=</span>n)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>urban <span class="op">=</span> ss.BoolState(<span class="st">'urban'</span>, default<span class="op">=</span>urban_function)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">10</span>, extra_states<span class="op">=</span>urban)  <span class="co"># Create 10 people with this state</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>sim.init()  <span class="co"># Initialize the sim --&gt; essential step to create the people and sample states</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Number of urban people: </span><span class="sc">{</span>np<span class="sc">.</span>count_nonzero(sim.people.urban)<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 10 agents
+Number of urban people: 8</code></pre>
 </div>
 </div>
 </section>
-<section id="summary" class="level2">
-<h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<ul>
-<li><strong>Demographics modules</strong> enable realistic population dynamics in Starsim:
-<ul>
-<li><strong>Births</strong>: Simple constant or time-varying birth rates</li>
-<li><strong>Deaths</strong>: Background mortality separate from disease deaths<br>
-</li>
-<li><strong>Pregnancy</strong>: Detailed pregnancy modeling with maternal/neonatal outcomes</li>
-</ul></li>
-<li><strong>Key considerations:</strong>
-<ul>
-<li>Use <code>demographics=True</code> for default birth/death rates</li>
-<li>Use <code>birth_rate</code> and <code>death_rate</code> for custom constant rates</li>
-<li>Use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy()</code></a> for age-specific fertility, pregnancy modeling, and mother-to-child transmission</li>
-<li>Demographics automatically enables aging; if you want to use aging without demographics, set <code>use_aging=True</code></li>
-</ul></li>
-</ul>
+<section id="modifying-people-with-modules" class="level2">
+<h2 class="anchored" data-anchor-id="modifying-people-with-modules">Modifying People with modules</h2>
+<p>We saw an example above of adding a custom state to people. However, a far more common way to add states to people is by adding a module to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>. All the states of the modules will automatically get added to the main <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> instance.</p>
+<div id="4ecd3e3a" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">30</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>ss.SIS(init_prev<span class="op">=</span><span class="fl">0.1</span>), networks<span class="op">=</span>ss.RandomNet())</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Number of infected people: </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>sis<span class="sc">.</span>infected<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 30 agents
+  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2010.01.01 (10/51) (0.02 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.04 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.11 s)  •••••••••••••••••••• 100%
+
+Number of infected people: 15</code></pre>
+</div>
+</div>
+<p>When states or arrays are added by modules, they are stored as dictionaries under the name of that module.</p>
+<p>Note that the Starsim <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> class can be used like a Numpy array, with all the standard arithmetic operations like sums, mean, counting, etc.</p>
+</section>
+<section id="debugging-and-analyzing" class="level2">
+<h2 class="anchored" data-anchor-id="debugging-and-analyzing">Debugging and analyzing</h2>
+<p>There are several ways to explore the People object. One way is by exporting to a dataframe:</p>
+<div id="3ed675a2" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>    uid  slot  alive      age  female  ti_dead  ti_removed  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
+0     0     0   True  25.1524   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             46.0           56.1627        1.5163
+1     1     1   True   4.9883    True      NaN         NaN    1.0                  False            False          True       0.2294            1.0             42.0           52.0214        0.7706
+2     2     2   True  58.1494   False      NaN         NaN    1.0                  False            False          True       0.0863            1.0             42.0           52.7087        0.9137
+3     3     3   True   0.1302   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             49.0           59.3261        1.4532
+4     4     4   True  43.8199   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             43.0           53.9736        1.0737
+5     5     5   True  42.6909   False      NaN         NaN    1.0                  False             True         False       0.6862            1.0             20.0           29.6344        0.3138
+6     6     6   True  54.2923    True      NaN         NaN    1.0                  False             True         False       0.2953            1.0             37.0           47.1078        0.7047
+7     7     7   True  52.6040   False      NaN         NaN    1.0                  False             True         False       0.6314            1.0             25.0           34.3523        0.3686
+8     8     8   True   7.0769   False      NaN         NaN    1.0                  False            False          True       0.0251            1.0             41.0           51.3925        0.9749
+9     9     9   True  27.2292   False      NaN         NaN    1.0                  False             True         False       0.1064            1.0             39.0           49.1210        0.8936
+10   10    10   True   4.0500    True      NaN         NaN    1.0                  False             True         False       0.1828            1.0             34.0           45.8417        0.8172
+11   11    11   True  42.6985   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             49.0           57.8087        1.4802
+12   12    12   True  25.2828    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             48.0           57.5599        1.4279
+13   13    13   True  27.6266    True      NaN         NaN    1.0                  False             True         False       0.3926            1.0             36.0           44.9499        0.6074
+14   14    14   True  24.6072   False      NaN         NaN    1.0                  False            False          True       0.0362            1.0             42.0           51.6577        0.9638
+15   15    15   True  48.8226   False      NaN         NaN    1.0                  False             True         False       0.1770            1.0             35.0           43.8462        0.8230
+16   16    16   True  16.9486   False      NaN         NaN    1.0                  False             True         False       0.5447            1.0             28.0           37.6368        0.4553
+17   17    17   True  19.6193    True      NaN         NaN    1.0                  False             True         False       0.5025            1.0             31.0           40.2820        0.4975
+18   18    18   True  40.8453    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             43.0           51.2966        1.1735
+19   19    19   True  25.0690   False      NaN         NaN    1.0                  False             True         False       0.4052            1.0             35.0           47.0952        0.5948
+20   20    20   True  24.1976   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             41.0           50.5722        1.1485
+21   21    21   True  27.8875   False      NaN         NaN    1.0                  False            False          True       0.5276            1.0             50.0           61.8450        1.4724
+22   22    22   True   7.1277    True      NaN         NaN    1.0                  False             True         False       0.5071            1.0             32.0           42.5898        0.4929
+23   23    23   True  35.5697   False      NaN         NaN    1.0                  False             True         False       0.5034            1.0             30.0           40.4424        0.4966
+24   24    24   True  36.3433    True      NaN         NaN    1.0                  False             True         False       0.3615            1.0             37.0           46.3120        0.6385
+25   25    25   True  58.3792   False      NaN         NaN    1.0                  False             True         False       0.5156            1.0             30.0           39.2283        0.4844
+26   26    26   True   1.6279    True      NaN         NaN    1.0                  False             True         False       0.6753            1.0             22.0           31.9325        0.3247
+27   27    27   True  49.9440   False      NaN         NaN    1.0                  False            False          True       0.0966            1.0             50.0           60.1813        1.9034
+28   28    28   True  50.4779   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             40.0           51.4462        1.1485
+29   29    29   True  39.0536   False      NaN         NaN    1.0                  False            False          True       0.2576            1.0             50.0           59.1780        1.7424</code></pre>
+</div>
+</div>
+<p>This is usually too much information to understand directly, but can be useful for producing summary statistics; for example, let’s say we want to understand the relationship between time since recovery and immunity:</p>
+<div id="625fad0e" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>plt.scatter(df[<span class="st">'sis.ti_recovered'</span>], df[<span class="st">'sis.immunity'</span>])</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Time of recovery'</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Immunity'</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="basics_people_files/figure-html/cell-9-output-1.png" width="589" height="429" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Sometimes we want to explore a single agent in more detail. For this, there is a <code>person()</code> method, which will return all the attributes of that particular agent (equivalent to a single row in the dataframe):</p>
+<div id="04419e32" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>sim.people.person(<span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="9">
+<pre><code>#0. 'uid':                   10
+#1. 'slot':                  10
+#2. 'alive':                 True
+#3. 'age':                   4.050025
+#4. 'female':                True
+#5. 'ti_dead':               nan
+#6. 'ti_removed':            nan
+#7. 'scale':                 1.0
+#8. 'randomnet.participant': False
+#9. 'sis.susceptible':       True
+#10. 'sis.infected':          False
+#11. 'sis.rel_sus':           0.18277001
+#12. 'sis.rel_trans':         1.0
+#13. 'sis.ti_infected':       34.0
+#14. 'sis.ti_recovered':      45.841686
+#15. 'sis.immunity':          0.81723</code></pre>
+</div>
+</div>
 
 
 </section>
@@ -1264,13 +1361,13 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/modules_networks.html" class="pagination-link" aria-label="Networks">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Networks</span>
+      <a href="../user_guide/basics_sim.html" class="pagination-link" aria-label="The Sim object">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">The Sim object</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/modules_interventions.html" class="pagination-link" aria-label="Interventions">
-        <span class="nav-page-text">Interventions</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/basics_parameters.html" class="pagination-link" aria-label="Parameters">
+        <span class="nav-page-text">Parameters</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
