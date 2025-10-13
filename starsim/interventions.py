@@ -236,9 +236,8 @@ class BaseScreening(BaseTest):
             self.screens[accept_uids] += 1
             self.ti_screened[accept_uids] = sim.ti
             self.results['n_screened'][sim.ti] = len(accept_uids)
+            #eligibility = None but I think this is ok
             # self.results['n_dx'][sim.ti] = len(self.outcomes['positive'])
-
-        print(f'eligibility = {self.eligibility}')
         return accept_uids
 
 
