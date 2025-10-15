@@ -33,3 +33,4 @@ jobs:
         if: always()
         with:
           report_paths: './tests/test-results.xml'
+          report_name: 'Test Report (${{ matrix.python-version }})'
