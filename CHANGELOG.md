@@ -2,6 +2,9 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+## Version 3.0.4 (2025-XX-XX)
+- Added additional calibration examples for workflows to re-identify known parameters
+
 
 ## Version 3.0.3 (2025-10-07)
 - Swapped order of `age` and `female` states in People to allow `female` dist to use `age` state during population initialization.
