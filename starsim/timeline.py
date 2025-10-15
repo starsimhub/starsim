@@ -109,7 +109,13 @@ class Timeline:
 
     @property
     def dt_year(self):
+        """ The timestep size in years """
         return self.dt.years
+
+    @property
+    def year(self):
+        """ The current time in years """
+        return self.now('year')
 
     def __bool__(self):
         """ Always truthy """
@@ -180,11 +186,11 @@ class Timeline:
             errormsg = f'Invalid key "{key}": must be one of {sc.strjoin(self._time_vecs)}'
             raise ValueError(errormsg)
 
-        if 0 <= self.ti < len(vec):
+        if 0 <= self.ti < len(vec): # Normal use case, we're in the middle of a sim
             now = vec[self.ti]
-        else:
+        else: # Special case, we are before or after the sim period
             now = self.tvec[0] + self.dt*self.ti
-            if key == 'year':
+            if key == 'yearvec':
                 now = float(now)
 
         if to_str:

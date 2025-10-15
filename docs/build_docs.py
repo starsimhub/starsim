@@ -21,6 +21,7 @@ import sys
 import subprocess
 import sciris as sc
 import starsim as ss
+import docutils as ut
 
 def run(cmd):
     sc.printgreen(f'\n> {cmd}\n')
@@ -57,9 +58,10 @@ if execute == 'jupyter' and not all([os.path.exists(f'./{folder}/.jupyter_cache'
     print('Falling back to quarto docs build since Jupyter cache not yet initialized')
     execute = 'quarto'
 
-T = sc.timer()
+
 
 sc.heading(f'Building docs with Quarto and execute="{execute}"', divider='★')
+T = sc.timer()
 
 sc.heading('Updating docs version number...')
 filename = '_variables.yml'
@@ -71,9 +73,13 @@ if data != orig:
 else:
     print('Version already correct:', orig)
 
+
 # Generate API documentation using quartodoc
 sc.heading('Building API documentation...')
 run('python -m quartodoc build')
+
+sc.heading('Customizing API aliases...')
+ut.customize_aliases()
 
 sc.heading('Building docs links...')
 run('python -m quartodoc interlinks')
@@ -92,11 +98,12 @@ else:
 
 # Tidy up
 if tidy:
-    sc.heading("Tidying outputs...")
-    run('./clean_outputs.py')
-
     sc.heading("Normalizing notebooks...")
     run('./normalize_notebooks.py')
 
+    sc.heading("Tidying outputs...")
+    run('./clean_outputs.py')
+
+
 T.toc('Docs built')
-print(f"\nIndex:\n{os.getcwd()}/_build/index.html")
+print(f"\nIndex:\n{os.getcwd()}/_site/index.html")

@@ -24,7 +24,7 @@ To run these tutorials locally:
 ## Introduction
 
 - [Introduction to Starsim](user_guide/intro_starsim.ipynb)
-- [Starsim "spokes"](user_guide/intro_spokes.ipynb)
+- [Starsim models](user_guide/intro_models.ipynb)
 
 ## Basics
 
