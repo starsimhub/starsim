@@ -1101,9 +1101,13 @@ class lognorm_ex(Dist):
     Note that a mean ≤ 0.0 is impossible, since this is the parameter of the distribution
     after the log transform.
 
+    The distribution can alternatively be parametrized by the median instead of the std, in which
+    case the std will be calculated automatically based on the mean.
+
     Args:
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
         std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
+        median (float): as an alternative to std, specify the median of the distribution
 
     **Example**:
 
@@ -1111,7 +1115,26 @@ class lognorm_ex(Dist):
     """
     scaling = scale_types.both
 
-    def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
+    def __init__(self, mean=1.0, std=None, median=None, **kwargs): # Does not accept dtype
+
+        if mean <= 0:
+            raise ValueError('The mean of the lognormal distribution must be >=0, as this distribution cannot produce negative or zero values')
+
+        if std is None:
+            if median is None:
+                std = 1.0
+            else:
+                if not (isinstance(mean, ss.dur) == isinstance(median, ss.dur)) or (isinstance(mean, ss.Rate) == isinstance(median, ss.Rate)):
+                    raise ValueError('If specifying the mean and median, they must both be the same type (e.g., if one is a duration, the other must be too)')
+
+
+                    if median <= 0:
+                        raise ValueError('The median of the lognormal distribution must be >=0, as this distribution cannot produce negative or zero values')
+
+        elif std is not None and median is not None:
+            raise ValueError('Cannot specify both std and median for lognorm_ex - specify either one or the other')
+
+
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
         return
 
@@ -1442,10 +1465,9 @@ class choice(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+            if ((isinstance(v, ss.dur)  or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur))
+             or (isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate))):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional (i.e., they cannot be durations or rates) because mathematically `exp(x)` requires that `x` does not have units. Typically this error indicates that `ss.lognormal_ex()` should be used instead.')
 
     def ppf(self, rands):
         """ Shouldn't actually be needed since dynamic pars not supported """
