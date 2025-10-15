@@ -100,6 +100,7 @@ website:
           - section: "Workflows"
             contents:
             - user_guide/workflows_run.ipynb
+            - user_guide/workflows_sir_calibration.ipynb
             - user_guide/workflows_calibration.ipynb
             - user_guide/workflows_deploy.ipynb
             - user_guide/workflows_samples.ipynb

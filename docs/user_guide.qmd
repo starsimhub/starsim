@@ -44,6 +44,7 @@ To run these tutorials locally:
 ## Workflows
 
 - [Running simulations](user_guide/workflows_run.ipynb)
+- [SIR Calibration](user_guide/workflows_sir_calibration.ipynb)
 - [Calibration](user_guide/workflows_calibration.ipynb)
 - [Deployment](user_guide/workflows_deploy.ipynb)
 - [Working with samples](user_guide/workflows_samples.ipynb)
