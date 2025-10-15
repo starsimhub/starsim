@@ -199,7 +199,7 @@ class Deaths(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
-        self.pars.p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
+        self._p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
         self.n_deaths = 0 # For results tracking
         return
 
@@ -275,8 +275,8 @@ class Deaths(Demographics):
     def step(self):
         """ Select people to die """
         p_death = self.make_p_death()  # Get the probability of death for each agent
-        self.pars.p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
-        death_uids = self.pars.p_death.filter()
+        self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
+        death_uids = self._p_death.filter()
         self.sim.people.request_death(death_uids)
         self.n_deaths = len(death_uids)
         return self.n_deaths

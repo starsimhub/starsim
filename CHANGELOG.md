@@ -6,6 +6,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 ## Version 3.0.3 (2025-10-07)
 - Swapped order of `age` and `female` states in People to allow `female` dist to use `age` state during population initialization.
 
+
 ## Version 3.0.2 (2025-08-25)
 - Additional minor updates following the v3 release.
 - Cleans up some of the logic for convertin rates to probabilities in the demographic modules
