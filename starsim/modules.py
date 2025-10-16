@@ -295,6 +295,11 @@ class Module(Base):
         if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
             errormsg = f'Cannot modify attribute "{attr}"; locked attributes are {sc.strjoin(self._locked_attrs)}.\n'
             errormsg += 'If you really mean to do this, use module.setattribute() or set module._lock_attrs = False'
+            try:
+                if isinstance(getattr(self, attr),ss.Arr) and len(getattr(self, attr)) == len(value):
+                    errormsg += f'\nOften this error can be resolved by replacing `self.{attr} = x` with `self.{attr}[:] = x`'
+            except:
+                pass
             raise AttributeError(errormsg)
         else:
             super().__setattr__(attr, value)
