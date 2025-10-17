@@ -249,11 +249,12 @@ class BaseScreening(BaseTest):
         accept_uids = ss.uids()
         if sim.ti in self.timepoints: # TODO: change to self.ti
             accept_uids = self.deliver()
-            self.screened[accept_uids] = True
-            self.screens[accept_uids] += 1
-            self.ti_screened[accept_uids] = sim.ti
-            self.results['n_screened'][sim.ti] = len(accept_uids)
-            self.results['n_dx'][sim.ti] = len(self.outcomes['positive'])
+            if len(accept_uids):
+                self.screened[accept_uids] = True
+                self.screens[accept_uids] += 1
+                self.ti_screened[accept_uids] = sim.ti
+                self.results['n_screened'][sim.ti] = len(accept_uids)
+                self.results['n_dx'][sim.ti] = len(self.outcomes['positive'])
 
         return accept_uids
 
