@@ -1387,6 +1387,12 @@ class bernoulli(Dist):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
 
+    def __bool__(self):
+        if callable(self.pars.p) or np.any(sc.promotetoarray(self.pars.p) > 0):
+            return True
+        else:
+            return False
+
     def make_rvs(self):
         rvs = self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
         return rvs

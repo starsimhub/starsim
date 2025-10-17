@@ -4,6 +4,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.0.4 (2025-XX-XX)
 - Added additional calibration examples for workflows to re-identify known parameters
+- Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
 
 
 ## Version 3.0.3 (2025-10-07)
