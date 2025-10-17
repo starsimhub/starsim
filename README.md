@@ -15,7 +15,7 @@ For more information about Starsim, please see the [documentation](https://docs.
 
 ## Requirements
 
-Python 3.9-3.13 or R.
+Python 3.10-3.13 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as [Miniconda](https://docs.anaconda.com/miniconda/).
 
