@@ -448,7 +448,7 @@ class Calibration(sc.prettyobj):
 
 __all__ += ['linear_interp', 'linear_accum', 'step_containing'] # Conformers
 __all__ += ['CalibComponent'] # Calib component base class
-__all__ += ['BetaBinomial', 'Binomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal'] # Specific calib components
+__all__ += ['BetaBinomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal'] # Specific calib components
 
 def linear_interp(expected, actual):
     """
@@ -684,64 +684,267 @@ class CalibComponent(sc.prettyobj):
         return g.fig
 
 class BetaBinomial(CalibComponent):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, alpha_prior=1, beta_prior=1, include_fn=None, n_boot=None, combine_reps=None):
+        """
+        Beta-binomial likelihood component with per-timepoint concentration parameters.
+        
+        This component maps simulated prevalence to a detection probability q(x̃), then
+        evaluates observed data using a beta-binomial distribution with concentration
+        parameter kappa that reflects survey-level variability (not simulation uncertainty).
+        
+        Args:
+            name (str): Name of this component
+            expected (pd.DataFrame): Real observed data with required columns:
+                - 'n': sample sizes (positive integers) 
+                - 'x': positive cases (non-negative integers ≤ n)
+                - EITHER 'kappa': concentration parameters (positive floats)
+                - OR 'ci95_low' AND 'ci95_high': 95% confidence interval bounds (0 ≤ low < high ≤ 1)
+            extract_fn (callable): Function to extract simulated data in same format
+            conform (str|callable): How to align timepoints ('prevalent', 'incident', etc.)
+            weight (float): Weight for this component in overall likelihood
+            alpha_prior (float): Prior parameter for prevalence estimation (default=1)
+            beta_prior (float): Prior parameter for prevalence estimation (default=1) 
+            include_fn (callable): Optional filter for which simulations to include
+            n_boot (int): Optional bootstrap samples
+            combine_reps (str): How to combine replicates ('mean', 'sum', etc.)
+            
+        The likelihood uses: s^obs ~ BetaBinomial(n^obs, α=κ*q, β=κ*(1-q))
+        where q = (x_sim + alpha_prior) / (n_sim + alpha_prior + beta_prior)
+        and κ can vary by timepoint to reflect different survey characteristics.
+        """
+        super().__init__(name, expected, extract_fn, conform, weight, include_fn, n_boot, combine_reps)
+        
+        # Validate priors
+        if alpha_prior <= 0:
+            raise ValueError(f"alpha_prior must be positive, got {alpha_prior}")
+        if beta_prior <= 0:
+            raise ValueError(f"beta_prior must be positive, got {beta_prior}")
+        self.alpha_prior = alpha_prior
+        self.beta_prior = beta_prior
+        
+        # Validate expected data contains integers for counts
+        if not all(expected['x'].apply(lambda x: isinstance(x, (int, np.integer)) and x >= 0)):
+            raise ValueError("expected['x'] must contain non-negative integers (observed positive cases)")
+        if not all(expected['n'].apply(lambda x: isinstance(x, (int, np.integer)) and x > 0)):
+            raise ValueError("expected['n'] must contain positive integers (sample sizes)")
+        
+        # Validate that x <= n for all observations
+        if not all(expected['x'] <= expected['n']):
+            raise ValueError("observed positive cases (x) cannot exceed sample size (n)")
+            
+        # Check for dispersion parameters (kappa or CI bounds)
+        has_kappa = 'kappa' in expected.columns
+        has_ci = 'ci95_low' in expected.columns and 'ci95_high' in expected.columns
+        
+        if has_kappa and has_ci:
+            raise ValueError("Provide either 'kappa' column OR 'ci95_low'/'ci95_high' columns, not both")
+        
+        # Process expected DataFrame
+        self.expected = expected.copy()
+        
+        # Store dispersion mode flag
+        self.use_overdispersion = has_kappa or has_ci
+        
+        if has_ci:
+            # Calculate kappa from confidence intervals
+            self.expected['kappa'] = self._calculate_kappa_from_ci()
+        elif has_kappa:
+            # Validate all kappa values are positive
+            if not all(self.expected['kappa'] > 0):
+                raise ValueError("All kappa values must be positive")
+        # If neither kappa nor CI provided, will use Binomial fallback
+            
+    def _calculate_kappa_from_ci(self):
+        """Calculate kappa values from confidence interval columns using vectorized operations"""
+        import warnings
+        
+        # Single epsilon for all numerical guards
+        eps = 1e-10
+        
+        # Extract arrays for vectorized operations
+        n_obs = self.expected['n'].values
+        x_obs = self.expected['x'].values
+        ci_lower = self.expected['ci95_low'].values
+        ci_upper = self.expected['ci95_high'].values
+        
+        # Numerical guard: ensure p ∈ (ε, 1-ε) to avoid division by zero in p*(1-p)
+        p_hat = x_obs / n_obs
+        p_hat = np.clip(p_hat, eps, 1 - eps)
+
+        # Validate CI bounds (vectorized checks)
+        invalid_bounds = (ci_lower < 0) | (ci_upper > 1) | (ci_lower >= ci_upper)
+        if invalid_bounds.any():
+            bad_indices = self.expected.index[invalid_bounds].tolist()
+            raise ValueError(f"Invalid confidence intervals at indices {bad_indices}: must have 0 ≤ low < high ≤ 1")
+
+        outside_ci = (p_hat < ci_lower) | (p_hat > ci_upper)
+        if outside_ci.any():
+            bad_indices = self.expected.index[outside_ci].tolist()
+            bad_props = p_hat[outside_ci]
+            bad_cis = list(zip(ci_lower[outside_ci], ci_upper[outside_ci]))
+            raise ValueError(f"Observed proportions {bad_props} not within confidence intervals {bad_cis} at indices {bad_indices}")
+
+        # Calculate standard error from CI (vectorized)
+        se_hat = (ci_upper - ci_lower) / (2 * 1.96)
+
+        # Calculate ICC and convert to kappa
+        # For n=1: design effect = 1, equivalent to binomial (rho=0, kappa=large)
+        # For n>1: calculate rho from ICC formula
+        rho = np.zeros_like(n_obs, dtype=float)
+        
+        # Calculate rho only for n > 1 cases
+        valid = n_obs > 1
+        if np.any(valid):
+            n_v, se_v, p_v = n_obs[valid], se_hat[valid], p_hat[valid]
+            # Ensure denominator > 0 to prevent division by zero
+            denom = np.maximum(p_v * (1 - p_v), eps)
+            rho[valid] = (n_v * se_v**2) / denom - 1 / (n_v - 1)
+        
+        # Numerical guard: clip negative rho to 0 (ensures valid ICC ≥ 0)
+        rho = np.maximum(rho, 0)
+
+        # Check for problematic cases where rho >= 1 (implies kappa <= 0)
+        # This happens when CI is too tight for the given p and n combination
+        problematic_rho = rho >= 1
+        if problematic_rho.any():
+            bad_indices = self.expected.index[problematic_rho].tolist()
+            bad_rho_values = rho[problematic_rho]
+            warnings.warn(
+                f"Confidence intervals at indices {bad_indices} are too tight for the observed data, "
+                f"implying ρ ≥ 1 (ρ = {bad_rho_values}), which would give κ ≤ 0. "
+                f"This is inconsistent with the beta-binomial model. "
+                f"Capping ρ at {1 - eps:.6f} to ensure positive κ.",
+                UserWarning
+            )
+        
+        # Cap rho to ensure positive kappa
+        # For kappa > 0: (1/rho) - 1 > 0 => 1/rho > 1 => rho < 1
+        max_rho = 1 - eps  # This gives kappa ≈ eps/(1-eps) ≈ eps, very small but positive
+        rho = np.minimum(rho, max_rho)
+        
+        # Convert to kappa: κ = (1/ρ) - 1
+        # Handle rho=0 case (design effect=1, binomial limit) without division by zero
+        kappa = np.full_like(rho, 1e6, dtype=float)  # Default to large kappa
+        nonzero = rho > 0
+        if np.any(nonzero):
+            kappa[nonzero] = (1 / rho[nonzero]) - 1
+
+        # Numerical guard: cap huge kappa values for SciPy numerical stability (can't handle ∞)
+        kappa = np.minimum(kappa, 1e6)
+        return kappa
+
     def compute_nll(self, expected, actual, **kwargs):
         """
-        For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
-        and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
-        The result is a Beta(actual['x']+1, actual['n']-actual['x']+1) posterior.
-        We then compare this to the real data, which has expected['x'] successes (positives) in expected['n'] trials (total observations).
-        To do so, we use a beta-binomial likelihood:
-        p(x|n, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
-        where
-          x=expected['x']
-          n=expected['n']
-          a=actual['x']+1
-          b=actual['n']-actual['x']+1
-        and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
-
-        We return the log of p(x|n, a, b)
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        Beta-binomial or Binomial negative log-likelihood.
+        
+        If kappa values are provided (or derived from CIs), uses Beta-binomial distribution.
+        Otherwise, falls back to Binomial distribution with warning.
+        
+        Args:
+            expected (pd.DataFrame): Real observed data (not used directly, uses self.expected)
+            actual (pd.DataFrame): Simulated data with 'n' and 'x' columns  
+            kwargs: Additional evaluation arguments
+            
+        Returns:
+            ndarray: Negative log likelihoods for each data point
         """
-
+        import warnings
+        
         logLs = []
-
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
+        # Dynamic merge key detection (fixes hardcoded ['t'] bug)
+        merge_keys = [name for name in self.expected.index.names if name is not None]
+        if not merge_keys:
+            merge_keys = ['t']  # fallback for edge cases
+        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), on=merge_keys, suffixes=('_e', '_a'))
+        eps = 1e-10
+        
+        # Issue warning once if using fallback
+        if not self.use_overdispersion:
+            warnings.warn("No kappa provided; using Binomial (no overdispersion).", UserWarning)
+        
+        for _, rep in combined.iterrows():
+            # Real observed data  
             e_n, e_x = rep['n_e'], rep['x_e']
+            
+            # Simulated data (extract prevalence with Bayesian adjustment)
             a_n, a_x = rep['n_a'], rep['x_a']
-
-            logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
+            
+            # Compute prevalence q from simulation with prior
+            q = (a_x + self.alpha_prior) / (a_n + self.alpha_prior + self.beta_prior)
+            
+            # Numerical guard: ensure q ∈ (ε, 1-ε) for numerical stability
+            q = np.clip(q, eps, 1 - eps)
+            
+            if self.use_overdispersion:
+                # Beta-binomial path: use provided/calculated kappa
+                e_kappa = rep['kappa']
+                alpha = e_kappa * q
+                beta = e_kappa * (1 - q)
+                
+                # Numerical guard: ensure α, β > ε for valid beta-binomial
+                alpha = max(alpha, eps)
+                beta = max(beta, eps)
+                
+                logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=alpha, b=beta)
+            else:
+                # Binomial fallback: exact base distribution
+                logL = sps.binom.logpmf(k=e_x, n=e_n, p=q)
+                
             logLs.append(logL)
 
         nlls = -np.array(logLs)
         return nlls
 
     def plot_facet(self, data, color, **kwargs):
+        """Plot beta-binomial or binomial likelihood facet."""
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
+        expected_t = self.expected.loc[t]
+        e_n, e_x = expected_t['n'], expected_t['x']
         kk = np.arange(0, int(2*e_x))
+        
         for idx, row in data.iterrows():
-            alpha = row['x'] + 1
-            beta = row['n'] - row['x'] + 1
-            q = sps.betabinom(n=e_n, a=alpha, b=beta)
-            yy = q.pmf(kk)
+            # Compute prevalence from simulation with prior
+            a_n, a_x = row['n'], row['x']
+            q = (a_x + self.alpha_prior) / (a_n + self.alpha_prior + self.beta_prior)
+            
+            # Numerical guard: ensure q ∈ (ε, 1-ε) for numerical stability
+            eps = 1e-10
+            q = np.clip(q, eps, 1 - eps)
+            
+            if self.use_overdispersion:
+                # Beta-binomial path
+                e_kappa = expected_t['kappa']
+                alpha = e_kappa * q
+                beta = e_kappa * (1 - q)
+                
+                # Numerical guard: ensure α, β > ε for valid beta-binomial
+                alpha = max(alpha, eps)
+                beta = max(beta, eps)
+                
+                dist = sps.betabinom(n=e_n, a=alpha, b=beta)
+            else:
+                # Binomial path
+                dist = sps.binom(n=e_n, p=q)
+            
+            yy = dist.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pmf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            yy_obs = dist.pmf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=10, color='k')
+            
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """Plot bootstrap distribution using beta-binomial or binomial."""
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
+        expected_t = self.expected.loc[t]
+        e_n, e_x = expected_t['n'], expected_t['x']
 
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
+        
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
             if self.combine_reps is None:
@@ -749,127 +952,169 @@ class BetaBinomial(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
-                alpha = row['x'] + 1
-                beta = row['n'] - row['x'] + 1
-                q = sps.betabinom(n=e_n, a=alpha, b=beta)
-                means[bi] = q.mean()
+            for _, row in actual.iterrows():
+                # Compute prevalence from simulation with prior
+                a_n, a_x = row['n'], row['x']  
+                q = (a_x + self.alpha_prior) / (a_n + self.alpha_prior + self.beta_prior)
+                
+                # Numerical guard: ensure q ∈ (ε, 1-ε) for numerical stability
+                eps = 1e-10
+                q = np.clip(q, eps, 1 - eps)
+                
+                if self.use_overdispersion:
+                    # Beta-binomial path
+                    e_kappa = expected_t['kappa']
+                    alpha = e_kappa * q
+                    beta = e_kappa * (1 - q)
+                    
+                    # Numerical guard: ensure α, β > ε for valid beta-binomial
+                    alpha = max(alpha, eps)
+                    beta = max(beta, eps)
+                    
+                    dist = sps.betabinom(n=e_n, a=alpha, b=beta)
+                else:
+                    # Binomial path
+                    dist = sps.binom(n=e_n, p=q)
+                    
+                means[bi] = dist.mean()
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
         ax.axvline(e_x, color='k', linestyle='--')
         return
 
-class Binomial(CalibComponent):
-
-    @staticmethod
-    def get_p(df, x_col='x', n_col='n'):
-        if 'p' in df:
-            p = df['p'].values
-        else:
-            p = df[x_col] / df[n_col] # Switched to MLE x/n from previous "Bayesian" (Laplace +1, Jeffreys) before: (df[x_col]+1) / (df[n_col]+2)
-        return p
-
-    def compute_nll(self, expected, actual, **kwargs):
-        """
-        Binomial log likelihood component.
-        We return the log of p(x|n, p)
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
-        """
-
-        logLs = []
-
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
-            if 'p' in rep:
-                # p specified, no collision
-                e_n, e_x = rep['n'], rep['x']
-                p = self.get_p(rep)
-            else:
-                assert 'n_e' in rep and 'x_e' in rep, 'Expected columns n_e and x_e not found'
-                # Collision in merge, get _e and _a values
-                e_n, e_x = rep['n_e'], rep['x_e']
-                if rep['n_a'] == 0:
-                    return np.inf
-                p = self.get_p(rep, 'x_a', 'n_a')
-
-            logL = sps.binom.logpmf(k=e_x, n=e_n, p=p)
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
-
-    def plot_facet(self, data, color, **kwargs):
-        t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
-        kk = np.arange(0, int(2*e_x))
-        for idx, row in data.iterrows():
-            p = self.get_p(row)
-            q = sps.binom(n=e_n, p=p)
-            yy = q.pmf(kk)
-            plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pmf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
-        return
-
-    def plot_facet_bootstrap(self, data, color, **kwargs):
-        t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
-
-        n_boot = kwargs.get('n_boot', 1000)
-        seeds = data['rand_seed'].unique()
-        boot_size = len(seeds)
-        means = np.zeros(n_boot)
-        for bi in np.arange(n_boot):
-            use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            if self.combine_reps is None:
-                actual = data.set_index('rand_seed').loc[use_seeds]
-            else:
-                actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
-
-            for idx, row in actual.iterrows():
-                p = self.get_p(row)
-                q = sps.binom(n=e_n, p=p)
-                means[bi] = q.mean()
-
-        ax = sns.kdeplot(means)
-        sns.rugplot(means, ax=ax)
-        ax.axvline(e_x, color='k', linestyle='--')
-        return
 
 class DirichletMultinomial(CalibComponent):
+    def __init__(self, *args, alpha_smooth=1e-3, **kwargs):
+        """
+        Dirichlet-Multinomial likelihood with user-specified concentration kappa.
+        Uses simulation data only to estimate category probabilities, with user-controlled
+        dispersion parameter kappa stored in the expected DataFrame.
+        
+        The expected DataFrame must contain:
+        - x_0, x_1, ..., x_k: Integer counts for each category (>=0)
+        - kappa: Concentration parameter per survey (>0)
+        - Standard time columns (t, t1 if applicable)
+        
+        Parameters:
+        -----------
+        alpha_smooth : float, default 1e-3
+            Small smoothing parameter added to each category before normalizing
+            to prevent degenerate probabilities on the simplex.
+        """
+        from pandas.api.types import is_integer_dtype, is_numeric_dtype
+        super().__init__(*args, **kwargs)
+        
+        # Find x_vars columns and sort for consistent ordering
+        x_vars = sorted([col for col in self.expected.columns if col.startswith('x_')])
+        if not x_vars:
+            raise ValueError("expected DataFrame must contain columns starting with 'x_' for category counts")
+        
+        # Validate x_vars are integer counts >= 0
+        for xvar in x_vars:
+            if not is_integer_dtype(self.expected[xvar]) or (self.expected[xvar] < 0).any():
+                raise ValueError(f'expected["{xvar}"] must be integer counts (>=0)')
+        
+        # Check for dispersion parameters (kappa)
+        has_kappa = 'kappa' in self.expected.columns
+        
+        # Store dispersion mode flag
+        self.use_overdispersion = has_kappa
+        
+        # Process expected DataFrame
+        self.expected = self.expected.copy()
+        
+        if has_kappa:
+            # Validate all kappa values are positive
+            if not is_numeric_dtype(self.expected['kappa']) or (self.expected['kappa'] <= 0).any():
+                raise ValueError("All kappa values must be positive numbers")
+            # Cap kappa for numerical stability
+            self.expected['kappa'] = np.minimum(self.expected['kappa'], 1e9)
+        # If kappa not provided, will use Multinomial fallback
+        
+        # Store consistent x_vars ordering and parameters
+        self.x_vars = x_vars
+        self.alpha_smooth = alpha_smooth
+        self._eps = 1e-10
+
     def compute_nll(self, expected, actual, **kwargs):
         """
-        The Dirichlet-multinomial negative log-likelihood is the
-        multi-dimensional analog of the beta-binomial likelihood. We begin with
-        a Dirichlet(1,1,...,1) prior and subsequently observe:
-            actual['x1'], actual['x2'], ..., actual['xk']
-        successes (positives). The result is a
-            Dirichlet(alpha=actual[x_vars]+1)
-        We then compare this to the real data, which has outcomes:
-            expected['x1'], expected['x2'], ..., expected['xk']
-
-        The count variables are any keys in the expected dataframe that start with 'x'.
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        Dirichlet-Multinomial or Multinomial negative log-likelihood.
+        
+        If kappa values are provided, uses Dirichlet-Multinomial distribution.
+        Otherwise, falls back to Multinomial distribution with warning.
+        
+        Args:
+            expected (pd.DataFrame): Real observed data (not used directly, uses self.expected)
+            actual (pd.DataFrame): Simulated data with x_vars columns
+            kwargs: Additional evaluation arguments
+            
+        Returns:
+            ndarray: Negative log likelihoods for each data point
         """
-
+        import warnings
+        
         logLs = []
-        x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
-        for t, rep_t in actual.groupby('t'):
-            for idx, rep in rep_t.iterrows():
-                e_x = expected.loc[t, x_vars].values.flatten()
-                n = e_x.sum()
-                a_x = rep[x_vars].astype('float')
-                logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=a_x+1)
+        
+        # Issue warning once if using fallback
+        if not self.use_overdispersion:
+            warnings.warn("No kappa provided; using Multinomial (no overdispersion).", UserWarning)
+        
+        # Use consistent x_vars ordering from __init__
+        x_vars = self.x_vars
+        K = len(x_vars)  # Number of categories
+        
+        # Group by time and compute likelihood for each survey
+        for t_idx in expected.index:
+            expected_t = expected.loc[[t_idx]]
+            
+            # Get the time value for filtering actual data
+            if isinstance(t_idx, tuple):
+                # Multi-index case (t, t1)
+                t_val = t_idx[0]  # Use first level (t) for matching
+                actual_t = actual[actual['t'] == t_val] if 't' in actual.columns else actual[actual.index == t_val]
+            else:
+                # Single index case
+                t_val = t_idx
+                actual_t = actual[actual.index == t_val] if actual.index.name == 't' else actual[actual['t'] == t_val]
+            
+            # Extract expected data for this timepoint
+            e_x = expected_t[x_vars].iloc[0].to_numpy(dtype=int)  # observed counts by category
+            n = e_x.sum()  # total observed count
+            
+            # Process each simulation replicate for this timepoint
+            for _, rep in actual_t.iterrows():
+                # Sim counts -> probabilities with smoothing on simplex
+                c_sim = rep[x_vars].to_numpy(dtype=float)
+                total_sim = c_sim.sum() + K * self.alpha_smooth
+                
+                if total_sim <= self._eps:
+                    # Degenerate case: uniform probabilities
+                    pi = np.full(K, 1.0 / K, dtype=float)
+                else:
+                    # Smoothed probabilities on simplex
+                    pi = (c_sim + self.alpha_smooth) / total_sim
+                
+                if self.use_overdispersion:
+                    # Dirichlet-Multinomial path: use provided kappa
+                    kappa = expected_t['kappa'].iloc[0]
+                    alpha = kappa * pi
+                    
+                    # Ensure alpha values are valid (> eps)
+                    alpha = np.maximum(alpha, self._eps)
+                    
+                    logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=alpha)
+                else:
+                    # Multinomial fallback: exact base distribution
+                    # Ensure probabilities are in valid range
+                    pi_clipped = np.clip(pi, self._eps, 1 - self._eps)
+                    pi_clipped = pi_clipped / pi_clipped.sum()  # Renormalize
+                    
+                    logL = sps.multinomial.logpmf(x=e_x, n=n, p=pi_clipped)
+                    
                 logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
+        
+        return -np.nan_to_num(np.array(logLs), nan=-np.inf)
 
     def plot(self, actual=None, **kwargs):
         if actual is None:
@@ -878,7 +1123,7 @@ class DirichletMultinomial(CalibComponent):
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
+        x_vars = self.x_vars
         actual = actual \
             .reset_index() \
             [['t', 'calibrated', 'rand_seed']+x_vars] \
@@ -895,7 +1140,7 @@ class DirichletMultinomial(CalibComponent):
         return g.fig
 
     def plot_facet(self, data, color, **kwargs):
-        # It's challenging to plot the Dirichlet-multinomial likelihood, so we use Beta binomial as a stand-in
+        """Plot marginal beta-binomial approximation for each category"""
         t = data.iloc[0]['t']
         var = data.iloc[0]['var']
         cal = data.iloc[0]['calibrated']
@@ -904,100 +1149,243 @@ class DirichletMultinomial(CalibComponent):
         actual = kwargs.get('full_actual', self.actual)
         actual = actual[(actual['t'] == t) & (actual['calibrated'] == cal)]
 
-        x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
+        # Use consistent x_vars ordering
+        x_vars = self.x_vars
+        K = len(x_vars)
+        e_x = expected[var].iloc[0]  # observed count for this category
+        e_n = expected[x_vars].sum(axis=1).iloc[0]  # total observed count  
+        kappa = expected['kappa'].iloc[0]  # concentration parameter
 
-        e_x = expected[var].values.flatten()[0]
-        e_n = expected[x_vars].sum(axis=1)
-
-        kk = np.arange(0, int(2*e_x))
+        kk = np.arange(0, int(2*e_x + 10))
         for seed, row in actual.groupby('rand_seed'):
+            # Get simulation data for this replicate
             a = row.set_index('var')['x']
-            a_x = a[var]
-            a_n = a[x_vars].sum()
-            alpha = a_x + 1
-            beta = a_n - a_x + 1
+            c_sim = a[x_vars].to_numpy(dtype=float)
+            
+            # Apply simplex smoothing
+            total_sim = c_sim.sum() + K * self.alpha_smooth
+            if total_sim <= self._eps:
+                pi = np.full(K, 1.0 / K, dtype=float)
+            else:
+                pi = (c_sim + self.alpha_smooth) / total_sim
+            
+            # Get probability for this specific category
+            var_idx = x_vars.index(var)
+            p_cat = pi[var_idx]
+            
+            # Beta-binomial approximation using kappa and category probability
+            alpha = kappa * p_cat
+            beta = kappa * (1 - p_cat)
+            
+            # Ensure valid parameters
+            alpha = max(alpha, self._eps)
+            beta = max(beta, self._eps)
+            
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             yy = q.pmf(kk)
-            plt.step(kk, yy, color=color, label=f"{seed}")
-            yy = q.pmf(e_x)
-            darker = [0.8*c for c in color]
-            plt.plot(e_x, yy, 'x', ms=10, color=darker)
-        plt.axvline(e_x, color='k', linestyle='--')
+            plt.step(kk, yy, color=color, alpha=0.7, label=f"{seed}")
+            yy_obs = q.pmf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=8, color='black')
+            
+        plt.axvline(e_x, color='k', linestyle='--', alpha=0.8)
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """Plot bootstrap distribution using marginal beta-binomial approximation"""
+        t = data.iloc[0]['t']
+        var = data.iloc[0]['var']
+        
+        expected = self.expected.loc[[t]]
+        x_vars = self.x_vars
+        K = len(x_vars)
+        e_x = expected[var].iloc[0]
+        e_n = expected[x_vars].sum(axis=1).iloc[0]
+        kappa = expected['kappa'].iloc[0]
+        
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            if self.combine_reps is None:
+                actual = data.set_index('rand_seed').loc[use_seeds]
+            else:
+                actual = data.set_index('rand_seed').loc[use_seeds].groupby(['t']).aggregate(func=self.combine_reps, **self.combine_kwargs)
+                
+            # Calculate bootstrap mean
+            total_mean = 0
+            n_reps = 0
+            for _, row in actual.iterrows():
+                # Extract simulation counts for all categories  
+                c_sim = np.array([row[xv] for xv in x_vars], dtype=float)
+                
+                # Apply simplex smoothing
+                total_sim = c_sim.sum() + K * self.alpha_smooth
+                if total_sim <= self._eps:
+                    pi = np.full(K, 1.0 / K, dtype=float)
+                else:
+                    pi = (c_sim + self.alpha_smooth) / total_sim
+                
+                # Get probability for this category and create beta-binomial
+                var_idx = x_vars.index(var)
+                p_cat = pi[var_idx]
+                alpha = max(kappa * p_cat, self._eps)
+                beta = max(kappa * (1 - p_cat), self._eps)
+                
+                q = sps.betabinom(n=e_n, a=alpha, b=beta)
+                total_mean += q.mean()
+                n_reps += 1
+                
+            means[bi] = total_mean / n_reps if n_reps > 0 else 0
+        
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
+        plt.axvline(e_x, color='k', linestyle='--')
         return
 
 class GammaPoisson(CalibComponent):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, rate_smoothing=(1e-6, 1e-6), **kwargs):
+        """
+        Gamma-Poisson (NB2) likelihood with user-specified dispersion k_size.
 
-        assert self.expected['n'].dtype == int, 'The expected must have an integer column named "n" for the total number of person-years'
-        assert self.expected['x'].dtype == int, 'The expected must have an integer column named "x" for the total number of events'
-        return
+        Uses simulation data only to estimate the mean rate, with user-controlled
+        dispersion parameter k_size stored in the expected DataFrame.
+
+        Parameters:
+        -----------
+        rate_smoothing : tuple of (c0, e0), default (1e-6, 1e-6)
+            Small values added to simulated counts (c0) and exposure (e0) 
+            to prevent division by zero when computing rates.
+            rate = (sim_counts + c0) / (sim_exposure + e0)
+        """
+        from pandas.api.types import is_integer_dtype, is_numeric_dtype
+        super().__init__(*args, **kwargs)
+        
+        # Validate rate_smoothing parameter
+        if not isinstance(rate_smoothing, (tuple, list)) or len(rate_smoothing) != 2:
+            raise ValueError("rate_smoothing must be a tuple/list of length 2: (c0, e0)")
+        
+        # Validation: n numeric (not integer), x integer
+        if not is_numeric_dtype(self.expected['n']) or (self.expected['n'] <= 0).any():
+            raise ValueError('expected["n"] must be numeric exposure (>0)')
+        if not is_integer_dtype(self.expected['x']) or (self.expected['x'] < 0).any():
+            raise ValueError('expected["x"] must be integer counts (>=0)')
+        
+        # Check for dispersion parameters (k_size)
+        has_k_size = 'k_size' in self.expected.columns
+        
+        # Store dispersion mode flag
+        self.use_overdispersion = has_k_size
+        
+        # Process expected DataFrame
+        self.expected = self.expected.copy()
+        
+        if has_k_size:
+            # Validate all k_size values are positive
+            if not all(self.expected['k_size'] > 0):
+                raise ValueError("All k_size values must be positive")
+            # Cap k_size values for numerical stability
+            self.expected['k_size'] = np.minimum(self.expected['k_size'], 1e6)
+        # If k_size not provided, will use Poisson fallback
+        
+        # Rate smoothing parameters (renamed for clarity)
+        self.c0, self.e0 = rate_smoothing
+        self._eps = 1e-10
 
     def compute_nll(self, expected, actual, **kwargs):
         """
-        The gamma-poisson likelihood is a Poisson likelihood with a
-        gamma-distributed rate parameter. Through a parameter transformation, we
-        end up calling a negative binomial, which is functionally equivalent.
-
-        For the gamma-poisson negative log-likelihood, we begin with a
-        gamma(1,1) and subsequently observe actual['x'] events (positives) in
-        actual['n'] trials (total person years). The result is a
-        gamma(alpha=1+actual['x'], beta=1+actual['n']) posterior.
-
-        To evaluate the gamma-poisson likelihood as a negative binomial, we use
-        the following: n = alpha, p = beta / (beta + 1)
-
-        However, the gamma is estimating a rate, and the observation is a count over a some period of time, say T person-years. To account for T other than 1, we scale beta by 1/T to arrive at beta' = beta / T. When passing into the negative binomial, alpha remains the same, but p = beta' / (beta' + 1) or equivalently p = beta / (beta + T).
-
-        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        Negative log-likelihood under NB2 or Poisson.
+        
+        If k_size values are provided, uses NB2 distribution.
+        Otherwise, falls back to Poisson distribution with warning.
+        
+        Args:
+            expected (pd.DataFrame): Real observed data (not used directly, uses self.expected)
+            actual (pd.DataFrame): Simulated data with 'n' and 'x' columns
+            kwargs: Additional evaluation arguments
+            
+        Returns:
+            ndarray: Negative log likelihoods for each data point
         """
-        logLs = []
-
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t', 't1'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
-            e_n, e_x = rep['n_e'], rep['x_e']
-            a_n, a_x = rep['n_a'], rep['x_a']
-            T = e_n
-            beta = 1 + a_n
-            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+T))
-            logL = np.nan_to_num(logL, nan=-np.inf)
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
+        import warnings
+        
+        # Merge expected/actual on ['t','t1'] 
+        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), 
+                           on=['t', 't1'], suffixes=('_e', '_a'), 
+                           how='inner')
+        
+        # Extract arrays (vectorized)
+        c_obs = combined['x_e'].to_numpy(dtype=int)        # observed counts
+        e_obs = combined['n_e'].to_numpy(dtype=float)      # observed exposure  
+        c_sim = combined['x_a'].to_numpy(dtype=float)      # simulated counts
+        e_sim = combined['n_a'].to_numpy(dtype=float)      # simulated exposure
+        
+        # Calculate rate from simulation with smoothing (guard against divide by zero)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            rate_sim = (c_sim + self.c0) / np.maximum(e_sim + self.e0, self._eps)
+        rate_sim = np.maximum(rate_sim, 0.0)  # Ensure non-negative
+        
+        # Compute mean: μ = n_obs × rate_sim
+        mu = np.maximum(self._eps, e_obs * rate_sim)  # Clip mu >= eps
+        
+        # Issue warning once if using fallback
+        if not self.use_overdispersion:
+            warnings.warn("No k_size provided; using Poisson (no overdispersion).", UserWarning)
+        
+        if self.use_overdispersion:
+            # NB2 path: use provided k_size
+            k_size = combined['k_size'].to_numpy(dtype=float)  # per-timepoint k_size
+            p = np.clip(k_size / (k_size + mu), self._eps, 1 - self._eps)
+            logL = sps.nbinom.logpmf(k=c_obs, n=k_size, p=p)
+        else:
+            # Poisson fallback: exact base distribution  
+            logL = sps.poisson.logpmf(k=c_obs, mu=mu)
+        
+        return -np.nan_to_num(logL, nan=-np.inf)  # Return NLL per row
 
     def plot_facet(self, data, color, **kwargs):
+        """Plot NB2 or Poisson likelihood distributions for each simulation replicate"""
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
-        e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
+        e_n, e_x = expected['n'].iloc[0], expected['x'].iloc[0]
+        
         kk = np.arange(0, int(2*e_x))
-        nll = 0
         for idx, row in data.iterrows():
-            a_n, a_x = row['n'], row['x']
-            beta = (a_n+1)
-            T = e_n
-            q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
-
-            yy = q.pmf(kk)
+            c_sim, e_sim = row['x'], row['n']
+            
+            # Calculate rate and mean
+            rate_sim = (c_sim + self.c0) / max(e_sim + self.e0, self._eps)
+            mu = max(self._eps, e_n * rate_sim)
+            
+            if self.use_overdispersion:
+                # NB2 path
+                k_size = expected['k_size'].iloc[0]
+                p = np.clip(k_size / (k_size + mu), self._eps, 1 - self._eps)
+                dist = sps.nbinom(n=k_size, p=p)
+            else:
+                # Poisson path
+                dist = sps.poisson(mu=mu)
+            
+            yy = dist.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pmf(e_x)
-            nll += -q.logpmf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            yy_obs = dist.pmf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=10, color='k')
+        
         plt.axvline(e_x, color='k', linestyle='--')
-        return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """Plot bootstrap distribution of means using NB2 or Poisson"""
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
-        e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
+        e_n, e_x = expected['n'].iloc[0], expected['x'].iloc[0]
 
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
+        
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
 
@@ -1006,135 +1394,237 @@ class GammaPoisson(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).aggregate(func=self.combine_reps, **self.combine_kwargs)
 
+            # Calculate bootstrap mean
+            total_mean = 0
+            n_reps = 0
             for idx, row in actual.iterrows():
-                a_n, a_x = row['n'], row['x']
-                beta = (a_n+1)
-                T = e_n
-                q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
-                means[bi] = q.mean()
+                c_sim, e_sim = row['x'], row['n']
+                rate_sim = (c_sim + self.c0) / max(e_sim + self.e0, self._eps)
+                mu = max(self._eps, e_n * rate_sim)
+                
+                if self.use_overdispersion:
+                    # NB2 path
+                    k_size = expected['k_size'].iloc[0]
+                    p = np.clip(k_size / (k_size + mu), self._eps, 1 - self._eps)
+                    dist = sps.nbinom(n=k_size, p=p)
+                else:
+                    # Poisson path
+                    dist = sps.poisson(mu=mu)
+                    
+                total_mean += dist.mean()
+                n_reps += 1
+            
+            means[bi] = total_mean / max(n_reps, 1)
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
-        return
 
 
 class Normal(CalibComponent):
-    def __init__(self, name, expected, extract_fn, conform, weight=1, sigma2=None, **kwargs):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, **kwargs):
+        """
+        Normal likelihood component with per-row uncertainty specification.
+        
+        This component evaluates observed data using a normal distribution with
+        per-row uncertainty that can be specified in multiple formats.
+        
+        Args:
+            name (str): Name of this component
+            expected (pd.DataFrame): Real observed data with required columns:
+                - 'x': observed values (floats)
+                - EXACTLY ONE of:
+                    - 'sigma2': variance for each observation
+                    - 'sigma': standard deviation for each observation  
+                    - 'ci95_low' AND 'ci95_high': 95% confidence interval bounds
+            extract_fn (callable): Function to extract simulated data in same format
+            conform (str|callable): How to align timepoints ('prevalent', 'incident', etc.)
+            weight (float): Weight for this component in overall likelihood
+            **kwargs: Additional arguments passed to parent class
+            
+        The likelihood uses: x^obs ~ Normal(μ=x_sim, σ²) where σ² varies by row.
+        """
         super().__init__(name, expected, extract_fn, conform, weight, **kwargs)
-        self.sigma2 = sigma2
-        return
-
+        
+        # Check for required per-row uncertainty columns
+        self.has_sigma2 = 'sigma2' in expected.columns
+        self.has_sigma = 'sigma' in expected.columns  
+        self.has_ci = 'ci95_low' in expected.columns and 'ci95_high' in expected.columns
+        
+        # Validate exactly one uncertainty method provided
+        uncertainty_methods = sum([self.has_sigma2, self.has_sigma, self.has_ci])
+        if uncertainty_methods == 0:
+            raise ValueError("Must provide per-row uncertainty: 'sigma2', 'sigma', or 'ci95_low'/'ci95_high' columns")
+        if uncertainty_methods > 1:
+            raise ValueError("Provide only one uncertainty method: 'sigma2', 'sigma', or 'ci95_low'/'ci95_high' columns")
+        
+        # Validate expected data
+        if not all(np.isfinite(expected['x'])):
+            raise ValueError("expected['x'] must contain finite values")
+            
+        if self.has_ci:
+            # Validate 95% confidence interval bounds
+            if not all(expected['ci95_low'] < expected['ci95_high']):
+                raise ValueError("ci95_low must be less than ci95_high for all observations")
+        
+        self.expected = expected.copy()
+        
     def compute_nll(self, expected, actual, **kwargs):
         """
-        Normal log-likelihood component.
-
-        Note that minimizing the negative log likelihood of a Gaussian likelihood is
-        equivalent to minimizing the Euclidean distance between the expected and
-        actual values.
-
-        User-provided variance can be passed as a keyword argument named sigma2 when creating this component.
-
+        Normal negative log-likelihood with per-row uncertainty.
+        
         Args:
-            expected (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from the reference dataset.
-            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset.
-            kwargs (dict): contains any eval_kwargs that were specified when instantiating the Calibration
-
+            expected (pd.DataFrame): Real observed data (not used directly, uses self.expected)
+            actual (pd.DataFrame): Simulated data with 'x' column (and optionally 'n' for ratios)
+            kwargs: Additional evaluation arguments
+            
         Returns:
-            nll (float): negative Euclidean distance between expected and predicted values.
+            ndarray: Negative log likelihoods for each data point
         """
-
-        logLs = []
-        sigma2 = self.sigma2
-        compute_var = sigma2 is None
-
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for idx, rep in combined.iterrows():
-            e_x = rep['x_e']
-            a_x = rep['x_a']
-
-            # TEMP TODO calculate rate if 'n' supplied
-            if 'n' in rep:
-                a_x = rep['x_a'] / rep['n']
-
-            if compute_var:
-                sigma2 = self.compute_var(expected['x'], a_x)
-
-            logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=np.sqrt(sigma2))
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
-
-    def compute_var(self, expected_x, actual_x):
-        """
-        Compute the maximum-likelihood variance of the residuals between expected and actual values.
-        """
-        diffs = expected_x - actual_x
-        SSE = np.sum(diffs**2)
-        N = len(expected_x) if sc.isiterable(expected_x) else 1
-        sigma2 = SSE/N
-        return sigma2
-
+        # Dynamic merge key detection (fixes hardcoded ['t'] bug)
+        merge_keys = [name for name in self.expected.index.names if name is not None]
+        if not merge_keys:
+            merge_keys = ['t']  # fallback for edge cases
+        
+        combined = pd.merge(self.expected.reset_index(), actual.reset_index(), 
+                           on=merge_keys, suffixes=('_e', '_a'))
+        
+        # Numerical epsilon for guards
+        eps = 1e-10
+        
+        # Extract arrays for vectorized operations and ensure float type
+        e_x = combined['x_e'].values.astype(float)
+        a_x = combined['x_a'].values.astype(float)
+        
+        # Handle ratio calculations if 'n' column present in actual data
+        if 'n_a' in combined.columns:
+            n_a = combined['n_a'].values.astype(float)
+            # Guard against division by zero/very small numbers
+            n_a = np.maximum(n_a, eps)
+            a_x = a_x / n_a
+        
+        # Parse per-row uncertainty (no suffix needed - these columns only exist in expected)
+        if self.has_sigma2:
+            sigma2 = combined['sigma2'].values.astype(float)
+        elif self.has_sigma:
+            sigma2 = (combined['sigma'].values.astype(float)) ** 2
+        elif self.has_ci:
+            # Convert 95% confidence interval width to variance
+            ci_width = combined['ci95_high'].values.astype(float) - combined['ci95_low'].values.astype(float)
+            sigma2 = (ci_width / (2 * 1.96)) ** 2
+        else:
+            raise ValueError("No uncertainty specification found")
+        
+        # Numerical guards for variance and sigma
+        sigma2 = np.maximum(sigma2, eps)  # Ensure σ² ≥ ε
+        sigma = np.sqrt(sigma2)
+        sigma = np.clip(sigma, eps, np.inf)  # Clip σ ≥ ε
+        
+        # Vectorized normal log-likelihood
+        logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=sigma)
+        nll = -logL
+        
+        # Handle any NaN/inf values that might have slipped through
+        nll = np.nan_to_num(nll, nan=np.inf, posinf=np.inf, neginf=-np.inf)
+        
+        return nll
+    
     def plot_facet(self, data, color, **kwargs):
+        """
+        Plot normal likelihood facet with per-row uncertainties.
+        """
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
         e_x = expected['x'].values.flatten()[0]
-        nll = 0
+        
+        # Numerical epsilon for guards
+        eps = 1e-10
+        
+        # Get per-row uncertainty for this timepoint and ensure float type
+        if self.has_sigma2:
+            sigma2 = float(expected['sigma2'].values[0])
+        elif self.has_sigma:
+            sigma2 = float(expected['sigma'].values[0]) ** 2
+        elif self.has_ci:
+            ci_high = float(expected['ci95_high'].values[0])
+            ci_low = float(expected['ci95_low'].values[0])
+            ci_width = ci_high - ci_low
+            sigma2 = (ci_width / (2 * 1.96)) ** 2
+        else:
+            raise ValueError("No uncertainty specification found")
+        
+        # Numerical guard for sigma
+        sigma2 = max(sigma2, eps)
+        sigma = np.sqrt(sigma2)
+        sigma = max(sigma, eps)
+        
         for idx, row in data.iterrows():
-            a_x = row['x']
-
-            # TEMP TODO calculate rate if 'n' supplied
+            a_x = float(row['x'])
+            
+            # Handle ratio calculation if 'n' column present
             if 'n' in row:
-                a_x = row['x'] / row['n'] # row[['x']].values[0] / row[['n']].values[0]
-
-            sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
-            if isinstance(sigma2, (list, np.ndarray)):
-                assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
-                # User provided a vector of variances
-                ti = self.expected.index.get_loc(t)
-                sigma2 = sigma2[ti]
-
-            sigma = np.sqrt(sigma2)
+                n_val = max(float(row['n']), eps)  # Guard against division by zero
+                a_x = a_x / n_val
+            
+            # Plot normal distribution centered on simulated value
             kk = np.linspace(a_x - 1.96*sigma, a_x + 1.96*sigma, 1000)
             q = sps.norm(loc=a_x, scale=sigma)
-
+            
             yy = q.pdf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
-            yy = q.pdf(e_x)
-            nll += -q.logpdf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            
+            # Mark observed value
+            yy_obs = q.pdf(e_x)
+            plt.plot(e_x, yy_obs, 'x', ms=10, color='k')
+        
+        # Mark expected value
         plt.axvline(e_x, color='k', linestyle='--')
         return
-
+    
     def plot_facet_bootstrap(self, data, color, **kwargs):
+        """
+        Plot bootstrap distribution of means.
+        """
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]] # Gracefully handle Series and DataFrame, if 't1' in index
-        e_x = expected['x'].values.flatten()[0] # Due to possible presence of 't1' in the index
-
+        expected = self.expected.loc[[t]]
+        e_x = expected['x'].values.flatten()[0]
+        
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
-        for bi in np.arange(n_boot):
+        
+        for bi in range(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-
+            
             if self.combine_reps is None:
                 actual = data.set_index('rand_seed').loc[use_seeds]
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
-
+            
+            # Calculate mean for this bootstrap sample with numerical guards
+            eps = 1e-10
+            boot_mean = 0.0
+            count = 0
             for idx, row in actual.iterrows():
-                a_x = row['x']
-
-                # TEMP TODO calculate rate if 'n' supplied
+                a_x = float(row['x'])
+                
+                # Handle ratio calculation if 'n' column present
                 if 'n' in row:
-                    a_x = row['x'] / row['n'] #row['x'].values / row['n'].values
-
-                # No need to form the sps.norm involving sigma2 because the mean will be a_x
-                means[bi] = a_x
-
-        ax = sns.kdeplot(means)
-        sns.rugplot(means, ax=ax)
+                    n_val = max(float(row['n']), eps)  # Guard against division by zero
+                    a_x = a_x / n_val
+                
+                boot_mean += a_x
+                count += 1
+            
+            # Guard against empty actual data
+            if count > 0:
+                means[bi] = boot_mean / count
+            else:
+                means[bi] = 0.0
+        
+        # Plot bootstrap distribution
+        sns.kdeplot(means)
+        sns.rugplot(means)
         plt.axvline(e_x, color='k', linestyle='--')
         return
