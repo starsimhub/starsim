@@ -4,6 +4,7 @@ Utilities for processing docs (notebooks mostly)
 
 import os
 import sys
+import importlib
 import sciris as sc
 import nbformat
 import nbconvert.preprocessors as nbp
@@ -164,3 +165,41 @@ def execute_notebooks(*args, folders=None):
     T.toc()
     
     return results
+
+
+@sc.timer('Customized aliases')
+def customize_aliases(mod_name='starsim', json_path='objects.json'):
+    """
+    Manually add aliases to functions, so instead of e.g. starsim.analyzers.Analyzer, you can link via starsim.Analyzer (and therefore ss.Analyzer)
+    """
+    print('Customizing aliases ...')
+    mod = importlib.import_module(mod_name)
+    mod_items = dir(mod)
+
+    # Load the current objects inventory
+    json = sc.loadjson(json_path)
+    items = json['items']
+    names = [item['name'] for item in items]
+    print(f'  Loaded {len(json["items"])} items')
+
+    # Collect duplicates
+    dups = []
+    for item in items:
+        parts = item['name'].split('.')
+        if len(parts) < 3 or parts[0] != mod_name:
+            continue
+        objname = parts[2] # e.g. 'Analyzer' from starsim.analyzers.Analyzer
+        if objname in mod_items:
+            remainder = '.'.join(parts[2:])
+            alias = f'{mod_name}.{remainder}'
+            if alias not in names:
+                dup = sc.dcp(item)
+                dup['name'] = alias
+                dups.append(dup)
+
+    # Add them back into the JSON
+    items.extend(dups)
+
+    # Save the modified version
+    sc.savejson(json_path, json)
+    print(f'  Saved {len(json["items"])} items')
