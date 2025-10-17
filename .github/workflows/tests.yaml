@@ -28,9 +28,9 @@ jobs:
       - name: Run API tests
         working-directory: ./tests
         run: pytest test_*.py -n auto --durations=0 --junitxml=test-results.xml # Run actual tests
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: failure()
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v5
+        if: always()
         with:
-          name: test_results
-          path: tests/test-results.xml
+          report_paths: './tests/test-results.xml'
+          check_name: 'Test Report (Python ${{ matrix.python-version }})'

@@ -6,6 +6,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added additional calibration examples for workflows to re-identify known parameters
 
 
+## Version 3.0.4 (2025-XX-XX)
+- Minor update, removes p_death from the parameters for the Deaths module
+- *GitHub info*: TBC
+
+
 ## Version 3.0.3 (2025-10-07)
 - Swapped order of `age` and `female` states in People to allow `female` dist to use `age` state during population initialization.
 
