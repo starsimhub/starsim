@@ -14,7 +14,7 @@ ss_int = ss.dtypes.int
 _ = None
 
 # Specify all externally visible functions this file defines; see also more definitions below
-__all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork']
+__all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork', 'MetapopulationRoute']
 
 
 # %% General network classes
@@ -25,6 +25,40 @@ class Route(ss.Module):
     """
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
         errormsg = 'compute_transmission() must be defined by Route subclasses'
+        raise NotImplementedError(errormsg)
+
+
+class MetapopulationRoute(Route):
+    """
+    Base class for metapopulation transmission routes
+    
+    Metapopulation routes handle transmission between spatially-distinct populations
+    (e.g., cities, regions, countries). Unlike simple mixing pools, they typically:
+    - Have their own transmission parameters (e.g., beta_net)
+    - Use spatial/demographic data (coordinates, population sizes)
+    - Apply transmission via callbacks to disease modules
+    - Return empty UIDs since they handle transmission internally
+    
+    Subclasses should implement specific metapopulation models like:
+    - Gravity-based transmission (distance and population size)
+    - Airline/transportation networks
+    - Migration models
+    """
+    
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
+        """
+        Compute metapopulation transmission
+        
+        Args:
+            rel_sus: Relative susceptibility (from disease)
+            rel_trans: Relative transmissibility (from disease) 
+            disease_beta: Disease beta parameter (ignored - metapop routes use own params)
+            disease: Disease object for callback-based transmission
+            
+        Returns:
+            ss.uids([]): Empty UIDs since transmission handled via callbacks
+        """
+        errormsg = 'compute_transmission() must be defined by MetapopulationRoute subclasses'
         raise NotImplementedError(errormsg)
 
 

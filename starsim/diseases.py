@@ -257,6 +257,15 @@ class Infection(Disease):
                             sources.append(source_uids)
                             networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
 
+            # Handle metapopulation routes with special transmission logic
+            elif isinstance(route, ss.MetapopulationRoute):
+                # Metapopulation routes use disease_beta multiplied by their x_beta parameter
+                disease_beta = betamap[nk][0] if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
+                target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
+                new_cases.append(target_uids)
+                sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
+                networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
+                
             # Handle everything else: mixing pools, environmental transmission, etc.
             elif isinstance(route, ss.Route):
                 # Mixing pools are unidirectional, only use the first beta value
