@@ -9,7 +9,7 @@ dose-based transmission via MetapopCompatible interface.
 import numpy as np
 from pandas.core.internals.blocks import new_block
 import starsim as ss
-from metapop_interface import MetapopCompatible
+from starsim.diseases import MetapopCompatible
 
 
 class SEIRPopulation(ss.Infection, MetapopCompatible):

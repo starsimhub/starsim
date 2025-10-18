@@ -17,7 +17,9 @@ import numpy as np
 import starsim as ss
 from seir_population import SEIRPopulation
 from metapop_route import GravityNetwork
-from metapopulation import MetaPopulation
+
+# Import MetaPopulation from starsim framework
+MetaPopulation = ss.MetaPopulation
 from seir_metapopulation_analyzer import SEIRMetapopulationAnalyzer
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -225,7 +227,7 @@ def plot_metapop_results(sim):
 if __name__ == "__main__":
     # Run a demonstration with more communities for better visualization
     print("Running metapopulation SEIR simulation...")
-    sim = run_metapop_demo(n_communities=1000, R0=10.0, x_beta=2e-2, duration_years=0.5)
+    sim = run_metapop_demo(n_communities=256, R0=10.0, x_beta=2e-2, duration_years=0.5)
     
     # Basic results summary
     print(f"\nSimulation completed! Final time: {sim.t} days")

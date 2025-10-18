@@ -7,7 +7,7 @@ Uses zero-row safe matrix normalization and vectorized operations.
 
 import numpy as np
 import starsim as ss
-from metapop_interface import MetapopCompatible
+from starsim.diseases import MetapopCompatible
 
 
 class GravityNetwork(ss.MetapopulationRoute):
