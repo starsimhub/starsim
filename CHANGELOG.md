@@ -2,13 +2,10 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-## Version 3.0.4 (2025-XX-XX)
-- Added additional calibration examples for workflows to re-identify known parameters
-
-
-## Version 3.0.4 (2025-XX-XX)
-- Minor update, removes p_death from the parameters for the Deaths module
-- *GitHub info*: TBC
+## Version 3.0.4 (2025-10-22)
+- Added additional calibration examples for workflows to re-identify known parameters.
+- Removed `p_death` from the parameters for the `ss.Deaths` module, as `Deaths.make_p_death()` always overrides this value and is therefore the means by which the death probability should be set or changed. 
+- *GitHub info*: PR [1055](https://github.com/starsimhub/starsim/pull/1055)
 
 
 ## Version 3.0.3 (2025-10-07)
