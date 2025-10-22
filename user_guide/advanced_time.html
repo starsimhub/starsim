@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -759,7 +759,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="b91f5bee" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>d.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;starsim.time.date at 0x7f79cffdf150&gt;
+<pre><code>&lt;starsim.time.date at 0x7f552ebd71d0&gt;
 [&lt;class 'starsim.time.date'&gt;, &lt;class 'pandas._libs.tslibs.timestamps.Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.timestamps._Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.base.ABCTimestamp'&gt;, &lt;class 'datetime.datetime'&gt;, &lt;class 'datetime.date'&gt;]
 ————————————————————————————————————————————————————————————————————————
 Methods:
@@ -791,7 +791,7 @@ Properties:
       _repr_base: '2025-08-02 00:00:00'
       _time_repr: '00:00:00'
           _value: 1754092800
-            asm8: numpy.datetime64('2025-08-02T00:00:00')
+            asm8: np.datetime64('2025-08-02T00:00:00')
              day: 2
      day_of_week: 5
      day_of_year: 214
@@ -801,9 +801,9 @@ Properties:
      daysinmonth: 31
             fold: 0
  fromisocalendar: &lt;built-in method fromisocalendar of type object at
-                  0x5639a8a2e61 [...]
+                  0x5556988bd25 [...]
    fromisoformat: &lt;built-in method fromisoformat of type object at
-                  0x5639a8a2e610&gt;
+                  0x5556988bd250&gt;
             hour: 0
     is_leap_year: False
     is_month_end: False
@@ -949,21 +949,21 @@ DateArray([datedur(0), datedur(days=1), datedur(days=2), datedur(days=3),
 <span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>plt.axvline(start, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Intervention'</span>)</span>
 <span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 0" with 5000 agentsInitializing sim "Sim 1" with 5000 agents
+<pre><code>Initializing sim "Sim 1" with 5000 agentsInitializing sim "Sim 0" with 5000 agents
 
   Running "Sim 0": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running "Sim 1": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "Sim 0": 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
-  Running "Sim 1": 2010.01.01 (10/51) (0.29 s)  ••••———————————————— 22%
-  Running "Sim 0": 2020.01.01 (20/51) (0.34 s)  ••••••••———————————— 41%
-  Running "Sim 1": 2020.01.01 (20/51) (0.49 s)  ••••••••———————————— 41%
-  Running "Sim 0": 2030.01.01 (30/51) (0.53 s)  ••••••••••••———————— 61%
-  Running "Sim 1": 2030.01.01 (30/51) (0.54 s)  ••••••••••••———————— 61%
-  Running "Sim 0": 2040.01.01 (40/51) (0.58 s)  ••••••••••••••••———— 80%
-  Running "Sim 1": 2040.01.01 (40/51) (0.59 s)  ••••••••••••••••———— 80%
-  Running "Sim 0": 2050.01.01 (50/51) (0.62 s)  •••••••••••••••••••• 100%
+  Running "Sim 0": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
+  Running "Sim 1": 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
+  Running "Sim 0": 2020.01.01 (20/51) (0.36 s)  ••••••••———————————— 41%
+  Running "Sim 1": 2020.01.01 (20/51) (0.52 s)  ••••••••———————————— 41%
+  Running "Sim 0": 2030.01.01 (30/51) (0.57 s)  ••••••••••••———————— 61%
+  Running "Sim 1": 2030.01.01 (30/51) (0.58 s)  ••••••••••••———————— 61%
+  Running "Sim 0": 2040.01.01 (40/51) (0.62 s)  ••••••••••••••••———— 80%
+  Running "Sim 1": 2040.01.01 (40/51) (0.62 s)  ••••••••••••••••———— 80%
+  Running "Sim 0": 2050.01.01 (50/51) (0.66 s)  •••••••••••••••••••• 100%
 
-  Running "Sim 1": 2050.01.01 (50/51) (0.64 s)  •••••••••••••••••••• 100%
+  Running "Sim 1": 2050.01.01 (50/51) (0.67 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1000,10 +1000,10 @@ DateArray([datedur(0), datedur(days=1), datedur(days=2), datedur(days=3),
 <span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>plt.axvline(start, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Intervention'</span>)</span>
 <span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f79cf3b6890&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f552dec09a0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/cbook.py", line 1791, in normalize_kwargs
-    to_canonical = {alias: canonical
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/_api/__init__.py", line 126, in check_in_list
+    if val not in values:
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1633,7 +1633,7 @@ freqperday(5)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

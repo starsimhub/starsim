@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -792,10 +792,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-90"><a href="#cb1-90" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sim <span class="kw">in</span> msim.sims:</span>
 <span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>    sim.analyzers[<span class="dv">0</span>].plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fdc89a51a80&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f1482173650&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 195, in set_children
-    ref = weakref.ref(
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/_api/__init__.py", line 65, in check_isinstance
+    def check_isinstance(types, /, **kwargs):
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -928,7 +928,7 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <span id="cb4-97"><a href="#cb4-97" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
 <span id="cb4-98"><a href="#cb4-98" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fdc8955b380&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f149217d3f0&gt;
 Traceback (most recent call last):
   File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
     @classmethod
@@ -1075,15 +1075,13 @@ Syphilis infections - With connector: 392.0</code></pre>
 <span id="cb7-111"><a href="#cb7-111" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  HIV: </span><span class="sc">{</span>hiv_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>hiv_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span>
 <span id="cb7-112"><a href="#cb7-112" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  Syphilis: </span><span class="sc">{</span>syph_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>syph_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fdc8966fbf0&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f14cd6d4ae0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_utils.py", line 1189, in isstring
-    def isstring(obj):
+  File "&lt;string&gt;", line 0, in &lt;module&gt;
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7fdc8966db20&gt;
+Exception ignored in: &lt;_io.BytesIO object at 0x7f14922f4fe0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_utils.py", line 1189, in isstring
-    def isstring(obj):
+  File "&lt;string&gt;", line 0, in &lt;module&gt;
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1566,7 +1564,7 @@ Connector + treatment:
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

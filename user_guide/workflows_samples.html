@@ -569,13 +569,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -752,7 +752,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   Running 2010.01.01 (10/51) (0.28 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.32 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.36 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.39 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.40 s)  ••••••••••••••••———— 80%
   Running 2050.01.01 (50/51) (0.43 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
@@ -1576,7 +1576,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">'cum_deaths'</span>] <span class="op">=</span> <span class="bu">sum</span>(sim.results.new_deaths)</span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="4">
-<pre><code>{'seed': 0, 'p_death': 0.01, 'cum_infections': 4515.0, 'cum_deaths': 42.0}</code></pre>
+<pre><code>{'seed': 0,
+ 'p_death': 0.01,
+ 'cum_infections': np.float64(4515.0),
+ 'cum_deaths': np.float64(42.0)}</code></pre>
 </div>
 </div>
 <div class="alert alert-warning alert-info">
@@ -1617,7 +1620,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>df, summary <span class="op">=</span> run_sim(<span class="dv">0</span>, <span class="fl">0.2</span>)<span class="op">;</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="6">
-<pre><code>{'seed': 0, 'p_death': 0.2, 'cum_infections': 4628.0, 'cum_deaths': 934.0}</code></pre>
+<pre><code>{'seed': 0,
+ 'p_death': 0.2,
+ 'cum_infections': np.float64(4628.0),
+ 'cum_deaths': np.float64(934.0)}</code></pre>
 </div>
 </div>
 <p>We can produce all of the samples associated with a scenario by iterating over the input seed values. This is being done in a basic loop here, but could be done in more sophistical ways to leverage parallel computing (e.g., with <code>sc.parallelize</code> for single host parallelization, or with <code>celery</code> for distributed computation).</p>
@@ -2692,9 +2698,9 @@ Name: cum_infections, dtype: float64</code></pre>
 <div id="35" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>res.get(<span class="dv">0</span>) <span class="co"># Retrieve both summary quantities and dataframes</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="14">
-<pre><code>(#0. 'p_death':        0.2
- #1. 'cum_infections': 4628.0
- #2. 'cum_deaths':     934.0,
+<pre><code>(#0. 'p_death':        np.float64(0.2)
+ #1. 'cum_infections': np.float64(4628.0)
+ #2. 'cum_deaths':     np.float64(934.0),
              Unnamed: 0  randomnet_n_edges  sir_n_susceptible  sir_n_infected  \
  timevec                                                                        
  2000-01-01           0            12616.0             4937.0            63.0   
@@ -3011,26 +3017,26 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>peak_infections <span class="op">=</span> <span class="kw">lambda</span> df: df[<span class="st">'sir_n_infected'</span>].<span class="bu">max</span>()</span>
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">apply</span>(peak_infections)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="23">
-<pre><code>[2487.0,
- 2502.0,
- 2524.0,
- 2437.0,
- 2391.0,
- 2471.0,
- 2526.0,
- 2459.0,
- 2397.0,
- 2483.0,
- 2436.0,
- 2443.0,
- 2449.0,
- 2338.0,
- 2506.0,
- 2401.0,
- 2509.0,
- 2365.0,
- 2438.0,
- 2476.0]</code></pre>
+<pre><code>[np.float64(2487.0),
+ np.float64(2502.0),
+ np.float64(2524.0),
+ np.float64(2437.0),
+ np.float64(2391.0),
+ np.float64(2471.0),
+ np.float64(2526.0),
+ np.float64(2459.0),
+ np.float64(2397.0),
+ np.float64(2483.0),
+ np.float64(2436.0),
+ np.float64(2443.0),
+ np.float64(2449.0),
+ np.float64(2338.0),
+ np.float64(2506.0),
+ np.float64(2401.0),
+ np.float64(2509.0),
+ np.float64(2365.0),
+ np.float64(2438.0),
+ np.float64(2476.0)]</code></pre>
 </div>
 </div>
 </section>
@@ -3050,8 +3056,8 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f8f09f9dd50&gt; mode='r'&gt;
-&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f8f09f9dd50&gt; mode='r'&gt;</code></pre>
+<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7fd855a7b2e0&gt; mode='r'&gt;
+&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7fd855a7b2e0&gt; mode='r'&gt;</code></pre>
 </div>
 </div>
 <div id="57" class="cell" data-execution_count="25">
@@ -3084,7 +3090,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 25.7 ms</code></pre>
+<pre><code>Elapsed time: 25.4 ms</code></pre>
 </div>
 </div>
 <div id="64" class="cell" data-execution_count="29">
@@ -3092,7 +3098,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 1.93 ms</code></pre>
+<pre><code>Elapsed time: 2.11 ms</code></pre>
 </div>
 </div>
 <p>The <code>preload</code> option populates the entire cache in advance. This makes creating the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.</p>
@@ -3100,7 +3106,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>    res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, preload<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 25.7 ms</code></pre>
+<pre><code>Elapsed time: 26.1 ms</code></pre>
 </div>
 </div>
 <div id="67" class="cell" data-execution_count="31">
@@ -3108,7 +3114,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 1.92 ms</code></pre>
+<pre><code>Elapsed time: 2.00 ms</code></pre>
 </div>
 </div>
 <div id="68" class="cell" data-execution_count="32">
@@ -3116,7 +3122,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 2.56 ms</code></pre>
+<pre><code>Elapsed time: 2.59 ms</code></pre>
 </div>
 </div>
 <p>Together, these options provide some flexibility in terms of memory and time demands to suit analyses at various different scales.</p>
@@ -3208,14 +3214,14 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <div id="82" class="cell" data-execution_count="39">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb66"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">id</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="39">
-<pre><code>{'p_death': 0.25, 'initial': 2}</code></pre>
+<pre><code>{'p_death': np.float64(0.25), 'initial': np.int64(2)}</code></pre>
 </div>
 </div>
 <p>The ‘identifier’ is a tuple of these values, which is suitable for use as a dictionary key. This can be useful for accumulating and comparing variables across scenarios:</p>
 <div id="84" class="cell" data-execution_count="40">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb68"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>res.identifier</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="40">
-<pre><code>(0.25, 2)</code></pre>
+<pre><code>(np.float64(0.25), np.int64(2))</code></pre>
 </div>
 </div>
 <section id="loading-multiple-scenarios" class="level3">
@@ -3226,8 +3232,8 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <span id="cb70-2"><a href="#cb70-2" aria-hidden="true" tabindex="-1"></a>results</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="41">
 <pre><code>&lt;Dataset:
-    'p_death':[0.0, 0.25, 0.5, 0.75]
-    'initial':[1, 2, 3]
+    'p_death':[np.float64(0.0), np.float64(0.25), np.float64(0.5), np.float64(0.75)]
+    'initial':[np.int64(1), np.int64(2), np.int64(3)]
 &gt;</code></pre>
 </div>
 </div>
@@ -3235,7 +3241,11 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <div id="88" class="cell" data-execution_count="42">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb72"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb72-1"><a href="#cb72-1" aria-hidden="true" tabindex="-1"></a>results.ids</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="42">
-<pre><code>{'p_death': [0.0, 0.25, 0.5, 0.75], 'initial': [1, 2, 3]}</code></pre>
+<pre><code>{'p_death': [np.float64(0.0),
+  np.float64(0.25),
+  np.float64(0.5),
+  np.float64(0.75)],
+ 'initial': [np.int64(1), np.int64(2), np.int64(3)]}</code></pre>
 </div>
 </div>
 <p>The individual results can be accessed by indexing the <code>Dataset</code> instance using the values of the identifiers. For example:</p>
@@ -3290,7 +3300,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-47-output-2.png" width="753" height="429" class="figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-47-output-2.png" width="897" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -3797,7 +3807,7 @@ Raw values: [0.00000000e+00 2.31481481e-11 4.62962963e-11 6.94444444e-11
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

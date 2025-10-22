@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -699,21 +699,21 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "random" with 10000 agentsInitializing sim "randomsafe" with 10000 agents
+<pre><code>Initializing sim "randomsafe" with 10000 agentsInitializing sim "random" with 10000 agents
 
-  Running "random": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "randomsafe": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "random": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
-  Running "random": 2020.01.01 (20/51) (0.37 s)  ••••••••———————————— 41%
-  Running "randomsafe": 2010.01.01 (10/51) (0.33 s)  ••••———————————————— 22%
-  Running "random": 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
-  Running "randomsafe": 2020.01.01 (20/51) (0.42 s)  ••••••••———————————— 41%
-  Running "random": 2040.01.01 (40/51) (0.47 s)  ••••••••••••••••———— 80%
-  Running "randomsafe": 2030.01.01 (30/51) (0.51 s)  ••••••••••••———————— 61%
-  Running "random": 2050.01.01 (50/51) (0.67 s)  •••••••••••••••••••• 100%
+  Running "random": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "randomsafe": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running "randomsafe": 2040.01.01 (40/51) (0.72 s)  ••••••••••••••••———— 80%
-  Running "randomsafe": 2050.01.01 (50/51) (0.81 s)  •••••••••••••••••••• 100%
+  Running "random": 2010.01.01 (10/51) (0.32 s)  ••••———————————————— 22%
+  Running "randomsafe": 2010.01.01 (10/51) (0.34 s)  ••••———————————————— 22%
+  Running "random": 2020.01.01 (20/51) (0.38 s)  ••••••••———————————— 41%
+  Running "randomsafe": 2020.01.01 (20/51) (0.44 s)  ••••••••———————————— 41%
+  Running "random": 2030.01.01 (30/51) (0.44 s)  ••••••••••••———————— 61%
+  Running "random": 2040.01.01 (40/51) (0.50 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2030.01.01 (30/51) (0.53 s)  ••••••••••••———————— 61%
+  Running "random": 2050.01.01 (50/51) (0.72 s)  •••••••••••••••••••• 100%
+
+  Running "randomsafe": 2040.01.01 (40/51) (0.77 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2050.01.01 (50/51) (0.85 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -732,19 +732,19 @@ Figure(768x576)</code></pre>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim1, sim2]).run(verbose<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 1" with 10000 agentsInitializing sim "Sim 0" with 10000 agents
+<pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
 </code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f7fd151e7a0&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad429ad0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 1771, in __init__
-    super().__init__(*args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 195, in set_children
+    ref = weakref.ref(
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f7fd15d8770&gt;
+Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad4294e0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 1771, in __init__
-    super().__init__(*args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 195, in set_children
+    ref = weakref.ref(
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -764,10 +764,15 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sim).run()</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f80095ec0e0&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad9318a0&gt;
 Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
-    def __new__(cls, value=None, base=None, **kwargs):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
+    @classmethod
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad9b6ac0&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
+    @classmethod
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -824,26 +829,25 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim "Low contacts" with 10000 agents
 Initializing sim "High contacts" with 10000 agents
-  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running "Low contacts": 2010.01.01 (10/51) (0.29 s)  ••••———————————————— 22%
+  Running "Low contacts": 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
   Running "High contacts": 2010.01.01 (10/51) (0.32 s)  ••••———————————————— 22%
   Running "Low contacts": 2020.01.01 (20/51) (0.35 s)  ••••••••———————————— 41%
   Running "High contacts": 2020.01.01 (20/51) (0.38 s)  ••••••••———————————— 41%
-  Running "Low contacts": 2030.01.01 (30/51) (0.39 s)  ••••••••••••———————— 61%
-  Running "High contacts": 2030.01.01 (30/51) (0.43 s)  ••••••••••••———————— 61%
-  Running "Low contacts": 2040.01.01 (40/51) (0.44 s)  ••••••••••••••••———— 80%
-  Running "Low contacts": 2050.01.01 (50/51) (0.48 s)  •••••••••••••••••••• 100%
+  Running "Low contacts": 2030.01.01 (30/51) (0.40 s)  ••••••••••••———————— 61%
+  Running "High contacts": 2030.01.01 (30/51) (0.45 s)  ••••••••••••———————— 61%
+  Running "Low contacts": 2040.01.01 (40/51) (0.45 s)  ••••••••••••••••———— 80%
+  Running "Low contacts": 2050.01.01 (50/51) (0.50 s)  •••••••••••••••••••• 100%
 
-  Running "High contacts": 2040.01.01 (40/51) (0.48 s)  ••••••••••••••••———— 80%
-  Running "High contacts": 2050.01.01 (50/51) (0.53 s)  •••••••••••••••••••• 100%
+  Running "High contacts": 2040.01.01 (40/51) (0.51 s)  ••••••••••••••••———— 80%
+  Running "High contacts": 2050.01.01 (50/51) (0.57 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f8008c0b150&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe5a0eb18f0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/weakref.py", line 452, in get
-    return self.data.get(ref(key),default)
+  File "&lt;frozen abc&gt;", line 123, in __subclasscheck__
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -914,7 +918,7 @@ Figure(768x576)</code></pre>
 </code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f7fd134a070&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe578ff8540&gt;
 Traceback (most recent call last):
   File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
     out = unpickling_func(*args)
@@ -924,10 +928,10 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.11 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.16 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.21 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.25 s)  •••••••••••••••••••• 100%
+  Running 2020.01.01 (20/51) (0.12 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.17 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.22 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.27 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -1439,8 +1443,8 @@ Figure(768x576)</code></pre>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../user_guide/workflows_sir_calibration.html" class="pagination-link" aria-label="Fit stochastic SIR models to synthetic data">
-        <span class="nav-page-text">Fit stochastic SIR models to synthetic data</span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../user_guide/workflows_sir_calibration.html" class="pagination-link" aria-label="Reidentify known parameters for a simple SIR model">
+        <span class="nav-page-text">Reidentify known parameters for a simple SIR model</span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>
@@ -1451,7 +1455,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

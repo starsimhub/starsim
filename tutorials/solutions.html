@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -750,11 +750,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.35 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.40 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.45 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.50 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.37 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.47 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.52 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -815,7 +815,7 @@ Figure(672x480)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.05 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.11 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.16 s)  ••••••••••••———————— 61%
   Running 2040.01.01 (40/51) (0.22 s)  ••••••••••••••••———— 80%
@@ -896,18 +896,18 @@ Figure(672x480)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2025.01.01 ( 0/366) (0.00 s)  ———————————————————— 0%
-  Running 2025.01.31 (30/366) (0.08 s)  •——————————————————— 8%
+  Running 2025.01.31 (30/366) (0.07 s)  •——————————————————— 8%
   Running 2025.03.02 (60/366) (0.15 s)  •••————————————————— 17%
   Running 2025.04.01 (90/366) (0.23 s)  ••••———————————————— 25%
   Running 2025.05.01 (120/366) (0.31 s)  ••••••—————————————— 33%
-  Running 2025.05.31 (150/366) (0.40 s)  ••••••••———————————— 41%
-  Running 2025.06.30 (180/366) (0.48 s)  •••••••••——————————— 49%
+  Running 2025.05.31 (150/366) (0.39 s)  ••••••••———————————— 41%
+  Running 2025.06.30 (180/366) (0.47 s)  •••••••••——————————— 49%
   Running 2025.07.30 (210/366) (0.56 s)  •••••••••••————————— 58%
   Running 2025.08.29 (240/366) (0.64 s)  •••••••••••••——————— 66%
-  Running 2025.09.28 (270/366) (0.71 s)  ••••••••••••••—————— 74%
+  Running 2025.09.28 (270/366) (0.72 s)  ••••••••••••••—————— 74%
   Running 2025.10.28 (300/366) (0.79 s)  ••••••••••••••••———— 82%
-  Running 2025.11.27 (330/366) (0.86 s)  ••••••••••••••••••—— 90%
-  Running 2025.12.27 (360/366) (0.93 s)  •••••••••••••••••••— 99%
+  Running 2025.11.27 (330/366) (0.87 s)  ••••••••••••••••••—— 90%
+  Running 2025.12.27 (360/366) (0.94 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -966,7 +966,7 @@ Figure(768x576)</code></pre>
 </div>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Population size in year 2040: 49.8504 million</code></pre>
+<pre><code>Population size in year 2040: 49.7592 million</code></pre>
 </div>
 </div>
 </section>
@@ -1096,17 +1096,17 @@ Performing grid search ...
 
 Grid search 1 of 2...
 
-  Trials: {0.0: False, 0.25: False, 0.5: False, 0.75: True, 1.0: True}
+  Trials: {np.float64(0.0): False, np.float64(0.25): False, np.float64(0.5): True, np.float64(0.75): True, np.float64(1.0): True}
 
-  Results: lower=0.5, upper=0.75
+  Results: lower=0.25, upper=0.5
 
 Grid search 2 of 2...
 
-  Trials: {0.5: False, 0.5625: False, 0.625: True, 0.6875: True, 0.75: True}
+  Trials: {np.float64(0.25): False, np.float64(0.3125): False, np.float64(0.375): False, np.float64(0.4375): False, np.float64(0.5): True}
 
-  Results: lower=0.5625, upper=0.625
+  Results: lower=0.4375, upper=0.5
 
-<span class="ansi-bold">Result: 0.59375</span>
+<span class="ansi-bold">Result: 0.46875</span>
 
 <span class="ansi-cyan-fg">
 
@@ -1124,25 +1124,25 @@ Performing automatic search...
 
      step 2 (0.7 s) ++ (orig:array([1.]) | best:array([0.9]) | new:array([0.7]) | diff:array([-0.2]))
 
-     step 3 (1.2 s) -- (orig:array([1.]) | best:array([0.7]) | new:array([10.3]) | diff:array([9.6]))
+     step 3 (1.3 s) -- (orig:array([1.]) | best:array([0.7]) | new:array([10.3]) | diff:array([9.6]))
 
      step 4 (1.6 s) -- (orig:array([1.]) | best:array([0.7]) | new:array([0.8]) | diff:array([0.1]))
 
-     step 5 (1.9 s) -- (orig:array([1.]) | best:array([0.7]) | new:array([10.5]) | diff:array([9.8]))
+     step 5 (2.0 s) ++ (orig:array([1.]) | best:array([0.7]) | new:array([0.5]) | diff:array([-0.2]))
 
-     step 6 (2.3 s) -- (orig:array([1.]) | best:array([0.7]) | new:array([0.75]) | diff:array([0.05]))
+     step 6 (2.3 s) -- (orig:array([1.]) | best:array([0.5]) | new:array([10.1]) | diff:array([9.6]))
 
-     step 7 (2.6 s) -- (orig:array([1.]) | best:array([0.7]) | new:array([10.6]) | diff:array([9.9]))
+     step 7 (2.7 s) -- (orig:array([1.]) | best:array([0.5]) | new:array([10.3]) | diff:array([9.8]))
 
-     step 8 (3.0 s) ++ (orig:array([1.]) | best:array([0.7]) | new:array([0.65]) | diff:array([-0.05]))
+     step 8 (3.1 s) -- (orig:array([1.]) | best:array([0.5]) | new:array([10.4]) | diff:array([9.9]))
 
-     step 9 (3.3 s) -- (orig:array([1.]) | best:array([0.65]) | new:array([10.55]) | diff:array([9.9]))
+     step 9 (3.5 s) -- (orig:array([1.]) | best:array([0.5]) | new:array([10.45]) | diff:array([9.95]))
 
-     step 10 (3.7 s) -- (orig:array([1.]) | best:array([0.65]) | new:array([10.6]) | diff:array([9.95]))
+     step 10 (3.8 s) -- (orig:array([1.]) | best:array([0.5]) | new:array([0.55]) | diff:array([0.05]))
 
-===  Maximum iterations reached (10 steps, orig: 1.000 | best: 0.6500 | ratio: 0.6499999999999999) ===
+===  Maximum iterations reached (10 steps, orig: 1.000 | best: 0.5000 | ratio: 0.49999999999999994) ===
 
-<span class="ansi-bold">Result: 0.6499999999999999</span>
+<span class="ansi-bold">Result: 0.49999999999999994</span>
 </pre>
 </div>
 </div>
@@ -1585,7 +1585,7 @@ Performing automatic search...
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

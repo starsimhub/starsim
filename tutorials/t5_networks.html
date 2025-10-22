@@ -569,13 +569,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -907,15 +907,15 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
   Running 2000.01.01 ( 0/121) (0.00 s)  ———————————————————— 1%
   Running 2000.11.01 (10/121) (0.42 s)  •——————————————————— 9%
   Running 2001.09.01 (20/121) (0.57 s)  •••————————————————— 17%
-  Running 2002.07.02 (30/121) (0.72 s)  •••••——————————————— 26%
+  Running 2002.07.02 (30/121) (0.73 s)  •••••——————————————— 26%
   Running 2003.05.03 (40/121) (0.87 s)  ••••••—————————————— 34%
-  Running 2004.03.02 (50/121) (1.02 s)  ••••••••———————————— 42%
-  Running 2005.01.01 (60/121) (1.17 s)  ••••••••••—————————— 50%
-  Running 2005.11.01 (70/121) (1.33 s)  •••••••••••————————— 59%
+  Running 2004.03.02 (50/121) (1.03 s)  ••••••••———————————— 42%
+  Running 2005.01.01 (60/121) (1.18 s)  ••••••••••—————————— 50%
+  Running 2005.11.01 (70/121) (1.34 s)  •••••••••••————————— 59%
   Running 2006.09.01 (80/121) (1.49 s)  •••••••••••••——————— 67%
   Running 2007.07.02 (90/121) (1.64 s)  •••••••••••••••————— 75%
   Running 2008.05.02 (100/121) (1.79 s)  ••••••••••••••••———— 83%
-  Running 2009.03.03 (110/121) (1.95 s)  ••••••••••••••••••—— 92%
+  Running 2009.03.03 (110/121) (1.94 s)  ••••••••••••••••••—— 92%
   Running 2010.01.01 (120/121) (2.10 s)  •••••••••••••••••••• 100%
 
 Figure(1152x864)</code></pre>
@@ -957,13 +957,20 @@ Figure(1152x864)</code></pre>
 <span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim_mp, sim_net]).run()</span>
 <span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f06358affb0&gt;
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 248, in _reconstruct
+    def _reconstruct(x, memo, func, args,
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t5_networks_files/figure-html/cell-10-output-2.png" width="759" height="566" class="figure-img"></p>
+<p><img src="t5_networks_files/figure-html/cell-10-output-3.png" width="759" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1419,7 +1426,7 @@ Figure(1152x864)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

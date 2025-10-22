@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -758,17 +758,17 @@ After running the sim
 
 </span>
 
-Number of agents after run: 1231
+Number of agents after run: 1230
 
-Number of agents who were born: 471.0
+Number of agents who were born: 460.0
 
-Number of agents who died: 222.0
+Number of agents who died: 218.0
 
-Maximum UID: 1470
+Maximum UID: 1459
 
 Size of the raw arrays: 1500
 
-Mean age of alive agents: 36.638798
+Mean age of alive agents: 36.88307
 </pre>
 </div>
 </div>
@@ -853,7 +853,7 @@ Number of urban people: 8</code></pre>
 <pre><code>Initializing sim with 30 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.02 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.04 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
   Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
   Running 2050.01.01 (50/51) (0.11 s)  •••••••••••••••••••• 100%
@@ -923,22 +923,22 @@ Number of infected people: 15</code></pre>
 <div id="04419e32" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>sim.people.person(<span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="9">
-<pre><code>#0. 'uid':                   10
-#1. 'slot':                  10
-#2. 'alive':                 True
-#3. 'age':                   4.050025
-#4. 'female':                True
-#5. 'ti_dead':               nan
-#6. 'ti_removed':            nan
-#7. 'scale':                 1.0
-#8. 'randomnet.participant': False
-#9. 'sis.susceptible':       True
-#10. 'sis.infected':          False
-#11. 'sis.rel_sus':           0.18277001
-#12. 'sis.rel_trans':         1.0
-#13. 'sis.ti_infected':       34.0
-#14. 'sis.ti_recovered':      45.841686
-#15. 'sis.immunity':          0.81723</code></pre>
+<pre><code>#0. 'uid':                   np.int64(10)
+#1. 'slot':                  np.int64(10)
+#2. 'alive':                 np.True_
+#3. 'age':                   np.float32(4.050025)
+#4. 'female':                np.True_
+#5. 'ti_dead':               np.float32(nan)
+#6. 'ti_removed':            np.float32(nan)
+#7. 'scale':                 np.float32(1.0)
+#8. 'randomnet.participant': np.False_
+#9. 'sis.susceptible':       np.True_
+#10. 'sis.infected':          np.False_
+#11. 'sis.rel_sus':           np.float32(0.18277001)
+#12. 'sis.rel_trans':         np.float32(1.0)
+#13. 'sis.ti_infected':       np.float32(34.0)
+#14. 'sis.ti_recovered':      np.float32(45.841686)
+#15. 'sis.immunity':          np.float32(0.81723)</code></pre>
 </div>
 </div>
 
@@ -1378,7 +1378,7 @@ Number of infected people: 15</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

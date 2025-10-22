@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -721,15 +721,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sims)</span>
 <span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>msim.plot(legend<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0dfe85e0&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f61d855f150&gt;
 Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
-    def __new__(cls, value=None, base=None, **kwargs):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
+    @classmethod
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0dd947c0&gt;
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d8378220&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 109, in __init__
-    def __init__(self, shorthand_name=None):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
+    @classmethod
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -756,90 +756,181 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sims)</span>
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>msim.plot(legend<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d31fb00&gt;
+<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f2aca0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1208, in __getattribute__
+    def __getattribute__(self, attr):
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d324810&gt;
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f2b3d0&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1208, in __getattribute__
+    def __getattribute__(self, attr):
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d324d60&gt;
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61f051b010&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1208, in __getattribute__
+    def __getattribute__(self, attr):
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d3252b0&gt;
+Exception ignored in: Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f2a700&gt;&lt;_io.BytesIO object at 0x7f61d7f2a700&gt;
+
+Exception ignored in: Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+&lt;_io.BytesIO object at 0x7f61d7f2a700&gt;BufferError
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d31f560&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d325b20&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d326070&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d3265c0&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/sciris/sc_odict.py", line 1211, in __getattribute__
-    return odict.__getattribute__(self, attr)
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d326ca0&gt;Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d326ca0&gt;&lt;_io.BytesIO object at 0x7f2d0d326ca0&gt;
+:   File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+BufferErrorExisting exports of data: object cannot be re-sizedBufferError: Exception ignored in: : 
+Existing exports of data: object cannot be re-sized&lt;_io.BytesIO object at 0x7f61d7f2a700&gt;Existing exports of data: object cannot be re-sizedException ignored in: 
 
 
-Traceback (most recent call last):
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 209, in _deepcopy_tuple
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 209, in _deepcopy_tuple
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 209, in _deepcopy_tuple
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d326ca0&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 209, in _deepcopy_tuple
-                for k, j in zip(x, y):for k, j in zip(x, y):for k, j in zip(x, y):for k, j in zip(x, y):
+&lt;_io.BytesIO object at 0x7f61d7f40720&gt;
+Exception ignored in: Traceback (most recent call last):
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f40720&gt;Traceback (most recent call last):
+
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+&lt;_io.BytesIO object at 0x7f61d7f40720&gt;BufferErrorTraceback (most recent call last):
+
+BufferError:   File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+BufferError: Traceback (most recent call last):
+Existing exports of data: object cannot be re-sized:   File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Existing exports of data: object cannot be re-sized
+Existing exports of data: object cannot be re-sized
+BufferErrorException ignored in: : Exception ignored in: 
+Existing exports of data: object cannot be re-sized&lt;_io.BytesIO object at 0x7f61d7f40ae0&gt;&lt;_io.BytesIO object at 0x7f61d7f40720&gt;Exception ignored in: 
 
 
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f40ae0&gt;Traceback (most recent call last):
+Traceback (most recent call last):
+&lt;_io.BytesIO object at 0x7f61d7f40ae0&gt;  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+
+
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+BufferErrorTraceback (most recent call last):
+Traceback (most recent call last):
+BufferError: :   File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Existing exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sized  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
 BufferError
-BufferErrorBufferErrorBufferError: : : : Existing exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sized
+: BufferError
+Exception ignored in: : Existing exports of data: object cannot be re-sizedException ignored in: &lt;_io.BytesIO object at 0x7f61d7f41030&gt;Existing exports of data: object cannot be re-sized&lt;_io.BytesIO object at 0x7f61d7f40ae0&gt;
 
 
 
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d326ca0&gt;
+Traceback (most recent call last):
+Exception ignored in: Traceback (most recent call last):
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f41030&gt;  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+&lt;_io.BytesIO object at 0x7f61d7f41030&gt;  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+
+BufferErrorBufferError
+: Traceback (most recent call last):
+: Traceback (most recent call last):
+Existing exports of data: object cannot be re-sized  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Existing exports of data: object cannot be re-sizedBufferErrorBufferError: 
+
+Exception ignored in: Existing exports of data: object cannot be re-sizedException ignored in: : Existing exports of data: object cannot be re-sized&lt;_io.BytesIO object at 0x7f61d7f41580&gt;
+&lt;_io.BytesIO object at 0x7f61d7f41030&gt;
+
+Exception ignored in: 
+Traceback (most recent call last):
+&lt;_io.BytesIO object at 0x7f61d7f41580&gt;Exception ignored in: Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+&lt;_io.BytesIO object at 0x7f61d7f41580&gt;
+BufferError  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+: 
+Traceback (most recent call last):
+BufferErrorExisting exports of data: object cannot be re-sized  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Traceback (most recent call last):
+: 
+BufferErrorException ignored in: :   File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Existing exports of data: object cannot be re-sized&lt;_io.BytesIO object at 0x7f61d7f41ad0&gt;Existing exports of data: object cannot be re-sized
+
+
+BufferErrorException ignored in: Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f41ad0&gt;&lt;_io.BytesIO object at 0x7f61d7f41580&gt;
+
+: Traceback (most recent call last):
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
+BufferError  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+
+: BufferErrorExisting exports of data: object cannot be re-sizedException ignored in: 
+&lt;_io.BytesIO object at 0x7f61d7f41ad0&gt;
+BufferErrorTraceback (most recent call last):
+: : Existing exports of data: object cannot be re-sized  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+Existing exports of data: object cannot be re-sizedBufferError
+
+: Exception ignored in: Existing exports of data: object cannot be re-sized&lt;_io.BytesIO object at 0x7f61d7f41ad0&gt;
+
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 117, in __instancecheck__
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f2bba0&gt;
+Traceback (most recent call last):
+Exception ignored in: Exception ignored in:   File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 248, in _reconstruct
+&lt;_io.BytesIO object at 0x7f61d7f2bba0&gt;&lt;_io.BytesIO object at 0x7f61d7f2bba0&gt;
+
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 152, in deepcopy
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 152, in deepcopy
+            rv = reductor(4)def _reconstruct(x, memo, func, args,rv = reductor(4)
+
+
+BufferErrorBufferError: BufferError: Existing exports of data: object cannot be re-sized: Existing exports of data: object cannot be re-sized
+
+Existing exports of data: object cannot be re-sizedException ignored in: 
+&lt;_io.BytesIO object at 0x7f61d7f2bba0&gt;
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/copy.py", line 248, in _reconstruct
+    def _reconstruct(x, memo, func, args,
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f2a700&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f40720&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f40ae0&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f41030&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f41580&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f41ad0&gt;
+Traceback (most recent call last):
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
+    out = unpickling_func(*args)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d7f2bba0&gt;
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/dill/_dill.py", line 436, in find_class
+    def find_class(self, module, name):
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored in: &lt;_io.BytesIO object at 0x7f6200307f60&gt;
 Traceback (most recent call last):
   File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
     def __new__(cls, value=None, base=None, **kwargs):
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d973dd0&gt;
+Exception ignored in: &lt;_io.BytesIO object at 0x7f61d855fc90&gt;
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/dill/_dill.py", line 436, in find_class
-    def find_class(self, module, name):
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d831080&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/dill/_dill.py", line 436, in find_class
-    def find_class(self, module, name):
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d8da840&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/dill/_dill.py", line 436, in find_class
-    def find_class(self, module, name):
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f2d0d6acb30&gt;
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
-    @classmethod
+  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/_api/__init__.py", line 86, in check_isinstance
+    for k, v in kwargs.items():
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -1394,8 +1485,8 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/workflows_calibration.html" class="pagination-link" aria-label="Calibration">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Calibration</span>
+      <a href="../user_guide/workflows_calibration.html" class="pagination-link" aria-label="Calibration using Optuna-Starsim integration">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Calibration using Optuna-Starsim integration</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
@@ -1411,7 +1502,7 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

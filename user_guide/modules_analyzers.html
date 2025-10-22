@@ -566,13 +566,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Fit stochastic SIR models to synthetic data</span></a>
+ <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Calibration</span></a>
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -736,62 +736,62 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 Number of edges for network mfnet on step 0: 3286
-Number of edges for network mfnet on step 1: 3331
-Number of edges for network mfnet on step 2: 3372
-Number of edges for network mfnet on step 3: 3416
-Number of edges for network mfnet on step 4: 3436
-Number of edges for network mfnet on step 5: 3469
-Number of edges for network mfnet on step 6: 3495
-Number of edges for network mfnet on step 7: 3533
-Number of edges for network mfnet on step 8: 3599
-Number of edges for network mfnet on step 9: 3623
+Number of edges for network mfnet on step 1: 3319
+Number of edges for network mfnet on step 2: 3357
+Number of edges for network mfnet on step 3: 3395
+Number of edges for network mfnet on step 4: 3426
+Number of edges for network mfnet on step 5: 3475
+Number of edges for network mfnet on step 6: 3509
+Number of edges for network mfnet on step 7: 3548
+Number of edges for network mfnet on step 8: 3593
+Number of edges for network mfnet on step 9: 3618
   Running 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
-Number of edges for network mfnet on step 10: 3648
-Number of edges for network mfnet on step 11: 3671
-Number of edges for network mfnet on step 12: 3710
-Number of edges for network mfnet on step 13: 3745
+Number of edges for network mfnet on step 10: 3634
+Number of edges for network mfnet on step 11: 3682
+Number of edges for network mfnet on step 12: 3713
+Number of edges for network mfnet on step 13: 3740
 Number of edges for network mfnet on step 14: 3775
-Number of edges for network mfnet on step 15: 3796
-Number of edges for network mfnet on step 16: 3837
-Number of edges for network mfnet on step 17: 3873
-Number of edges for network mfnet on step 18: 3921
-Number of edges for network mfnet on step 19: 3951
-  Running 2020.01.01 (20/51) (0.47 s)  ••••••••———————————— 41%
-Number of edges for network mfnet on step 20: 3977
-Number of edges for network mfnet on step 21: 4014
-Number of edges for network mfnet on step 22: 4048
-Number of edges for network mfnet on step 23: 4085
-Number of edges for network mfnet on step 24: 4118
-Number of edges for network mfnet on step 25: 4144
-Number of edges for network mfnet on step 26: 4176
-Number of edges for network mfnet on step 27: 4221
-Number of edges for network mfnet on step 28: 4267
-Number of edges for network mfnet on step 29: 4300
-  Running 2030.01.01 (30/51) (0.55 s)  ••••••••••••———————— 61%
-Number of edges for network mfnet on step 30: 4340
-Number of edges for network mfnet on step 31: 4383
-Number of edges for network mfnet on step 32: 4432
-Number of edges for network mfnet on step 33: 4473
-Number of edges for network mfnet on step 34: 4517
-Number of edges for network mfnet on step 35: 4564
-Number of edges for network mfnet on step 36: 4612
-Number of edges for network mfnet on step 37: 4654
-Number of edges for network mfnet on step 38: 4716
-Number of edges for network mfnet on step 39: 4762
-  Running 2040.01.01 (40/51) (0.63 s)  ••••••••••••••••———— 80%
-Number of edges for network mfnet on step 40: 4784
-Number of edges for network mfnet on step 41: 4847
-Number of edges for network mfnet on step 42: 4889
-Number of edges for network mfnet on step 43: 4924
-Number of edges for network mfnet on step 44: 4974
-Number of edges for network mfnet on step 45: 5016
-Number of edges for network mfnet on step 46: 5086
-Number of edges for network mfnet on step 47: 5130
-Number of edges for network mfnet on step 48: 5180
-Number of edges for network mfnet on step 49: 5230
-  Running 2050.01.01 (50/51) (0.71 s)  •••••••••••••••••••• 100%
+Number of edges for network mfnet on step 15: 3816
+Number of edges for network mfnet on step 16: 3850
+Number of edges for network mfnet on step 17: 3896
+Number of edges for network mfnet on step 18: 3945
+Number of edges for network mfnet on step 19: 3987
+  Running 2020.01.01 (20/51) (0.49 s)  ••••••••———————————— 41%
+Number of edges for network mfnet on step 20: 4010
+Number of edges for network mfnet on step 21: 4048
+Number of edges for network mfnet on step 22: 4085
+Number of edges for network mfnet on step 23: 4124
+Number of edges for network mfnet on step 24: 4149
+Number of edges for network mfnet on step 25: 4164
+Number of edges for network mfnet on step 26: 4200
+Number of edges for network mfnet on step 27: 4250
+Number of edges for network mfnet on step 28: 4299
+Number of edges for network mfnet on step 29: 4314
+  Running 2030.01.01 (30/51) (0.57 s)  ••••••••••••———————— 61%
+Number of edges for network mfnet on step 30: 4346
+Number of edges for network mfnet on step 31: 4373
+Number of edges for network mfnet on step 32: 4409
+Number of edges for network mfnet on step 33: 4465
+Number of edges for network mfnet on step 34: 4506
+Number of edges for network mfnet on step 35: 4559
+Number of edges for network mfnet on step 36: 4609
+Number of edges for network mfnet on step 37: 4642
+Number of edges for network mfnet on step 38: 4694
+Number of edges for network mfnet on step 39: 4742
+  Running 2040.01.01 (40/51) (0.65 s)  ••••••••••••••••———— 80%
+Number of edges for network mfnet on step 40: 4768
+Number of edges for network mfnet on step 41: 4830
+Number of edges for network mfnet on step 42: 4887
+Number of edges for network mfnet on step 43: 4947
+Number of edges for network mfnet on step 44: 5010
+Number of edges for network mfnet on step 45: 5047
+Number of edges for network mfnet on step 46: 5109
+Number of edges for network mfnet on step 47: 5165
+Number of edges for network mfnet on step 48: 5216
+Number of edges for network mfnet on step 49: 5259
+  Running 2050.01.01 (50/51) (0.73 s)  •••••••••••••••••••• 100%
 
-Number of edges for network mfnet on step 50: 5266
+Number of edges for network mfnet on step 50: 5283
 Figure(896x672)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -849,9 +849,9 @@ Figure(896x672)</code></pre>
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.11 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.24 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.39 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.56 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.75 s)  •••••••••••••••••••• 100%
+  Running 2030.01.01 (30/51) (0.40 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.57 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.76 s)  •••••••••••••••••••• 100%
 
 Total infections among pregnant women: 151.0</code></pre>
 </div>
@@ -892,7 +892,7 @@ Total infections among pregnant women: 151.0</code></pre>
 <pre><code>Initializing sim with 1000 agents
   Running 2000.01.01 ( 0/76) (0.00 s)  ———————————————————— 1%
   Running 2002.01.01 (10/76) (0.03 s)  ••—————————————————— 14%
-  Running 2004.01.01 (20/76) (0.05 s)  •••••——————————————— 28%
+  Running 2004.01.01 (20/76) (0.06 s)  •••••——————————————— 28%
   Running 2006.01.01 (30/76) (0.09 s)  ••••••••———————————— 41%
   Running 2008.01.01 (40/76) (0.12 s)  ••••••••••—————————— 54%
   Running 2010.01.01 (50/76) (0.15 s)  •••••••••••••——————— 67%
@@ -973,10 +973,10 @@ Figure(672x480)</code></pre>
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.07 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.12 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.17 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.22 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.28 s)  •••••••••••••••••••• 100%
+  Running 2020.01.01 (20/51) (0.13 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.18 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.24 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.30 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -1427,7 +1427,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.3 (2025-10-07).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
