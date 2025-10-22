@@ -7,7 +7,7 @@ name = "starsim"
 dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {file = "LICENSE"}
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
@@ -56,6 +56,8 @@ dev = [
     "jupyter",
     "jupyter-cache"
 ]
+
+optuna = ["scikit-learn"]
 
 [project.urls]
 "Website" = "https://starsim.org"

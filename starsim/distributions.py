@@ -464,7 +464,7 @@ class Dist:
 
         # Validation
         jumps = to if (to is not None) else self.ind + delta
-        if self.ind >= jumps and not force:
+        if self.ind > jumps and not force:
             errormsg = f'You tried to jump the distribution "{self}" to state {jumps}, but the ' \
                        f'RNG state is already at state {self.ind}, meaning you will draw the same ' \
                         'random numbers twice. If you are sure you want to do this, set force=True.'
