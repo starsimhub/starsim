@@ -4,6 +4,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.1.0 (2025-XX-XX)
 - (Planned changes to how pregnancy/births tracks UIDs of mothers and children)
+- Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
 
 
 ## Version 3.0.4 (2025-10-22)
