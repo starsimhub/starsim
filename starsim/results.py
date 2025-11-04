@@ -327,6 +327,7 @@ class Result(ss.BaseArr):
                 fig = plt.figure(**fig_kw)
         if ax is None:
             ax = plt.subplot(111)
+
         if self.timevec is None:
             errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
             raise ValueError(errormsg)
@@ -336,14 +337,14 @@ class Result(ss.BaseArr):
             ax.fill_between(self.timevec, self.low, self.high, **fill_kw)
 
         # Plot results
-        plt.plot(self.timevec, self.values, **plot_kw)
-        plt.title(self.full_label)
-        plt.xlabel('Time')
+        ax.plot(self.timevec, self.values, **plot_kw)
+        ax.set_title(self.full_label)
+        ax.set_xlabel('Time')
         sc.commaticks(ax)
         if self.has_dates:
             sc.dateformatter(ax)
-        if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
-            plt.ylim(bottom=0)
+        if (self.values.min() >= 0) and (ax.get_ylim()[0]<0): # Don't allow axis to go negative if results don't
+            ax.set_ylim(bottom=0)
         return ss.return_fig(fig)
 
 
