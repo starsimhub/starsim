@@ -319,8 +319,12 @@ class Result(ss.BaseArr):
         fig_kw = sc.mergedicts(fig_kw)
         plot_kw = sc.mergedicts(dict(lw=3, alpha=0.8), plot_kw, kwargs)
         fill_kw = sc.mergedicts(dict(alpha=0.1), fill_kw)
-        if fig is None and ax is None:
-            fig = plt.figure(**fig_kw)
+
+        if fig is None:
+            if ax is not None:
+                fig = ax.figure
+            else:
+                fig = plt.figure(**fig_kw)
         if ax is None:
             ax = plt.subplot(111)
         if self.timevec is None:
