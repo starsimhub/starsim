@@ -1440,13 +1440,6 @@ class choice(Dist):
         self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
         return
 
-    def convert_timepars(self):
-        for key, v in self._pars.items():
-            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
-
     def ppf(self, rands):
         """ Shouldn't actually be needed since dynamic pars not supported """
         pars = self._pars

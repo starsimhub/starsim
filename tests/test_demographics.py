@@ -30,7 +30,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(datadir/'nigeria_asfr.csv')
-        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1)  # 4/3
+        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1, burnin=False)  # 4/3
         demographics += pregnancy
 
     death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
@@ -187,8 +187,27 @@ def test_aging():
     return s3 # Most interesting sim
 
 
+def test_pregnancy():
+    """ Test pregnancy module"""
+    sc.heading('Testing pregnancy module')
+
+    sim = ss.Sim(
+        n_agents=10e3,
+        demographics=[
+            ss.Pregnancy(fertility_rate=ss.freqperyear(10)),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ],
+        dur=ss.years(20),
+        rand_seed=1,
+        dt=ss.years(1/12),
+        networks=ss.PrenatalNet(),
+    )
+    sim.run()
+    return sim
+
+
 if __name__ == '__main__':
-    do_plot = True
+    do_plot = False
     sc.options(interactive=do_plot)
     s1 = test_nigeria(do_plot=do_plot)
     s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
@@ -196,3 +215,5 @@ if __name__ == '__main__':
     s4 = test_module_adding()
     s5 = test_aging()
     plt.show()
+
+    # sim = test_pregnancy()
