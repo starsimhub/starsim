@@ -589,8 +589,8 @@ class Pregnancy(Demographics):
 
                 # Find the prenatal connections that are ending
                 prenatal_ending = prenatalnet.edges.end <= ti
-                new_infant_uids = prenatalnet.edges.p1[prenatal_ending]
-                new_mother_uids = prenatalnet.edges.p2[prenatal_ending]
+                new_mother_uids = prenatalnet.edges.p1[prenatal_ending]
+                new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
 
                 # Validation
                 if not set(new_mother_uids) == set(deliveries.uids):  # Not sure why sometimes out of order

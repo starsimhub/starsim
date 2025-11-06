@@ -679,6 +679,9 @@ class Dist:
             if isinstance(val, ss.TimePar):
                 timepar_type = type(val)
                 timepar_dict[key] = timepar_type
+            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
+                timepar_type = type(val.flat[0])
+                timepar_dict[key] = timepar_type
 
         # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
         if self.unit is not None and len(timepar_dict):
@@ -1077,9 +1080,9 @@ class lognorm_im(Dist):
     def convert_timepars(self):
         for key, v in self._pars.items():
             if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('lognormal parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('lognormal parameters must be nondimensional')
 
     def sync_pars(self, call=True):
         """ Translate between NumPy and SciPy parameters """
@@ -1284,9 +1287,9 @@ class randint(Dist):
     def convert_timepars(self):
         for key, v in self._pars.items():
             if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('randint parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('randint parameters must be nondimensional')
 
     def ppf(self, rands):
         p = self._pars

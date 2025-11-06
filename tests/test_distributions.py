@@ -297,82 +297,96 @@ def test_timepar_dists():
     v.freq = ss.freqperyear(30)
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
+    check_which = ['linear', 'unitless', 'special']
 
-    # Check distributions that scale linearly with time, with the parameter we'll set
-    print('Testing linear distributions ...')
-    linear_dists = dict(
-        constant   = 'v',
-        uniform    = 'high',
-        normal     = 'loc',
-        lognorm_ex = 'mean',
-        expon      = 'scale',
-        weibull    = 'scale',
-        gamma      = 'scale',
-    )
+    if 'linear' in check_which:
+        # Check distributions that scale linearly with time, with the parameter we'll set
+        print('Testing linear distributions ...')
+        linear_dists = dict(
+            constant   = 'v',
+            uniform    = 'high',
+            normal     = 'loc',
+            lognorm_ex = 'mean',
+            expon      = 'scale',
+            weibull    = 'scale',
+            gamma      = 'scale',
+        )
 
-    for name,par in linear_dists.items():
-        dist_class = getattr(ss, name)
+        for name,par in linear_dists.items():
+            dist_class = getattr(ss, name)
 
+            for module in mock_mods.values():
+
+                # Create the dists, the first parameter of which should have time units
+                dists = sc.objdict()
+                for key,val in v.items():
+                    pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
+                    dists[key] = dist_class(**pardict, name=key, module=module, strict=False).init()
+
+                # Create the random variates
+                rvs = sc.objdict()
+                for k,dist in dists.items():
+                    rvs[k] = dist.rvs(n)
+
+                # Check that the distributions match
+                ratio = ss.years(1)/module.t.dt
+                expected = rvs.base.mean()
+                expected_dur = expected*ratio
+                expected_rate = expected/ratio
+                actual_dur = rvs.dur.mean()
+                actual_rate = rvs.freq.mean()
+                assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
+                assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
+                sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
+
+    if 'unitless' in check_which:
+        # Check that unitless distributions fail
+        print('Testing unitless distributions ...')
+        par = ss.dur(10, 'years')
+        unitless_dists = ['lognorm_im', 'randint']
+        for name in unitless_dists:
+            dist_class = getattr(ss, name)
+            with pytest.raises(NotImplementedError):
+                dist = dist_class(par, name='notimplemented', module=mock_mods.year, strict=False).init()
+                dist.rvs(n)
+            sc.printgreen(f'✓ {name} passed: raised appropriate error')
+
+    if 'special' in check_which:
+        # Check special distributions
+        print('Testing choice distribution ...')
+        a = ss.days(np.array([10, 20, 30]))
+        p = np.array([0.2, 0.3, 0.5])
         for module in mock_mods.values():
+            choice = ss.choice(a=a, p=p, module=module, strict=False).init()
+            mean = choice.rvs(n).mean()
+            expected = (a*p/module.t.dt).sum()
+            assert np.isclose(mean, expected, rtol=rtol), f'Choice values do not match: {mean:n} ≠ {expected:n}'
+            sc.printgreen(f'✓ Choice passed: {expected:n} ≈ {mean:n} with dt={module.t.dt}')
 
-            # Create the dists, the first parameter of which should have time units
-            dists = sc.objdict()
-            for key,val in v.items():
-                pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
-                dists[key] = dist_class(**pardict, name=key, module=module, strict=False).init()
+        print('Testing Poisson distribution ...')
+        lam1 = ss.freqperyear(1)
+        lam2 = ss.perday(1)
+        for module in mock_mods.values():
+            poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
+            poi2 = ss.poisson(lam=lam2, module=module, strict=False).init()
+            mean1 = poi1.rvs(n).mean()
+            mean2 = poi2.rvs(n).mean()
+            expected1 = lam1*module.t.dt
+            expected2 = lam2*module.t.dt
+            assert np.isclose(mean1, expected1, rtol=rtol), f'Poisson values do not match for {lam1}: {mean1:n} ≠ {expected1:n}'
+            assert np.isclose(mean2, expected2, rtol=rtol), f'Poisson values do not match for {lam2}: {mean2:n} ≠ {expected2:n}'
+            sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
+            sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
 
-            # Create the random variates
-            rvs = sc.objdict()
-            for k,dist in dists.items():
-                rvs[k] = dist.rvs(n)
-
-            # Check that the distributions match
-            ratio = ss.years(1)/module.t.dt
-            expected = rvs.base.mean()
-            expected_dur = expected*ratio
-            expected_rate = expected/ratio
-            actual_dur = rvs.dur.mean()
-            actual_rate = rvs.freq.mean()
-            assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
-            assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
-            sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
-
-    # Check that unitless distributions fail
-    print('Testing unitless distributions ...')
-    par = ss.dur(10, 'years')
-    unitless_dists = ['lognorm_im', 'randint', 'choice']
-    for name in unitless_dists:
-        dist_class = getattr(ss, name)
-        with pytest.raises(NotImplementedError):
-            dist = dist_class(par, name='notimplemented', module=mock_mods.year, strict=False).init()
-            dist.rvs(n)
-        sc.printgreen(f'✓ {name} passed: raised appropriate error')
-
-    # Check special distributions
-    print('Testing Poisson distribution ...')
-    lam1 = ss.freqperyear(1)
-    lam2 = ss.perday(1)
-    for module in mock_mods.values():
-        poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
-        poi2 = ss.poisson(lam=lam2, module=module, strict=False).init()
-        mean1 = poi1.rvs(n).mean()
-        mean2 = poi2.rvs(n).mean()
-        expected1 = lam1*module.t.dt
-        expected2 = lam2*module.t.dt
-        assert np.isclose(mean1, expected1, rtol=rtol), f'Poisson values do not match for {lam1}: {mean1:n} ≠ {expected1:n}'
-        assert np.isclose(mean2, expected2, rtol=rtol), f'Poisson values do not match for {lam2}: {mean2:n} ≠ {expected2:n}'
-        sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
-        sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
-
-    print('Testing Bernoulli distribution ...')
-    p1 = ss.probperday(0.1/365)
-    p2 = ss.probperyear(0.1)
-    ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
-    ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
-    mean1 = ber1.rvs(n).mean()
-    mean2 = ber2.rvs(n).mean()
-    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {ber1} and {ber2}: {mean1:n} ≠ {mean2:n}'
-    sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
+        print('Testing Bernoulli distribution ...')
+        p1 = ss.probperday(0.1/365)
+        p2 = ss.probperyear(0.1)
+        ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
+        ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
+        mean1 = ber1.rvs(n).mean()
+        mean2 = ber2.rvs(n).mean()
+        assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {ber1} and {ber2}: {mean1:n} ≠ {mean2:n}'
+        sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
 
     print('Testing different syntaxes for adding timepars')
     kw = dict(dt=ss.days(1))
@@ -459,7 +473,7 @@ def test_timepar_callable():
 
 # %% Run as a script
 if __name__ == '__main__':
-    do_plot = True
+    do_plot = False
     sc.options(interactive=do_plot)
     # ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
 

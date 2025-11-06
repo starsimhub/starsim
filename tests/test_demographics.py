@@ -219,7 +219,7 @@ def test_pregnancy():
 
     # Check that gestational clock is NaN for all non-pregnant women
     assert np.all(np.isnan(sim.people.pregnancy.gestation[~sim.people.pregnancy.pregnant])), 'Some non-pregnant people have gestational clock'
-    print('✓ Pregnancy module tests passed')
+    sc.printgreen('✓ Pregnancy duration tests passed')
 
     # Check that everyone born during the sim has gestational age at birth recorded
     born_during_sim = (sim.people.age < sim.pars.dur.years) & (sim.people.age > 0)
@@ -260,7 +260,7 @@ def test_pregnancy():
     assert ptb_results['<18'] > ptb_results['18-35'], '<18 mothers do not have higher preterm birth share than 18-35 mothers'
     assert ptb_results['>35'] > ptb_results['18-35'], '>35 mothers do not have higher preterm birth share than 18-35 mothers'
 
-    print('✓ Gestational age at birth by maternal age tests passed')
+    sc.printgreen('✓ Gestational age at birth by maternal age tests passed')
 
     return sim
 
