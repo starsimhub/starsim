@@ -640,7 +640,7 @@ class Pregnancy(Demographics):
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy/layer.t.dt) # Network edge duration is stored in units of timesteps, so we need to convert dur_pregnancy to a number of timesteps here
+                    durs = self.dur_pregnancy[conceive_uids]
                     start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
@@ -664,9 +664,6 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = ti
         self.gest_clock[uids] = 0
 
-        if ti == 20:
-            print('hi')
-
         # Use rel_ptb to assign pregnancy durations
         rel_ptb = self.rel_ptb[uids]
         sorted_uids = uids[np.argsort(-rel_ptb)]
@@ -679,6 +676,13 @@ class Pregnancy(Demographics):
         self.dur_postpartum[uids] = dur_postpartum
         dead = self.pars.p_maternal_death.rvs(uids)
         self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
+
+        # Check that all pregnant women have a delivery time set
+        missing_delivery = self.pregnant[uids] & np.isnan(self.ti_delivery[uids])
+        if np.any(missing_delivery):
+            which_uids = uids[missing_delivery]
+            errormsg = f'Delivery time has NaN values for {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
+            raise ValueError(errormsg)
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
             self.ti_dead[uids[dead]] = ti + dur_preg
@@ -706,6 +710,7 @@ class Pregnancy(Demographics):
             self.pregnant[mother_uids] = False # Baby lost, mother no longer pregnant
             self.fecund[mother_uids] = True # Or wait?
             self.postpartum[mother_uids] = False
+            self.gest_clock[mother_uids] = np.nan
             self.child_uid[mother_uids] = np.nan
             self.ti_delivery[mother_uids] = np.nan
             self.ti_postpartum[mother_uids] = np.nan

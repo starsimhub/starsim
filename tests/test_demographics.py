@@ -203,17 +203,35 @@ def test_pregnancy():
         networks=ss.PrenatalNet(),
     )
     sim.run()
+
+    # Tests
+    # Check that everyone in their 2nd trimester conceived 3-6 months ago
+    tri2 = sim.demographics.pregnancy.tri2.uids
+    conception_time = sim.people.pregnancy.ti_pregnant[tri2]
+    time_since_conception = ss.years((sim.ti - conception_time) * sim.t.dt_year ).weeks
+    assert np.all((time_since_conception >= 13) & (time_since_conception <= 26)), 'Some people in 2nd trimester did not conceive 3-6 months ago'
+
+    # Check that gestational clock is present for all pregnant women, and that they all have a defined delivery time
+    pregnant = sim.people.pregnancy.pregnant
+    assert np.all(~np.isnan(sim.people.pregnancy.gest_clock[pregnant])), 'Some pregnant people are missing gestational clock'
+    ti_delivery = sim.people.pregnancy.ti_delivery[pregnant]
+    assert np.all(~np.isnan(ti_delivery)), 'Some people with ti_pregnant are missing ti_delivery'
+
+    # Check that gestational clock is NaN for all non-pregnant women
+    assert np.all(np.isnan(sim.people.pregnancy.gest_clock[~sim.people.pregnancy.pregnant])), 'Some non-pregnant people have gestational clock'
+    print('✓ Pregnancy module tests passed')
+
     return sim
 
 
 if __name__ == '__main__':
     do_plot = False
-    sc.options(interactive=do_plot)
-    s1 = test_nigeria(do_plot=do_plot)
-    s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
-    s3 = test_constant_pop(do_plot=do_plot)
-    s4 = test_module_adding()
-    s5 = test_aging()
-    plt.show()
+    # sc.options(interactive=do_plot)
+    # s1 = test_nigeria(do_plot=do_plot)
+    # s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
+    # s3 = test_constant_pop(do_plot=do_plot)
+    # s4 = test_module_adding()
+    # s5 = test_aging()
+    # plt.show()
 
-    # sim = test_pregnancy()
+    sim = test_pregnancy()
