@@ -330,8 +330,10 @@ class Pregnancy(Demographics):
             rel_ptb_over35 = 1.2, # Relative risk of pre-term birth for mothers over 35
             fertility_rate = ss.peryear(100), # Can be a number or a Pandas DataFrame
             rel_fertility = 1,
+            primary_infertility = 0,  # Probability of primary infertility
             p_maternal_death = ss.bernoulli(0),
             p_neonatal_death = ss.bernoulli(0),
+            rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
             max_age = 50, # Maximum age to become pregnant
@@ -342,24 +344,32 @@ class Pregnancy(Demographics):
         )
         self.update_pars(pars, **kwargs)
 
-        self.pars.p_conceive = ss.bernoulli(p=0) # Placeholder, see make_p_conceive
+        # Distributions: binary outcomes
+        self._p_fertile = ss.bernoulli(p=1-self.pars['primary_infertility'])  # Probability that a woman is fertile
+        self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage
+        self._p_mat_mort = ss.bernoulli(p=0)  # Probability of maternal mortality
+        self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
+        self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth
+        self._p_twins = ss.bernoulli(p=0)  # Probability of twins
+        self._p_breastfeed = ss.bernoulli(p=1)  # Probability of breastfeeding, set to 1 for consistency
 
         # Other, e.g. postpartum, on contraception...
         self.define_states(
             ss.BoolState('fecund', default=True, label='Female of childbearing age'),
+            ss.BoolState('fertile', label='Fertile'),  # Fecund and not infertile
             ss.BoolState('pregnant', label='Pregnant'),  # Currently pregnant
             ss.BoolState('postpartum', label="Post-partum"),  # Currently post-partum
             ss.FloatArr('parity', label='Parity', default=0),  # Number of pregnancies
             ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_pregnancy', label='Pregnany duration'),  # Duration of pregnancy
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
-            ss.FloatArr('gest_clock', label='Number of weeks into pregnancy'),  # Gestational clock
-            ss.FloatArr('gest_weeks_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
+            ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
+            ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
             ss.FloatArr('ti_delivery', label='Time of delivery'),  # Time of delivery
             ss.FloatArr('ti_postpartum', label='Time post-partum ends'),  # Time postpartum ends
             ss.FloatArr('ti_dead', label='Time of maternal death'),  # Maternal mortality
-            ss.FloatArr('rel_ptb_base', label='Relative risk of pre-term birth at base', default=ss.normal(loc=1, scale=0.1)),  # Baseline relative risk of pre-term birth - constant throughout lifetime of mother
+            ss.FloatArr('rel_ptb_base', label='Relative risk of pre-term birth at base', default=1),  # Baseline relative risk of pre-term birth - constant throughout lifetime of mother
             ss.FloatArr('rel_ptb', label='Relative risk of pre-term birth', default=1),  # Relative risk of pre-term birth - resets every timestep
         )
 
@@ -368,12 +378,39 @@ class Pregnancy(Demographics):
             sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-        self.choose_slots = None # Distribution for choosing slots; set in self.init()
+        self.choose_slots = None  # Distribution for choosing slots; set in self.init()
+        self.fertility_rate_data = None  # Processed data; set in self.init_pre() if fertility rate data is in pars
 
         # For results tracking
         self.n_pregnancies = 0
         self.n_births = 0
+
+        # Define ASFR
+        self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
+        self.asfr_width = self.asfr_bins[1]-self.asfr_bins[0]
+        self.asfr = None  # Storing this separately from results as it has a different format
+
         return
+
+    @property
+    def trimesters(self):
+        """ Return trimester durations in weeks """
+        return [ss.weeks(13), ss.weeks(26), ss.weeks(40)]
+
+    @property
+    def tri1(self):
+        """ Return boolean array for first trimester """
+        return self.gestation < self.trimesters[0].value
+
+    @property
+    def tri2(self):
+        """ Return boolean array for second trimester """
+        return (self.gestation >= self.trimesters[0].value) & (self.gestation < self.trimesters[1].value)
+
+    @property
+    def tri3(self):
+        """ Return boolean array for third trimester """
+        return self.gestation >= self.trimesters[1].value
 
     def make_p_conceive(self, filter_uids=None):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
@@ -456,13 +493,19 @@ class Pregnancy(Demographics):
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.fertility_rate_data = self.standardize_fertility_data()
+        if self.pars.fertility_rate is not None:
+            self.fertility_rate_data = self.standardize_fertility_data()
 
         low = sim.pars.n_agents + 1
         high = int(self.pars.slot_scale*sim.pars.n_agents)
         high = np.maximum(high, self.pars.min_slots) # Make sure there are at least min_slots slots to avoid artifacts related to small populations
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
 
+        return
+
+    def init_post(self):
+        super().init_post()
+        self.set_states()
         return
 
     def init_results(self):
@@ -479,25 +522,18 @@ class Pregnancy(Demographics):
         )
         return
 
-    def step(self):
-        if self.ti == 0 and self.pars.burnin:  # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
-            for dti in dtis:
-                self.t.ti = dti
-                self.do_step()
-            self.t.ti = 0
-        new_uids = self.do_step()
-        return new_uids
+    def _get_uids(self, upper_age=None, female_only=True):
+        people = self.sim.people
+        if upper_age is None: upper_age = 1000
+        within_age = people.age <= upper_age
+        if female_only:
+            f_uids = (within_age & people.female).uids
+            return f_uids
+        else:
+            uids = within_age.uids
+            return uids
 
-    def do_step(self):
-        """ Perform all updates """
-        self.update_states()
-        conceive_uids = self.make_pregnancies()
-        self.n_pregnancies += len(conceive_uids)  # += to handle burn-in
-        new_uids = self.make_embryos(conceive_uids)
-        return new_uids
-
-    def update_ptb(self):
+    def set_ptb(self):
         """ Update relative risk of pre-term birth """
         self.rel_ptb[:] = self.rel_ptb_base[:]  # Reset to baseline
         under18 = self.sim.people.age < 18
@@ -506,30 +542,17 @@ class Pregnancy(Demographics):
         self.rel_ptb[over35] *= self.pars.rel_ptb_over35
         return
 
-    @property
-    def trimesters(self):
-        """ Return trimester durations in weeks """
-        return [ss.weeks(13), ss.weeks(26), ss.weeks(40)]
-
-    @property
-    def tri1(self):
-        """ Return boolean array for first trimester """
-        return self.gest_clock < self.trimesters[0].value
-
-    @property
-    def tri2(self):
-        """ Return boolean array for second trimester """
-        return (self.gest_clock >= self.trimesters[0].value) & (self.gest_clock < self.trimesters[1].value)
-
-    @property
-    def tri3(self):
-        """ Return boolean array for third trimester """
-        return self.gest_clock >= self.trimesters[1].value
+    def set_states(self, uids=None, upper_age=None):
+        if uids is None: uids = self._get_uids(upper_age=upper_age)
+        self.fertile[uids] = self._p_fertile.rvs(uids)  # Fertility
+        self.rel_ptb_base[uids] = self.pars.rr_ptb.rvs(uids)  # Baseline relative risk of pre-term birth
+        return
 
     def update_states(self):
         """ Update states """
-        # Update pre-term birth relative risk
-        self.update_ptb()
+
+        self.set_states()
+        self.set_ptb()  # Update pre-term birth relative risk
 
         # Check for new deliveries
         ti = self.ti
@@ -544,16 +567,16 @@ class Pregnancy(Demographics):
             # Store information about the baby - whether premature
             newborn_uids = ss.uids(self.child_uid[deliveries])
             gest_years = self.dur_pregnancy[deliveries] * self.t.dt_year
-            self.gest_weeks_at_birth[newborn_uids] = ss.years(gest_years).weeks.astype(int)
-            self.gest_clock[deliveries] = np.nan
+            self.gestation_at_birth[newborn_uids] = ss.years(gest_years).weeks.astype(int)
+            self.gestation[deliveries] = np.nan
 
         # Update gestational clock for ongoing pregnancies
         if self.pregnant.any():
-            self.gest_clock[self.pregnant] = ss.years((self.ti - self.ti_pregnant[self.pregnant])*self.t.dt_year).weeks
+            self.gestation[self.pregnant] = ss.years((self.ti - self.ti_pregnant[self.pregnant])*self.t.dt_year).weeks
 
         # Check that gestational clock has values for all currently-pregnant women
-        if np.any(self.pregnant & np.isnan(self.gest_clock)):
-            which_uids = ss.uids(self.pregnant & np.isnan(self.gest_clock))
+        if np.any(self.pregnant & np.isnan(self.gestation)):
+            which_uids = ss.uids(self.pregnant & np.isnan(self.gestation))
             errormsg = f'Gestational clock has NaN values for {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
 
@@ -662,7 +685,7 @@ class Pregnancy(Demographics):
         self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti
-        self.gest_clock[uids] = 0
+        self.gestation[uids] = 0
 
         # Use rel_ptb to assign pregnancy durations
         rel_ptb = self.rel_ptb[uids]
@@ -688,6 +711,24 @@ class Pregnancy(Demographics):
             self.ti_dead[uids[dead]] = ti + dur_preg
         return
 
+    def step(self):
+        if self.ti == 0 and self.pars.burnin:  # TODO: refactor
+            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
+            for dti in dtis:
+                self.t.ti = dti
+                self.do_step()
+            self.t.ti = 0
+        new_uids = self.do_step()
+        return new_uids
+
+    def do_step(self):
+        """ Perform all updates """
+        self.update_states()
+        conceive_uids = self.make_pregnancies()
+        self.n_pregnancies += len(conceive_uids)  # += to handle burn-in
+        new_uids = self.make_embryos(conceive_uids)
+        return new_uids
+
     def finish_step(self):
         super().finish_step()
         death_uids = ss.uids(self.sim.people.ti_dead <= self.ti)
@@ -710,7 +751,7 @@ class Pregnancy(Demographics):
             self.pregnant[mother_uids] = False # Baby lost, mother no longer pregnant
             self.fecund[mother_uids] = True # Or wait?
             self.postpartum[mother_uids] = False
-            self.gest_clock[mother_uids] = np.nan
+            self.gestation[mother_uids] = np.nan
             self.child_uid[mother_uids] = np.nan
             self.ti_delivery[mother_uids] = np.nan
             self.ti_postpartum[mother_uids] = np.nan
