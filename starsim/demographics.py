@@ -332,7 +332,7 @@ class Pregnancy(Demographics):
             rel_fertility = 1,
             primary_infertility = 0,  # Probability of primary infertility
             p_maternal_death = ss.bernoulli(0),
-            p_neonatal_death = ss.bernoulli(0),
+            p_neonatal_death = ss.bernoulli(1),
             rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
@@ -563,6 +563,7 @@ class Pregnancy(Demographics):
             self.postpartum[deliveries] = True
             self.fecund[deliveries] = False
             self.parity[deliveries] += 1  # Increment parity for the mothers
+            self.gestation[deliveries] = np.nan  # No longer pregnant so remove gestational clock
 
             # Store information about the baby - whether premature
             newborn_uids = ss.uids(self.child_uid[deliveries])
@@ -623,9 +624,8 @@ class Pregnancy(Demographics):
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         eligible_uids = self.sim.people.female.uids
         p_conceive = self.make_p_conceive(eligible_uids)
-        self.pars.p_conceive.set(p_conceive)
-        dist = self.pars.p_conceive
-        conceive_uids = dist.filter(eligible_uids)
+        self._p_conceive.set(p_conceive)
+        conceive_uids = self._p_conceive.filter(eligible_uids)
 
         if len(conceive_uids) == 0:
             return ss.uids()
@@ -729,32 +729,44 @@ class Pregnancy(Demographics):
         new_uids = self.make_embryos(conceive_uids)
         return new_uids
 
+    def step_die(self, uids):
+        """ Wipe dates and states following death """
+        self.fecund[uids] = False
+        self.fertile[uids] = False
+        self.pregnant[uids] = False
+        self.postpartum[uids] = False
+        self.dur_pregnancy[uids] = np.nan
+        self.dur_postpartum[uids] = np.nan
+        self.gestation[uids] = np.nan
+        self.child_uid[uids] = np.nan  # Baby lost
+        self.ti_delivery[uids] = np.nan
+        self.ti_postpartum[uids] = np.nan
+        return
+
     def finish_step(self):
         super().finish_step()
         death_uids = ss.uids(self.sim.people.ti_dead <= self.ti)
         if len(death_uids) == 0:
             return
 
-        # Any pregnant? Consider death of the neonate
+        # Any pregnant? Consider death of the neonate. Default probability is set to 1
+        # meaning we assume that unborn children do not survive.
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
             neonate_uids = ss.uids(self.child_uid[mother_death_uids])
             neonatal_death_uids = self.pars.p_neonatal_death.filter(neonate_uids)
             if len(neonatal_death_uids):
                 self.sim.people.request_death(neonatal_death_uids)
+            self.step_die(mother_death_uids)
 
         # Any prenatal? Handle changes to pregnancy
         is_prenatal = self.sim.people.age[death_uids] < 0
         prenatal_death_uids = death_uids[is_prenatal]
         if len(prenatal_death_uids):
             mother_uids = self.sim.people.parent[prenatal_death_uids]
-            self.pregnant[mother_uids] = False # Baby lost, mother no longer pregnant
-            self.fecund[mother_uids] = True # Or wait?
-            self.postpartum[mother_uids] = False
-            self.gestation[mother_uids] = np.nan
-            self.child_uid[mother_uids] = np.nan
-            self.ti_delivery[mother_uids] = np.nan
-            self.ti_postpartum[mother_uids] = np.nan
+            self.step_die(mother_uids)
+            self.fecund[mother_uids] = True
+
         return
 
     def update_results(self):
