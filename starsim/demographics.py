@@ -346,12 +346,10 @@ class Pregnancy(Demographics):
 
         # Distributions: binary outcomes
         self._p_fertile = ss.bernoulli(p=1-self.pars['primary_infertility'])  # Probability that a woman is fertile
-        self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage
-        self._p_mat_mort = ss.bernoulli(p=0)  # Probability of maternal mortality
+        self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage - placeholder, not used
         self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
-        self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth
-        self._p_twins = ss.bernoulli(p=0)  # Probability of twins
-        self._p_breastfeed = ss.bernoulli(p=1)  # Probability of breastfeeding, set to 1 for consistency
+        self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth - placeholder, not used
+        self._p_twins = ss.bernoulli(p=0)  # Probability of twins - placeholder, not used
 
         # Other, e.g. postpartum, on contraception...
         self.define_states(
