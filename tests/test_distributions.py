@@ -473,7 +473,7 @@ def test_timepar_callable():
 
 # %% Run as a script
 if __name__ == '__main__':
-    do_plot = False
+    do_plot = True
     sc.options(interactive=do_plot)
     # ss.options.warnings = 'error' # Turn warnings into exceptions for debugging
 

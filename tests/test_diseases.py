@@ -205,7 +205,7 @@ def test_mtct():
     demographics = ss.Pregnancy(fertility_rate=ss.freqperyear(20))
     sim = ss.Sim(dt=ss.month, people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
-    # sim.plot()
+    sim.plot()
     return sim
 
 
