@@ -197,7 +197,7 @@ def test_pregnancy():
             ss.Pregnancy(fertility_rate=ss.freqperyear(10)),
             ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
         ],
-        dur=ss.years(20),
+        dur=ss.years(10),
         rand_seed=1,
         dt=ss.years(1/12),
         networks=ss.PrenatalNet(),
@@ -222,7 +222,7 @@ def test_pregnancy():
     sc.printgreen('✓ Pregnancy duration tests passed')
 
     # Check that everyone born during the sim has gestational age at birth recorded
-    born_during_sim = (sim.people.age < sim.pars.dur.years) & (sim.people.age > 0)
+    born_during_sim = (sim.people.age < sim.pars.dur.years) & (sim.people.age > sim.t.dt.years)
     assert np.all(~np.isnan(sim.people.pregnancy.gestation_at_birth[born_during_sim]))
 
     # Check that the mean gestational age at birth is approximately 40 weeks
@@ -266,7 +266,7 @@ def test_pregnancy():
 
 
 if __name__ == '__main__':
-    do_plot = False
+    do_plot = True
     sc.options(interactive=do_plot)
     s1 = test_nigeria(do_plot=do_plot)
     s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')

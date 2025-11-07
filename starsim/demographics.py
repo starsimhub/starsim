@@ -517,7 +517,9 @@ class Pregnancy(Demographics):
             ss.Result('pregnancies', dtype=int,   scale=True,  summarize_by='sum',  label='New pregnancies'),
             ss.Result('births',      dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
             ss.Result('cbr',         dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
+            ss.Result('tfr',         dtype=float, scale=False, summarize_by='sum',  label='Total fertility rate'),
         )
+        self.asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
         return
 
     def _get_uids(self, upper_age=None, female_only=True):
@@ -562,6 +564,7 @@ class Pregnancy(Demographics):
             self.fecund[deliveries] = False
             self.parity[deliveries] += 1  # Increment parity for the mothers
             self.gestation[deliveries] = np.nan  # No longer pregnant so remove gestational clock
+            self.ti_delivery[deliveries] = ti  # Record time of delivery as timestep, not fractional time
 
             # Store information about the baby - whether premature
             newborn_uids = ss.uids(self.child_uid[deliveries])
@@ -776,6 +779,22 @@ class Pregnancy(Demographics):
         self.n_pregnancies = 0
         self.n_births = 0
 
+        # Update ASFR and TFR
+        self.compute_asfr()
+        self.results.tfr[self.ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
+
+        return
+
+    def compute_asfr(self):
+        """
+        Computes age-specific fertility rates (ASFR). Since this is calculated each timestep,
+        the annualized results should compute the sum.
+        """
+        new_mother_uids = (self.ti_delivery == self.ti).uids
+        new_mother_ages = self.sim.people.age[new_mother_uids]
+        births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins)
+        women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins)
+        self.asfr[:, self.ti] = sc.safedivide(births_by_age, women_by_age) * 1000
         return
 
     def finalize(self):
@@ -785,4 +804,12 @@ class Pregnancy(Demographics):
         n_alive = self.sim.results.n_alive[inds]
         births = np.divide(self.results['births'], n_alive, where=n_alive>0)
         self.results['cbr'][:] = births/units
+
+        # Aggregate the ASFR results, taking rolling annual sums
+        asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
+        tdim = int(1/self.t.dt_year)
+        for i in range(len(self.asfr_bins)-1):
+            asfr[i, (tdim-1):] = np.convolve(self.asfr[i, :], np.ones(tdim), mode='valid')
+        self.asfr = asfr
+
         return
