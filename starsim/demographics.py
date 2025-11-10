@@ -311,7 +311,7 @@ class Pregnancy(Demographics):
         fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
         rel_fertility (float): constant used to scale all fertility rates
         p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
-        p_neonatal_death (float): probability of neonatal death (default 0.0)
+        p_survive_maternal_death (float): probability that an unborn agent will survive death of the mother (default 0)
         sex_ratio (float): probability of female births (default 0.5)
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
@@ -320,7 +320,7 @@ class Pregnancy(Demographics):
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
     """
     def __init__(self, pars=None, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
-                 p_maternal_death=_, p_neonatal_death=_, sex_ratio=_, min_age=_, max_age=_,
+                 p_maternal_death=_, p_survive_maternal_death=_, sex_ratio=_, min_age=_, max_age=_,
                  rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
@@ -332,7 +332,7 @@ class Pregnancy(Demographics):
             rel_fertility = 1,
             primary_infertility = 0,  # Probability of primary infertility
             p_maternal_death = ss.bernoulli(0),
-            p_neonatal_death = ss.bernoulli(1),
+            p_survive_maternal_death = ss.bernoulli(1),
             rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
@@ -754,10 +754,11 @@ class Pregnancy(Demographics):
         # meaning we assume that unborn children do not survive.
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
-            neonate_uids = ss.uids(self.child_uid[mother_death_uids])
-            neonatal_death_uids = self.pars.p_neonatal_death.filter(neonate_uids)
-            if len(neonatal_death_uids):
-                self.sim.people.request_death(neonatal_death_uids)
+            unborn_uids = ss.uids(self.child_uid[mother_death_uids])
+            unborn_survival = self.pars.p_survive_maternal_death.rvs(unborn_uids)
+            unborn_death_uids = unborn_uids[~unborn_survival]
+            if len(unborn_death_uids):
+                self.sim.people.request_death(unborn_death_uids)
             self.step_die(mother_death_uids)
 
         # Any prenatal? Handle changes to pregnancy
