@@ -332,7 +332,7 @@ class Pregnancy(Demographics):
             rel_fertility = 1,
             primary_infertility = 0,  # Probability of primary infertility
             p_maternal_death = ss.bernoulli(0),
-            p_survive_maternal_death = ss.bernoulli(1),
+            p_survive_maternal_death = ss.bernoulli(0),
             rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
