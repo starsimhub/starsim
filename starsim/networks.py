@@ -928,7 +928,7 @@ class MaternalNet(DynamicNetwork):
         Initialized empty and filled with pregnancies throughout the simulation
         """
         super().__init__(**kwargs)
-        self.meta.start = ss_int # Add maternal-specific keys to meta
+        self.meta.start = ss_int  # Add maternal-specific keys to meta
         self.meta.end = ss_int
         self.prenatal = True
         self.postnatal = False
@@ -975,6 +975,7 @@ class PrenatalNet(MaternalNet):
         self.prenatal = True
         self.postnatal = False
         return
+
 
 class PostnatalNet(MaternalNet):
     """ Postnatal transmission network """

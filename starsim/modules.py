@@ -8,11 +8,11 @@ import functools as ft
 import sciris as sc
 import starsim as ss
 
-__all__ = ['module_map', 'module_types', 'register_modules', 'find_modules', 'required', 'Base', 'Module']
+__all__ = ['module_map', 'module_types', 'register_modules', 'find_modules', 'required', 'stateproperty', 'Base', 'Module']
 
-module_args = ['name', 'label'] # Define allowable module arguments
+module_args = ['name', 'label']  # Define allowable module arguments
 
-custom_modules = [] # Allow the user to register custom modules
+custom_modules = []  # Allow the user to register custom modules
 
 
 def module_map(key=None):
@@ -158,6 +158,40 @@ def required(val=True):
 
         return wrapper
     return decorator
+
+
+def stateproperty(func):
+    """
+    NOT FUNCTIONAL YET -- DO NOT USE
+    Decorator to define a property that is also a state.
+
+    This decorator creates a property that:
+    1. Calculates/returns values dynamically like a normal property
+    2. If the returned value is a state that isn't registered, registers it automatically
+
+    Notes:
+    - Acts like a normal @property decorator
+    - If the returned value is an unregistered state, it gets added to the module
+    - Use for computed states or lazy state initialization
+    - Questions: will this be slow?? Why not just register the state at the beginning? What's the advantage
+        of doing it this way?
+    """
+    @property
+    @ft.wraps(func)
+    def wrapper(self):
+        print('WARNING: ss.stateproperty is not yet functional -- do not use!')
+        result = func(self)
+        name = self.name
+
+        # Check if result is a state that needs to be registered
+        if isinstance(result, ss.Arr):
+            # Check if this state is already in the module's state list
+            state_names = {s.name for s in self.state_list}
+            if name not in state_names:
+                # Register the state
+                self.setattribute(name, result)
+        return result
+    return wrapper
 
 
 class Base:
