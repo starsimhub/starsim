@@ -257,8 +257,8 @@ def test_pregnancy():
     # Assertions
     assert mean_results['<18'] < mean_results['18-35'], '<18 mothers do not have lower gestational age at birth than 18-35 mothers'
     assert mean_results['>35'] < mean_results['18-35'], '>35 mothers do not have lower gestational age at birth than 18-35 mothers'
-    # assert ptb_results['<18'] > ptb_results['18-35'], '<18 mothers do not have higher preterm birth share than 18-35 mothers'
-    # assert ptb_results['>35'] > ptb_results['18-35'], '>35 mothers do not have higher preterm birth share than 18-35 mothers'
+    assert ptb_results['<18'] > ptb_results['18-35'], '<18 mothers do not have higher preterm birth share than 18-35 mothers'
+    assert ptb_results['>35'] > ptb_results['18-35'], '>35 mothers do not have higher preterm birth share than 18-35 mothers'
 
     sc.printgreen('✓ Gestational age at birth by maternal age tests passed')
 
@@ -266,13 +266,13 @@ def test_pregnancy():
 
 
 if __name__ == '__main__':
-    # do_plot = True
-    # sc.options(interactive=do_plot)
-    # s1 = test_nigeria(do_plot=do_plot)
-    # s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
-    # s3 = test_constant_pop(do_plot=do_plot)
-    # s4 = test_module_adding()
-    # s5 = test_aging()
-    sim = test_pregnancy()
-    # plt.show()
+    do_plot = True
+    sc.options(interactive=do_plot)
+    s1 = test_nigeria(do_plot=do_plot)
+    s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
+    s3 = test_constant_pop(do_plot=do_plot)
+    s4 = test_module_adding()
+    s5 = test_aging()
+    s6 = test_pregnancy()
+    plt.show()
 
