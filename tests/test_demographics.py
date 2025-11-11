@@ -194,7 +194,7 @@ def test_pregnancy():
     sim = ss.Sim(
         n_agents=10e3,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=True),
+            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
             ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
         ],
         dur=ss.years(10),
