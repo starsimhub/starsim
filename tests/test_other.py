@@ -281,7 +281,7 @@ if __name__ == '__main__':
 
     # Run tests
     ppl   = test_people()
-    sim1  = test_microsim(do_plot)
+    sim1  = test_microsim(False)
     sim2  = test_ppl_construction(do_plot)
     sims  = test_arrs()
     sims2 = test_deepcopy()

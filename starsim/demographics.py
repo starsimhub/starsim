@@ -351,7 +351,7 @@ class Pregnancy(Demographics):
 
             # Pregnancy outcome parameters - PTBs, deaths
             rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
-            rr_ptb_age= np.array([[18, 35, 100], [1.2, 1, 1.2]]), # Relative risk of pre-term birth by maternal age
+            rr_ptb_age= np.array([[18, 35, 1000], [1.2, 1, 1.2]]), # Relative risk of pre-term birth by maternal age
             p_maternal_death=ss.bernoulli(0),
             p_survive_maternal_death=ss.bernoulli(0),
 
