@@ -901,6 +901,10 @@ class dur(TimePar):
             base (str): the base unit, e.g. 'years'
         """
         super().__init__()
+
+        if isinstance(value, ss.Arr):
+            value = value.values
+
         if isinstance(value, dur):
             if self.base is not None:
                 self.value = self.to_base(value)
