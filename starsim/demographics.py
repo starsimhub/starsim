@@ -306,28 +306,37 @@ class Pregnancy(Demographics):
     pregnancies at simulation start.
 
     Args:
-        dur_pregnancy (float/dur): duration of pregnancy (default 9 months)
-        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
         fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
         rel_fertility (float): constant used to scale all fertility rates
-        p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
-        p_survive_maternal_death (float): probability that an unborn agent will survive death of the mother (default 0)
-        sex_ratio (float): probability of female births (default 0.5)
+        primary_infertility (float): probability of primary infertility (default 0)
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
         rate_units (float): units for fertility rates (default assumes per 1000)
+        dur_pregnancy (float/dur): duration of pregnancy (drawn from choice distribution by default)
+        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+        dur_breastfeed (float/dur): duration of breastfeeding (default lognormal with mean 9 months, std 6 months)
+        p_breastfeed (float): probability of breastfeeding (default 1)
+        rr_ptb (float): base relative risk of pre-term birth (default normal with mean 1, std 0.1)
+        rr_ptb_age (array): relative risk of pre-term birth by maternal age (default [[18,35,100],[1.2,1,1.2]])
+        p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
+        p_survive_maternal_death (float): probability that an unborn agent will survive death of the mother (default 0)
+        sex_ratio (float): probability of female births (default 0.5)
         burnin (bool): whether to seed pregnancies from before simulation start (default true)
+        slot_scale (float): scale factor for assigning slots to newborn agents (default 5)
+        min_slots (int): minimum number of slots for newborn agents (default 100)
+        trimesters (list): list of durations defining the end of each trimester
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
     """
-    def __init__(self, pars=None, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
-                 p_maternal_death=_, p_survive_maternal_death=_, sex_ratio=_, min_age=_, max_age=_,
-                 rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
+    def __init__(self, pars=None, fertility_rate=_, rel_fertility=_, primary_infertility=_, min_age=_, max_age=_,
+                 rate_units=_, dur_pregnancy=_, dur_postpartum=_, dur_breastfeed=_, p_breastfeed=_, rr_ptb=_,
+                 rr_ptb_age=_, p_maternal_death=_, p_survive_maternal_death=_, sex_ratio=_, burnin=_, slot_scale=_,
+                 min_slots=_, trimesters=_, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
             # Parameters related to probability of getting pregnant
             fertility_rate=ss.peryear(100),  # Can be a number or a Pandas DataFrame
             rel_fertility=1,  # Constant to scale all fertility rates, useful if a dataframe is used
-            primary_infertility=0,  # Primary infertility - used within a Bernoulli distribution set below
+            p_infertile=ss.bernoulli(p=0),  # Primary infertility
             min_age=15,  # Minimum age to become pregnant
             max_age=50,  # Maximum age to become pregnant
             rate_units=1e-3,  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
@@ -342,8 +351,7 @@ class Pregnancy(Demographics):
 
             # Pregnancy outcome parameters - PTBs, deaths
             rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
-            rel_ptb_under18=1.2,  # Relative risk of pre-term birth for mothers under 18
-            rel_ptb_over35=1.2,  # Relative risk of pre-term birth for mothers over 35
+            rr_ptb_age= np.array([[18, 35, 100], [1.2, 1, 1.2]]), # Relative risk of pre-term birth by maternal age
             p_maternal_death=ss.bernoulli(0),
             p_survive_maternal_death=ss.bernoulli(0),
 
@@ -353,13 +361,12 @@ class Pregnancy(Demographics):
             min_slots=100,  # Minimum number of slots, useful if the population size is very small
 
             # Settings
-            burnin = True, # Should we seed pregnancies that would have happened before the start of the simulation?
-            trimesters = [ss.weeks(13), ss.weeks(26)]
+            burnin=True, # Should we seed pregnancies that would have happened before the start of the simulation?
+            trimesters=[ss.weeks(13), ss.weeks(26)]
         )
         self.update_pars(pars, **kwargs)
 
         # Distributions: binary outcomes
-        self._p_infertile = ss.bernoulli(p=self.pars['primary_infertility'])  # Probability that a woman is fertile
         self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage - placeholder, not used
         self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
         self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth - placeholder, not used
@@ -597,10 +604,9 @@ class Pregnancy(Demographics):
     def set_ptb(self):
         """ Update relative risk of pre-term birth """
         self.rel_ptb[:] = self.rel_ptb_base[:]  # Reset to baseline
-        under18 = self.sim.people.age < 18
-        over35 = self.sim.people.age > 35
-        self.rel_ptb[under18] *= self.pars.rel_ptb_under18
-        self.rel_ptb[over35] *= self.pars.rel_ptb_over35
+        rr_ptb_age_bins = self.pars.rr_ptb_age[0].astype(int)
+        age_ind = np.searchsorted(rr_ptb_age_bins, self.sim.people.age, side="left")
+        self.rel_ptb[:] *= self.pars.rr_ptb_age[1][age_ind]
         return
 
     def updates_pre(self, uids=None, upper_age=None):
@@ -611,7 +617,7 @@ class Pregnancy(Demographics):
         set the baseline values for newborn agents.
         """
         if uids is None: uids = self._get_uids(upper_age=upper_age)
-        self.infertile[uids] = self._p_infertile.rvs(uids)  # Infertility
+        self.infertile[uids] = self.pars.p_infertile.rvs(uids)  # Infertility
         self.rel_ptb_base[uids] = self.pars.rr_ptb.rvs(uids)  # Baseline relative risk of pre-term birth
         self.set_ptb()  # Update pre-term birth relative risk
 
