@@ -5,6 +5,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 ## Version 3.1.0 (2025-XX-XX)
 - (Planned changes to how pregnancy/births tracks UIDs of mothers and children)
 - Add support for operating on `ss.BaseArr` with time parameters (e.g., multiplying a state by a duration)
+- Add support for creating an `ss.dur` from an `ss.BaseArr` 
 
 ## Version 3.0.4 (2025-10-22)
 - Added additional calibration examples for workflows to re-identify known parameters.
