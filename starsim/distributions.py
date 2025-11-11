@@ -1080,9 +1080,9 @@ class lognorm_im(Dist):
     def convert_timepars(self):
         for key, v in self._pars.items():
             if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal parameters must be nondimensional')
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal parameters must be nondimensional')
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
 
     def sync_pars(self, call=True):
         """ Translate between NumPy and SciPy parameters """

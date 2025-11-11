@@ -308,7 +308,7 @@ class Pregnancy(Demographics):
     Args:
         fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
         rel_fertility (float): constant used to scale all fertility rates
-        primary_infertility (float): probability of primary infertility (default 0)
+        p_infertile (bernoulli): probability of primary infertility (default 0)
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
         rate_units (float): units for fertility rates (default assumes per 1000)
@@ -327,7 +327,7 @@ class Pregnancy(Demographics):
         trimesters (list): list of durations defining the end of each trimester
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
     """
-    def __init__(self, pars=None, fertility_rate=_, rel_fertility=_, primary_infertility=_, min_age=_, max_age=_,
+    def __init__(self, pars=None, fertility_rate=_, rel_fertility=_, p_infertile=_, min_age=_, max_age=_,
                  rate_units=_, dur_pregnancy=_, dur_postpartum=_, dur_breastfeed=_, p_breastfeed=_, rr_ptb=_,
                  rr_ptb_age=_, p_maternal_death=_, p_survive_maternal_death=_, sex_ratio=_, burnin=_, slot_scale=_,
                  min_slots=_, trimesters=_, metadata=None, **kwargs):
@@ -432,7 +432,7 @@ class Pregnancy(Demographics):
 
     @property
     def susceptible(self):
-        """ Defined as fertile women of childbearing age who are pregnant, and so are susceptible to conception """
+        """ Defined as fertile women of childbearing age who are not pregnant, and so are susceptible to conception """
         return self.fertile & (~self.pregnant)
 
     @property
@@ -444,7 +444,7 @@ class Pregnancy(Demographics):
     def postpartum(self):
         """ Within the postpartum window """
         timesteps_since_birth = self.ti - self.ti_delivery
-        pp_timesteps = self.pars.postpartum_window/self.t.dt
+        pp_timesteps = self.pars.dur_postpartum/self.t.dt
         pp_bools = ~self.pregnant & (timesteps_since_birth >= 0) & (timesteps_since_birth <= pp_timesteps)
         return pp_bools
 
@@ -621,7 +621,7 @@ class Pregnancy(Demographics):
         self.rel_ptb_base[uids] = self.pars.rr_ptb.rvs(uids)  # Baseline relative risk of pre-term birth
         self.set_ptb()  # Update pre-term birth relative risk
 
-        # Relative susceptibility to pregnancy
+        # Reset relative susceptibility to pregnancy
         self.rel_sus[:] = 0
         self.rel_sus[self.susceptible] = 1
 
@@ -853,9 +853,12 @@ class Pregnancy(Demographics):
             newborns = ss.uids(self.child_uid[mothers])
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
             self.process_newborns(newborns)             # Process newborns
-            self.process_postpartum(mothers)            # Set any postpartum updates
             self.set_breastfeeding(mothers, newborns)   # Set breastfeeding states
             self.update_breastfeeding_network(mothers)  # Update networks with new pregnancies
+
+        # Make any postpartum updates
+        if self.postpartum.any():
+            self.process_postpartum(self.postpartum.uids)
 
         # Figure out who conceives, set prognoses, and make embryos
         conceivers = self.select_conceivers()           # Get the UIDs of women who are going to conceive this timestep
