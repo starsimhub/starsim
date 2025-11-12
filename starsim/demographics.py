@@ -55,7 +55,7 @@ class Births(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
-        self.n_births = 0 # For results tracking
+        self.n_births_this_step = 0 # For results tracking
         self.dist = ss.bernoulli(p=0) # Used to generate random numbers; set to use the birth rate above
         return
 
@@ -120,7 +120,7 @@ class Births(Demographics):
 
     def step(self):
         new_uids = self.add_births()
-        self.n_births = len(new_uids)
+        self.n_births_this_step = len(new_uids)
         return new_uids
 
     def add_births(self):
@@ -135,11 +135,11 @@ class Births(Demographics):
     def update_results(self):
         """ Calculate new births and crude birth rate """
         # New births -- already calculated
-        self.results.new[self.ti] = self.n_births
+        self.results.new[self.ti] = self.n_births_this_step
 
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
-        births_per_year = self.n_births/self.sim.t.dt_year
+        births_per_year = self.n_births_this_step/self.sim.t.dt_year
         denom = self.sim.people.alive.sum()
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
@@ -408,8 +408,8 @@ class Pregnancy(Demographics):
         self.fertility_rate_data = None  # Processed data; set in self.init_pre() if fertility rate data is in pars
 
         # For results tracking
-        self.n_pregnancies = 0
-        self.n_births = 0
+        self.n_pregnancies_this_step = 0
+        self.n_births_this_step = 0
 
         # Define ASFR
         self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
@@ -480,9 +480,8 @@ class Pregnancy(Demographics):
         sim = self.sim
         ppl = sim.people
 
-        # Filter UIDS and age
-        may_conceive = ppl.female & (ppl.age >= self.pars.min_age) & (ppl.age <= self.pars.max_age)
-        uids = may_conceive
+        # Apply filter UIDS and get ages
+        uids = self.fecund
         if filter_uids is not None: uids = filter_uids & uids
         age = sim.people.age[uids]
 
@@ -642,7 +641,7 @@ class Pregnancy(Demographics):
         the child UID is stored with the mother; at birth, this value is removed from the mother,
         although the newborn agent can still be linked to the mother via the parent state.
         """
-        self.n_births = len(uids)
+        self.n_births_this_step = len(uids)
         self.gestation_at_birth[newborn_uids] = self.gestation[uids]  # Transfer to newborn before it gets reset
         self.child_uid[uids]  # Remove child UIDs for women once they are no longer pregnant
         self.pregnant[uids] = False
@@ -699,7 +698,7 @@ class Pregnancy(Demographics):
     def update_breastfeeding_network(self, delivery_uids):
         """ Add connections to any post-natal networks """
         for lkey, layer in self.sim.networks.items():
-            if layer.postnatal and self.n_births:
+            if layer.postnatal and self.n_births_this_step:
 
                 # Add postnatal connections by finding the prenatal contacts
                 # Validation of the networks is done during initialization to ensure that 1 prenatal netwrok is present
@@ -717,7 +716,7 @@ class Pregnancy(Demographics):
 
                 # Create durations and start dates, and add connections
                 durs = self.dur_breastfeed[new_mother_uids]
-                start = np.full(self.n_births, fill_value=self.ti)
+                start = np.full(self.n_births_this_step, fill_value=self.ti)
 
                 # # Remove pairs from prenatal network and add to postnatal
                 prenatalnet.end_pairs()
@@ -862,7 +861,7 @@ class Pregnancy(Demographics):
 
         # Figure out who conceives, set prognoses, and make embryos
         conceivers = self.select_conceivers()           # Get the UIDs of women who are going to conceive this timestep
-        self.n_pregnancies += len(conceivers)           # += to handle burn-in
+        self.n_pregnancies_this_step += len(conceivers) # += to handle burn-in
         if len(conceivers):
             self.make_pregnancies(conceivers)           # Set prognoses for new pregnancies
             new_uids = self.make_embryos(conceivers)    # Create unborn agents
@@ -911,12 +910,12 @@ class Pregnancy(Demographics):
 
     def update_results(self):
         ti = self.ti
-        self.results['pregnancies'][ti] = self.n_pregnancies
-        self.results['births'][ti] = self.n_births
+        self.results['pregnancies'][ti] = self.n_pregnancies_this_step
+        self.results['births'][ti] = self.n_births_this_step
 
         # Reset for the next step
-        self.n_pregnancies = 0
-        self.n_births = 0
+        self.n_pregnancies_this_step = 0
+        self.n_births_this_step = 0
 
         # Update ASFR and TFR
         self.compute_asfr()
