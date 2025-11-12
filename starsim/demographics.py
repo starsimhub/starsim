@@ -477,13 +477,12 @@ class Pregnancy(Demographics):
 
     def make_p_conceive(self, filter_uids=None):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
-        sim = self.sim
-        ppl = sim.people
+        ppl = self.sim.people
 
         # Apply filter UIDS and get ages
         uids = self.fecund
         if filter_uids is not None: uids = filter_uids & uids
-        age = sim.people.age[uids]
+        age = ppl.age[uids]
 
         # Get data, check it's in the right form
         frd = self.fertility_rate_data
@@ -491,7 +490,7 @@ class Pregnancy(Demographics):
             raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
 
         # Initialize rate as an array the length of raw UIDs, so we can index it with UIDs
-        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
+        fertility_rate = np.zeros(len(ppl.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
@@ -514,7 +513,7 @@ class Pregnancy(Demographics):
                 age_counts = np.zeros_like(new_rate)
                 age_counts[v] = c
 
-                age_bin_pregnant = np.digitize(sim.people.age[self.pregnant], age_bins) - 1
+                age_bin_pregnant = np.digitize(ppl.age[self.pregnant], age_bins) - 1
                 v, c = np.unique(age_bin_pregnant, return_counts=True)
                 pregnant_age_counts = np.zeros_like(new_rate)
                 pregnant_age_counts[v] = c
