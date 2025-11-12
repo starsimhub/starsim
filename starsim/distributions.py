@@ -86,24 +86,16 @@ class Dists(sc.prettyobj):
             raise ValueError(errormsg)
 
         if isinstance(obj, ss.Sim):
-            # Use sim logic to filter and prioritise where we look for dists
-            # Functionality will be the same, but as there are usually several references to the same dists
-            # with different traces, we would prioritise tracing objects directly, in order of
-            # 1. The parent module
-            # 2. Accessed via People
-            # 3. Accessed via Sim
-            # TODO - add a prefix so that the traces can be mapped via the Sim?
+            # Sim-specific prioritization of where to look for dists
             skip_ids = set()
             skip_ids.add(id(sim))
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
-            dists = sc.search(obj.module_dict, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True) # First check via modules
-            skip_ids.update(id(x) for x in obj.module_dict)
-            skip_ids.remove(id(sim.people))
-            dists += sc.search(sim.people, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True) # Then check via people
-            skip_ids.add(id(sim.people))
-            skip_ids.update(id(x) for x in dists.values())
-            dists += sc.search(obj, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True) # Then check the rest of the sim
+            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+            skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
+            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already foun
+            skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
+            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
         else:
             dists = sc.search(obj, type=Dist, flatten=True)
         self.dists = dists
