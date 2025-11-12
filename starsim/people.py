@@ -170,28 +170,30 @@ class People:
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
+    def add_module(self, module):
         """
         Add a Module to the People instance
 
         This method is used to add a module to the People. It will register any module states with this
-        people instance for dynamic resizing, and expose the states contained in the module to the user
-        via `People.states.<module_name>.<state_name>`
+        people instance for dynamic resizing, and expose the module via People, in two ways
 
-        The entries created below make it possible to do `sim.people.hiv.susceptible` or
-        `sim.people.states['hiv.susceptible']` and have both of them work
+        - `People.<module>` will be a reference to the module itself, enabling access via `people.hiv.susceptible`
+        - `People.states['<module>.<state>']` will be a reference to the state, enabling access via `people.states['hiv.susceptible']`
+
         """
-        # Map the module's states into the People state ndict
+
+        # Connect the module as People attribute
+        if hasattr(self, module.name):
             raise Exception(f'Module {module.name} already added')
+        else:
+            setattr(self, module.name, module)
 
         if len(module.state_list):
-            module_states = sc.objdict()
-            setattr(self, module.name, module)
             self._linked_modules.append(module.name)
             for state in module.state_list:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
-                # module_states[state.name] = state
         return
 
     def init_vals(self):
