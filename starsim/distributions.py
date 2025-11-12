@@ -85,14 +85,29 @@ class Dists(sc.prettyobj):
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
 
-        # Do not look for distributions in the people states, since they shadow the "real" states
-        skip = dict(
-            ids=id(sim.people._states) if sim is not None else None,
-            keys='module',
-        )
+        if isinstance(obj, ss.Sim):
+            # Use sim logic to filter and prioritise where we look for dists
+            # Functionality will be the same, but as there are usually several references to the same dists
+            # with different traces, we would prioritise tracing objects directly, in order of
+            # 1. The parent module
+            # 2. Accessed via People
+            # 3. Accessed via Sim
+            # TODO - add a prefix so that the traces can be mapped via the Sim?
+            skip_ids = set()
+            skip_ids.add(id(sim))
+            skip_ids.add(id(sim.people._states))
+            skip_ids.add(id(sim.people)) # Skip checking people on the first round
+            dists = sc.search(obj.module_dict, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True) # First check via modules
+            skip_ids.update(id(x) for x in obj.module_dict)
+            skip_ids.remove(id(sim.people))
+            dists += sc.search(sim.people, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True) # Then check via people
+            skip_ids.add(id(sim.people))
+            skip_ids.update(id(x) for x in dists.values())
+            dists += sc.search(obj, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True) # Then check the rest of the sim
+        else:
+            dists = sc.search(obj, type=Dist, flatten=True)
+        self.dists = dists
 
-        # Find and initialize the distributions
-        self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.init(trace=trace, seed=base_seed, sim=sim, force=force)
