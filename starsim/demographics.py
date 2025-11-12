@@ -607,6 +607,15 @@ class Pregnancy(Demographics):
         self.rel_ptb[:] *= self.pars.rr_ptb_age[1][age_ind]
         return
 
+    def set_rel_sus(self):
+        """
+        Set relative susceptibility to pregnancy. Note that rel_sus isn't used in this module,
+        but it's a key ingredient for derived modules that compute pregnancies based on exposure.
+        """
+        self.rel_sus[self.susceptible] = 1.0
+        self.rel_sus[~self.susceptible] = 0.0
+        return
+
     def updates_pre(self, uids=None, upper_age=None):
         """
         This runs prior at the beginning of each timestep, prior to calculating pregnancy exposure,
@@ -618,10 +627,6 @@ class Pregnancy(Demographics):
         self.infertile[uids] = self.pars.p_infertile.rvs(uids)  # Infertility
         self.rel_ptb_base[uids] = self.pars.rr_ptb.rvs(uids)  # Baseline relative risk of pre-term birth
         self.set_ptb()  # Update pre-term birth relative risk
-
-        # Reset relative susceptibility to pregnancy
-        self.rel_sus[:] = 0
-        self.rel_sus[self.susceptible] = 1
 
         # Check if anyone stops breastfeeding
         if self.breastfeeding.any():
@@ -750,14 +755,14 @@ class Pregnancy(Demographics):
         self.sim.people.request_death(maternal_deaths)
         return
 
-    def select_conceivers(self):
+    def select_conceivers(self, uids=None):
         """ Select people to make pregnant """
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        eligible_uids = self.sim.people.female.uids
-        p_conceive = self.make_p_conceive(eligible_uids)
+        if uids is None: uids = self.sim.people.female.uids
+        p_conceive = self.make_p_conceive(uids)
         self._p_conceive.set(p_conceive)
-        conceive_uids = self._p_conceive.filter(eligible_uids)
+        conceive_uids = self._p_conceive.filter(uids)
 
         if len(conceive_uids) == 0:
             return ss.uids()
@@ -859,6 +864,7 @@ class Pregnancy(Demographics):
             self.process_postpartum(self.postpartum.uids)
 
         # Figure out who conceives, set prognoses, and make embryos
+        self.set_rel_sus()                              # Update rel_sus
         conceivers = self.select_conceivers()           # Get the UIDs of women who are going to conceive this timestep
         self.n_pregnancies_this_step += len(conceivers) # += to handle burn-in
         if len(conceivers):
