@@ -187,13 +187,13 @@ class People:
 
         if len(module.state_list):
             module_states = sc.objdict()
-            setattr(self, module.name, module_states)
+            setattr(self, module.name, module)
             self._linked_modules.append(module.name)
             for state in module.state_list:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
-                module_states[state.name] = state
+                # module_states[state.name] = state
         return
 
     def init_vals(self):
