@@ -170,7 +170,6 @@ class People:
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
-    def add_module(self, module, force=False):
         """
         Add a Module to the People instance
 
@@ -182,7 +181,6 @@ class People:
         `sim.people.states['hiv.susceptible']` and have both of them work
         """
         # Map the module's states into the People state ndict
-        if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
 
         if len(module.state_list):
