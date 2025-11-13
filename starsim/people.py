@@ -622,11 +622,10 @@ class Filter(sc.prettyobj):
             new_state.people = self
             self.states[key] = new_state
 
-        # Set up links to modules
         for mod in self._linked_modules:
             setattr(self, mod, sc.dictobj())
-            for key in getattr(self.people, mod).keys():
-                getattr(self, mod)[key] = self.states[f'{mod}.{key}']
+            for state in getattr(people, mod).state_list:
+                getattr(self, mod)[state.name] = self.states[f'{mod}.{state.name}']
         return
 
     def __getitem__(self, key):
