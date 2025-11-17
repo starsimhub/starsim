@@ -410,6 +410,7 @@ class Pregnancy(Demographics):
         # For results tracking
         self.n_pregnancies_this_step = 0
         self.n_births_this_step = 0
+        self.derived_results = None  # Updated in init_results
 
         # Define ASFR
         self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
@@ -442,7 +443,12 @@ class Pregnancy(Demographics):
 
     @property
     def postpartum(self):
-        """ Within the postpartum window """
+        """
+        Within a pre-defined postpartum window, as specified by the dur_postpartum par
+        This does not directly affect any other functionality within this module, but is
+        provided for convenience for modules that need to know which women are X timesteps
+        postpartum.
+        """
         timesteps_since_birth = self.ti - self.ti_delivery
         pp_timesteps = self.pars.dur_postpartum/self.t.dt
         pp_bools = ~self.pregnant & (timesteps_since_birth >= 0) & (timesteps_since_birth <= pp_timesteps)
@@ -571,18 +577,34 @@ class Pregnancy(Demographics):
 
     def init_results(self):
         """
-        Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
-        Still unclear whether this logic should live in the pregnancy module, the
-        individual disease modules, the connectors, or the sim.
+        Initialize results. By default, this includes:
+        - new_pregnancies: number of new pregnancies on each timestep
+        - new_births: number of new births on each timestep
+        - cbr: crude birth rate on each timestep
+        - tfr: total fertility rate on each timestep
+        - The number of people who are fecund, (in)fertile, susceptible, postpartum, pregnant, infertile, breastfeeding
         """
         super().init_results()
-        self.define_results(
-            ss.Result('pregnancies', dtype=int,   scale=True,  summarize_by='sum',  label='New pregnancies'),
-            ss.Result('births',      dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
-            ss.Result('cbr',         dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
-            ss.Result('tfr',         dtype=float, scale=False, summarize_by='sum',  label='Total fertility rate'),
-        )
+
+        scaling_kw = dict(dtype=int, scale=True)
+        nonscaling_kw = dict(dtype=float, scale=False)
+        self.derived_results = ['n_fecund', 'n_fertile', 'n_susceptible', 'n_postpartum']
+
+        # Define results
+        results = sc.autolist()
+        results += [
+            ss.Result('new_pregnancies', **scaling_kw,  label='New pregnancies'),
+            ss.Result('new_births', **scaling_kw,  label='New births'),
+            ss.Result('cbr', **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
+            ss.Result('tfr', **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
+        ]
+        for res in self.derived_results:
+            results += ss.Result(res, **scaling_kw)
+        self.define_results(*results)
+
+        # Extra results
         self.asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
+
         return
 
     # Helper methods
@@ -927,8 +949,12 @@ class Pregnancy(Demographics):
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results['pregnancies'][ti] = self.n_pregnancies_this_step
-        self.results['births'][ti] = self.n_births_this_step
+        self.results['new_pregnancies'][ti] = self.n_pregnancies_this_step
+        self.results['new_births'][ti] = self.n_births_this_step
+
+        for res in self.derived_results:
+            state = getattr(self, res.replace('n_', ''))
+            self.results[res][self.ti] = state.sum()
 
         # Reset for the next step
         self.n_pregnancies_this_step = 0
@@ -957,7 +983,7 @@ class Pregnancy(Demographics):
         units = self.pars.rate_units*self.sim.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
-        births = np.divide(self.results['births'], n_alive, where=n_alive>0)
+        births = np.divide(self.results['new_births'], n_alive, where=n_alive>0)
         self.results['cbr'][:] = births/units
 
         # Aggregate the ASFR results, taking rolling annual sums
