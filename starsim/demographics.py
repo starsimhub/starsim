@@ -595,6 +595,8 @@ class Pregnancy(Demographics):
         results += [
             ss.Result('new_pregnancies', **scaling_kw,  label='New pregnancies'),
             ss.Result('new_births', **scaling_kw,  label='New births'),
+            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths'),
+            ss.Result('mmr', **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate'),
             ss.Result('cbr', **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
             ss.Result('tfr', **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
         ]
@@ -775,6 +777,7 @@ class Pregnancy(Demographics):
         """
         maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
+        self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
         return
 
     def select_conceivers(self, uids=None):
@@ -812,7 +815,6 @@ class Pregnancy(Demographics):
         people.slot[new_uids] = new_slots  # Before sampling female_dist
         people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
         people.parent[new_uids] = conceive_uids
-        self.child_uid[conceive_uids] = new_uids  # Stored for the duration of pregnancy then removed
         return
 
     def make_embryos(self, conceive_uids):
@@ -827,6 +829,7 @@ class Pregnancy(Demographics):
         else:
             new_uids, new_slots = self._make_newborn_uids(conceive_uids)
             self._set_embryo_states(conceive_uids, new_uids, new_slots)
+            self.child_uid[conceive_uids] = new_uids  # Stored for the duration of pregnancy then removed
 
         if self.ti < 0:
             people.age[new_uids] += -self.ti * self.sim.t.dt_year  # Age to ti=0
@@ -960,9 +963,11 @@ class Pregnancy(Demographics):
         self.n_pregnancies_this_step = 0
         self.n_births_this_step = 0
 
-        # Update ASFR and TFR
+        # Update ASFR, TFR, and MMR
+        res = self.results
         self.compute_asfr()
-        self.results.tfr[self.ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
+        self.results.tfr[ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
+        self.results.mmr[ti] = sc.safedivide(res.maternal_deaths[ti], res.new_births[ti]) * 100e3
 
         return
 
