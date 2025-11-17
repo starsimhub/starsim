@@ -10,7 +10,7 @@ ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None
 
-__all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
+__all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy']
 
 
 class Demographics(ss.Module):
@@ -296,6 +296,44 @@ class Deaths(Demographics):
         return
 
 
+class PregnancyPars(ss.Pars):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+        # Parameters related to probability of getting pregnant
+        self.fertility_rate=ss.peryear(100)  # Can be a number or a Pandas DataFrame
+        self.rel_fertility=1  # Constant to scale all fertility rates, useful if a dataframe is used
+        self.p_infertile=ss.bernoulli(p=0)  # Primary infertility
+        self.min_age=15  # Minimum age to become pregnant
+        self.max_age=50  # Maximum age to become pregnant
+        self.rate_units=1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+
+        # Parameters related to pregnancy duration
+        self.dur_pregnancy=ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
+        self.dur_postpartum=ss.months(6)  # Duration of postpartum period. Not used for anything within this module
+
+        # Parameters related to breastfeeding
+        self.dur_breastfeed=ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))  # Only relevant if postnatal transmission used...
+        self.p_breastfeed=ss.bernoulli(p=1)  # Probability of breastfeeding, set to 1 for consistency
+
+        # Pregnancy outcome parameters - PTBs, deaths
+        self.rr_ptb=ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
+        self.rr_ptb_age= np.array([[18, 35, 1000], [1.2, 1, 1.2]]) # Relative risk of pre-term birth by maternal age
+        self.p_maternal_death=ss.bernoulli(0)
+        self.p_survive_maternal_death=ss.bernoulli(0)
+
+        # Parameters related to newborn agents
+        self.sex_ratio=ss.bernoulli(0.5)  # Ratio of babies born female
+        self.slot_scale=5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+        self.min_slots=100  # Minimum number of slots, useful if the population size is very small
+
+        # Settings
+        self.burnin=True # Should we seed pregnancies that would have happened before the start of the simulation?
+        self.trimesters=[ss.weeks(13), ss.weeks(26)]
+        self.update(kwargs)
+        return
+
+
 class Pregnancy(Demographics):
     """
     Create births via pregnancies for each agent.
@@ -332,38 +370,8 @@ class Pregnancy(Demographics):
                  rr_ptb_age=_, p_maternal_death=_, p_survive_maternal_death=_, sex_ratio=_, burnin=_, slot_scale=_,
                  min_slots=_, trimesters=_, metadata=None, **kwargs):
         super().__init__()
-        self.define_pars(
-            # Parameters related to probability of getting pregnant
-            fertility_rate=ss.peryear(100),  # Can be a number or a Pandas DataFrame
-            rel_fertility=1,  # Constant to scale all fertility rates, useful if a dataframe is used
-            p_infertile=ss.bernoulli(p=0),  # Primary infertility
-            min_age=15,  # Minimum age to become pregnant
-            max_age=50,  # Maximum age to become pregnant
-            rate_units=1e-3,  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
-
-            # Parameters related to pregnancy duration
-            dur_pregnancy=ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])), # Quantiles for looking up fertility rates at delivery time
-            dur_postpartum=ss.months(6),  # Duration of postpartum period. Not used for anything within this module
-
-            # Parameters related to breastfeeding
-            dur_breastfeed=ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)),  # Only relevant if postnatal transmission used...
-            p_breastfeed=ss.bernoulli(p=1),  # Probability of breastfeeding, set to 1 for consistency
-
-            # Pregnancy outcome parameters - PTBs, deaths
-            rr_ptb=ss.normal(loc=1, scale=0.1),  # Base risk of pre-term birth due to factors other than maternal age
-            rr_ptb_age= np.array([[18, 35, 1000], [1.2, 1, 1.2]]), # Relative risk of pre-term birth by maternal age
-            p_maternal_death=ss.bernoulli(0),
-            p_survive_maternal_death=ss.bernoulli(0),
-
-            # Parameters related to newborn agents
-            sex_ratio=ss.bernoulli(0.5),  # Ratio of babies born female
-            slot_scale=5, # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
-            min_slots=100,  # Minimum number of slots, useful if the population size is very small
-
-            # Settings
-            burnin=True, # Should we seed pregnancies that would have happened before the start of the simulation?
-            trimesters=[ss.weeks(13), ss.weeks(26)]
-        )
+        default_pars = PregnancyPars()
+        self.define_pars(**default_pars)
         self.update_pars(pars, **kwargs)
 
         # Distributions: binary outcomes
