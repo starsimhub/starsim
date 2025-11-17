@@ -336,8 +336,6 @@ class Result(ss.BaseArr):
         plt.title(self.full_label)
         plt.xlabel('Time')
         sc.commaticks(ax)
-        if self.has_dates:
-            sc.dateformatter(ax)
         if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
             plt.ylim(bottom=0)
         return ss.return_fig(fig)

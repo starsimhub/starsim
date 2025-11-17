@@ -27,6 +27,7 @@ TimePar  # All time parameters
         └── freqperyear
 """
 import numbers
+import matplotlib
 import datetime as dt
 import dateutil.relativedelta as drd
 import sciris as sc
@@ -34,7 +35,6 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 ss_float = ss.dtypes.float
-
 # General classes; specific classes are listed below
 __all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
 
@@ -2117,3 +2117,132 @@ def rate_prob(value, unit=None):
     """ Backwards compatibility function for per """
     warn_deprecation('rate_prob', value, unit)
     return ss.per(value, unit)
+
+#%% Plotting functionality
+
+class MockAxis():
+    """
+    Emulator for Axis.get_view_internal() to return converted values
+
+    Matplotlib's date locators (AutoDateLocator, YearLocator, MonthLocator etc.)
+    call Axis.get_view_internal() to get the current axis limits. These locators all
+    expect the values to be returned in matplotlib dates (i.e., days since 1970-01-01).
+    This helper class is bound to the actual axis, and emulates `Axis.get_view_interval()`
+    performing the conversion to return the values in the expected units. That way, the
+    Locator instances can be used directly without needing any other changes.
+
+    When this class is instantiated, it is bound to an actual Axis instance. The axis
+    instance would have our custom date units and values in floating point years. Then
+    `MockAxis.get_view_interval()` converts these years to standard matplotlib date values
+    before they get passed to the Matplotlib locators.
+    """
+
+    def __init__(self, axis):
+        self.axis = axis
+
+    def get_view_interval(self):
+        """
+        Return converted axis limits
+
+        :return: Tuple with (min, max) axis limits in matplotlib date units (days since 1970-01-01)
+        """
+        ymin, ymax = self.axis.get_view_interval()
+        vmin, vmax = matplotlib.dates.date2num(ss.date(ymin)), matplotlib.dates.date2num(ss.date(ymax))
+        return vmin, vmax
+
+class FloatYearLocator(matplotlib.ticker.Locator):
+    """
+    Locator to calculate tick positions for float year axes
+
+    Matplotlib's AutoDateLocator is the standard way to calculating date-based tick
+    positions, incorporating a lot of functionality around sensibly setting the tick intervals
+    e.g., to whole months. This class wraps AutoDateLocator to allow it to be used
+    with float year axis values, by converting the float year values to matplotlib date values
+    before calling the locator, and then converting the calculated tick positions back to
+    float years before returning them.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._date_locator = matplotlib.dates.AutoDateLocator(minticks=3) # Store an AutoDateLocator instance to calculate the tick locations
+
+    def set_axis(self, axis):
+        # When binding this locator to an axis, we also need to bind the internal date locator
+        # to a MockAxis instance that performs a conversion from our years to matplotlib values.
+        # This instance is internally passed from AutoDateLocator to whichever child class instance
+        # gets used to calculate the tick locations
+        super().set_axis(axis)
+        self._date_locator.set_axis(MockAxis(axis))
+
+    def __call__(self):
+        vmin, vmax = self._date_locator.axis.get_view_interval()
+        return self.tick_values(vmin, vmax)
+
+    def tick_values(self, *args, **kwargs):
+        vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
+        yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
+        return np.array(yticks)
+
+
+class FloatYearFormatter(sc.ScirisDateFormatter):
+    """
+    Formatter that renders float years as calendar dates
+
+    This class provides the same formatting as sc.ScirisDateFormatter, but works with
+    axis values that are float years, rather than matplotlib date values (days since 1970-01-01)
+    """
+    def format_data_short(self, value):
+        return super().format_data_short(matplotlib.dates.date2num(ss.date(value)))
+
+    def format_ticks(self, values, *args, **kwargs):
+        return super().format_ticks(values, min_year=-np.inf, max_year=np.inf)
+
+
+class DateConverter(matplotlib.units.ConversionInterface):
+    """
+    Starsim date conversion interface for matplotlib
+
+    This class gets registered with matplotlib as the converter for Starsim
+    date and DateArray types, allowing them to be used directly as axis values. This achieves
+    two outcomes
+
+    1. When Starsim date or DateArray values are plotted, the x-axis values are automatically converted
+       to float years for plotting. If this class is not used, matplotlib will instead convert them to
+       days since 1970-01-01, which is the default behaviour for pd.Timestamp.
+    2. If the first plotting command used on an axis has date/DateArray as the x-axis, our standard
+       custom date locators and formatters will be used, so that the float years will automatically be
+       labelled with dates.
+
+    Together, this means that users can freely plot both Starsim date/DateArray values and
+    plain float years on the same axis without needing any conversions, and they'll also automatically
+    get date-based ticks without needing to set the locator, even if they are using custom plotting
+    code rather than ss.Result.plot().
+    """
+
+    @staticmethod
+    def axisinfo(unit, axis):
+        # Specify which locators and formatters should be used if an instance
+        # of a registered class is the first one plotted
+        loc = FloatYearLocator()
+        fmt = FloatYearFormatter(loc)
+        return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
+
+    @staticmethod
+    def default_units(x, axis):
+        # Return a unique unit identifier so matplotlib knows that the axis is
+        # in our custom units
+        return 'ss.date'
+
+    @staticmethod
+    def convert(value, unit, axis):
+        # Handle the conversion of registered class instances to numerical values
+        # that will appear as the x-values for any plotted data - this is the crucial
+        # part so that plotting float year data is compatible with date data.
+        if sc.isiterable(value):
+            return [v.years if isinstance(v, ss.date) else v for v in value]
+        else:
+            return value.years if isinstance(value, ss.date) else value
+
+# Register the converter for the Starsim date classes
+matplotlib.units.registry[date] = DateConverter()
+matplotlib.units.registry[DateArray] = DateConverter()
