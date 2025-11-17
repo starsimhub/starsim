@@ -370,7 +370,7 @@ class Pregnancy(Demographics):
         self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage - placeholder, not used
         self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
         self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth - placeholder, not used
-        self._p_twins = ss.bernoulli(p=0)  # Probability of twins - placeholder, not used
+        self._p_twins = ss.bernoulli(p=0.5)  # Probability of twins - placeholder, not used
 
         # States
         self.define_states(
@@ -775,25 +775,36 @@ class Pregnancy(Demographics):
 
         return conceive_uids
 
+    def _make_newborn_uids(self, conceive_uids):
+        """ Helper method to link embryos to mothers """
+        # Choose slots for the unborn agents
+        new_slots = self.choose_slots.rvs(conceive_uids)
+        new_uids = self.sim.people.grow(len(new_slots), new_slots)
+        return new_uids, new_slots
+
+    def _set_embryo_states(self, conceive_uids, new_uids, new_slots):
+        """ Set states for the just-conceived """
+        people = self.sim.people
+        gest_years = self.dur_pregnancy[conceive_uids] * self.t.dt_year
+        people.age[new_uids] = -gest_years
+        people.slot[new_uids] = new_slots  # Before sampling female_dist
+        people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
+        people.parent[new_uids] = conceive_uids
+        self.child_uid[conceive_uids] = new_uids  # Stored for the duration of pregnancy then removed
+        return
+
     def make_embryos(self, conceive_uids):
-        """ Add properties for the just-conceived """
+        """
+        Make newly-conceived agents. This method calls two helper methods, which grow the population
+        and set the states for the newborn agents.
+        """
         people = self.sim.people
         n_unborn = len(conceive_uids)
         if n_unborn == 0:
             new_uids = ss.uids()
         else:
-
-            # Choose slots for the unborn agents
-            new_slots = self.choose_slots.rvs(conceive_uids)
-
-            # Grow the arrays and set properties for the unborn agents
-            new_uids = people.grow(len(new_slots), new_slots)
-            gest_years = self.dur_pregnancy[conceive_uids] * self.t.dt_year
-            people.age[new_uids] = -gest_years
-            people.slot[new_uids] = new_slots  # Before sampling female_dist
-            people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
-            people.parent[new_uids] = conceive_uids
-            self.child_uid[conceive_uids] = new_uids  # Stored for the duration of pregnancy then removed
+            new_uids, new_slots = self._make_newborn_uids(conceive_uids)
+            self._set_embryo_states(conceive_uids, new_uids, new_slots)
 
         if self.ti < 0:
             people.age[new_uids] += -self.ti * self.sim.t.dt_year  # Age to ti=0
@@ -914,6 +925,7 @@ class Pregnancy(Demographics):
         return
 
     def update_results(self):
+        super().update_results()
         ti = self.ti
         self.results['pregnancies'][ti] = self.n_pregnancies_this_step
         self.results['births'][ti] = self.n_births_this_step
