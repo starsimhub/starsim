@@ -27,6 +27,7 @@ TimePar  # All time parameters
         └── freqperyear
 """
 import numbers
+import collections
 import matplotlib
 import datetime as dt
 import dateutil.relativedelta as drd
@@ -2177,6 +2178,21 @@ class FloatYearLocator(matplotlib.ticker.Locator):
     def __call__(self):
         vmin, vmax = self._date_locator.axis.get_view_interval()
         return self.tick_values(vmin, vmax)
+
+    def __call__(self):
+        # Get the axis view limits in matplotlib date units
+        vmin, vmax = self._date_locator.axis.get_view_interval()
+
+        # Calculate approximate number of ticks that can fit
+        if self.axis is not None:
+            ax_width = self.axis.axes.bbox.width  # Width in points
+            char_width = 10  # Approximate points per character
+            label_chars = 6  # Approximate characters per label
+            label_width = char_width * label_chars
+            self._date_locator.maxticks = collections.defaultdict(lambda: max(self._date_locator.minticks, int(ax_width / label_width)))
+
+        return self.tick_values(vmin, vmax)
+
 
     def tick_values(self, *args, **kwargs):
         vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
