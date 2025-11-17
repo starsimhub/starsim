@@ -379,7 +379,8 @@ class Pregnancy(Demographics):
             ss.BoolState('infertile', label='Infertile (primary infertility)'),
             ss.FloatArr('rel_sus', default=0),  # Susceptibility to pregnancy, set to 1 for non-pregnant women
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
-            ss.FloatArr('parity', label='Parity', default=0),  # Number of pregnancies
+            ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
+            ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
             ss.FloatArr('child_uid', label='UID of children, from embryo to birth'),
             ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
@@ -654,11 +655,15 @@ class Pregnancy(Demographics):
 
         # Check if anyone stops breastfeeding
         if self.breastfeeding.any():
-            stopping = self.ti >= self.ti_stop_breastfeed[self.breastfeeding]
-            if np.any(stopping):
-                self.breastfeeding[self.breastfeeding.uids[stopping]] = False
+            self.update_breastfeeding(self.breastfeeding.uids)
 
         return uids
+
+    def update_breastfeeding(self, uids):
+        stopping = uids[self.ti >= self.ti_stop_breastfeed[uids]]
+        if np.any(stopping):
+            self.breastfeeding[stopping] = False
+        return stopping
 
     def process_delivery(self, uids, newborn_uids):
         """
@@ -681,7 +686,7 @@ class Pregnancy(Demographics):
         dead = self.pars.p_maternal_death.rvs(uids)
         if np.any(dead):  # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
             self.ti_dead[uids[dead]] = self.ti
-        return
+        return uids, newborn_uids
 
     def process_newborns(self, uids):
         """ Set states for newborn agents """
@@ -698,19 +703,19 @@ class Pregnancy(Demographics):
         """
         return
 
-    def set_breastfeeding(self, uids, newborn_uids):
+    def set_breastfeeding(self, newborn_uids):
         """
         Set breastfeeding durations for new mothers. Thie method could be extended to
         store duration of exclusive breastfeeding, partial breastfeeding, etc, and these
         properties could be stored with the infant for tracking other health outcomes.
         """
-        breastfeed_bools = self.pars.p_breastfeed.rvs(uids)
-        will_breastfeed = uids[breastfeed_bools]
-        breastfed = newborn_uids[breastfeed_bools]
+        breastfed_bools = self.pars.p_breastfeed.rvs(newborn_uids)
+        gets_breastfed = newborn_uids[breastfed_bools]
+        will_breastfeed = self.sim.people.parent[gets_breastfed]
         self.breastfeeding[will_breastfeed] = True  # For the mother
         self.dur_breastfeed[will_breastfeed] = self.pars.dur_breastfeed.rvs(will_breastfeed)
         self.ti_stop_breastfeed[will_breastfeed] = self.ti + self.dur_breastfeed[will_breastfeed]
-        self.breastfed[breastfed] = True  # For the infant
+        self.breastfed[gets_breastfed] = True  # For the infant
         return
 
     def update_prenatal_network(self, conceive_uids, new_uids):
@@ -849,6 +854,7 @@ class Pregnancy(Demographics):
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti
         self.gestation[uids] = 0
+        self.n_pregnancies[uids] += 1
 
         # Use rel_ptb to assign pregnancy durations
         rel_ptb = self.rel_ptb[uids]
@@ -890,10 +896,10 @@ class Pregnancy(Demographics):
         mothers = (self.pregnant & (self.ti_delivery > self.ti) & (self.ti_delivery < (self.ti + 1))).uids
         if len(mothers):
             newborns = ss.uids(self.child_uid[mothers])
-            self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
+            mothers, newborns = self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
             self.process_newborns(newborns)             # Process newborns
-            self.set_breastfeeding(mothers, newborns)   # Set breastfeeding states
-            self.update_breastfeeding_network(mothers)  # Update networks with new pregnancies
+            self.set_breastfeeding(newborns)            # Set breastfeeding states
+            self.update_breastfeeding_network(mothers)  # Update transmission networks
 
         # Make any postpartum updates
         if self.postpartum.any():
