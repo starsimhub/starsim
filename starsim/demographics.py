@@ -459,7 +459,7 @@ class Pregnancy(Demographics):
         postpartum.
         """
         timesteps_since_birth = self.ti - self.ti_delivery
-        pp_timesteps = self.pars.dur_postpartum/self.t.dt
+        pp_timesteps = int(self.pars.dur_postpartum/self.t.dt)
         pp_bools = ~self.pregnant & (timesteps_since_birth >= 0) & (timesteps_since_birth <= pp_timesteps)
         return pp_bools
 
