@@ -2241,6 +2241,8 @@ class DateConverter(matplotlib.units.ConversionInterface):
         # of a registered class is the first one plotted
         loc = FloatYearLocator()
         fmt = FloatYearFormatter(loc)
+        axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
+        axis._set_converter = lambda converter: None
         return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
 
     @staticmethod
@@ -2250,14 +2252,57 @@ class DateConverter(matplotlib.units.ConversionInterface):
         return 'ss.date'
 
     @staticmethod
+    def _convert_single(v):
+        if isinstance(v, ss.date):
+            return v.years
+        elif isinstance(v, (pd.Timestamp, datetime.date, datetime.datetime)):
+            return ss.date(v).years
+        else:
+            return v
+
+    @staticmethod
     def convert(value, unit, axis):
         # Handle the conversion of registered class instances to numerical values
         # that will appear as the x-values for any plotted data - this is the crucial
         # part so that plotting float year data is compatible with date data.
         if sc.isiterable(value):
-            return [v.years if isinstance(v, ss.date) else v for v in value]
+            return [DateConverter._convert_single(v) for v in value]
         else:
-            return value.years if isinstance(value, ss.date) else value
+            return DateConverter._convert_single(value)
+
+
+# __all__ += ['DateIndex']
+#
+# class DateIndex(pd.Index):
+#     """
+#     Custom Index that wraps DateArray and enables custom matplotlib behavior
+#
+#     This uses composition rather than multiple inheritance to avoid conflicts
+#     between DateArray (ndarray subclass) and Index (also has ndarray behavior).
+#     """
+#
+#         """ Lightweight wrapper for an array of dates """
+#         def __new__(cls, arr=None, unit=None):
+#             arr = sc.toarray(arr)
+#             if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+#                 if unit is None:
+#                     if isinstance(arr[0], (ss.date, ss.dur)):
+#                         unit = type(arr[0]) # Get the unit from the input
+#                     elif isinstance(arr[0], (np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
+#                         arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
+#                         unit = ss.date
+#                     else:
+#                         try: # Else, if the input is datelike (>1), assume date
+#                             assert np.all(arr >= 1.0)
+#                             unit = ss.date
+#                         except: # Otherwise, assume years
+#                             unit = ss.years
+#                 out = arr.view(cls)
+#                 out._unit = unit
+#                 return out
+#             else:
+#                 errormsg = f'Argument must be an array, not {type(arr)}'
+#                 raise TypeError(errormsg)
 
 # Register the converter for the Starsim date classes
 matplotlib.units.registry[date] = DateConverter()
