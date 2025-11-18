@@ -3,7 +3,12 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 ## Version 3.1.0 (2025-XX-XX)
-- (Planned changes to how pregnancy/births tracks UIDs of mothers and children)
+- Added new functionality to the `Pregnancy` module:
+    - renamed `make_p_fertility()` -> `make_p_conceive()`
+    - added variable durations of pregnancies and tracking of pre-term birth outcomes
+    - added variable breastfeeding durations
+    - refactored the logic of how pregnancies and births are handled with new helper methods for better extensibility
+    - added results on age-specific fertility rates and total fertility rates
 - Previously `People.(module_name).(state_name)` could be used to access module states (e.g., `people.sir.infected`). However, this mechanism fails to pass on property attributes that are dynamically computed (e.g., `SIR.infectious`). Now `People.(module_name)` simply contains a reference to the module, so all attributes can be accessed. 
 - Add support for operating on `ss.BaseArr` with time parameters (e.g., multiplying a state by a duration)
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
