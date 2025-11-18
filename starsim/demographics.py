@@ -682,7 +682,6 @@ class Pregnancy(Demographics):
         the child UID is stored with the mother; at birth, this value is removed from the mother,
         although the newborn agent can still be linked to the mother via the parent state.
         """
-        self.n_births_this_step = len(uids)
         self.gestation_at_birth[newborn_uids] = self.gestation[uids]  # Transfer to newborn before it gets reset
         self.child_uid[uids]  # Remove child UIDs for women once they are no longer pregnant
         self.pregnant[uids] = False
@@ -901,10 +900,11 @@ class Pregnancy(Demographics):
         self.progress_pregnancies()
 
         # Process deliveries and births
-        mothers = (self.pregnant & (self.ti_delivery > self.ti) & (self.ti_delivery < (self.ti + 1))).uids
+        mothers = (self.pregnant & (self.ti_delivery >= self.ti) & (self.ti_delivery < (self.ti + 1))).uids
         if len(mothers):
             newborns = ss.uids(self.child_uid[mothers])
             mothers, newborns = self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
+            self.n_births_this_step += len(newborns)    # += to handle burn-in
             self.process_newborns(newborns)             # Process newborns
             self.set_breastfeeding(newborns)            # Set breastfeeding states
             self.update_breastfeeding_network(mothers)  # Update transmission networks
