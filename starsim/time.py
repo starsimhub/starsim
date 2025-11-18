@@ -26,6 +26,7 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
+import datetime
 import numbers
 import collections
 import matplotlib
@@ -64,18 +65,20 @@ class DateArray(np.ndarray):
     def __new__(cls, arr=None, unit=None):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            out = arr.view(cls)
             if unit is None:
-                try:
-                    assert isinstance(arr[0], (ss.date, ss.dur))
+                if isinstance(arr[0], (ss.date, ss.dur)):
                     unit = type(arr[0]) # Get the unit from the input
-                except:
+                elif isinstance(arr[0], (np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
+                    arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
+                    unit = ss.date
+                else:
                     try: # Else, if the input is datelike (>1), assume date
                         assert np.all(arr >= 1.0)
                         unit = ss.date
                     except: # Otherwise, assume years
                         unit = ss.years
-                out._unit = unit
+            out = arr.view(cls)
+            out._unit = unit
             return out
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
