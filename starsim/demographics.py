@@ -587,8 +587,8 @@ class Pregnancy(Demographics):
     def init_results(self):
         """
         Initialize results. By default, this includes:
-        - new_pregnancies: number of new pregnancies on each timestep
-        - new_births: number of new births on each timestep
+        - pregnancies: number of new pregnancies on each timestep
+        - births: number of new births on each timestep
         - cbr: crude birth rate on each timestep
         - tfr: total fertility rate on each timestep
         - The number of people who are fecund, (in)fertile, susceptible, postpartum, pregnant, infertile, breastfeeding
@@ -602,9 +602,9 @@ class Pregnancy(Demographics):
         # Define results
         results = sc.autolist()
         results += [
-            ss.Result('new_pregnancies', **scaling_kw,  label='New pregnancies'),
-            ss.Result('new_births', **scaling_kw,  label='New births'),
-            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths'),
+            ss.Result('pregnancies', **scaling_kw, label='New pregnancies', summarize_by='sum'),
+            ss.Result('births', **scaling_kw, label='New births', summarize_by='sum'),
+            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum'),
             ss.Result('mmr', **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate'),
             ss.Result('cbr', **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
             ss.Result('tfr', **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
@@ -966,8 +966,8 @@ class Pregnancy(Demographics):
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results['new_pregnancies'][ti] = self.n_pregnancies_this_step
-        self.results['new_births'][ti] = self.n_births_this_step
+        self.results['pregnancies'][ti] = self.n_pregnancies_this_step
+        self.results['births'][ti] = self.n_births_this_step
 
         for res in self.derived_results:
             state = getattr(self, res.replace('n_', ''))
@@ -981,7 +981,7 @@ class Pregnancy(Demographics):
         res = self.results
         self.compute_asfr()
         self.results.tfr[ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
-        self.results.mmr[ti] = sc.safedivide(res.maternal_deaths[ti], res.new_births[ti]) * 100e3
+        self.results.mmr[ti] = sc.safedivide(res.maternal_deaths[ti], res.births[ti]) * 100e3
 
         return
 
@@ -1002,7 +1002,7 @@ class Pregnancy(Demographics):
         units = self.pars.rate_units*self.sim.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
-        births = np.divide(self.results['new_births'], n_alive, where=n_alive>0)
+        births = np.divide(self.results['births'], n_alive, where=n_alive>0)
         self.results['cbr'][:] = births/units
 
         # Aggregate the ASFR results, taking rolling annual sums
