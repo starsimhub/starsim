@@ -5,10 +5,13 @@ import numpy as np
 import starsim as ss
 import sciris as sc
 import pandas as pd
+import numba as nb
 
 ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None
+nbint = ss.dtypes.nbint
+
 
 __all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy']
 
@@ -389,7 +392,6 @@ class Pregnancy(Demographics):
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
             ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
             ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
-            ss.FloatArr('child_uid', label='UID of children, from embryo to birth'),
             ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
@@ -489,6 +491,21 @@ class Pregnancy(Demographics):
     def tri3_uids(self):
         """ Return UIDs of those in their third trimester """
         return self.pregnant.uids[self.dur_gestation >= self.trimesters[1]]
+
+    @staticmethod
+    def _find_children(child_uids, parent_uids, target_parent_uids):
+        """Find children whose parents are in the target set"""
+        mask = np.isin(parent_uids, target_parent_uids)
+        return child_uids[mask]
+
+    def find_children(self, parent_uids):
+        children = self._find_children(self.sim.people.auids, self.sim.people.parent, parent_uids)
+        return ss.uids(children)
+
+    def find_unborn_children(self, parent_uids):
+        all_children = self.find_children(parent_uids)
+        unborn_children = all_children[self.sim.people.age[all_children] < self.t.dt.years]
+        return unborn_children
 
     def make_p_conceive(self, filter_uids=None):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
@@ -683,7 +700,6 @@ class Pregnancy(Demographics):
         although the newborn agent can still be linked to the mother via the parent state.
         """
         self.gestation_at_birth[newborn_uids] = self.gestation[uids]  # Transfer to newborn before it gets reset
-        self.child_uid[uids]  # Remove child UIDs for women once they are no longer pregnant
         self.pregnant[uids] = False
         self.ti_delivery[uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
         self.gestation[uids] = np.nan  # No longer pregnant so remove gestational clock
@@ -841,7 +857,6 @@ class Pregnancy(Demographics):
         else:
             new_uids, new_slots = self._make_newborn_uids(conceive_uids)
             self._set_embryo_states(conceive_uids, new_uids, new_slots)
-            self.child_uid[conceive_uids] = new_uids  # Stored for the duration of pregnancy then removed
 
         if self.ti < 0:
             people.age[new_uids] += -self.ti * self.sim.t.dt_year  # Age to ti=0
@@ -902,7 +917,7 @@ class Pregnancy(Demographics):
         # Process deliveries and births
         mothers = (self.pregnant & (self.ti_delivery >= self.ti) & (self.ti_delivery < (self.ti + 1))).uids
         if len(mothers):
-            newborns = ss.uids(self.child_uid[mothers])
+            newborns = self.find_unborn_children(mothers)
             mothers, newborns = self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
             self.n_births_this_step += len(newborns)    # += to handle burn-in
             self.process_newborns(newborns)             # Process newborns
@@ -932,7 +947,6 @@ class Pregnancy(Demographics):
         self.pregnant[uids] = False
         self.dur_pregnancy[uids] = np.nan
         self.gestation[uids] = np.nan
-        self.child_uid[uids] = np.nan
         self.ti_delivery[uids] = np.nan
         self.date_delivery[uids] = np.nan
         return
@@ -943,11 +957,11 @@ class Pregnancy(Demographics):
         if len(death_uids) == 0:
             return
 
-        # Any pregnant? Consider death of the neonate. Default probability is set to 1
+        # Any pregnant? Consider death of the unborn agent. Default probability is set to 1
         # meaning we assume that unborn children do not survive.
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
-            unborn_uids = ss.uids(self.child_uid[mother_death_uids])
+            unborn_uids = self.find_unborn_children(mother_death_uids)
             unborn_survival = self.pars.p_survive_maternal_death.rvs(unborn_uids)
             unborn_death_uids = unborn_uids[~unborn_survival]
             if len(unborn_death_uids):
