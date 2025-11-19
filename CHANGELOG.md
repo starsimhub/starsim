@@ -4,6 +4,10 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.1.0 (2025-XX-XX)
 - (Planned changes to how pregnancy/births tracks UIDs of mothers and children)
+- Previously `People.(module_name).(state_name)` could be used to access module states (e.g., `people.sir.infected`). However, this mechanism fails to pass on property attributes that are dynamically computed (e.g., `SIR.infectious`). Now `People.(module_name)` simply contains a reference to the module, so all attributes can be accessed. 
+- Add support for operating on `ss.BaseArr` with time parameters (e.g., multiplying a state by a duration)
+- Add support for creating an `ss.dur` from an `ss.BaseArr` 
+- Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
 
 
@@ -19,7 +23,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.0.2 (2025-08-25)
 - Additional minor updates following the v3 release.
-- Cleans up some of the logic for convertin rates to probabilities in the demographic modules
+- Cleans up some of the logic for converting rates to probabilities in the demographic modules
 - Adds a `request_removal` method to People, which can be used to remove people from the population for reasons other than death (e.g. migration)
 - Fixes a bug that prevented `ss.prob` from accepting arrays
 - Adds a `year` property to Timelines, so `sim.t.now('year')` can be rewritten as `sim.t.year`
