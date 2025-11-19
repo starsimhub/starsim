@@ -8,7 +8,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Add support for operating on `ss.BaseArr` with time parameters (e.g., multiplying a state by a duration)
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
 - Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
-
+- Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
 
 
 ## Version 3.0.4 (2025-10-22)
