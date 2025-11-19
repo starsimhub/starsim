@@ -697,9 +697,10 @@ class Pregnancy(Demographics):
         gestational age is tracked with the mother; at birth, this value is transferred
         to the newborn agent before being reset for the mother. Likewise, during pregnancy,
         the child UID is stored with the mother; at birth, this value is removed from the mother,
-        although the newborn agent can still be linked to the mother via the parent state.
+        although newborn agents can still be linked to the mother via the parent state.
         """
-        self.gestation_at_birth[newborn_uids] = self.gestation[uids]  # Transfer to newborn before it gets reset
+        newborn_parents = self.sim.people.parent[newborn_uids]  # Find which parent each newborn belongs to
+        self.gestation_at_birth[newborn_uids] = self.gestation[newborn_parents]  # Transfer to newborn
         self.pregnant[uids] = False
         self.ti_delivery[uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
         self.gestation[uids] = np.nan  # No longer pregnant so remove gestational clock
