@@ -587,6 +587,15 @@ class Pregnancy(Demographics):
     def init_post(self):
         super().init_post()
         self.updates_pre()
+
+        # Burn-in
+        if self.ti == 0 and self.pars.burnin:  # TODO: refactor
+            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
+            for dti in dtis:
+                self.t.ti = dti
+                self.step()
+            self.t.ti = 0
+
         return
 
     def init_results(self):
@@ -885,17 +894,7 @@ class Pregnancy(Demographics):
         return
 
     def step(self):
-        if self.ti == 0 and self.pars.burnin:  # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
-            for dti in dtis:
-                self.t.ti = dti
-                self.do_step()
-            self.t.ti = 0
-        self.do_step()
-        return
-
-    def do_step(self):
-        """ Perform all updates except for deaths, which are handled in finish_step """
+       """ Perform all updates except for deaths, which are handled in finish_step """
 
         # Set base states
         self.updates_pre(upper_age=self.t.dt_year)  # Set base states for new agents
