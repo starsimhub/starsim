@@ -786,7 +786,8 @@ class Pregnancy(Demographics):
         if self.pregnant.any():
             will_deliver = (self.ti_delivery > self.ti) & (self.ti_delivery < (self.ti+1)) & self.pregnant
             self.gestation[self.pregnant] += self.dt.weeks
-            self.gestation[will_deliver] = (self.t.dt*self.dur_pregnancy[will_deliver]).weeks  # Set to full term for those delivering this timestep
+            # For those delivering, set to the gestational age at delivery, which may be part-way through the timestep
+            self.gestation[will_deliver] = (self.t.dt*self.dur_pregnancy[will_deliver]).weeks
 
         # Check that gestational clock has values for all currently-pregnant women
         if np.any(self.pregnant & np.isnan(self.gestation)):
