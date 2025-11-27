@@ -490,6 +490,11 @@ class Pregnancy(Demographics):
         """ Return UIDs of those in their third trimester """
         return self.pregnant.uids[self.dur_gestation >= self.trimesters[1]]
 
+    def find_unborn_children(self, parent_uids):
+        all_children = self.sim.people.find_children(parent_uids)
+        unborn_children = all_children[self.sim.people.age[all_children] < self.t.dt.years]
+        return unborn_children
+
     def make_p_conceive(self, filter_uids=None):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
         ppl = self.sim.people
@@ -901,7 +906,7 @@ class Pregnancy(Demographics):
         # Process deliveries and births
         mothers = (self.pregnant & (self.ti_delivery >= self.ti) & (self.ti_delivery < (self.ti + 1))).uids
         if len(mothers):
-            newborns = self.sim.people.find_unborn_children(mothers)
+            newborns = self.find_unborn_children(mothers)
             mothers, newborns = self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
             self.n_births_this_step += len(newborns)    # += to handle burn-in
             self.process_newborns(newborns)             # Process newborns
@@ -945,7 +950,7 @@ class Pregnancy(Demographics):
         # meaning we assume that unborn children do not survive.
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
-            unborn_uids = self.sim.people.find_unborn_children(mother_death_uids)
+            unborn_uids = self.find_unborn_children(mother_death_uids)
             unborn_survival = self.pars.p_survive_maternal_death.rvs(unborn_uids)
             unborn_death_uids = unborn_uids[~unborn_survival]
             if len(unborn_death_uids):
