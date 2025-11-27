@@ -490,14 +490,12 @@ class Pregnancy(Demographics):
         """ Return UIDs of those in their third trimester """
         return self.pregnant.uids[self.dur_gestation >= self.trimesters[1]]
 
-    @staticmethod
-    def _find_children(child_uids, parent_uids, target_parent_uids):
-        """Find children whose parents are in the target set"""
+    def find_children(self, target_parent_uids):
+        """ Find children whose parents are in the target set"""
+        all_uids = self.sim.people.auids
+        parent_uids = self.sim.people.parent
         mask = np.isin(parent_uids, target_parent_uids)
-        return child_uids[mask]
-
-    def find_children(self, parent_uids):
-        children = self._find_children(self.sim.people.auids, self.sim.people.parent, parent_uids)
+        children = all_uids[mask]
         return ss.uids(children)
 
     def find_unborn_children(self, parent_uids):
