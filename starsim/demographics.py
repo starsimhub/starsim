@@ -394,7 +394,6 @@ class Pregnancy(Demographics):
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
             ss.FloatArr('ti_delivery', label='Timestep of delivery'),  # Timestep of delivery (integer)
-            ss.FloatArr('date_delivery', label='Date of delivery'),  # Date of delivery (ss.DateArray)
             ss.FloatArr('ti_dead', label='Time of maternal death'),  # Maternal mortality
 
             # Pre-term birth
@@ -882,7 +881,6 @@ class Pregnancy(Demographics):
         dur_preg = self.pars.dur_pregnancy.rvs(uids)
         self.dur_pregnancy[sorted_uids] = np.sort(dur_preg)
         self.ti_delivery[sorted_uids] = ti + self.dur_pregnancy[sorted_uids]
-        self.date_delivery[sorted_uids] = self.t.now() + ss.DateArray(self.dur_pregnancy[sorted_uids]*self.t.dt)
 
         # Check that all pregnant women have a delivery time set
         missing_delivery = self.pregnant[uids] & np.isnan(self.ti_delivery[uids])
@@ -936,7 +934,6 @@ class Pregnancy(Demographics):
         self.dur_pregnancy[uids] = np.nan
         self.gestation[uids] = np.nan
         self.ti_delivery[uids] = np.nan
-        self.date_delivery[uids] = np.nan
         return
 
     def finish_step(self):
