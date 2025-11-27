@@ -5,12 +5,10 @@ import numpy as np
 import starsim as ss
 import sciris as sc
 import pandas as pd
-import numba as nb
 
 ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None
-nbint = ss.dtypes.nbint
 
 
 __all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy']
