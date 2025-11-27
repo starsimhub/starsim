@@ -785,7 +785,7 @@ class Pregnancy(Demographics):
         # Update gestational clock for ongoing pregnancies that aren't going to deliver on this timestep
         if self.pregnant.any():
             will_deliver = (self.ti_delivery > self.ti) & (self.ti_delivery < (self.ti+1)) & self.pregnant
-            self.gestation[self.pregnant] = self.dur_gestation.weeks
+            self.gestation[self.pregnant] += self.dt.weeks
             self.gestation[will_deliver] = (self.t.dt*self.dur_pregnancy[will_deliver]).weeks  # Set to full term for those delivering this timestep
 
         # Check that gestational clock has values for all currently-pregnant women
