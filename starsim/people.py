@@ -381,6 +381,20 @@ class People:
         self.ti_removed[uids] = self.sim.ti
         return
 
+    def find_children(self, target_parent_uids):
+        """ Find children whose parents are in the target set"""
+        all_uids = self.auids
+        parent_uids = self.parent
+        mask = np.isin(parent_uids, target_parent_uids)
+        children = all_uids[mask]
+        return ss.uids(children)
+
+    def find_unborn_children(self, target_parent_uids):
+        """ Find children who have not yet been born whose parents are in the target set """
+        all_children = self.find_children(target_parent_uids)
+        unborn_children = all_children[self.age[all_children] < self.t.dt.years]
+        return unborn_children
+
     def step_die(self):
         """ Carry out any deaths or removals that took place this timestep """
         death_uids = ((self.ti_dead <= self.sim.ti) | (self.ti_removed <= self.sim.ti)).uids
