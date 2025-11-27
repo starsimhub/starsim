@@ -894,7 +894,7 @@ class Pregnancy(Demographics):
         return
 
     def step(self):
-       """ Perform all updates except for deaths, which are handled in finish_step """
+        """ Perform all updates except for deaths, which are handled in finish_step """
 
         # Set base states
         self.updates_pre(upper_age=self.t.dt_year)  # Set base states for new agents
