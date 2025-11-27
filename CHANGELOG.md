@@ -2,6 +2,11 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+## Version 3.0.5 (2025-10-22).
+- Fixed bugs with products being added/stepped multiple times.
+- Fixed bug that prevented `Result.resample(output_form='series')` from being used.
+
+
 ## Version 3.0.4 (2025-10-22)
 - Added additional calibration examples for workflows to re-identify known parameters.
 - Removed `p_death` from the parameters for the `ss.Deaths` module, as `Deaths.make_p_death()` always overrides this value and is therefore the means by which the death probability should be set or changed. 
