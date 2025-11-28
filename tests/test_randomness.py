@@ -146,7 +146,7 @@ class OneMore(ss.Intervention):
         """ Create an extra agent """
         sim = self.sim
         if sim.ti == self.ti_apply:
-            new_uids = self.one_birth.make_embryos(ss.uids(0), embryo_counts=np.array([1])) # Assign 0th agent to be the "mother"
+            _, new_uids = self.one_birth.make_embryos(ss.uids(0), embryo_counts=np.array([1])) # Assign 0th agent to be the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
 
             # Infect that agent and immediately recover
