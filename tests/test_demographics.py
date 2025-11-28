@@ -223,7 +223,8 @@ def test_pregnancy():
 
     # Check that everyone born during the sim has gestational age at birth recorded
     born_during_sim = (sim.people.age < sim.pars.dur.years) & (sim.people.age > sim.t.dt.years)
-    assert np.all(~np.isnan(sim.people.pregnancy.gestation_at_birth[born_during_sim]))
+    aa = (sim.people.pregnancy.gestation_at_birth.isnan & born_during_sim).uids
+    assert len(aa) == 0, f'Some babies born during the sim are missing gestational age at birth: {len(aa)} found'
 
     # Check that the mean gestational age at birth is approximately 40 weeks
     mean_gestation = np.nanmean(sim.people.pregnancy.gestation_at_birth[born_during_sim])
@@ -273,6 +274,6 @@ if __name__ == '__main__':
     # s3 = test_constant_pop(do_plot=do_plot)
     # s4 = test_module_adding()
     # s5 = test_aging()
-    s6 = test_pregnancy()
+    sim = test_pregnancy()
     # plt.show()
 
