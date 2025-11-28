@@ -388,7 +388,7 @@ class Pregnancy(Demographics):
         self.define_states(
             # Pregnancy and fertility
             ss.BoolState('pregnant', label='Pregnant'),  # Currently pregnant
-            ss.BoolState('infertile', label='Infertile (primary infertility)'),
+            ss.BoolState('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
             ss.FloatArr('rel_sus', default=0),  # Susceptibility to pregnancy, set to 1 for non-pregnant women
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
             ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
@@ -707,9 +707,8 @@ class Pregnancy(Demographics):
         self.parity[uids] += 1  # Increment parity for the mothers
 
         # Set maternal death outcomes
-        dead = self.pars.p_maternal_death.rvs(uids)
-        if np.any(dead):  # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = self.ti
+        dead = self.pars.p_maternal_death.filter(uids)
+        self.ti_dead[uids[dead]] = self.ti
         return uids, newborn_uids
 
     def process_newborns(self, uids):
@@ -976,8 +975,7 @@ class Pregnancy(Demographics):
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
             unborn_uids = self.find_unborn_children(mother_death_uids)
-            unborn_survival = self.pars.p_survive_maternal_death.rvs(unborn_uids)
-            unborn_death_uids = unborn_uids[~unborn_survival]
+            _, unborn_death_uids = self.pars.p_survive_maternal_death.filter(unborn_uids, both=True)
             if len(unborn_death_uids):
                 self.sim.people.request_death(unborn_death_uids)
             self.step_die(mother_death_uids)

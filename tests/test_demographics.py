@@ -267,13 +267,13 @@ def test_pregnancy():
 
 
 if __name__ == '__main__':
-    # do_plot = True
-    # sc.options(interactive=do_plot)
-    # s1 = test_nigeria(do_plot=do_plot)
-    # s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
-    # s3 = test_constant_pop(do_plot=do_plot)
-    # s4 = test_module_adding()
-    # s5 = test_aging()
-    sim = test_pregnancy()
-    # plt.show()
+    do_plot = True
+    sc.options(interactive=do_plot)
+    s1 = test_nigeria(do_plot=do_plot)
+    s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
+    s3 = test_constant_pop(do_plot=do_plot)
+    s4 = test_module_adding()
+    s5 = test_aging()
+    s6 = test_pregnancy()
+    plt.show()
 
