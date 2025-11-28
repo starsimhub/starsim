@@ -146,7 +146,7 @@ class OneMore(ss.Intervention):
         """ Create an extra agent """
         sim = self.sim
         if sim.ti == self.ti_apply:
-            new_uids = self.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
+            new_uids = self.one_birth.make_embryos(ss.uids(0), embryo_counts=np.array([1])) # Assign 0th agent to be the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
 
             # Infect that agent and immediately recover
@@ -326,7 +326,7 @@ def test_combine_rands(do_plot=False):
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
-    do_plot = True
+    do_plot = False
 
     o1 = test_seed()
     o2 = test_reset(n)
