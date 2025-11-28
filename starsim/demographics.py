@@ -490,7 +490,7 @@ class Pregnancy(Demographics):
     @property
     def tri3_uids(self):
         """ Return UIDs of those in their third trimester """
-        return self.pregnant.uids[self.dur_gestation >= self.trimesters[1]]
+        return self.pregnant.uids[self.dur_gestation >= self.pars.trimesters[1]]
 
     def find_unborn_children(self, parent_uids):
         all_children = self.sim.people.find_children(parent_uids)
