@@ -475,8 +475,7 @@ class Pregnancy(Demographics):
     def dur_gestation_at_birth(self):
         """ Return duration of gestation at birth for agents born during the simulation """
         born_during_sim = self.sim.people.parent.notnan & (self.sim.people.age > self.t.dt.years)
-        parents_during_sim = self.sim.people.parent[born_during_sim]
-        return ss.years(self.ti - self.ti_delivery[parents_during_sim]*self.t.dt_year)
+        return ss.weeks(self.people.pregnancy.gestation_at_birth[born_during_sim]).to('years')
 
     @property
     def tri1_uids(self):
