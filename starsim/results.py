@@ -212,7 +212,7 @@ class Result(ss.BaseArr):
 
         # Figure out return format
         if output_form == 'series':
-            out = pd.Series(df.value.values, index=df.timevec)
+            out = df.value
         elif output_form == 'dataframe':
             out = df
         elif output_form == 'result':
