@@ -10,9 +10,9 @@ import starsim as ss
 
 __all__ = ['module_map', 'module_types', 'register_modules', 'find_modules', 'required', 'Base', 'Module']
 
-module_args = ['name', 'label'] # Define allowable module arguments
+module_args = ['name', 'label']  # Define allowable module arguments
 
-custom_modules = [] # Allow the user to register custom modules
+custom_modules = []  # Allow the user to register custom modules
 
 
 def module_map(key=None):
