@@ -2,7 +2,6 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-<<<<<<< HEAD
 ## Version 3.1.0 (2025-XX-XX)
 - (Planned changes to how pregnancy/births tracks UIDs of mothers and children)
 - Previously `People.(module_name).(state_name)` could be used to access module states (e.g., `people.sir.infected`). However, this mechanism fails to pass on property attributes that are dynamically computed (e.g., `SIR.infectious`). Now `People.(module_name)` simply contains a reference to the module, so all attributes can be accessed. 
