@@ -318,7 +318,7 @@ class PregnancyPars(ss.Pars):
         self.p_breastfeed=ss.bernoulli(p=1)  # Probability of breastfeeding, set to 1 for consistency
 
         # Parameters related to implantation rate
-        self.embryos_per_pregnancy = ss.choice(a=np.array([1, 2]), p=np.array([0.5, 0.5]))  # Embryos per pregnancy
+        self.embryos_per_pregnancy = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0]))  # Embryos per pregnancy
 
         # Pregnancy outcome parameters - PTBs, deaths
         self.rr_ptb=ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
@@ -382,7 +382,6 @@ class Pregnancy(Demographics):
         self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage - placeholder, not used
         self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
         self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth - placeholder, not used
-        self._p_twins = ss.bernoulli(p=0.5)  # Probability of twins - placeholder, not used
 
         # States
         self.define_states(
