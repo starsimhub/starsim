@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.25">
+<meta name="generator" content="quarto-1.8.26">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -75,9 +75,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-7ac2f9da8c2617a4fdd15004b4601015.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
@@ -357,10 +357,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
-    <div class="pt-lg-2 mt-2 text-left sidebar-header">
-      <a href="../index.html" class="sidebar-logo-link">
-      </a>
-      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -759,7 +755,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="b91f5bee" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>d.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;starsim.time.date at 0x7f552ebd71d0&gt;
+<pre><code>&lt;starsim.time.date at 0x7f96ff4bbcd0&gt;
 [&lt;class 'starsim.time.date'&gt;, &lt;class 'pandas._libs.tslibs.timestamps.Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.timestamps._Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.base.ABCTimestamp'&gt;, &lt;class 'datetime.datetime'&gt;, &lt;class 'datetime.date'&gt;]
 ————————————————————————————————————————————————————————————————————————
 Methods:
@@ -791,7 +787,7 @@ Properties:
       _repr_base: '2025-08-02 00:00:00'
       _time_repr: '00:00:00'
           _value: 1754092800
-            asm8: np.datetime64('2025-08-02T00:00:00')
+            asm8: numpy.datetime64('2025-08-02T00:00:00')
              day: 2
      day_of_week: 5
      day_of_year: 214
@@ -801,9 +797,9 @@ Properties:
      daysinmonth: 31
             fold: 0
  fromisocalendar: &lt;built-in method fromisocalendar of type object at
-                  0x5556988bd25 [...]
+                  0x558c9b96a96 [...]
    fromisoformat: &lt;built-in method fromisoformat of type object at
-                  0x5556988bd250&gt;
+                  0x558c9b96a960&gt;
             hour: 0
     is_leap_year: False
     is_month_end: False
@@ -949,21 +945,21 @@ DateArray([datedur(0), datedur(days=1), datedur(days=2), datedur(days=3),
 <span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>plt.axvline(start, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Intervention'</span>)</span>
 <span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 1" with 5000 agentsInitializing sim "Sim 0" with 5000 agents
+<pre><code>Initializing sim "Sim 0" with 5000 agentsInitializing sim "Sim 1" with 5000 agents
 
   Running "Sim 0": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running "Sim 1": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running "Sim 0": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
   Running "Sim 1": 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
   Running "Sim 0": 2020.01.01 (20/51) (0.36 s)  ••••••••———————————— 41%
-  Running "Sim 1": 2020.01.01 (20/51) (0.52 s)  ••••••••———————————— 41%
-  Running "Sim 0": 2030.01.01 (30/51) (0.57 s)  ••••••••••••———————— 61%
-  Running "Sim 1": 2030.01.01 (30/51) (0.58 s)  ••••••••••••———————— 61%
-  Running "Sim 0": 2040.01.01 (40/51) (0.62 s)  ••••••••••••••••———— 80%
-  Running "Sim 1": 2040.01.01 (40/51) (0.62 s)  ••••••••••••••••———— 80%
-  Running "Sim 0": 2050.01.01 (50/51) (0.66 s)  •••••••••••••••••••• 100%
+  Running "Sim 1": 2020.01.01 (20/51) (0.36 s)  ••••••••———————————— 41%
+  Running "Sim 0": 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
+  Running "Sim 1": 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
+  Running "Sim 0": 2040.01.01 (40/51) (0.47 s)  ••••••••••••••••———— 80%
+  Running "Sim 1": 2040.01.01 (40/51) (0.48 s)  ••••••••••••••••———— 80%
+  Running "Sim 0": 2050.01.01 (50/51) (0.52 s)  •••••••••••••••••••• 100%
 
-  Running "Sim 1": 2050.01.01 (50/51) (0.67 s)  •••••••••••••••••••• 100%
+  Running "Sim 1": 2050.01.01 (50/51) (0.55 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -999,17 +995,10 @@ DateArray([datedur(0), datedur(days=1), datedur(days=2), datedur(days=3),
 <span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>plt.scatter(years, r2.sis.prevalence, label<span class="op">=</span><span class="st">'With vaccine'</span>)</span>
 <span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>plt.axvline(start, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Intervention'</span>)</span>
 <span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f552dec09a0&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/_api/__init__.py", line 126, in check_in_list
-    if val not in values:
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="advanced_time_files/figure-html/cell-12-output-2.png" width="571" height="411" class="figure-img"></p>
+<p><img src="advanced_time_files/figure-html/cell-12-output-1.png" width="571" height="411" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1047,10 +1036,10 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <p>Durations are relatively straightforward. The base class for durations is <a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur()</code></a>, but in almost all cases you’ll want to use <code>ss.days()</code>, <code>ss.weeks()</code>, <code>ss.months()</code>, or <code>ss.years()</code> instead. (In fact, if you type <code>ss.dur(3, 'years')</code>, it will return <code>ss.years(3)</code>.)</p>
 <p>Durations operate more or less how you would expect, with the left hand operator taking precedence:</p>
 <div id="365b9e46" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>d1 <span class="op">=</span> ss.years(<span class="dv">2</span>)</span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>d2 <span class="op">=</span> ss.days(<span class="dv">3</span>)</span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d1 <span class="op">+</span> d2)</span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d2 <span class="op">+</span> d1)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>d1 <span class="op">=</span> ss.years(<span class="dv">2</span>)</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>d2 <span class="op">=</span> ss.days(<span class="dv">3</span>)</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d1 <span class="op">+</span> d2)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d2 <span class="op">+</span> d1)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>years(2.00822)
 days(733)</code></pre>
@@ -1058,10 +1047,10 @@ days(733)</code></pre>
 </div>
 <p>You can also easily convert durations:</p>
 <div id="21e089f7" class="cell" data-execution_count="13">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>d1 <span class="op">=</span> ss.years(<span class="dv">10</span>)</span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d1.days) <span class="co"># Represent as days, but keep as years internally</span></span>
-<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>d2 <span class="op">=</span> d1.to(<span class="st">'days'</span>)</span>
-<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d2)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>d1 <span class="op">=</span> ss.years(<span class="dv">10</span>)</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d1.days) <span class="co"># Represent as days, but keep as years internally</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>d2 <span class="op">=</span> d1.to(<span class="st">'days'</span>)</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d2)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>3650.0
 days(3650)</code></pre>
@@ -1070,9 +1059,9 @@ days(3650)</code></pre>
 <p>Note: in almost all cases, you can use either with or without the ‘s’, i.e.&nbsp;<code>ss.years(1).to('day')</code> or <code>ss.years(1).to('days')</code> both work.</p>
 <p>Also, there are shortcut classes for unit values:</p>
 <div id="3d9a5556" class="cell" data-execution_count="14">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.weeks(<span class="dv">1</span>))</span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.week)</span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> ss.weeks(<span class="fl">1.0</span>) <span class="op">==</span> ss.weeks(<span class="dv">1</span>) <span class="op">==</span> ss.week</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.weeks(<span class="dv">1</span>))</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.week)</span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> ss.weeks(<span class="fl">1.0</span>) <span class="op">==</span> ss.weeks(<span class="dv">1</span>) <span class="op">==</span> ss.week</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>week
 week</code></pre>
@@ -1082,12 +1071,12 @@ week</code></pre>
 <h4 class="anchored" data-anchor-id="date-durations">Date durations</h4>
 <p>In most cases, the durations above can be used for arithmetic with dates. But sometimes we need precise date arithmetic that keeps track of each unit separately. For this we can use <a href="../api/time.html#starsim.time.datedur" title="0"><code>ss.datedur</code></a>. For example:</p>
 <div id="58932f9d" class="cell" data-execution_count="15">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.date(<span class="st">'2025.1.1'</span>)</span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>years <span class="op">=</span> ss.years(<span class="fl">0.5</span>)</span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>datedur <span class="op">=</span> ss.datedur(months<span class="op">=</span><span class="dv">6</span>)</span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d <span class="op">+</span> years)</span>
-<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d <span class="op">+</span> datedur)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.date(<span class="st">'2025.1.1'</span>)</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>years <span class="op">=</span> ss.years(<span class="fl">0.5</span>)</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>datedur <span class="op">=</span> ss.datedur(months<span class="op">=</span><span class="dv">6</span>)</span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d <span class="op">+</span> years)</span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d <span class="op">+</span> datedur)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>2025.07.02
 2025.07.01</code></pre>
@@ -1095,8 +1084,8 @@ week</code></pre>
 </div>
 <p>Why is this happening? Because 2025.5 is closer to July 2nd than July 1st. There are fewer days from the start of the year to July 1st than there are days from July 1st to the end of the year:</p>
 <div id="9c6800de" class="cell" data-execution_count="16">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.date(<span class="st">'2025.7.1'</span>) <span class="op">-</span> ss.date(<span class="st">'2025.1.1'</span>))</span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.date(<span class="st">'2025.12.31'</span>) <span class="op">-</span> ss.date(<span class="st">'2025.7.1'</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.date(<span class="st">'2025.7.1'</span>) <span class="op">-</span> ss.date(<span class="st">'2025.1.1'</span>))</span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.date(<span class="st">'2025.12.31'</span>) <span class="op">-</span> ss.date(<span class="st">'2025.7.1'</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>datedur(months=6)
 datedur(months=5, days=30)</code></pre>
@@ -1112,19 +1101,19 @@ datedur(months=5, days=30)</code></pre>
 <h4 class="anchored" data-anchor-id="frequencies">Frequencies</h4>
 <p>We define a “frequency”, or <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a>, as the “number of events happening in a given amount of time”. Frequencies are the simplest type of rate to understand, since arithmetic operators work the same as they would for a float, with the caveat that the numerator and denominator of a frequency are stored separately:</p>
 <div id="628b34c6" class="cell" data-execution_count="17">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Construct directly</span></span>
-<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>f1 <span class="op">=</span> ss.freqperday(<span class="fl">0.5</span>)</span>
-<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Construct as the inverse of a duration</span></span>
-<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.days(<span class="dv">2</span>)</span>
-<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>f2 <span class="op">=</span> <span class="dv">1</span><span class="op">/</span>d</span>
-<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f1)</span>
-<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f2)</span>
-<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> f1 <span class="op">==</span> f2</span>
-<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Can multiply by a float</span></span>
-<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f1<span class="op">*</span><span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Construct directly</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>f1 <span class="op">=</span> ss.freqperday(<span class="fl">0.5</span>)</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Construct as the inverse of a duration</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.days(<span class="dv">2</span>)</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>f2 <span class="op">=</span> <span class="dv">1</span><span class="op">/</span>d</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f1)</span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f2)</span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> f1 <span class="op">==</span> f2</span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Can multiply by a float</span></span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f1<span class="op">*</span><span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>freqperday(0.5)
 freq(1/days(2))
@@ -1136,17 +1125,17 @@ freqperday(5)</code></pre>
 <h4 class="anchored" data-anchor-id="probabilities">Probabilities</h4>
 <p>Probabilities, called <a href="../api/time.html#starsim.time.prob" title="0"><code>ss.prob()</code></a> in Starsim, can either have units or be unitless. A unitless probability is fairly straightforward, with the caveat about multiplication above (i.e., <code>ss.prob(0.5)*2 == ss.prob(0.75)</code>).</p>
 <p>With a unit, e.g.&nbsp;<code>ss.probperday(0.5)</code>, it represents the probability of an event occurring during a specified period of time. This allows the probability of an event over one time period to be converted to the probability of an event over a different time period. To do this, the underlying rate (see “Probability rates” below for more information) is first calculated:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>rate <span class="op">=</span> <span class="op">-</span>np.log(<span class="dv">1</span> <span class="op">-</span> prob)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>rate <span class="op">=</span> <span class="op">-</span>np.log(<span class="dv">1</span> <span class="op">-</span> prob)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Then, the probability over the new duration is</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> np.exp(<span class="op">-</span>rate<span class="op">/</span>factor)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> np.exp(<span class="op">-</span>rate<span class="op">/</span>factor)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>where <code>factor</code> is the ratio of the new duration to the original duration.</p>
 <p>For example,</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> ss.prob(<span class="fl">0.8</span>, ss.years(<span class="dv">1</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> ss.prob(<span class="fl">0.8</span>, ss.years(<span class="dv">1</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>indicates a 80% chance of an event occurring in one year.</p>
 <p>When multiplied by the original denominator, 1 year in this case, the probability remains unchanged, 80%:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>p<span class="op">*</span>ss.years(<span class="dv">1</span>) <span class="op">==</span> <span class="fl">0.8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>p<span class="op">*</span>ss.years(<span class="dv">1</span>) <span class="op">==</span> <span class="fl">0.8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Multiplying <code>p</code> by <code>ss.years(2)</code> does not simply double the probability to 160% (which is not possible), but rather returns a new probability of 96% representing the chance of the event occurring at least once over the new duration of two years:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">*</span> ss.years(<span class="dv">2</span>) <span class="op">==</span> <span class="fl">0.96</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">*</span> ss.years(<span class="dv">2</span>) <span class="op">==</span> <span class="fl">0.96</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 <section id="probability-rates" class="level4">
 <h4 class="anchored" data-anchor-id="probability-rates">Probability rates</h4>
@@ -1154,14 +1143,14 @@ freqperday(5)</code></pre>
 <p>Probability rates must be non-negative, but need not be less than 1. Thus, <code>ss.perday(2)</code> is a valid rate (whereas <code>ss.probperday(2)</code> is not valid).</p>
 <p>When a <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> is multiplied by a scalar or array, the rate is simply scaled. Such multiplication occurs frequently in epidemiological models, where the base rate is multiplied by “rate ratio” or “relative rate” to represent agents experiencing higher (multiplier &gt; 1) or lower (multiplier &lt; 1) event rates.</p>
 <p>Alternatively, when a <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> is multiplied by a duration (type <a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur</code></a>), a probability is calculated. The conversion from rate to probability on multiplication by a duration is exactly the same as for <a href="../api/time.html#starsim.time.prob" title="0"><code>ss.prob</code></a>:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> np.exp(<span class="op">-</span>rate<span class="op">/</span>factor)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> np.exp(<span class="op">-</span>rate<span class="op">/</span>factor)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The only difference is that we are using the rate directly, rather than back-calculating it first.</p>
 <p>For example, consider</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> ss.peryear(<span class="fl">0.8</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> ss.peryear(<span class="fl">0.8</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>When multiplied by a duration of 1 year, the calculated probability is <code>1 - np.exp(-0.8)</code>, which is approximately 55%:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>p<span class="op">*</span>ss.years(<span class="dv">1</span>) ≈ <span class="fl">0.55</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>p<span class="op">*</span>ss.years(<span class="dv">1</span>) ≈ <span class="fl">0.55</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>When multiplied by a scalar, the rate is simply scaled.</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>p<span class="op">*</span><span class="dv">2</span> <span class="op">==</span> <span class="fl">1.6</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>p<span class="op">*</span><span class="dv">2</span> <span class="op">==</span> <span class="fl">1.6</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The difference between <a href="../api/time.html#starsim.time.prob" title="0"><code>ss.prob</code></a> and <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a> is subtle, but important. <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> works directly with the instantaneous rate of an event occurring. In contrast, <a href="../api/time.html#starsim.time.prob" title="0"><code>ss.prob</code></a> starts with a probability and a duration, and the underlying rate is calculated. On multiplication by a duration:</p>
 <ul>
 <li><a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a>: rate → number of events</li>
@@ -1173,16 +1162,16 @@ freqperday(5)</code></pre>
 <h4 class="anchored" data-anchor-id="using-rates">Using rates</h4>
 <p>Each of these quantities has <code>.to_prob()</code> and <code>.to_events()</code> methods; in fact, the only difference between <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a> and <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a> is that multiplying <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a> by a duration calls <code>.to_events()</code>, while multiplying <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a> by a duration calls <code>.to_prob()</code>.</p>
 <p>In most cases, you will be using <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per()</code></a> together with the simulation (or module) timestep <code>dt</code>. In order to convert your rate into a probability of an event happening, simply call <code>.to_prob()</code> – remember to do this as the <em>last</em> step of the calculation, so that the probability is scaled correctly:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the death rate</span></span>
-<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>death_rate <span class="op">=</span> ss.peryear(<span class="fl">0.1</span>)</span>
-<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a>rel_death_age <span class="op">=</span> <span class="fl">3.4</span> <span class="co"># Older age, higher risk</span></span>
-<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a>rel_death_ses <span class="op">=</span> <span class="fl">5.7</span> <span class="co"># Lower SES, higher risk</span></span>
-<span id="cb44-5"><a href="#cb44-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-6"><a href="#cb44-6" aria-hidden="true" tabindex="-1"></a><span class="co"># ✓ Right -- multiply first, and then convert to probability</span></span>
-<span id="cb44-7"><a href="#cb44-7" aria-hidden="true" tabindex="-1"></a>p_death <span class="op">=</span> (death_rate <span class="op">*</span> rel_death_age <span class="op">*</span> rel_death_ses).to_prob()</span>
-<span id="cb44-8"><a href="#cb44-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-9"><a href="#cb44-9" aria-hidden="true" tabindex="-1"></a><span class="co"># × WRONG -- will produce an invalid probability</span></span>
-<span id="cb44-10"><a href="#cb44-10" aria-hidden="true" tabindex="-1"></a>p_death <span class="op">=</span> death_rate.to_prob() <span class="op">*</span> rel_death_age <span class="op">*</span> rel_death_ses</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the death rate</span></span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>death_rate <span class="op">=</span> ss.peryear(<span class="fl">0.1</span>)</span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>rel_death_age <span class="op">=</span> <span class="fl">3.4</span> <span class="co"># Older age, higher risk</span></span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>rel_death_ses <span class="op">=</span> <span class="fl">5.7</span> <span class="co"># Lower SES, higher risk</span></span>
+<span id="cb43-5"><a href="#cb43-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-6"><a href="#cb43-6" aria-hidden="true" tabindex="-1"></a><span class="co"># ✓ Right -- multiply first, and then convert to probability</span></span>
+<span id="cb43-7"><a href="#cb43-7" aria-hidden="true" tabindex="-1"></a>p_death <span class="op">=</span> (death_rate <span class="op">*</span> rel_death_age <span class="op">*</span> rel_death_ses).to_prob()</span>
+<span id="cb43-8"><a href="#cb43-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb43-9"><a href="#cb43-9" aria-hidden="true" tabindex="-1"></a><span class="co"># × WRONG -- will produce an invalid probability</span></span>
+<span id="cb43-10"><a href="#cb43-10" aria-hidden="true" tabindex="-1"></a>p_death <span class="op">=</span> death_rate.to_prob() <span class="op">*</span> rel_death_age <span class="op">*</span> rel_death_ses</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>How does a rate know how to convert itself to a probability? When a sim is initialized, it finds all the timepars, and adds a <code>default_dur</code> property to them that’s equal to module <code>dt</code>. This means that <code>death_rate.to_prob()</code> is simply a shortcut for <code>death_rate * self.dt</code>, but both are equivalent.</p>
 </section>
 <section id="summary" class="level4">
@@ -1633,7 +1622,7 @@ freqperday(5)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.5 (2025-11-27).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

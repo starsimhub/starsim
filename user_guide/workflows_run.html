@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.25">
+<meta name="generator" content="quarto-1.8.26">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -75,9 +75,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-7ac2f9da8c2617a4fdd15004b4601015.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
@@ -357,10 +357,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
-    <div class="pt-lg-2 mt-2 text-left sidebar-header">
-      <a href="../index.html" class="sidebar-logo-link">
-      </a>
-      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -699,51 +695,32 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "randomsafe" with 10000 agentsInitializing sim "random" with 10000 agents
+<pre><code>Initializing sim "random" with 10000 agentsInitializing sim "randomsafe" with 10000 agents
 
   Running "random": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "randomsafe": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running "random": 2010.01.01 (10/51) (0.32 s)  ••••———————————————— 22%
-  Running "randomsafe": 2010.01.01 (10/51) (0.34 s)  ••••———————————————— 22%
-  Running "random": 2020.01.01 (20/51) (0.38 s)  ••••••••———————————— 41%
-  Running "randomsafe": 2020.01.01 (20/51) (0.44 s)  ••••••••———————————— 41%
-  Running "random": 2030.01.01 (30/51) (0.44 s)  ••••••••••••———————— 61%
-  Running "random": 2040.01.01 (40/51) (0.50 s)  ••••••••••••••••———— 80%
-  Running "randomsafe": 2030.01.01 (30/51) (0.53 s)  ••••••••••••———————— 61%
-  Running "random": 2050.01.01 (50/51) (0.72 s)  •••••••••••••••••••• 100%
+  Running "random": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
+  Running "randomsafe": 2010.01.01 (10/51) (0.35 s)  ••••———————————————— 22%
+  Running "random": 2020.01.01 (20/51) (0.39 s)  ••••••••———————————— 41%
+  Running "randomsafe": 2020.01.01 (20/51) (0.46 s)  ••••••••———————————— 41%
+  Running "random": 2030.01.01 (30/51) (0.48 s)  ••••••••••••———————— 61%
+  Running "random": 2040.01.01 (40/51) (0.56 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2030.01.01 (30/51) (0.59 s)  ••••••••••••———————— 61%
+  Running "random": 2050.01.01 (50/51) (0.64 s)  •••••••••••••••••••• 100%
 
-  Running "randomsafe": 2040.01.01 (40/51) (0.77 s)  ••••••••••••••••———— 80%
-  Running "randomsafe": 2050.01.01 (50/51) (0.85 s)  •••••••••••••••••••• 100%
-
-Figure(768x576)</code></pre>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="workflows_run_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
-</figure>
-</div>
-</div>
-</div>
-<p><a href="../api/run.html#starsim.run.parallel" title="0"><code>ss.parallel()</code></a> is just a wrapper for <a href="../api/run.html#starsim.run.MultiSim.run" title="0"><code>ss.MultiSim().run()</code></a> (and note how we can pass arguments to all of the sims, e.g.&nbsp;<code>verbose=0</code> here):</p>
-<div id="c1b72b99" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'randomsafe'</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim1, sim2]).run(verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
+  Running "randomsafe": 2040.01.01 (40/51) (0.70 s)  ••••••••••••••••———— 80%
+  Running "randomsafe": 2050.01.01 (50/51) (0.83 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad429ad0&gt;
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6affd4e700&gt;:
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 195, in set_children
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/matplotlib/transforms.py", line 195, in set_children
     ref = weakref.ref(
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad4294e0&gt;
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6affd4e6b0&gt;:
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/matplotlib/transforms.py", line 195, in set_children
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/matplotlib/transforms.py", line 195, in set_children
     ref = weakref.ref(
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
@@ -753,7 +730,26 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_run_files/figure-html/cell-3-output-4.png" width="758" height="566" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-2-output-4.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><a href="../api/run.html#starsim.run.parallel" title="0"><code>ss.parallel()</code></a> is just a wrapper for <a href="../api/run.html#starsim.run.MultiSim.run" title="0"><code>ss.MultiSim().run()</code></a> (and note how we can pass arguments to all of the sims, e.g.&nbsp;<code>verbose=0</code> here):</p>
+<div id="c1b72b99" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'randomsafe'</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim1, sim2]).run(verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="workflows_run_files/figure-html/cell-3-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -763,33 +759,21 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(sim).run()</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad9318a0&gt;
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
-    @classmethod
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7fe5ad9b6ac0&gt;
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
-    @classmethod
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_run_files/figure-html/cell-4-output-3.png" width="758" height="566" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-4-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>In addition to plotting the individual sims, we can quickly compute stats on the sim by calling <code>msim.mean()</code> or <code>msim.median()</code> (or more generally, <code>msim.reduce()</code> if we want to specify e.g.&nbsp;quantiles):</p>
 <div id="7c306b79" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>msim.mean()</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>msim.mean()</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
@@ -803,8 +787,8 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <p>This looks a little wonky because the error bounds shown are ±2 standard deviations, but we know things like deaths can’t go negative. In cases like this, we get more reasonable results with <code>median()</code>, which by default shows the 10th and 90th quantiles:</p>
 <div id="c0c6f8a9" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>msim.median()</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>msim.median()</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
@@ -821,37 +805,65 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <p>Both <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>ss.Sim</code></a> and <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim</code></a> objects let you control whether or not the objects passed into them are copied. By default, sims <em>do</em> copy inputs and multisims <em>don’t</em>. Let’s look at a few examples.</p>
 <p>Sims copy inputs by default because it’s common to want to reuse a module between sims, which wouldn’t be allowed if it wasn’t copied (since it’s modified in place during run). For example:</p>
 <div id="43b84dc4" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS(beta<span class="op">=</span><span class="fl">0.1</span>)</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Low contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">5</span>))</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'High contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">10</span>))</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>ss.parallel(s1, s2).plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS(beta<span class="op">=</span><span class="fl">0.1</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'Low contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">5</span>))</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(label<span class="op">=</span><span class="st">'High contacts'</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">10</span>))</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>ss.parallel(s1, s2).plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim "Low contacts" with 10000 agents
-Initializing sim "High contacts" with 10000 agents
-  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+Initializing sim "High contacts" with 10000 agents</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3de83060&gt;Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3de83060&gt;:
+:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 107, in __new__
+  File "&lt;frozen abc&gt;", line 107, in __new__
+BufferErrorBufferError: : Existing exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sized
+
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3dd474c0&gt;Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3dd474c0&gt;:
+:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 107, in __new__
+  File "&lt;frozen abc&gt;", line 107, in __new__
+BufferErrorBufferError: : Existing exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sized
+
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3dc51990&gt;Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3dc51990&gt;:
+:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 107, in __new__
+  File "&lt;frozen abc&gt;", line 107, in __new__
+BufferError: BufferErrorExisting exports of data: object cannot be re-sized: 
+Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3db3fec0&gt;Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3db3fec0&gt;:
+:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 107, in __new__
+  File "&lt;frozen abc&gt;", line 107, in __new__
+BufferError: BufferErrorExisting exports of data: object cannot be re-sized: 
+Existing exports of data: object cannot be re-sized</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Running "High contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%  Running "Low contacts": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
   Running "Low contacts": 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
   Running "High contacts": 2010.01.01 (10/51) (0.32 s)  ••••———————————————— 22%
   Running "Low contacts": 2020.01.01 (20/51) (0.35 s)  ••••••••———————————— 41%
   Running "High contacts": 2020.01.01 (20/51) (0.38 s)  ••••••••———————————— 41%
-  Running "Low contacts": 2030.01.01 (30/51) (0.40 s)  ••••••••••••———————— 61%
-  Running "High contacts": 2030.01.01 (30/51) (0.45 s)  ••••••••••••———————— 61%
-  Running "Low contacts": 2040.01.01 (40/51) (0.45 s)  ••••••••••••••••———— 80%
-  Running "Low contacts": 2050.01.01 (50/51) (0.50 s)  •••••••••••••••••••• 100%
+  Running "Low contacts": 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
+  Running "High contacts": 2030.01.01 (30/51) (0.47 s)  ••••••••••••———————— 61%
+  Running "Low contacts": 2040.01.01 (40/51) (0.47 s)  ••••••••••••••••———— 80%
+  Running "Low contacts": 2050.01.01 (50/51) (0.53 s)  •••••••••••••••••••• 100%
 
-  Running "High contacts": 2040.01.01 (40/51) (0.51 s)  ••••••••••••••••———— 80%
-  Running "High contacts": 2050.01.01 (50/51) (0.57 s)  •••••••••••••••••••• 100%
-</code></pre>
-</div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe5a0eb18f0&gt;
-Traceback (most recent call last):
-  File "&lt;frozen abc&gt;", line 123, in __subclasscheck__
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Figure(768x576)</code></pre>
+  Running "High contacts": 2040.01.01 (40/51) (0.55 s)  ••••••••••••••••———— 80%
+  Running "High contacts": 2050.01.01 (50/51) (0.63 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -863,25 +875,51 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <p>But this can be confusing, because it means the <code>sis</code> in the simulation is a different object than the <code>sis</code> you created. If you want to keep it the same, set <code>copy_inputs=False</code>, for example, to use it directly afterwards:</p>
 <div id="ed9e5cb6" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(beta<span class="op">=</span><span class="fl">0.035</span>)</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>, copy_inputs<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>sir.plot() <span class="co"># This wouldn't work without copy_inputs=False</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(beta<span class="op">=</span><span class="fl">0.035</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>, copy_inputs<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>sir.plot() <span class="co"># This wouldn't work without copy_inputs=False</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3de83060&gt;:
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 106, in __new__
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3dd474c0&gt;:
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 106, in __new__
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3dc51990&gt;:
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 106, in __new__
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b3db3fec0&gt;:
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 106, in __new__
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b319484a0&gt;:
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 106, in __new__
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f6b0352a700&gt;:
+Traceback (most recent call last):
+  File "&lt;frozen abc&gt;", line 106, in __new__
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.37 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.43 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.49 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.55 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.35 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.42 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.51 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.58 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.63 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_run_files/figure-html/cell-8-output-2.png" width="614" height="429" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-8-output-3.png" width="614" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -915,30 +953,21 @@ Figure(768x576)</code></pre>
 <span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>s1.run().plot() <span class="co"># This now works, because the sim was *not* run in place</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim "Sim 0" with 10000 agentsInitializing sim "Sim 1" with 10000 agents
-</code></pre>
-</div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7fe578ff8540&gt;
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
-    out = unpickling_func(*args)
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim with 10000 agents
+
+Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.12 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.17 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.22 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.27 s)  •••••••••••••••••••• 100%
+  Running 2020.01.01 (20/51) (0.13 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.21 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.29 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.36 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_run_files/figure-html/cell-10-output-4.png" width="758" height="566" class="figure-img"></p>
+<p><img src="workflows_run_files/figure-html/cell-10-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -947,77 +976,77 @@ Figure(768x576)</code></pre>
 <section id="advanced-workflows" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-workflows">Advanced workflows</h2>
 <p>A common pattern for more complex workflows is to write <code>make_sim()</code>. The example below, based on an STIsim application, shows how complex a <code>make_sim()</code> function can get (this is, after all, where most of the science happens!):</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim(seed<span class="op">=</span><span class="dv">1</span>, n_agents<span class="op">=</span><span class="va">None</span>, start<span class="op">=</span><span class="dv">1990</span>, stop<span class="op">=</span><span class="dv">2030</span>, debug<span class="op">=</span><span class="va">False</span>, add_stis<span class="op">=</span><span class="va">True</span>, scenario<span class="op">=</span><span class="st">'treat'</span>):</span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    total_pop <span class="op">=</span> {<span class="dv">1970</span>: <span class="fl">5.203e6</span>, <span class="dv">1980</span>: <span class="fl">7.05e6</span>, <span class="dv">1985</span>: <span class="fl">8.691e6</span>, <span class="dv">1990</span>: <span class="dv">9980999</span>, <span class="dv">2000</span>: <span class="fl">11.83e6</span>}[start]</span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> n_agents <span class="kw">is</span> <span class="va">None</span>: n_agents <span class="op">=</span> [<span class="bu">int</span>(<span class="fl">10e3</span>), <span class="bu">int</span>(<span class="fl">5e2</span>)][debug]</span>
-<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> dt <span class="kw">is</span> <span class="va">None</span>: dt <span class="op">=</span> [<span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, <span class="dv">1</span>][debug]</span>
-<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Demographic modules</span></span>
-<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>    fertility_data <span class="op">=</span> pd.read_csv(<span class="ss">f'data/asfr.csv'</span>)</span>
-<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>    pregnancy <span class="op">=</span> ss.Pregnancy(dt<span class="op">=</span><span class="st">'month'</span>, fertility_rate<span class="op">=</span>fertility_data)</span>
-<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    death_data <span class="op">=</span> pd.read_csv(<span class="ss">f'data/deaths.csv'</span>)</span>
-<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>    death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>death_data, rate_units<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># People and networks</span></span>
-<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>pd.read_csv(<span class="ss">f'data/age_dist_</span><span class="sc">{</span>start<span class="sc">}</span><span class="ss">.csv'</span>, index_col<span class="op">=</span><span class="st">'age'</span>)[<span class="st">'value'</span>])</span>
-<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>    sexual <span class="op">=</span> sti.FastStructuredSexual(</span>
-<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>        prop_f0<span class="op">=</span><span class="fl">0.79</span>,</span>
-<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>        prop_m0<span class="op">=</span><span class="fl">0.83</span>,</span>
-<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>        f1_conc<span class="op">=</span><span class="fl">0.16</span>,</span>
-<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>        m1_conc<span class="op">=</span><span class="fl">0.11</span>,</span>
-<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>        p_pair_form<span class="op">=</span><span class="fl">0.58</span>,</span>
-<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>        condom_data<span class="op">=</span>pd.read_csv(<span class="ss">f'data/condom_use.csv'</span>),</span>
-<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a>    maternal <span class="op">=</span> ss.MaternalNet(dt<span class="op">=</span><span class="st">'month'</span>)</span>
-<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Diseases</span></span>
-<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a>    hiv <span class="op">=</span> make_hiv()</span>
-<span id="cb26-27"><a href="#cb26-27" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> [hiv]</span>
-<span id="cb26-28"><a href="#cb26-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> add_stis:</span>
-<span id="cb26-29"><a href="#cb26-29" aria-hidden="true" tabindex="-1"></a>        ng, ct, tv, bv <span class="op">=</span> make_stis()</span>
-<span id="cb26-30"><a href="#cb26-30" aria-hidden="true" tabindex="-1"></a>        stis <span class="op">=</span> [ng, ct, tv, bv]</span>
-<span id="cb26-31"><a href="#cb26-31" aria-hidden="true" tabindex="-1"></a>        diseases <span class="op">+=</span> stis  <span class="co"># Add the STIs to the list of diseases</span></span>
-<span id="cb26-32"><a href="#cb26-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-33"><a href="#cb26-33" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Interventions and analyzers</span></span>
-<span id="cb26-34"><a href="#cb26-34" aria-hidden="true" tabindex="-1"></a>    intvs <span class="op">=</span> make_hiv_intvs()</span>
-<span id="cb26-35"><a href="#cb26-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> add_stis:</span>
-<span id="cb26-36"><a href="#cb26-36" aria-hidden="true" tabindex="-1"></a>        intvs <span class="op">+=</span> make_testing(ng, ct, tv, bv, scenario<span class="op">=</span>scenario, poc<span class="op">=</span>poc, stop<span class="op">=</span>stop)</span>
-<span id="cb26-37"><a href="#cb26-37" aria-hidden="true" tabindex="-1"></a>        connectors <span class="op">=</span> [sti.hiv_ng(hiv, ng), sti.hiv_ct(hiv, ct), sti.hiv_tv(hiv, tv)]</span>
-<span id="cb26-38"><a href="#cb26-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
-<span id="cb26-39"><a href="#cb26-39" aria-hidden="true" tabindex="-1"></a>        connectors <span class="op">=</span> []</span>
-<span id="cb26-40"><a href="#cb26-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-41"><a href="#cb26-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> analyzers <span class="kw">is</span> <span class="va">None</span>:</span>
-<span id="cb26-42"><a href="#cb26-42" aria-hidden="true" tabindex="-1"></a>        analyzers <span class="op">=</span> [sti.sw_stats(diseases<span class="op">=</span>[<span class="st">'ng'</span>, <span class="st">'ct'</span>, <span class="st">'tv'</span>]), ts()]</span>
-<span id="cb26-43"><a href="#cb26-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-44"><a href="#cb26-44" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Actually create the sim</span></span>
-<span id="cb26-45"><a href="#cb26-45" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> ss.Sim(</span>
-<span id="cb26-46"><a href="#cb26-46" aria-hidden="true" tabindex="-1"></a>        dt<span class="op">=</span>dt,</span>
-<span id="cb26-47"><a href="#cb26-47" aria-hidden="true" tabindex="-1"></a>        rand_seed<span class="op">=</span>seed,</span>
-<span id="cb26-48"><a href="#cb26-48" aria-hidden="true" tabindex="-1"></a>        total_pop<span class="op">=</span>total_pop,</span>
-<span id="cb26-49"><a href="#cb26-49" aria-hidden="true" tabindex="-1"></a>        start<span class="op">=</span>start,</span>
-<span id="cb26-50"><a href="#cb26-50" aria-hidden="true" tabindex="-1"></a>        stop<span class="op">=</span>stop,</span>
-<span id="cb26-51"><a href="#cb26-51" aria-hidden="true" tabindex="-1"></a>        people<span class="op">=</span>ppl,</span>
-<span id="cb26-52"><a href="#cb26-52" aria-hidden="true" tabindex="-1"></a>        diseases<span class="op">=</span>diseases,</span>
-<span id="cb26-53"><a href="#cb26-53" aria-hidden="true" tabindex="-1"></a>        networks<span class="op">=</span>[sexual, maternal],</span>
-<span id="cb26-54"><a href="#cb26-54" aria-hidden="true" tabindex="-1"></a>        demographics<span class="op">=</span>[pregnancy, death],</span>
-<span id="cb26-55"><a href="#cb26-55" aria-hidden="true" tabindex="-1"></a>        interventions<span class="op">=</span>intvs,</span>
-<span id="cb26-56"><a href="#cb26-56" aria-hidden="true" tabindex="-1"></a>        analyzers<span class="op">=</span>analyzers,</span>
-<span id="cb26-57"><a href="#cb26-57" aria-hidden="true" tabindex="-1"></a>        connectors<span class="op">=</span>connectors,</span>
-<span id="cb26-58"><a href="#cb26-58" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb26-59"><a href="#cb26-59" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-60"><a href="#cb26-60" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Store scenario</span></span>
-<span id="cb26-61"><a href="#cb26-61" aria-hidden="true" tabindex="-1"></a>    sim.scenario <span class="op">=</span> scenario</span>
-<span id="cb26-62"><a href="#cb26-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sim</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim(seed<span class="op">=</span><span class="dv">1</span>, n_agents<span class="op">=</span><span class="va">None</span>, start<span class="op">=</span><span class="dv">1990</span>, stop<span class="op">=</span><span class="dv">2030</span>, debug<span class="op">=</span><span class="va">False</span>, add_stis<span class="op">=</span><span class="va">True</span>, scenario<span class="op">=</span><span class="st">'treat'</span>):</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    total_pop <span class="op">=</span> {<span class="dv">1970</span>: <span class="fl">5.203e6</span>, <span class="dv">1980</span>: <span class="fl">7.05e6</span>, <span class="dv">1985</span>: <span class="fl">8.691e6</span>, <span class="dv">1990</span>: <span class="dv">9980999</span>, <span class="dv">2000</span>: <span class="fl">11.83e6</span>}[start]</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> n_agents <span class="kw">is</span> <span class="va">None</span>: n_agents <span class="op">=</span> [<span class="bu">int</span>(<span class="fl">10e3</span>), <span class="bu">int</span>(<span class="fl">5e2</span>)][debug]</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> dt <span class="kw">is</span> <span class="va">None</span>: dt <span class="op">=</span> [<span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, <span class="dv">1</span>][debug]</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Demographic modules</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>    fertility_data <span class="op">=</span> pd.read_csv(<span class="ss">f'data/asfr.csv'</span>)</span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>    pregnancy <span class="op">=</span> ss.Pregnancy(dt<span class="op">=</span><span class="st">'month'</span>, fertility_rate<span class="op">=</span>fertility_data)</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>    death_data <span class="op">=</span> pd.read_csv(<span class="ss">f'data/deaths.csv'</span>)</span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>    death <span class="op">=</span> ss.Deaths(death_rate<span class="op">=</span>death_data, rate_units<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># People and networks</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(n_agents, age_data<span class="op">=</span>pd.read_csv(<span class="ss">f'data/age_dist_</span><span class="sc">{</span>start<span class="sc">}</span><span class="ss">.csv'</span>, index_col<span class="op">=</span><span class="st">'age'</span>)[<span class="st">'value'</span>])</span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>    sexual <span class="op">=</span> sti.FastStructuredSexual(</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>        prop_f0<span class="op">=</span><span class="fl">0.79</span>,</span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>        prop_m0<span class="op">=</span><span class="fl">0.83</span>,</span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>        f1_conc<span class="op">=</span><span class="fl">0.16</span>,</span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a>        m1_conc<span class="op">=</span><span class="fl">0.11</span>,</span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a>        p_pair_form<span class="op">=</span><span class="fl">0.58</span>,</span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a>        condom_data<span class="op">=</span>pd.read_csv(<span class="ss">f'data/condom_use.csv'</span>),</span>
+<span id="cb24-22"><a href="#cb24-22" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb24-23"><a href="#cb24-23" aria-hidden="true" tabindex="-1"></a>    maternal <span class="op">=</span> ss.MaternalNet(dt<span class="op">=</span><span class="st">'month'</span>)</span>
+<span id="cb24-24"><a href="#cb24-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-25"><a href="#cb24-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Diseases</span></span>
+<span id="cb24-26"><a href="#cb24-26" aria-hidden="true" tabindex="-1"></a>    hiv <span class="op">=</span> make_hiv()</span>
+<span id="cb24-27"><a href="#cb24-27" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> [hiv]</span>
+<span id="cb24-28"><a href="#cb24-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> add_stis:</span>
+<span id="cb24-29"><a href="#cb24-29" aria-hidden="true" tabindex="-1"></a>        ng, ct, tv, bv <span class="op">=</span> make_stis()</span>
+<span id="cb24-30"><a href="#cb24-30" aria-hidden="true" tabindex="-1"></a>        stis <span class="op">=</span> [ng, ct, tv, bv]</span>
+<span id="cb24-31"><a href="#cb24-31" aria-hidden="true" tabindex="-1"></a>        diseases <span class="op">+=</span> stis  <span class="co"># Add the STIs to the list of diseases</span></span>
+<span id="cb24-32"><a href="#cb24-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-33"><a href="#cb24-33" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Interventions and analyzers</span></span>
+<span id="cb24-34"><a href="#cb24-34" aria-hidden="true" tabindex="-1"></a>    intvs <span class="op">=</span> make_hiv_intvs()</span>
+<span id="cb24-35"><a href="#cb24-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> add_stis:</span>
+<span id="cb24-36"><a href="#cb24-36" aria-hidden="true" tabindex="-1"></a>        intvs <span class="op">+=</span> make_testing(ng, ct, tv, bv, scenario<span class="op">=</span>scenario, poc<span class="op">=</span>poc, stop<span class="op">=</span>stop)</span>
+<span id="cb24-37"><a href="#cb24-37" aria-hidden="true" tabindex="-1"></a>        connectors <span class="op">=</span> [sti.hiv_ng(hiv, ng), sti.hiv_ct(hiv, ct), sti.hiv_tv(hiv, tv)]</span>
+<span id="cb24-38"><a href="#cb24-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb24-39"><a href="#cb24-39" aria-hidden="true" tabindex="-1"></a>        connectors <span class="op">=</span> []</span>
+<span id="cb24-40"><a href="#cb24-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-41"><a href="#cb24-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> analyzers <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb24-42"><a href="#cb24-42" aria-hidden="true" tabindex="-1"></a>        analyzers <span class="op">=</span> [sti.sw_stats(diseases<span class="op">=</span>[<span class="st">'ng'</span>, <span class="st">'ct'</span>, <span class="st">'tv'</span>]), ts()]</span>
+<span id="cb24-43"><a href="#cb24-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-44"><a href="#cb24-44" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Actually create the sim</span></span>
+<span id="cb24-45"><a href="#cb24-45" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb24-46"><a href="#cb24-46" aria-hidden="true" tabindex="-1"></a>        dt<span class="op">=</span>dt,</span>
+<span id="cb24-47"><a href="#cb24-47" aria-hidden="true" tabindex="-1"></a>        rand_seed<span class="op">=</span>seed,</span>
+<span id="cb24-48"><a href="#cb24-48" aria-hidden="true" tabindex="-1"></a>        total_pop<span class="op">=</span>total_pop,</span>
+<span id="cb24-49"><a href="#cb24-49" aria-hidden="true" tabindex="-1"></a>        start<span class="op">=</span>start,</span>
+<span id="cb24-50"><a href="#cb24-50" aria-hidden="true" tabindex="-1"></a>        stop<span class="op">=</span>stop,</span>
+<span id="cb24-51"><a href="#cb24-51" aria-hidden="true" tabindex="-1"></a>        people<span class="op">=</span>ppl,</span>
+<span id="cb24-52"><a href="#cb24-52" aria-hidden="true" tabindex="-1"></a>        diseases<span class="op">=</span>diseases,</span>
+<span id="cb24-53"><a href="#cb24-53" aria-hidden="true" tabindex="-1"></a>        networks<span class="op">=</span>[sexual, maternal],</span>
+<span id="cb24-54"><a href="#cb24-54" aria-hidden="true" tabindex="-1"></a>        demographics<span class="op">=</span>[pregnancy, death],</span>
+<span id="cb24-55"><a href="#cb24-55" aria-hidden="true" tabindex="-1"></a>        interventions<span class="op">=</span>intvs,</span>
+<span id="cb24-56"><a href="#cb24-56" aria-hidden="true" tabindex="-1"></a>        analyzers<span class="op">=</span>analyzers,</span>
+<span id="cb24-57"><a href="#cb24-57" aria-hidden="true" tabindex="-1"></a>        connectors<span class="op">=</span>connectors,</span>
+<span id="cb24-58"><a href="#cb24-58" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb24-59"><a href="#cb24-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-60"><a href="#cb24-60" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Store scenario</span></span>
+<span id="cb24-61"><a href="#cb24-61" aria-hidden="true" tabindex="-1"></a>    sim.scenario <span class="op">=</span> scenario</span>
+<span id="cb24-62"><a href="#cb24-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sim</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>If your <code>make_sim()</code> function is computationally expensive, you can parallelize it using <code>sc.parallelize()</code>, e.g.</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the arguments</span></span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>iterkwargs <span class="op">=</span> []</span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">100</span>):</span>
-<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> n_agents <span class="kw">in</span> [<span class="fl">1e3</span>, <span class="fl">2e3</span>, <span class="fl">5e3</span>, <span class="fl">10e3</span>]:</span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>        iterkwargs.append(<span class="bu">dict</span>(seed<span class="op">=</span>seed, n_agents<span class="op">=</span>n_agents))</span>
-<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sims</span></span>
-<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>sims <span class="op">=</span> sc.parallelize(make_sim, iterkwargs<span class="op">=</span>iterkwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the arguments</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>iterkwargs <span class="op">=</span> []</span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">100</span>):</span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> n_agents <span class="kw">in</span> [<span class="fl">1e3</span>, <span class="fl">2e3</span>, <span class="fl">5e3</span>, <span class="fl">10e3</span>]:</span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>        iterkwargs.append(<span class="bu">dict</span>(seed<span class="op">=</span>seed, n_agents<span class="op">=</span>n_agents))</span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sims</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>sims <span class="op">=</span> sc.parallelize(make_sim, iterkwargs<span class="op">=</span>iterkwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 
 
 </section>
@@ -1455,7 +1484,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.5 (2025-11-27).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

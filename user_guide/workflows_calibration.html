@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.25">
+<meta name="generator" content="quarto-1.8.26">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -75,9 +75,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-969ddfa49e00a70eb3423444dbc81f6c.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-065a5179aebd64318d7ea99d77b64a9e.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-7ac2f9da8c2617a4fdd15004b4601015.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
@@ -357,10 +357,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
-    <div class="pt-lg-2 mt-2 text-left sidebar-header">
-      <a href="../index.html" class="sidebar-logo-link">
-      </a>
-      </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -875,17 +871,17 @@ Performing calibration...</span>
 </div>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>[I 2025-10-22 03:13:28,669] A new study created in RDB with name: starsim_calibration</code></pre>
+<pre><code>[I 2025-12-11 18:43:24,332] A new study created in RDB with name: starsim_calibration</code></pre>
 </div>
 </div>
 <p>Let’s look at the best parameters that were found. Note that the <code>rand_seed</code> was selected at random, but the other parameters are meaningful.</p>
 <div id="cell-18" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>calib.best_pars</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="8">
-<pre><code>{'beta': 0.010803788895830151,
- 'init_prev': 0.04672394969644946,
+<pre><code>{'beta': 0.012577048505091268,
+ 'init_prev': 0.035523064379514385,
  'n_contacts': 3,
- 'rand_seed': 170396}</code></pre>
+ 'rand_seed': 576939}</code></pre>
 </div>
 </div>
 <p>Once the calibration is complete, we can compare the <code>guess</code> values to the best values found by calling <code>check_fit</code>.</p>
@@ -902,44 +898,14 @@ Performing calibration...</span>
 <pre><span class="ansi-cyan-fg">
 
 Confirming fit...</span>
+
+Fit with original pars: 6.927809785316569
+
+Fit with best-fit pars: -0.5297811591278784
+
+✓ Calibration improved fit 6.927809785316569 --&gt; -0.5297811591278784
 </pre>
 </div>
-</div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f38a9c73880&gt;
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
-    def __new__(cls, value=None, base=None, **kwargs):
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f38a9b6b740&gt;
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
-    def __new__(cls, value=None, base=None, **kwargs):
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f38a9b6bc40&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/dill/_dill.py", line 436, in find_class
-    def find_class(self, module, name):
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f38a968e480&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/pandas/core/internals/blocks.py", line 2789, in new_block
-    def new_block(
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f38a9faa340&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/pandas/core/internals/blocks.py", line 2789, in new_block
-    def new_block(
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored in: &lt;_io.BytesIO object at 0x7f3869e5bec0&gt;
-Traceback (most recent call last):
-  File "&lt;string&gt;", line 0, in &lt;module&gt;
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
-<div class="cell-output cell-output-stdout">
-<pre><code>Fit with original pars: 6.927809785316569
-Fit with best-fit pars: -0.5372379924612117
-✓ Calibration improved fit 6.927809785316569 --&gt; -0.5372379924612117</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="9">
 <pre><code>True</code></pre>
@@ -947,25 +913,18 @@ Fit with best-fit pars: -0.5372379924612117
 </div>
 <p>After calling <code>check_fit</code>, we can plot the results. This first plot shows the Normal likelihood distributions from each of the 15 simulations we did in <code>check_fit</code> as the colored lines. The vertical dashed line is located at the real (<code>expected</code>) data. Top row is the “guess” values and the bottom row is the new “best” parameters. We want the vertical dashed line to cross the Gaussians at high points, representing high likelihood.</p>
 <div id="cell-22" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>calib.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored in: &lt;_io.BytesIO object at 0x7f386e1d8c70&gt;
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.13.7/x64/lib/python3.13/site-packages/seaborn/cm.py", line 1565, in &lt;module&gt;
-    _lut_dict = dict(
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>calib.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-11-output-2.png" width="1286" height="569" class="figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-11-output-1.png" width="1286" height="569" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>Another way to plot the results is via bootstrapping. Here we repeatedly choose 15 from the <code>n_reps=15</code> simulations (with replacement), compute the average (or sum for some components), and repeatedly calculate the mean. We then plot the distribution of means, and hope it lands near the vertical dashed lines representing the real data.</p>
 <div id="cell-24" class="cell" data-execution_count="11">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:1137: UserWarning: Dataset has 0 variance; skipping density estimate. Pass `warn_singular=False` to disable this warning.
   ax = sns.kdeplot(means)</code></pre>
@@ -980,11 +939,78 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <p>We can view some plots of the final fitted results. Whereas the two plots above were from the <code>check_fit</code>, running both “guess” and “best” parameters, here we make make new simulations to visualize the results.</p>
 <div id="cell-26" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> calib.plot_final()<span class="op">;</span> <span class="co"># Run the model for build_kw['n_reps'] = 15 replicates</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> calib.plot_final()<span class="op">;</span> <span class="co"># Run the model for build_kw['n_reps'] = 15 replicates</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01957c03b0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f019552ecf0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01954024d0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f0195321710&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01953216c0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f0195321800&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01953e4d10&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f0194c715d0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01949215d0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f0195145670&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f0167658540&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01675e4c20&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f01671a00e0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/_py_warnings.py", line 330, in _add_filter
+    filters.insert(0, item)
+BufferError: Existing exports of data: object cannot be re-sized</code></pre>
+</div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-13-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-13-output-2.png" class="img-fluid figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1006,7 +1032,7 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </ul>
 <p>Here are some examples:</p>
 <div id="cell-28" class="cell" data-execution_count="13">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:440: ExperimentalWarning: optuna.visualization.matplotlib._optimization_history.plot_optimization_history is experimental (supported from v2.2.0). The interface can change in the future.
   fig = getattr(vis, method)(self.study)</code></pre>
@@ -1014,13 +1040,13 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-14-output-2.png" width="763" height="454" class="figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-14-output-2.png" width="663" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <div id="cell-29" class="cell" data-execution_count="14">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:438: ExperimentalWarning: optuna.visualization.matplotlib._contour.plot_contour is experimental (supported from v2.2.0). The interface can change in the future.
   fig = vis.plot_contour(self.study, params=params)</code></pre>
@@ -1034,7 +1060,7 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 </div>
 <div id="cell-30" class="cell" data-execution_count="15">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_param_importances'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_param_importances'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Could not run plot_param_importances: Tried to import 'sklearn' but failed. Please make sure that the package is installed correctly to use this feature. Actual error: No module named 'sklearn'.</code></pre>
 </div>
@@ -1045,55 +1071,55 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <p>If you choose not to use components, you can always create your own mismatch function, as in the following example:</p>
 <div id="cell-32" class="cell" data-execution_count="16">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>my_data <span class="op">=</span> (ss.date(<span class="st">'2020-01-12'</span>), <span class="fl">0.13</span>)</span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">eval</span>(sim, expected):</span>
-<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute the squared error at one point in time.</span></span>
-<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># expected will contain my_data in this example due to eval_kw</span></span>
-<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>    date, p <span class="op">=</span> expected</span>
-<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(sim, ss.MultiSim):</span>
-<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim])</span>
-<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> <span class="dv">0</span></span>
-<span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> sim.sims:</span>
-<span id="cb28-12"><a href="#cb28-12" aria-hidden="true" tabindex="-1"></a>        ind <span class="op">=</span> np.searchsorted(s.results.timevec, date, side<span class="op">=</span><span class="st">'left'</span>)</span>
-<span id="cb28-13"><a href="#cb28-13" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> s.results.sir.prevalence[ind]</span>
-<span id="cb28-14"><a href="#cb28-14" aria-hidden="true" tabindex="-1"></a>        ret <span class="op">+=</span> (prev <span class="op">-</span> p)<span class="op">**</span><span class="dv">2</span></span>
-<span id="cb28-15"><a href="#cb28-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret</span>
-<span id="cb28-16"><a href="#cb28-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-17"><a href="#cb28-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-18"><a href="#cb28-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
-<span id="cb28-19"><a href="#cb28-19" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb28-20"><a href="#cb28-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>),</span>
-<span id="cb28-21"><a href="#cb28-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb28-22"><a href="#cb28-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-23"><a href="#cb28-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
-<span id="cb28-24"><a href="#cb28-24" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
-<span id="cb28-25"><a href="#cb28-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-26"><a href="#cb28-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the calibration</span></span>
-<span id="cb28-27"><a href="#cb28-27" aria-hidden="true" tabindex="-1"></a>calib <span class="op">=</span> ss.Calibration(</span>
-<span id="cb28-28"><a href="#cb28-28" aria-hidden="true" tabindex="-1"></a>    calib_pars <span class="op">=</span> calib_pars,</span>
-<span id="cb28-29"><a href="#cb28-29" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> sim,</span>
-<span id="cb28-30"><a href="#cb28-30" aria-hidden="true" tabindex="-1"></a>    build_fn <span class="op">=</span> build_sim,</span>
-<span id="cb28-31"><a href="#cb28-31" aria-hidden="true" tabindex="-1"></a>    build_kw <span class="op">=</span> <span class="bu">dict</span>(n_reps<span class="op">=</span><span class="dv">2</span>), <span class="co"># Two reps per point</span></span>
-<span id="cb28-32"><a href="#cb28-32" aria-hidden="true" tabindex="-1"></a>    reseed <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb28-33"><a href="#cb28-33" aria-hidden="true" tabindex="-1"></a>    eval_fn <span class="op">=</span> <span class="bu">eval</span>, <span class="co"># Will call my_function(msim, eval_kwargs)</span></span>
-<span id="cb28-34"><a href="#cb28-34" aria-hidden="true" tabindex="-1"></a>    eval_kw <span class="op">=</span> <span class="bu">dict</span>(expected<span class="op">=</span>my_data), <span class="co"># Will call eval(sim, **eval_kw)</span></span>
-<span id="cb28-35"><a href="#cb28-35" aria-hidden="true" tabindex="-1"></a>    total_trials <span class="op">=</span> <span class="dv">20</span>,</span>
-<span id="cb28-36"><a href="#cb28-36" aria-hidden="true" tabindex="-1"></a>    n_workers <span class="op">=</span> <span class="va">None</span>, <span class="co"># None indicates to use all available CPUs</span></span>
-<span id="cb28-37"><a href="#cb28-37" aria-hidden="true" tabindex="-1"></a>    die <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb28-38"><a href="#cb28-38" aria-hidden="true" tabindex="-1"></a>    debug <span class="op">=</span> debug,</span>
-<span id="cb28-39"><a href="#cb28-39" aria-hidden="true" tabindex="-1"></a>    verbose <span class="op">=</span> <span class="dv">0</span>,</span>
-<span id="cb28-40"><a href="#cb28-40" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb28-41"><a href="#cb28-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-42"><a href="#cb28-42" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
-<span id="cb28-43"><a href="#cb28-43" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
-<span id="cb28-44"><a href="#cb28-44" aria-hidden="true" tabindex="-1"></a>calib.calibrate()</span>
-<span id="cb28-45"><a href="#cb28-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-46"><a href="#cb28-46" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
-<span id="cb28-47"><a href="#cb28-47" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>my_data <span class="op">=</span> (ss.date(<span class="st">'2020-01-12'</span>), <span class="fl">0.13</span>)</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">eval</span>(sim, expected):</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute the squared error at one point in time.</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># expected will contain my_data in this example due to eval_kw</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    date, p <span class="op">=</span> expected</span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(sim, ss.MultiSim):</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim])</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> sim.sims:</span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>        ind <span class="op">=</span> np.searchsorted(s.results.timevec, date, side<span class="op">=</span><span class="st">'left'</span>)</span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> s.results.sir.prevalence[ind]</span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>        ret <span class="op">+=</span> (prev <span class="op">-</span> p)<span class="op">**</span><span class="dv">2</span></span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret</span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>),</span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
+<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
+<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the calibration</span></span>
+<span id="cb26-27"><a href="#cb26-27" aria-hidden="true" tabindex="-1"></a>calib <span class="op">=</span> ss.Calibration(</span>
+<span id="cb26-28"><a href="#cb26-28" aria-hidden="true" tabindex="-1"></a>    calib_pars <span class="op">=</span> calib_pars,</span>
+<span id="cb26-29"><a href="#cb26-29" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> sim,</span>
+<span id="cb26-30"><a href="#cb26-30" aria-hidden="true" tabindex="-1"></a>    build_fn <span class="op">=</span> build_sim,</span>
+<span id="cb26-31"><a href="#cb26-31" aria-hidden="true" tabindex="-1"></a>    build_kw <span class="op">=</span> <span class="bu">dict</span>(n_reps<span class="op">=</span><span class="dv">2</span>), <span class="co"># Two reps per point</span></span>
+<span id="cb26-32"><a href="#cb26-32" aria-hidden="true" tabindex="-1"></a>    reseed <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb26-33"><a href="#cb26-33" aria-hidden="true" tabindex="-1"></a>    eval_fn <span class="op">=</span> <span class="bu">eval</span>, <span class="co"># Will call my_function(msim, eval_kwargs)</span></span>
+<span id="cb26-34"><a href="#cb26-34" aria-hidden="true" tabindex="-1"></a>    eval_kw <span class="op">=</span> <span class="bu">dict</span>(expected<span class="op">=</span>my_data), <span class="co"># Will call eval(sim, **eval_kw)</span></span>
+<span id="cb26-35"><a href="#cb26-35" aria-hidden="true" tabindex="-1"></a>    total_trials <span class="op">=</span> <span class="dv">20</span>,</span>
+<span id="cb26-36"><a href="#cb26-36" aria-hidden="true" tabindex="-1"></a>    n_workers <span class="op">=</span> <span class="va">None</span>, <span class="co"># None indicates to use all available CPUs</span></span>
+<span id="cb26-37"><a href="#cb26-37" aria-hidden="true" tabindex="-1"></a>    die <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb26-38"><a href="#cb26-38" aria-hidden="true" tabindex="-1"></a>    debug <span class="op">=</span> debug,</span>
+<span id="cb26-39"><a href="#cb26-39" aria-hidden="true" tabindex="-1"></a>    verbose <span class="op">=</span> <span class="dv">0</span>,</span>
+<span id="cb26-40"><a href="#cb26-40" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb26-41"><a href="#cb26-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-42"><a href="#cb26-42" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
+<span id="cb26-43"><a href="#cb26-43" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
+<span id="cb26-44"><a href="#cb26-44" aria-hidden="true" tabindex="-1"></a>calib.calibrate()</span>
+<span id="cb26-45"><a href="#cb26-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-46"><a href="#cb26-46" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
+<span id="cb26-47"><a href="#cb26-47" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>[I 2025-10-22 03:14:16,831] A new study created in RDB with name: starsim_calibration</code></pre>
+<pre><code>[I 2025-12-11 18:44:13,218] A new study created in RDB with name: starsim_calibration</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
 <div class="ansi-escaped-output">
@@ -1103,9 +1129,9 @@ Peforming calibration...</span>
 
 Fit with original pars: 1.07281525
 
-Fit with best-fit pars: 0.0023810000000000003
+Fit with best-fit pars: 0.005677250000000002
 
-✓ Calibration improved fit 1.07281525 --&gt; 0.0023810000000000003
+✓ Calibration improved fit 1.07281525 --&gt; 0.005677250000000002
 </pre>
 </div>
 </div>
@@ -1550,7 +1576,7 @@ Fit with best-fit pars: 0.0023810000000000003
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.4 (2025-10-22).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.5 (2025-11-27).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
