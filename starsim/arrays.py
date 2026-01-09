@@ -590,10 +590,48 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
 
-    def __and__(self, other): return self._boolmath('&', other)
-    def __or__(self, other):  return self._boolmath('|', other)
-    def __xor__(self, other): return self._boolmath('^', other)
-    def __invert__(self):     return self._boolmath('~')
+    def __and__(self, other):
+        """ Bitwise AND: returns BoolArr when operating on arrays, or uids when operating on uids (set intersection) """
+        if isinstance(other, uids):
+            return self.uids & other  # Set intersection
+        return self._boolmath('&', other)
+
+    def __or__(self, other):
+        """ Bitwise OR: returns BoolArr when operating on arrays, or uids when operating on uids (set union) """
+        if isinstance(other, uids):
+            return self.uids | other  # Set union
+        return self._boolmath('|', other)
+
+    def __xor__(self, other):
+        """ Bitwise XOR: returns BoolArr when operating on arrays, or uids when operating on uids (set symmetric difference) """
+        if isinstance(other, uids):
+            return self.uids ^ other  # Set symmetric difference
+        return self._boolmath('^', other)
+
+    def __invert__(self):
+        """ Bitwise NOT """
+        return self._boolmath('~')
+
+    def __iand__(self, other):
+        """ In-place AND: not supported with uids to avoid accidental state corruption """
+        if isinstance(other, uids):
+            errormsg = f'In-place operation &= is not supported between BoolArr and uids. Use explicit assignment instead, or use .uids for set operations.'
+            raise NotImplementedError(errormsg)
+        return self._boolmath('&', other)
+
+    def __ior__(self, other):
+        """ In-place OR: not supported with uids to avoid accidental state corruption """
+        if isinstance(other, uids):
+            errormsg = f'In-place operation |= is not supported between BoolArr and uids. Use explicit assignment instead, or use .uids for set operations.'
+            raise NotImplementedError(errormsg)
+        return self._boolmath('|', other)
+
+    def __ixor__(self, other):
+        """ In-place XOR: not supported with uids to avoid accidental state corruption """
+        if isinstance(other, uids):
+            errormsg = f'In-place operation ^= is not supported between BoolArr and uids. Use explicit assignment instead, or use .uids for set operations.'
+            raise NotImplementedError(errormsg)
+        return self._boolmath('^', other)
 
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property

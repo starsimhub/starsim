@@ -118,6 +118,40 @@ def test_arrs():
     assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
     assert np.array_equal(s1.people.age[s1.people.age < 5],s1.people.age[s1.people.age.values < 5])
 
+    # Test BoolArr & uids operations
+    test_uids = ss.uids([0, 2, 4, 6, 8])
+
+    # Test set intersection (BoolArr & uids)
+    result1 = s1.people.female & test_uids
+    assert isinstance(result1, ss.uids), 'BoolArr & uids should return uids'
+    expected1 = s1.people.female.uids & test_uids
+    assert np.array_equal(result1, expected1), 'BoolArr & uids should match BoolArr.uids & uids'
+
+    # Test set union (BoolArr | uids)
+    result2 = s1.people.female | test_uids
+    assert isinstance(result2, ss.uids), 'BoolArr | uids should return uids'
+    expected2 = s1.people.female.uids | test_uids
+    assert np.array_equal(result2, expected2), 'BoolArr | uids should match BoolArr.uids | uids'
+
+    # Test set symmetric difference (BoolArr ^ uids)
+    result3 = s1.people.female ^ test_uids
+    assert isinstance(result3, ss.uids), 'BoolArr ^ uids should return uids'
+    expected3 = s1.people.female.uids ^ test_uids
+    assert np.array_equal(result3, expected3), 'BoolArr ^ uids should match BoolArr.uids ^ uids'
+
+    # Test symmetry (uids & BoolArr should equal BoolArr & uids)
+    result4 = test_uids & s1.people.female
+    assert np.array_equal(result1, result4), 'Operation should be symmetric'
+
+    # Test that BoolArr & BoolArr still returns BoolArr (existing behavior preserved)
+    result5 = s1.people.female & s1.people.male
+    assert isinstance(result5, ss.BoolArr), 'BoolArr & BoolArr should still return BoolArr'
+
+    # Test that in-place operations raise error
+    with pytest.raises(NotImplementedError):
+        bool_copy = s1.people.female.asnew()
+        bool_copy &= test_uids
+
     o.s1 = s1
     o.s2 = s2
 
