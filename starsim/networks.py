@@ -255,6 +255,7 @@ class Network(Route):
 
     def update_results(self):
         """ Store the number of edges in the network """
+        super().update_results()
         self.results['n_edges'][self.ti] = len(self)
         return
 
