@@ -927,6 +927,11 @@ class PrenatalNet(Network):
     The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
     """
 
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        ss.check_requires(sim, ss.Pregnancy)
+        return
+
     def step(self):
         # Adding/removing edges is managed by ss.Pregnancy
         pass
@@ -956,6 +961,11 @@ class PostnatalNet(DynamicNetwork):
         super().__init__(**kwargs)
         self.define_pars(dur=dur)
         self.update_pars(pars, **kwargs)
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        ss.check_requires(sim, ss.Pregnancy)
         return
 
     def add_pairs(self, mother_uids=None, infant_uids=None):

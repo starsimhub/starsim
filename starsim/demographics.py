@@ -877,8 +877,6 @@ class Pregnancy(Demographics):
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
             self.n_births_this_step += len(newborns)    # += to handle burn-in
             self.process_newborns(newborns)             # Process newborns
-            self.set_breastfeeding(mothers)             # Set breastfeeding states
-            self.update_postnatal_networks()         # Update transmission networks
 
         # Figure out who conceives, set prognoses, and make embryos
         self.set_rel_sus()                              # Update rel_sus
