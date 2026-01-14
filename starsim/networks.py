@@ -918,72 +918,51 @@ class MSMNet(SexualNetwork):
         return
 
 
-class MaternalNet(DynamicNetwork):
+
+class PrenatalNet(Network):
     """
-    Base class for maternal transmission
-    Use PrenatalNet and PostnatalNet to capture transmission in different phases
+    Prenatal transmission network
+
+    Although edges change over time, the edges are managed via ss.Pregnancy as pregnancies start and finish.
+    The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
     """
-    def __init__(self, **kwargs):
-        """
-        Initialized empty and filled with pregnancies throughout the simulation
-        """
-        super().__init__(**kwargs)
-        self.meta.start = ss_int  # Add maternal-specific keys to meta
-        self.meta.end = ss_int
-        self.prenatal = True
-        self.postnatal = False
-        return
 
     def step(self):
+        # Adding/removing edges is managed by ss.Pregnancy
+        pass
+
+    def add_pairs(self, mother_uids=None, unborn_uids=None):
+        n = len(mother_uids) if mother_uids is not None else 0
+        if n:
+            self.append(p1=mother_uids, p2=unborn_uids, beta=np.ones(n))
+        return n
+
+class MaternalNet(PrenatalNet):
+    """ TEMP - for backwards compatibility"""
+    pass
+
+class PostnatalNet(DynamicNetwork):
+    """
+    Postnatal transmission network
+
+    Edges are created by ss.Pregnancy but automatically end after a fixed duration
+    (whereas the PrenatalNet edges are ended by ss.Pregnancy when the pregnancy ends).
+    """
+
+    def __init__(self, pars=None, dur=None, **kwargs):
         """
-        Set beta to 0 for women who complete duration of transmission
-        Keep connections for now, might want to consider removing
-
-        NB: add_pairs() and end_pairs() are NOT called here; this is done separately
-        in ss.Pregnancy.update_states().
+        :param dur: Default edge duration (constant, ss.Dist)
         """
-        inactive = self.edges.end <= self.ti
-        self.edges.beta[inactive] = 0
-        return
-
-    def end_pairs(self):
-        people = self.sim.people
-        edges = self.edges
-        active = (edges.end > self.ti) & people.alive[edges.p1] & people.alive[edges.p2]
-        for k in self.meta_keys():
-            edges[k] = edges[k][active]
-        return len(active)
-
-    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
-        """ Add connections between pregnant women and their as-yet-unborn babies """
-        if mother_inds is None:
-            return 0
-        else:
-            if start is None:
-                start = np.ones_like(dur)*self.ti
-            n = len(mother_inds)
-            beta = np.ones(n)
-            end = start + sc.promotetoarray(dur)
-            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
-            return n
-
-
-class PrenatalNet(MaternalNet):
-    """ Prenatal transmission network """
-    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.prenatal = True
-        self.postnatal = False
+        self.define_pars(dur=dur)
+        self.update_pars(pars, **kwargs)
         return
 
-
-class PostnatalNet(MaternalNet):
-    """ Postnatal transmission network """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.prenatal = False
-        self.postnatal = True
-        return
+    def add_pairs(self, mother_uids=None, infant_uids=None):
+        n = len(mother_uids) if mother_uids is not None else 0
+        if n:
+            self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
+        return n
 
 
 #%% Mixing pools
