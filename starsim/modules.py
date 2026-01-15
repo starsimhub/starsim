@@ -295,6 +295,11 @@ class Module(Base):
         if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
             errormsg = f'Cannot modify attribute "{attr}"; locked attributes are {sc.strjoin(self._locked_attrs)}.\n'
             errormsg += 'If you really mean to do this, use module.setattribute() or set module._lock_attrs = False'
+            try:
+                if isinstance(getattr(self, attr),ss.Arr) and len(getattr(self, attr)) == len(value):
+                    errormsg += f'\nOften this error can be resolved by replacing `self.{attr} = x` with `self.{attr}[:] = x`'
+            except:
+                pass
             raise AttributeError(errormsg)
         else:
             super().__setattr__(attr, value)
@@ -541,6 +546,9 @@ class Module(Base):
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
+            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in {state.name for state in self.auto_state_list}:
+                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the BoolState "{result.name[2:]}".'
+                raise ValueError(msg)
             self.results += result
         return
 

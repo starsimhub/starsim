@@ -160,6 +160,41 @@ def test_products(do_plot=False):
 
     return sim
 
+class StatefulVx(ss.Vx):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.define_states(
+            ss.BoolState('vaccinated'),  # True if a routine vaccine was ever delivered to this agent
+        ),
+        return
+
+    def administer(self, people, uids):
+        self.vaccinated[uids] = True
+        self.results.n_vaccinated[self.ti] = len(uids)
+
+
+@sc.timer()
+def test_two_products():
+
+    pars = sc.objdict(
+        n_agents = 5e3,
+        start = 2000,
+        stop = 2020,
+        diseases = 'sis',
+        networks = 'random',
+    )
+
+    my_vaccine = StatefulVx()
+    vx1 = ss.routine_vx(name='vx1', product = my_vaccine, prob=0.1,start_year = 2005, eligibility=lambda sim: (~sim.people.statefulvx.vaccinated).uids)
+    vx2 = ss.routine_vx(name='vx2', product = my_vaccine, prob=0.2,start_year = 2005, eligibility=lambda sim: (~sim.people.statefulvx.vaccinated).uids)
+    sim = ss.Sim(pars, interventions=[vx1,vx2])
+    sim.run()
+
+    assert (sim.people.vx1.vaccinated.sum()+sim.people.vx2.vaccinated.sum()) == sim.people.statefulvx.vaccinated.sum()
+
+    return sim
+
+
 
 if __name__ == '__main__':
     T = sc.timer()
@@ -168,5 +203,6 @@ if __name__ == '__main__':
     leaky  = test_sir_vaccine_leaky()
     a_or_n = test_sir_vaccine_all_or_nothing()
     prod   = test_products(do_plot=do_plot)
+    prod2   = test_two_products()
 
     T.toc()
