@@ -14,7 +14,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
 - Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
-
+- Renamed arguments to `MaternalNet.add_pairs()` from `mother_inds` to `mother_uids` and `unborn_inds` to `unborn_uids` to clarify that these inputs should be agent UIDs.
+- Removed `dur` argument to `MaternalNet.add_pairs()` as the edge lifespan is now managed by the `Pregnancy` module with edges being removed upon delivery.
 
 ## Version 3.0.4 (2025-10-22)
 - Added additional calibration examples for workflows to re-identify known parameters.
