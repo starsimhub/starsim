@@ -1028,8 +1028,7 @@ class BreastfeedingNet(ss.PostnatalNet):
 
         return
 
-    def update_breastfeeding(self, uids):
-        stopping = uids[self.ti >= self.ti_stop_breastfeed[uids]]
-        if np.any(stopping):
-            self.breastfeeding[stopping] = False
-        return stopping
+    def end_pairs(self):
+        # TODO - potentially modify DynamicNetwork.end_pairs() to return the UIDs removed to facilitate
+        self.breastfeeding[self.ti >= self.ti_stop_breastfeed] = False
+        return super().end_pairs()

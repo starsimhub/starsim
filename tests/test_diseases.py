@@ -211,11 +211,11 @@ def test_mtct():
 
 if __name__ == '__main__':
     do_plot = True
-    # sc.options(interactive=do_plot)
-    # sir   = test_sir()
-    # s1,s2 = test_sir_epi()
-    # sis   = test_sis()
-    # ncd   = test_ncd()
-    # gavi  = test_gavi()
-    # multi = test_multidisease()
+    sc.options(interactive=do_plot)
+    sir   = test_sir()
+    s1,s2 = test_sir_epi()
+    sis   = test_sis()
+    ncd   = test_ncd()
+    gavi  = test_gavi()
+    multi = test_multidisease()
     mtct  = test_mtct()

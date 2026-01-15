@@ -38,7 +38,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     demographics += death
 
     # Make people
-    n_agents = 50_000
+    n_agents = 5_000
     nga_pop_1995 = 106819805
     age_data = pd.read_csv(datadir/'nigeria_age.csv')
     ppl = ss.People(n_agents, age_data=age_data)
@@ -192,7 +192,7 @@ def test_pregnancy():
     sc.heading('Testing pregnancy module')
 
     sim = ss.Sim(
-        n_agents=1e6,
+        n_agents=10e3,
         demographics=[
             ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
             ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
@@ -268,12 +268,12 @@ def test_pregnancy():
 
 if __name__ == '__main__':
     do_plot = True
-    # sc.options(interactive=do_plot)
-    # s1 = test_nigeria(do_plot=do_plot)
-    # s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
-    # s3 = test_constant_pop(do_plot=do_plot)
-    # s4 = test_module_adding()
-    # s5 = test_aging()
+    sc.options(interactive=do_plot)
+    s1 = test_nigeria(do_plot=do_plot)
+    s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
+    s3 = test_constant_pop(do_plot=do_plot)
+    s4 = test_module_adding()
+    s5 = test_aging()
     s6 = test_pregnancy()
     plt.show()
 
