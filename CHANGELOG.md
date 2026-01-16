@@ -4,12 +4,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.1.0 (2026-XX-XX)
 - (Planned changes to how pregnancy/births tracks UIDs of mothers and children)
-- Previously `People.(module_name).(state_name)` could be used to access module states (e.g., `people.sir.infected`). However, this mechanism fails to pass on property attributes that are dynamically computed (e.g., `SIR.infectious`). Now `People.(module_name)` simply contains a reference to the module, so all attributes can be accessed. 
+- Previously `People.(module_name).(state_name)` could be used to access module states (e.g., `people.sir.infected`). However, this mechanism fails to pass on property attributes that are dynamically computed (e.g., `SIR.infectious`). Now `People.(module_name)` simply contains a reference to the module, so all attributes can be accessed.
 - Add support for operating on `ss.BaseArr` with time parameters (e.g., multiplying a state by a duration)
-- Add support for creating an `ss.dur` from an `ss.BaseArr` 
+- Add support for creating an `ss.dur` from an `ss.BaseArr`
 - Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
 - Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
+- Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. *GitHub info*: PR [#1098](https://github.com/starsimhub/starsim/issues/1098)
 
 
 ## Version 3.0.5 (2025-10-22).
