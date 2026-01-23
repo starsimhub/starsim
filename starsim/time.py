@@ -90,13 +90,16 @@ class DateArray(np.ndarray):
         except: return ss.date
 
     def __add__(self, other):
-        cls = self.__class__
-        if self.is_date:
-            return cls([np.vectorize()])
-            np.vectorize(ss.date.__add__)(other)
+        return NotImplemented # Delegate to the other class - typically Date__radd__ or Dur.__radd__
 
     def __radd__(self, other):
         return self.__add__(other)
+
+    def __sub__(self, other):
+        return NotImplemented # Delegate to other class
+
+    def __rsub__(self, other):
+        return self.__sub__(other)
 
     def is_(self, which):
         """ Checks if the DateArray is comprised of ss.date objects """
