@@ -428,10 +428,9 @@ class date(pd.Timestamp):
     def __rsub__(self, other):
         if isinstance(other, np.ndarray):
             return other.__class__([o-self for o in other]) # TODO: is this right?
-        elif isinstance(other, ss.datedur):
-            return ss.date(other.value - self.to_pandas())
         elif isinstance(other, ss.dur):
-            return ss.date(other.years - self.to_year())
+            # As this is __rsub__, this corresponds to `other - self` hence this operation is not permitted
+            raise TypeError("Cannot subtract a date from a duration")
         elif isinstance(other, (ss.date, dt.date, dt.datetime)):
             if not isinstance(other, pd.Timestamp):
                 other = pd.Timestamp(other)
