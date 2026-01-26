@@ -386,7 +386,10 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
         elif isinstance(other, ss.dur):
-            return date(self.to_year() + other.years)
+            if other.is_array:
+                return ss.DateArray(np.vectorize(self.__add__)(other))
+            else:
+                return date(self.to_year() + other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
@@ -407,7 +410,10 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.datedur):
             return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.dur):
-            return ss.date(self.to_year() - other.years)
+            if other.is_array:
+                return ss.DateArray(np.vectorize(self.__sub__)(other))
+            else:
+                return ss.date(self.to_year() - other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return ss.date(self.to_pandas() - other)
         elif isinstance(other, (ss.date, pd.Timestamp, dt.date, dt.datetime)):
@@ -978,7 +984,10 @@ class dur(TimePar):
         if isinstance(other, dur):
             return self.__class__(self.value + self.to_base(other))
         elif isinstance(other, date): # If adding to a date, convert to years
-            return date.from_year(other.to_year() + self.years)
+            if self.is_array:
+                return DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
+            else:
+                return date.from_year(other.to_year() + self.years)
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
