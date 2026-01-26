@@ -11,7 +11,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
 - Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
 - Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. *GitHub info*: PR [#1098](https://github.com/starsimhub/starsim/issues/1098)
-
+- Fixed/added operators `+` and `-` for `ss.DateArray` when operating on `ss.date` and `ss.dur` instances
 
 ## Version 3.0.5 (2025-10-22).
 - Fixed bugs with products being added/stepped multiple times.
