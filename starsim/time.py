@@ -989,15 +989,23 @@ class dur(TimePar):
 
     def __sub__(self, other):
         if isinstance(other, dur):
-            out = self.__class__(self.value - self.to_base(other))
-        elif isinstance(other, date):
-            return date.from_year(other.to_year() - self.years)
+            return self.__class__(self.value - self.to_base(other))
+        elif isinstance(other, date) :
+            raise TypeError('Cannot subtract a date from a duration')
+        elif isinstance(other, DateArray):
+            if other.is_date:
+                raise TypeError('Cannot subtract a date from a duration')
+            else:
+                return DateArray(np.vectorize(self.__sub__)(other))
         else:
             out = self.__class__(self.value - other)
             if sc.isnumber(out) and out < 0:
                 warnmsg = f'Subtracting {self} and {other} yields {out}. Durations are rarely negative; are you sure this is intentional?'
                 ss.warn(warnmsg)
-        return out
+            return out
+
+    def __rsub__(self, other):
+        return (-self) + other
 
     def __mul__(self, other):
         if isinstance(other, Rate):
