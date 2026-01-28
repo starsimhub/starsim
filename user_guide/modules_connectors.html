@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.26">
+<meta name="generator" content="quarto-1.8.27">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -75,9 +75,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-7ac2f9da8c2617a4fdd15004b4601015.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
@@ -1057,35 +1057,35 @@ Syphilis infections - With connector: 392.0</code></pre>
 <span id="cb5-111"><a href="#cb5-111" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  HIV: </span><span class="sc">{</span>hiv_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>hiv_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span>
 <span id="cb5-112"><a href="#cb5-112" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  Syphilis: </span><span class="sc">{</span>syph_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>syph_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fd98e00d850&gt;:
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36cd60&gt;:
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numba/core/compiler_machinery.py", line 393, in resolve_requires
-    ret = set()
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/llvmlite/ir/instructions.py", line 139, in descr_arg
+    return '{0} {1}{2}'.format(a.type, attrs, a.get_reference())
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fd98e00e020&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36c5e0&gt;:
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numba/core/compiler_machinery.py", line 393, in resolve_requires
-    ret = set()
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/llvmlite/ir/instructions.py", line 139, in descr_arg
+    return '{0} {1}{2}'.format(a.type, attrs, a.get_reference())
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fd98e00d850&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36cd60&gt;:
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numba/core/compiler_machinery.py", line 393, in resolve_requires
-    ret = set()
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fd98e00e020&gt;:
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
+    def __init__(self, func, args, kwds):Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36cd60&gt;
+:
+BufferError: Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
+
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36c5e0&gt;    :
+def __init__(self, func, args, kwds):
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numba/core/compiler_machinery.py", line 393, in resolve_requires
-    ret = set()
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fd98e00d850&gt;:
+BufferError  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
+:     def __init__(self, func, args, kwds):Existing exports of data: object cannot be re-sized
+BufferError
+: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36c5e0&gt;Existing exports of data: object cannot be re-sized:
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numba/core/compiler_machinery.py", line 393, in resolve_requires
-    ret = set()
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fd98e00e020&gt;:
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numba/core/compiler_machinery.py", line 393, in resolve_requires
-    ret = set()
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
+
+    def __init__(self, func, args, kwds):
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1568,7 +1568,7 @@ Connector + treatment:
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.5 (2025-11-27).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.6 (2026-01-28).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

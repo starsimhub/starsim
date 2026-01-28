@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.26">
+<meta name="generator" content="quarto-1.8.27">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -75,9 +75,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-7ac2f9da8c2617a4fdd15004b4601015.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-597958c53c93a607afca12fd375c57ed.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
@@ -717,20 +717,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sims)</span>
 <span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>msim.plot(legend<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd526fb060&gt;:
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff4fd7e4810&gt;:
 Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
-    out = unpickling_func(*args)
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
+    @classmethod
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd527ebf10&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d77c4a0&gt;:
 Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
-    out = unpickling_func(*args)
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd5253bd80&gt;:
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 261, in _rebuild
-    out = unpickling_func(*args)
+  File "/home/runner/work/starsim/starsim/starsim/time.py", line 705, in _check_dist_arg
+    @classmethod
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -757,125 +752,135 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sims)</span>
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>msim.plot(legend<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd52420400&gt;:
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d5bc130&gt;:
 Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-    self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    _token = _extobj_contextvar.set(extobj)
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd52238d10&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d46cf90&gt;:
 Traceback (most recent call last):
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd52420400&gt;  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    _token = _extobj_contextvar.set(extobj)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d46d0d0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d5bc130&gt;_token = _extobj_contextvar.set(extobj)
 :
-    Traceback (most recent call last):
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
+BufferErrorTraceback (most recent call last):
+: Existing exports of data: object cannot be re-sized  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
 
-    BufferErrorself.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps: 
-Existing exports of data: object cannot be re-sizedBufferError
-: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682570&gt;Existing exports of data: object cannot be re-sized
-:
-Traceback (most recent call last):
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd52238d10&gt;:
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Traceback (most recent call last):
-      File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps    
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsBufferError
-: BufferErrorExisting exports of data: object cannot be re-sized: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682c50&gt;
-:
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682570&gt;:
-    Traceback (most recent call last):
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-
-    self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsBufferError: 
-BufferErrorExisting exports of data: object cannot be re-sized: 
-Existing exports of data: object cannot be re-sizedException ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682e80&gt;
-:
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682c50&gt;Traceback (most recent call last):
-:
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-        self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsself.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
-
-BufferErrorBufferError: : Existing exports of data: object cannot be re-sizedExisting exports of data: object cannot be re-sized
-
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682e80&gt;:
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683420&gt;Traceback (most recent call last):
-:
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Traceback (most recent call last):
-      File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
-    BufferErrorself.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps: 
-Existing exports of data: object cannot be re-sizedBufferError
-: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683420&gt;Existing exports of data: object cannot be re-sized:
+    Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d1b20&gt;_token = _extobj_contextvar.set(extobj):
 
 Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516836a0&gt;    :
-Traceback (most recent call last):
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
+BufferError  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+:     Existing exports of data: object cannot be re-sized_token = _extobj_contextvar.set(extobj)
 
-    BufferErrorself.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps: 
-Existing exports of data: object cannot be re-sized
-BufferErrorException ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516836a0&gt;: :
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d46cf90&gt;BufferError: :
 Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
 
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683920&gt;    :
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsTraceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d22f0&gt;    :
+_token = _extobj_contextvar.set(extobj)Traceback (most recent call last):
 
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-BufferError    self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps: 
-Existing exports of data: object cannot be re-sized
-BufferErrorException ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683920&gt;: :
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+BufferError    : _token = _extobj_contextvar.set(extobj)Existing exports of data: object cannot be re-sized
+
+BufferErrorException ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d46d0d0&gt;: :
 Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
 
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683ba0&gt;    :
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsTraceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2570&gt;    :
+_token = _extobj_contextvar.set(extobj)Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
 
-BufferError  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-    : self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsExisting exports of data: object cannot be re-sized
+    BufferError: _token = _extobj_contextvar.set(extobj)Existing exports of data: object cannot be re-sized
 
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683ba0&gt;BufferError: :
-Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
-
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683e20&gt;    :
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsTraceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-
-    BufferErrorself.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps: 
-Existing exports of data: object cannot be re-sizedBufferError
-: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683e20&gt;Existing exports of data: object cannot be re-sized:
+BufferError: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d1b20&gt;Existing exports of data: object cannot be re-sized:
 
 Traceback (most recent call last):
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516cc0e0&gt;:
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d29d0&gt;  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+:
 Traceback (most recent call last):
-      File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps    
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumpsBufferError
+      File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+_token = _extobj_contextvar.set(extobj)    
+_token = _extobj_contextvar.set(extobj)BufferError
 : BufferErrorExisting exports of data: object cannot be re-sized: 
-Existing exports of data: object cannot be re-sizedException ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516cc0e0&gt;:
+Existing exports of data: object cannot be re-sizedException ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d22f0&gt;
+:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2bb0&gt;Traceback (most recent call last):
+:
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+Traceback (most recent call last):
+      File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+_token = _extobj_contextvar.set(extobj)
+    BufferError_token = _extobj_contextvar.set(extobj): 
+Existing exports of data: object cannot be re-sizedBufferError
+: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2570&gt;Existing exports of data: object cannot be re-sized:
 
 Traceback (most recent call last):
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516cc360&gt;  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2d90&gt;    :
+_token = _extobj_contextvar.set(extobj)Traceback (most recent call last):
+
+BufferError  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+:     Existing exports of data: object cannot be re-sized_token = _extobj_contextvar.set(extobj)
+
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d29d0&gt;BufferError: :
+Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+
+    Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2980&gt;_token = _extobj_contextvar.set(extobj):
+Traceback (most recent call last):
+
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+BufferError:     Existing exports of data: object cannot be re-sized_token = _extobj_contextvar.set(extobj)
+
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2bb0&gt;BufferError:
+: Traceback (most recent call last):
+Existing exports of data: object cannot be re-sized
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d3100&gt;:
+Traceback (most recent call last):
+_token = _extobj_contextvar.set(extobj)  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+
+    BufferError_token = _extobj_contextvar.set(extobj): 
+Existing exports of data: object cannot be re-sizedBufferError: 
+Existing exports of data: object cannot be re-sizedException ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2d90&gt;
+:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d32e0&gt;Traceback (most recent call last):
+:
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+Traceback (most recent call last):
+      File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+_token = _extobj_contextvar.set(extobj)    
+_token = _extobj_contextvar.set(extobj)BufferError
+: Existing exports of data: object cannot be re-sizedBufferError
+: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2980&gt;Existing exports of data: object cannot be re-sized:
+
+Traceback (most recent call last):
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d34c0&gt;  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
 :
     Traceback (most recent call last):
-self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-
-    BufferErrorself.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps: 
+_token = _extobj_contextvar.set(extobj)
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+BufferError    : _token = _extobj_contextvar.set(extobj)Existing exports of data: object cannot be re-sized
+BufferError
+: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d3100&gt;:
 Existing exports of data: object cannot be re-sized
-BufferErrorException ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516cc360&gt;: :
-Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
-
-  File "/home/runner/work/starsim/starsim/starsim/distributions.py", line 477, in jump
-    self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    _token = _extobj_contextvar.set(extobj)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d32e0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    _token = _extobj_contextvar.set(extobj)
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d34c0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/numpy/_core/_ufunc_config.py", line 484, in inner
+    _token = _extobj_contextvar.set(extobj)
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -933,93 +938,120 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 <span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>    msim <span class="op">=</span> ss.MultiSim(sims)</span>
 <span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>    msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd52420400&gt;:
+<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d5bc130&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd52238d10&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d46cf90&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682570&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53d46d0d0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682c50&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d1b20&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51682e80&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d22f0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683420&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2570&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516836a0&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d29d0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683920&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2bb0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683ba0&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2d90&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51683e20&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d2980&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516cc0e0&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d3100&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516cc360&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d32e0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd516ccdb0&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d34c0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51e8e390&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53c8d21b0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51dac040&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53cfd4540&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51c95d50&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53cec1800&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51b87bf0&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53cdb6a70&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51ce0e50&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53ccaff60&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd51a959e0&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53cbad350&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd519d5080&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff53cab6610&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd50f45440&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff52f917a60&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7fcd50d34e00&gt;:
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff52f824db0&gt;:
 Traceback (most recent call last):
-  File "&lt;frozen importlib._bootstrap_external&gt;", line 511, in _compile_bytecode
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
+BufferError: Existing exports of data: object cannot be re-sized
+Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7ff52f824fe0&gt;:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/bokeh/settings.py", line 382, in __init__
+    def __init__(self, name: str, env_var: str | None = None, default: Unset[T] = _Unset,
 BufferError: Existing exports of data: object cannot be re-sized</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
@@ -1537,7 +1569,7 @@ BufferError: Existing exports of data: object cannot be re-sized</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.5 (2025-11-27).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.0.6 (2026-01-28).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
