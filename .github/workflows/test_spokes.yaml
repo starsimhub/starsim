@@ -29,12 +29,12 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.12']
+        python-version: ['3.14']
     runs-on: ${{ matrix.os }}
     
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -44,7 +44,7 @@ jobs:
         run: pip install -e .
 
       - name: Check out HPVsim
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: 'starsimhub/stisim'
           path: 'stisim'
@@ -75,12 +75,12 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.12']
+        python-version: ['3.14']
     runs-on: ${{ matrix.os }}
     
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -90,7 +90,7 @@ jobs:
         run: pip install -e .
 
       - name: Check out HPVsim
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: 'fpsim/fpsim'
           path: 'fpsim'

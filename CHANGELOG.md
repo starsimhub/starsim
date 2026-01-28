@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-## Version 3.1.0 (2025-XX-XX)
+## Version 3.1.0 (2026-XX-XX)
 - Added new functionality to the `Pregnancy` module:
     - renamed `make_p_fertility()` -> `make_p_conceive()`
     - added variable durations of pregnancies and tracking of pre-term birth outcomes
@@ -14,6 +14,15 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
 - Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
+
+
+## Version 3.0.6 (2026-01-28)
+- Fixed bug in plot_cpu() when using pandas v3
+
+
+## Version 3.0.5 (2025-10-22).
+- Fixed bugs with products being added/stepped multiple times.
+- Fixed bug that prevented `Result.resample(output_form='series')` from being used.
 
 
 ## Version 3.0.4 (2025-10-22)

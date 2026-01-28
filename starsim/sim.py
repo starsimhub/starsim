@@ -117,7 +117,7 @@ class Sim(ss.Base):
         """ List all products across interventions; not an ndict like the other module types """
         products = []
         for intv in self.interventions():
-            if intv.has_product:
+            if intv.has_product and intv.product not in products:
                 products.append(intv.product)
         return products
 
