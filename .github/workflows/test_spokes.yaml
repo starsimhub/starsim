@@ -29,7 +29,7 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.12']
+        python-version: ['3.14']
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -61,7 +61,7 @@ jobs:
         working-directory: ./stisim/tests
         run: pytest test_*.py --durations=0 --junitxml=stisim-test-results.xml # Run actual tests
       - name: Upload test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: test_results
@@ -75,7 +75,7 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.12']
+        python-version: ['3.14']
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -107,7 +107,7 @@ jobs:
         working-directory: ./fpsim/tests
         run: pytest test_*.py --durations=0 --junitxml=fpsim-test-results.xml # Run actual tests
       - name: Upload test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: test_results
