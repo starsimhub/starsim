@@ -451,7 +451,7 @@ class Loop:
         pcts = df.percent.values
 
         if x.max() < 1:
-            x *= 1e3
+            x = x*1e3
             unit = 'ms'
         else:
             unit = 's'

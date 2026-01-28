@@ -13,6 +13,10 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. *GitHub info*: PR [#1098](https://github.com/starsimhub/starsim/issues/1098)
 
 
+## Version 3.0.6 (2026-01-28)
+- Fixed bug in plot_cpu() when using pandas v3
+
+
 ## Version 3.0.5 (2025-10-22).
 - Fixed bugs with products being added/stepped multiple times.
 - Fixed bug that prevented `Result.resample(output_form='series')` from being used.

@@ -322,7 +322,7 @@ class date(pd.Timestamp):
         else:
             if day_round:
                 date = sc.yeartodate(year)
-                timestamp = pd.Timestamp(date).round('d')
+                timestamp = pd.Timestamp(date).round('D')
             else:
                 year_start = pd.Timestamp(year=int(year), month=1, day=1)
                 year_end = pd.Timestamp(year=int(year) + 1, month=1, day=1)
