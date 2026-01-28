@@ -965,8 +965,17 @@ class PostnatalNet(DynamicNetwork):
         return
 
     def add_pairs(self, mother_uids=None, infant_uids=None):
+        # Note that the mother_uids should contain repeat entries if a mother has multiple infants
         n = len(mother_uids) if mother_uids is not None else 0
+        p = self.pars
+
         if n:
+            if isinstance(p.dur, ss.Dist):
+                dur = p.dur.rvs(mother_uids)
+            elif p.dur is None:
+                dur = np.full(n,fill_value=np.inf)
+            else:
+                dur = np.full(n, p.dur/self.t.dt)
             self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
         return n
 
