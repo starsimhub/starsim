@@ -965,6 +965,52 @@ class PostnatalNet(DynamicNetwork):
             self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
         return n
 
+class BreastfeedingNet(ss.PostnatalNet):
+
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(pars=pars, **kwargs)
+
+        # Breastfeeding parameters
+        self.define_pars(
+            dur = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)),  # Only relevant if postnatal transmission used...
+            p_breastfeed = ss.bernoulli(p=1),  # Probability of breastfeeding, set to 1 for consistency
+        )
+        self.update_pars(pars, **kwargs)
+
+        # Breastfeeding states
+        self.define_states(
+            ss.BoolState('breastfeeding', label='Breastfeeding'),  # Currently breastfeeding
+            ss.FloatArr('dur_breastfeed', label='Duration of breastfeeding'),  # Duration of breastfeeding
+            ss.FloatArr('ti_stop_breastfeed', label='Time breastfeeding stops'),  # Time breastfeeding stops
+            ss.BoolState('breastfed', label='Breastfed'),  # Property of newborn indicating whether they were breastfed
+        )
+
+        return
+
+    def add_pairs(self, mother_uids=None, newborn_uids=None):
+        """
+        Set breastfeeding durations for new mothers. This method could be extended to
+        store duration of exclusive breastfeeding, partial breastfeeding, etc, and these
+        properties could be stored with the infant for tracking other health outcomes.
+        """
+        if mother_uids is not None:
+            will_breastfeed = self.pars.p_breastfeed.filter(mother_uids)
+            self.breastfeeding[will_breastfeed] = True  # For the mother
+            self.dur_breastfeed[will_breastfeed] = self.pars.dur.rvs(will_breastfeed)
+            self.ti_stop_breastfeed[will_breastfeed] = self.ti + self.dur_breastfeed[will_breastfeed]
+
+            # When setting breastfeeding status for the infant, we need to ensure that multiple newborns to the same
+            # mother will all have the flag set, while older siblings will not be affected.
+            parents = self.sim.people.parent[newborn_uids] # This may not be the same as mother_uids if a mother has multiple children
+            gets_breastfed = newborn_uids[np.isin(parents, will_breastfeed)]
+            self.breastfed[gets_breastfed] = True  # For the infant
+
+        return
+
+    def end_pairs(self):
+        # TODO - potentially modify DynamicNetwork.end_pairs() to return the UIDs removed to facilitate
+        self.breastfeeding[self.ti >= self.ti_stop_breastfeed] = False
+        return super().end_pairs()
 
 #%% Mixing pools
 
