@@ -706,27 +706,14 @@ class Pregnancy(Demographics):
         """ Set states for newborn agents """
         return
 
-    # def process_postpartum(self, uids):
-    #     """
-    #     Handle postpartum updates for new mothers
-    #     Examples of what could go in here include:
-    #      - adjusting susceptibility to pregnancy via lactational amenorrhea (LAM),
-    #        postpartum anovulation, and postpartum sexual abstinence or reduced activity
-    #      - adjusting care-seeking behavior
-    #      - adjusting susceptibility to other infections
-    #     """
-    #     return
-
-
-
     def progress_pregnancies(self):
         """
         Update pregnant women. The method can be enhanced by derived classes that add logic
         for miscarriage, termination, maternal death, etc.
         """
-        # Update gestational clock for ongoing pregnancies that aren't going to deliver on this timestep
+        # Update gestational clock for ongoing pregnancies
         if self.pregnant.any():
-            will_deliver = (self.ti_delivery > self.ti) & (self.ti_delivery < (self.ti+1)) & self.pregnant
+            will_deliver = self.pregnant & (self.ti_delivery <= self.ti)
             self.gestation[self.pregnant] += self.dt.weeks
             # For those delivering, set to the gestational age at delivery, which may be part-way through the timestep
             self.gestation[will_deliver] = (self.t.dt*self.dur_pregnancy[will_deliver]).weeks
