@@ -85,14 +85,21 @@ class Dists(sc.prettyobj):
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
 
-        # Do not look for distributions in the people states, since they shadow the "real" states
-        skip = dict(
-            ids=id(sim.people._states) if sim is not None else None,
-            keys='module',
-        )
+        if isinstance(obj, ss.Sim):
+            # Sim-specific prioritization of where to look for dists
+            skip_ids = set()
+            skip_ids.add(id(sim))
+            skip_ids.add(id(sim.people._states))
+            skip_ids.add(id(sim.people)) # Skip checking people on the first round
+            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+            skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
+            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already foun
+            skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
+            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+        else:
+            dists = sc.search(obj, type=Dist, flatten=True)
+        self.dists = dists
 
-        # Find and initialize the distributions
-        self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.init(trace=trace, seed=base_seed, sim=sim, force=force)
@@ -1389,6 +1396,12 @@ class bernoulli(Dist):
     def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
+
+    def __bool__(self):
+        if callable(self.pars.p) or np.any(sc.promotetoarray(self.pars.p) > 0):
+            return True
+        else:
+            return False
 
     def make_rvs(self):
         rvs = self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)

@@ -14,6 +14,9 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
 - Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
+- Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
+- Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. 
+- Fixed bug when multiplying an `ss.prob` by an array of durations
 
 
 ## Version 3.0.6 (2026-01-28)
