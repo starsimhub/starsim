@@ -11,7 +11,7 @@ ss_int = ss.dtypes.int
 _ = None
 
 
-__all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy', 'BreastfeedingNet']
+__all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy']
 
 
 class Demographics(ss.Module):
