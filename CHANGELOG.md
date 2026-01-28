@@ -19,7 +19,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Fixed bug when multiplying an `ss.prob` by an array of durations
 - Renamed arguments to `MaternalNet.add_pairs()` from `mother_inds` to `mother_uids` and `unborn_inds` to `unborn_uids` to clarify that these inputs should be agent UIDs.
 - Removed `dur` argument to `MaternalNet.add_pairs()` as the edge lifespan is now managed by the `Pregnancy` module with edges being removed upon delivery.
-
+- Removed `Network.prenatal` and `Network.postnatal` attributes as these are now tracked by type (`ss.Pre)
 
 ## Version 3.0.6 (2026-01-28)
 - Fixed bug in plot_cpu() when using pandas v3

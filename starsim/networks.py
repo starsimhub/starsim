@@ -75,8 +75,6 @@ class Network(Route):
             p2 = ss_int,
             beta = ss_float,
         )
-        self.prenatal = False  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
-        self.postnatal = False  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
         self.edges = sc.objdict()
