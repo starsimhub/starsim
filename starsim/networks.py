@@ -457,7 +457,7 @@ class SexualNetwork(DynamicNetwork):
 
 # %% Specific instances of networks
 __all__ += ['StaticNet', 'RandomNet', 'RandomSafeNet', 'MFNet', 'MSMNet',
-            'MaternalNet', 'PrenatalNet', 'PostnatalNet']
+            'MaternalNet', 'PrenatalNet', 'PostnatalNet', 'BreastfeedingNet']
 
 
 class StaticNet(Network):
