@@ -30,7 +30,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(datadir/'nigeria_asfr.csv')
-        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1)  # 4/3
+        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1, burnin=False)  # 4/3
         demographics += pregnancy
 
     death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
@@ -187,6 +187,85 @@ def test_aging():
     return s3 # Most interesting sim
 
 
+def test_pregnancy():
+    """ Test pregnancy module"""
+    sc.heading('Testing pregnancy module')
+
+    sim = ss.Sim(
+        n_agents=10e3,
+        demographics=[
+            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ],
+        dur=ss.years(10),
+        rand_seed=1,
+        dt=ss.years(1/12),
+        networks=ss.PrenatalNet(),
+    )
+    sim.run()
+
+    # Tests
+    # Check that everyone in their 2nd trimester conceived 3-6 months ago
+    tri2 = sim.demographics.pregnancy.tri2_uids
+    conception_time = sim.people.pregnancy.ti_pregnant[tri2]
+    time_since_conception = ss.years((sim.ti - conception_time) * sim.t.dt_year).weeks
+    assert np.all((time_since_conception >= 13) & (time_since_conception <= 26)), 'Some people in 2nd trimester did not conceive 3-6 months ago'
+
+    # Check that gestational clock is present for all pregnant women, and that they all have a defined delivery time
+    pregnant = sim.people.pregnancy.pregnant
+    assert np.all(~np.isnan(sim.people.pregnancy.gestation[pregnant])), 'Some pregnant people are missing gestational clock'
+    ti_delivery = sim.people.pregnancy.ti_delivery[pregnant]
+    assert np.all(~np.isnan(ti_delivery)), 'Some people with ti_pregnant are missing ti_delivery'
+
+    # Check that gestational clock is NaN for all non-pregnant women
+    assert np.all(np.isnan(sim.people.pregnancy.gestation[~sim.people.pregnancy.pregnant])), 'Some non-pregnant people have gestational clock'
+    sc.printgreen('✓ Pregnancy duration tests passed')
+
+    # Check that everyone born during the sim has gestational age at birth recorded
+    born_during_sim = (sim.people.age < sim.pars.dur.years) & (sim.people.age > sim.t.dt.years)
+    aa = (sim.people.pregnancy.gestation_at_birth.isnan & born_during_sim).uids
+    assert len(aa) == 0, f'Some babies born during the sim are missing gestational age at birth: {len(aa)} found'
+
+    # Check that the mean gestational age at birth is approximately 40 weeks
+    mean_gestation = np.nanmean(sim.people.pregnancy.gestation_at_birth[born_during_sim])
+    assert np.isclose(mean_gestation, 40, atol=2), f'Mean gestational age at birth is {mean_gestation:.1f} weeks, expected ~40 weeks'
+
+    # Check that the mean gestational age of babies born to women <18 or >35 is shorter than otherwise
+    mothers = sim.people.parent[born_during_sim]
+    age_of_mother = sim.people.age[mothers]
+    age_of_mother_at_birth = age_of_mother - sim.people.age[born_during_sim]
+    key_cohorts = {
+        '<18': age_of_mother_at_birth < 18,
+        '>35': age_of_mother_at_birth > 35,
+        '18-35': (age_of_mother_at_birth >= 18) & (age_of_mother_at_birth <= 35),
+    }
+    mean_results = {k:None for k in key_cohorts.keys()}
+    ptb_results = {k:None for k in key_cohorts.keys()}
+    for k, v in key_cohorts.items():
+        these_mothers_idx = v.nonzero()[-1]
+        babies_of_these_mothers = born_during_sim.uids[these_mothers_idx]
+        mean_gestation = sim.people.pregnancy.gestation_at_birth[babies_of_these_mothers].mean()
+        print(f'Mean gestational age at birth for mothers aged {k} at birth: {mean_gestation:.1f} weeks')
+        mean_results[k] = mean_gestation
+        n = len(babies_of_these_mothers)
+        print(f'  {n} babies born to mothers aged {k} at birth')
+        # Share of babies born preterm (<37 weeks)
+        n_preterm = np.sum(sim.people.pregnancy.gestation_at_birth[babies_of_these_mothers] < 37)
+        preterm_share = n_preterm / n if n > 0 else np.nan
+        print(f'  Preterm births (<37 weeks): {n_preterm} ({preterm_share:.1%})')
+        ptb_results[k] = preterm_share
+
+    # Assertions
+    assert mean_results['<18'] < mean_results['18-35'], '<18 mothers do not have lower gestational age at birth than 18-35 mothers'
+    assert mean_results['>35'] < mean_results['18-35'], '>35 mothers do not have lower gestational age at birth than 18-35 mothers'
+    assert ptb_results['<18'] > ptb_results['18-35'], '<18 mothers do not have higher preterm birth share than 18-35 mothers'
+    assert ptb_results['>35'] > ptb_results['18-35'], '>35 mothers do not have higher preterm birth share than 18-35 mothers'
+
+    sc.printgreen('✓ Gestational age at birth by maternal age tests passed')
+
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -195,4 +274,6 @@ if __name__ == '__main__':
     s3 = test_constant_pop(do_plot=do_plot)
     s4 = test_module_adding()
     s5 = test_aging()
+    s6 = test_pregnancy()
     plt.show()
+
