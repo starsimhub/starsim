@@ -23,7 +23,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.0.2 (2025-08-25)
 - Additional minor updates following the v3 release.
-- Cleans up some of the logic for convertin rates to probabilities in the demographic modules
+- Cleans up some of the logic for converting rates to probabilities in the demographic modules
 - Adds a `request_removal` method to People, which can be used to remove people from the population for reasons other than death (e.g. migration)
 - Fixes a bug that prevented `ss.prob` from accepting arrays
 - Adds a `year` property to Timelines, so `sim.t.now('year')` can be rewritten as `sim.t.year`
