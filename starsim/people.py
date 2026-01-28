@@ -170,6 +170,51 @@ class People:
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
+    @property
+    def auto_state_list(self):
+        """
+        List of "automatic" states with boolean type (`ss.BoolState`)
+
+        BoolStates automatically generate results like n_alive, n_female, etc.
+        This only includes BoolStates that belong directly to People, not those
+        from modules (which have their own result generation).
+        For a list of all states, see `People.states`.
+        """
+        # Only include BoolStates that belong directly to People, not module states
+        # Module states have combined names like "sir.susceptible" with a dot
+        return [state for key, state in self.states.items()
+                if isinstance(state, ss.BoolState) and '.' not in key]
+
+    def init_results(self):
+        """
+        Initialize results for People; called during `Sim.init_results()`
+
+        By default, People reports on counts for any `ss.BoolState` instances, e.g. if
+        People contains a `ss.BoolState` called 'alive' it will automatically contain a
+        Result for 'n_alive'. For identical behavior that does not automatically
+        generate results, use `ss.BoolArr` instead of `ss.BoolState`.
+
+        This method also creates the standard people-related results like new_deaths,
+        new_emigrants, and cum_deaths.
+        """
+        kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
+        results = []
+
+        # Create results for all BoolStates
+        for state in self.auto_state_list:
+            results.append(ss.Result(f'n_{state.name}', label=state.label, **kw))
+
+        # Add standard people-related results
+        results.extend([
+            ss.Result('new_deaths', label='Deaths', **kw),
+            ss.Result('new_emigrants', label='Emigrants', **kw),
+            ss.Result('cum_deaths', label='Cumulative deaths', **kw),
+        ])
+
+        # Add results to the sim
+        self.sim.results += results
+        return
+
     def add_module(self, module):
         """
         Add a Module to the People instance

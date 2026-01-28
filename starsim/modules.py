@@ -546,6 +546,9 @@ class Module(Base):
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
+            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in {state.name for state in self.auto_state_list}:
+                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the BoolState "{result.name[2:]}".'
+                raise ValueError(msg)
             self.results += result
         return
 

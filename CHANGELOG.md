@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-## Version 3.1.0 (2025-XX-XX)
+## Version 3.1.0 (2026-XX-XX)
 - Added new functionality to the `Pregnancy` module:
     - renamed `make_p_fertility()` -> `make_p_conceive()`
     - added variable durations of pregnancies and tracking of pre-term birth outcomes
@@ -14,8 +14,21 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
 - Changed date plotting to convert `ss.date` and `ss.DateArray` values to years internally. This facilitates adding extra data to plots when the data is in years.
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
+- Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
+- Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. 
+- Fixed bug when multiplying an `ss.prob` by an array of durations
 - Renamed arguments to `MaternalNet.add_pairs()` from `mother_inds` to `mother_uids` and `unborn_inds` to `unborn_uids` to clarify that these inputs should be agent UIDs.
 - Removed `dur` argument to `MaternalNet.add_pairs()` as the edge lifespan is now managed by the `Pregnancy` module with edges being removed upon delivery.
+
+
+## Version 3.0.6 (2026-01-28)
+- Fixed bug in plot_cpu() when using pandas v3
+
+
+## Version 3.0.5 (2025-10-22).
+- Fixed bugs with products being added/stepped multiple times.
+- Fixed bug that prevented `Result.resample(output_form='series')` from being used.
+
 
 ## Version 3.0.4 (2025-10-22)
 - Added additional calibration examples for workflows to re-identify known parameters.
