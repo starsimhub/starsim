@@ -980,7 +980,27 @@ class PostnatalNet(DynamicNetwork):
         return n
 
 class BreastfeedingNet(PostnatalNet):
+    """
+    Network to track breastfeeding status
 
+    `BreastfeedingNet` tracks breastfeeding status between mothers and infants, as
+    an instance of a postpartum process (i.e., a postpartum network). To include breastfeeding
+    in a simulation, add an instance of `BreastfeedingNet` to a `Sim` that contains a `Pregnancy`
+    demographics module.
+
+    **Example**:
+
+        demographics = ss.Pregnancy(fertility_rate=ss.freqperyear(20))
+        sis = ss.SIS(
+            beta={'breastfeeding':[ss.permonth(0.1), 0]}
+            )
+        networks = [ss.BreastfeedingNet()]
+        sim = ss.Sim(diseases=sis, networks=networks, demographics=demographics)
+
+    Transmission along the breastfeeding network is supported if a non-zero beta value is specified
+    per the example above. Set the breastfeeding beta value to `0` to skip transmission for diseases
+    that are not transmitted via breastfeeding.
+    """
     def __init__(self, pars=None, **kwargs):
         super().__init__(pars=pars, **kwargs)
 
