@@ -319,15 +319,10 @@ class Result(ss.BaseArr):
         fig_kw = sc.mergedicts(fig_kw)
         plot_kw = sc.mergedicts(dict(lw=3, alpha=0.8), plot_kw, kwargs)
         fill_kw = sc.mergedicts(dict(alpha=0.1), fill_kw)
-
-        if fig is None:
-            if ax is not None:
-                fig = ax.figure
-            else:
-                fig = plt.figure(**fig_kw)
+        if fig is None and ax is None:
+            fig = plt.figure(**fig_kw)
         if ax is None:
             ax = plt.subplot(111)
-
         if self.timevec is None:
             errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
             raise ValueError(errormsg)
@@ -337,12 +332,14 @@ class Result(ss.BaseArr):
             ax.fill_between(self.timevec, self.low, self.high, **fill_kw)
 
         # Plot results
-        ax.plot(self.timevec, self.values, **plot_kw)
-        ax.set_title(self.full_label)
-        ax.set_xlabel('Time')
+        plt.plot(self.timevec, self.values, **plot_kw)
+        plt.title(self.full_label)
+        plt.xlabel('Time')
         sc.commaticks(ax)
-        if (self.values.min() >= 0) and (ax.get_ylim()[0]<0): # Don't allow axis to go negative if results don't
-            ax.set_ylim(bottom=0)
+        if self.has_dates:
+            sc.dateformatter(ax)
+        if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
+            plt.ylim(bottom=0)
         return ss.return_fig(fig)
 
 

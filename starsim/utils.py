@@ -12,7 +12,7 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'standardize_netkey', 'parse_age_range', 'standardize_data',
+__all__ = ['ndict', 'warn', 'find_contacts', 'standardize_netkey', 'standardize_data',
            'validate_sim_data', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 class ndict(sc.objdict):
@@ -205,49 +205,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
 
 
 # %% Data cleaning and processing
-
-def parse_age_range(age_string) -> tuple:
-    """
-    Parse an age range string into lower and upper bounds
-
-    Example usage:
-
-        >>> ss.parse_age_range("5-9")
-        (5.0,9.0)
-
-    Supported formats are
-        - '5-9'
-        - '5 to 9'
-        - '<5' - which returns (0.0, 5.0)
-        - '95+' - which returns (95.0, np.inf)
-        - '>95' - which returns (95.0, np.inf)
-
-    :param age_string: A string specifying an age range (e.g., '5-9', '5 to 9', '95+')
-    :return: A tuple with (lower, upper) bound values.
-    """
-    age_string = age_string.strip().lower()
-
-    if "+" in age_string:  # Handle "95+"
-        age_lower = float(age_string.split("+")[0])
-        age_upper = np.inf
-    elif "-" in age_string:  # Handle "5-9"
-        age_lower = float(age_string.split("-")[0])
-        age_upper = float(age_string.split("-")[1])
-    elif age_string.startswith('<'):
-        age_upper = float(age_string[1:])
-        age_lower = 0.0
-    elif age_string.startswith('>'):
-        age_upper = np.inf
-        age_lower = float(age_string[1:])
-    else:  # Handle "5 to 9"
-        age_lower = float(age_string.split("to")[0])
-        age_upper = float(age_string.split("to")[1])
-
-    if age_lower < 0 or age_upper < 0:
-        raise Exception('Age bounds cannot be negative')
-
-    return age_lower, age_upper
-
 
 def standardize_netkey(key):
     """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """

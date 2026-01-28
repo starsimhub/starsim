@@ -2,7 +2,6 @@
 Define array-handling classes, including agent states
 """
 # import sys
-import itertools
 import numbers
 import numpy as np
 import numba as nb
@@ -75,9 +74,6 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
         inputs = [self._arr(x) for x in inputs]
         kwargs = {k:self._arr(v) for k,v in kwargs.items()}
-        for x in itertools.chain(inputs, kwargs.values()):
-            if isinstance(x, ss.TimePar):
-                return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
