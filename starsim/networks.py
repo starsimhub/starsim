@@ -75,8 +75,6 @@ class Network(Route):
             p2 = ss_int,
             beta = ss_float,
         )
-        self.prenatal = False  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
-        self.postnatal = False  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
         self.edges = sc.objdict()
@@ -255,6 +253,7 @@ class Network(Route):
 
     def update_results(self):
         """ Store the number of edges in the network """
+        super().update_results()
         self.results['n_edges'][self.ti] = len(self)
         return
 
@@ -458,7 +457,7 @@ class SexualNetwork(DynamicNetwork):
 
 # %% Specific instances of networks
 __all__ += ['StaticNet', 'RandomNet', 'RandomSafeNet', 'MFNet', 'MSMNet',
-            'MaternalNet', 'PrenatalNet', 'PostnatalNet']
+            'MaternalNet', 'PrenatalNet', 'PostnatalNet', 'BreastfeedingNet']
 
 
 class StaticNet(Network):
@@ -918,73 +917,135 @@ class MSMNet(SexualNetwork):
         return
 
 
-class MaternalNet(DynamicNetwork):
+
+class PrenatalNet(Network):
     """
-    Base class for maternal transmission
-    Use PrenatalNet and PostnatalNet to capture transmission in different phases
+    Prenatal transmission network
+
+    Although edges change over time, the edges are managed via ss.Pregnancy as pregnancies start and finish.
+    The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
     """
-    def __init__(self, **kwargs):
-        """
-        Initialized empty and filled with pregnancies throughout the simulation
-        """
-        super().__init__(**kwargs)
-        self.meta.start = ss_int  # Add maternal-specific keys to meta
-        self.meta.end = ss_int
-        self.prenatal = True
-        self.postnatal = False
-        return
 
     def step(self):
-        """
-        Set beta to 0 for women who complete duration of transmission
-        Keep connections for now, might want to consider removing
+        # Adding/removing edges is managed by ss.Pregnancy
+        pass
 
-        NB: add_pairs() and end_pairs() are NOT called here; this is done separately
-        in ss.Pregnancy.update_states().
+    def add_pairs(self, mother_uids=None, unborn_uids=None):
+        n = len(mother_uids) if mother_uids is not None else 0
+        if n:
+            self.append(p1=mother_uids, p2=unborn_uids, beta=np.ones(n))
+        return n
+
+class MaternalNet(PrenatalNet):
+    """ TEMP - for backwards compatibility"""
+    pass
+
+class PostnatalNet(DynamicNetwork):
+    """
+    Network to track postnatal processes
+
+    This network automatically has edges added between mothers and infants upon birth if
+    a `Pregnancy` module is present in the simulation. The edges persist until the specified
+    duration has elapsed, at which point they are automatically removed. This allows
+    different `PostnatalNet` instances have different postnatal periods specific to
+    what is being modelled. Transmission along this network is possible if a beta
+    value >0 is specified. Otherwise, transmission will be skipped.
+
+    By default, the postnatal duration is based on the maternal UID and would be the same
+    for all infants of that mother, although derived classes could modify this behavior.
+    """
+
+    def __init__(self, pars=None, dur=None, **kwargs):
         """
-        inactive = self.edges.end <= self.ti
-        self.edges.beta[inactive] = 0
+        :param dur (`ss.dur` or `ss.Dist`): Edge duration i.e., postpartum period for this module. If not provided, the postpartum edges will not automatically be removed unless deaths occur (but could otherwise be removed externally)
+        """
+        super().__init__(**kwargs)
+        self.define_pars(dur=dur)
+        self.update_pars(pars, **kwargs)
+        return
+
+    def add_pairs(self, mother_uids=None, infant_uids=None):
+        # Note that the mother_uids should contain repeat entries if a mother has multiple infants
+        n = len(mother_uids) if mother_uids is not None else 0
+        p = self.pars
+
+        if n:
+            if isinstance(p.dur, ss.Dist):
+                dur = p.dur.rvs(mother_uids)
+            elif p.dur is None:
+                dur = np.full(n,fill_value=np.inf)
+            else:
+                dur = np.full(n, p.dur/self.t.dt)
+            self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
+        return n
+
+class BreastfeedingNet(PostnatalNet):
+    """
+    Network to track breastfeeding status
+
+    `BreastfeedingNet` tracks breastfeeding status between mothers and infants, as
+    an instance of a postpartum process (i.e., a postpartum network). To include breastfeeding
+    in a simulation, add an instance of `BreastfeedingNet` to a `Sim` that contains a `Pregnancy`
+    demographics module.
+
+    **Example**:
+
+        demographics = ss.Pregnancy(fertility_rate=ss.freqperyear(20))
+        sis = ss.SIS(
+            beta={'breastfeeding':[ss.permonth(0.1), 0]}
+            )
+        networks = [ss.BreastfeedingNet()]
+        sim = ss.Sim(diseases=sis, networks=networks, demographics=demographics)
+
+    Transmission along the breastfeeding network is supported if a non-zero beta value is specified
+    per the example above. Set the breastfeeding beta value to `0` to skip transmission for diseases
+    that are not transmitted via breastfeeding.
+    """
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(pars=pars, **kwargs)
+
+        # Breastfeeding parameters
+        self.define_pars(
+            dur = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)),
+            p_breastfeed = ss.bernoulli(p=1),  # Probability of breastfeeding
+        )
+        self.update_pars(pars, **kwargs)
+
+        # Breastfeeding states
+        self.define_states(
+            ss.BoolState('breastfeeding', label='Breastfeeding'),  # Currently breastfeeding
+            ss.FloatArr('dur_breastfeed', label='Duration of breastfeeding'),  # Duration of breastfeeding
+            ss.FloatArr('ti_stop_breastfeed', label='Time breastfeeding stops'),  # Time breastfeeding stops
+            ss.BoolState('breastfed', label='Breastfed'),  # Property of newborn indicating whether they were breastfed
+        )
+
+        return
+
+    def add_pairs(self, mother_uids=None, newborn_uids=None):
+        """
+        Set breastfeeding durations for new mothers. This method could be extended to
+        store duration of exclusive breastfeeding, partial breastfeeding, etc, and these
+        properties could be stored with the infant for tracking other health outcomes.
+        """
+        super().add_pairs(mother_uids, newborn_uids)
+        if mother_uids is not None:
+            will_breastfeed = self.pars.p_breastfeed.filter(mother_uids)
+            self.breastfeeding[will_breastfeed] = True  # For the mother
+            self.dur_breastfeed[will_breastfeed] = self.pars.dur.rvs(will_breastfeed)
+            self.ti_stop_breastfeed[will_breastfeed] = self.ti + self.dur_breastfeed[will_breastfeed]
+
+            # When setting breastfeeding status for the infant, we need to ensure that multiple newborns to the same
+            # mother will all have the flag set, while older siblings will not be affected.
+            parents = self.sim.people.parent[newborn_uids] # This may not be the same as mother_uids if a mother has multiple children
+            gets_breastfed = newborn_uids[np.isin(parents, will_breastfeed)]
+            self.breastfed[gets_breastfed] = True  # For the infant
+
         return
 
     def end_pairs(self):
-        people = self.sim.people
-        edges = self.edges
-        active = (edges.end > self.ti) & people.alive[edges.p1] & people.alive[edges.p2]
-        for k in self.meta_keys():
-            edges[k] = edges[k][active]
-        return len(active)
-
-    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
-        """ Add connections between pregnant women and their as-yet-unborn babies """
-        if mother_inds is None:
-            return 0
-        else:
-            if start is None:
-                start = np.ones_like(dur)*self.ti
-            n = len(mother_inds)
-            beta = np.ones(n)
-            end = start + sc.promotetoarray(dur)
-            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
-            return n
-
-
-class PrenatalNet(MaternalNet):
-    """ Prenatal transmission network """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.prenatal = True
-        self.postnatal = False
-        return
-
-
-class PostnatalNet(MaternalNet):
-    """ Postnatal transmission network """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.prenatal = False
-        self.postnatal = True
-        return
-
+        # TODO - potentially modify DynamicNetwork.end_pairs() to return the UIDs removed to facilitate
+        self.breastfeeding[self.ti >= self.ti_stop_breastfeed] = False
+        return super().end_pairs()
 
 #%% Mixing pools
 

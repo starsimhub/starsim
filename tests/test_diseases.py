@@ -198,10 +198,10 @@ def test_mtct():
         beta = dict(
             random = [ss.permonth(0.005)]*2,
             prenatal = [ss.permonth(0.1), 0],
-            postnatal = [ss.permonth(0.1), 0]
+            breastfeeding = [ss.permonth(0.1), 0]
         )
     )
-    networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
+    networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
     demographics = ss.Pregnancy(fertility_rate=ss.freqperyear(20))
     sim = ss.Sim(dt=ss.month, people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
