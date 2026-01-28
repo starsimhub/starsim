@@ -991,6 +991,7 @@ class BreastfeedingNet(ss.PostnatalNet):
         store duration of exclusive breastfeeding, partial breastfeeding, etc, and these
         properties could be stored with the infant for tracking other health outcomes.
         """
+        super().add_pairs(mother_uids, newborn_uids)
         if mother_uids is not None:
             will_breastfeed = self.pars.p_breastfeed.filter(mother_uids)
             self.breastfeeding[will_breastfeed] = True  # For the mother
