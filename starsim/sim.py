@@ -287,14 +287,14 @@ class Sim(ss.Base):
         return
 
     def init_results(self):
-        """ Create initial results that are present in all simulations """
-        kw = dict(module='Sim', shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
-        self.results += [
-            ss.Result('n_alive',    label='Number alive', **kw),
-            ss.Result('new_deaths', label='Deaths', **kw),
-            ss.Result('new_emigrants', label='Emigrants', **kw),
-            ss.Result('cum_deaths', label='Cumulative deaths', **kw),
-        ]
+        """
+        Create initial results that are present in all simulations
+
+        This method initializes results by calling `People.init_results()` to let
+        People handle its own result initialization (including automatic BoolState results).
+        """
+        # Let People handle its own result initialization
+        self.people.init_results()
         return
 
     def init_data(self, data=None):
