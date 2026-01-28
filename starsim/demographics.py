@@ -871,7 +871,7 @@ class Pregnancy(Demographics):
         self.progress_pregnancies()
 
         # Process deliveries and births
-        mothers = (self.pregnant & (self.ti_delivery >= self.ti) & (self.ti_delivery < (self.ti + 1))).uids
+        mothers = (self.pregnant & (self.ti_delivery <= self.ti)).uids
         if len(mothers):
             newborns = self.find_unborn_children(mothers)
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
