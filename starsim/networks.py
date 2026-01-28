@@ -942,15 +942,22 @@ class MaternalNet(PrenatalNet):
 
 class PostnatalNet(DynamicNetwork):
     """
-    Postnatal transmission network
+    Network to track postnatal processes
 
-    Edges are created by ss.Pregnancy but automatically end after a fixed duration
-    (whereas the PrenatalNet edges are ended by ss.Pregnancy when the pregnancy ends).
+    This network automatically has edges added between mothers and infants upon birth if
+    a `Pregnancy` module is present in the simulation. The edges persist until the specified
+    duration has elapsed, at which point they are automatically removed. This allows
+    different `PostnatalNet` instances have different postnatal periods specific to
+    what is being modelled. Transmission along this network is possible if a beta
+    value >0 is specified. Otherwise, transmission will be skipped.
+
+    By default, the postnatal duration is based on the maternal UID and would be the same
+    for all infants of that mother, although derived classes could modify this behavior.
     """
 
     def __init__(self, pars=None, dur=None, **kwargs):
         """
-        :param dur: Default edge duration (constant, ss.Dist)
+        :param dur (`ss.dur` or `ss.Dist`): Edge duration i.e., postpartum period for this module. If not provided, the postpartum edges will not automatically be removed unless deaths occur (but could otherwise be removed externally)
         """
         super().__init__(**kwargs)
         self.define_pars(dur=dur)
@@ -970,8 +977,8 @@ class BreastfeedingNet(ss.PostnatalNet):
 
         # Breastfeeding parameters
         self.define_pars(
-            dur = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)),  # Only relevant if postnatal transmission used...
-            p_breastfeed = ss.bernoulli(p=1),  # Probability of breastfeeding, set to 1 for consistency
+            dur = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)),
+            p_breastfeed = ss.bernoulli(p=1),  # Probability of breastfeeding
         )
         self.update_pars(pars, **kwargs)
 
