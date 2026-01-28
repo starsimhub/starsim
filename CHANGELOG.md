@@ -2,6 +2,10 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+## Version 3.0.6 (2026-01-28)
+- Fixed bug in plot_cpu() when using pandas v3
+
+
 ## Version 3.0.5 (2025-10-22).
 - Fixed bugs with products being added/stepped multiple times.
 - Fixed bug that prevented `Result.resample(output_form='series')` from being used.
@@ -19,7 +23,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.0.2 (2025-08-25)
 - Additional minor updates following the v3 release.
-- Cleans up some of the logic for convertin rates to probabilities in the demographic modules
+- Cleans up some of the logic for converting rates to probabilities in the demographic modules
 - Adds a `request_removal` method to People, which can be used to remove people from the population for reasons other than death (e.g. migration)
 - Fixes a bug that prevented `ss.prob` from accepting arrays
 - Adds a `year` property to Timelines, so `sim.t.now('year')` can be rewritten as `sim.t.year`
