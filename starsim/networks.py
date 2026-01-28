@@ -979,7 +979,7 @@ class PostnatalNet(DynamicNetwork):
             self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
         return n
 
-class BreastfeedingNet(ss.PostnatalNet):
+class BreastfeedingNet(PostnatalNet):
 
     def __init__(self, pars=None, **kwargs):
         super().__init__(pars=pars, **kwargs)
