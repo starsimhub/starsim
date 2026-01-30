@@ -29,12 +29,12 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.12']
+        python-version: ['3.14']
     runs-on: ${{ matrix.os }}
     
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -44,7 +44,7 @@ jobs:
         run: pip install -e .
 
       - name: Check out HPVsim
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: 'starsimhub/stisim'
           path: 'stisim'
@@ -61,7 +61,7 @@ jobs:
         working-directory: ./stisim/tests
         run: pytest test_*.py --durations=0 --junitxml=stisim-test-results.xml # Run actual tests
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: test_results
@@ -75,12 +75,12 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.12']
+        python-version: ['3.14']
     runs-on: ${{ matrix.os }}
     
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -90,7 +90,7 @@ jobs:
         run: pip install -e .
 
       - name: Check out HPVsim
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: 'fpsim/fpsim'
           path: 'fpsim'
@@ -107,7 +107,7 @@ jobs:
         working-directory: ./fpsim/tests
         run: pytest test_*.py --durations=0 --junitxml=fpsim-test-results.xml # Run actual tests
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: test_results
