@@ -981,71 +981,43 @@ class PostnatalNet(DynamicNetwork):
 
 class BreastfeedingNet(PostnatalNet):
     """
-    Network to track breastfeeding status
+    Network for breastfeeding transmission
 
-    `BreastfeedingNet` tracks breastfeeding status between mothers and infants, as
-    an instance of a postpartum process (i.e., a postpartum network). To include breastfeeding
-    in a simulation, add an instance of `BreastfeedingNet` to a `Sim` that contains a `Pregnancy`
-    demographics module.
-
-    **Example**:
-
-        demographics = ss.Pregnancy(fertility_rate=ss.freqperyear(20))
-        sis = ss.SIS(
-            beta={'breastfeeding':[ss.permonth(0.1), 0]}
-            )
-        networks = [ss.BreastfeedingNet()]
-        sim = ss.Sim(diseases=sis, networks=networks, demographics=demographics)
-
-    Transmission along the breastfeeding network is supported if a non-zero beta value is specified
-    per the example above. Set the breastfeeding beta value to `0` to skip transmission for diseases
-    that are not transmitted via breastfeeding.
+    To model breastfeeding transmission, include this network in a `Sim` that contains a `Pregnancy`
+    module. Edges will be automatically added and removed from this network tracking the breastfeeding
+    status from the `Pregnancy` module.
     """
+
     def __init__(self, pars=None, **kwargs):
         super().__init__(pars=pars, **kwargs)
-
-        # Breastfeeding parameters
-        self.define_pars(
-            dur = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)),
-            p_breastfeed = ss.bernoulli(p=1),  # Probability of breastfeeding
-        )
-        self.update_pars(pars, **kwargs)
-
-        # Breastfeeding states
-        self.define_states(
-            ss.BoolState('breastfeeding', label='Breastfeeding'),  # Currently breastfeeding
-            ss.FloatArr('dur_breastfeed', label='Duration of breastfeeding'),  # Duration of breastfeeding
-            ss.FloatArr('ti_stop_breastfeed', label='Time breastfeeding stops'),  # Time breastfeeding stops
-            ss.BoolState('breastfed', label='Breastfed'),  # Property of newborn indicating whether they were breastfed
-        )
-
+        assert self.pars.dur is None, 'BreastfeedingNet does not accept a `dur` parameter as breastfeeding duration is determined by the Pregnancy module'
         return
+
+    def init_post(self, *args, **kwargs):
+        # Connect the pregnancy module to this network
+        for module in self.sim.module_list:
+            if isinstance(module, ss.Pregnancy):
+                self.pregnancy = module
+                break
+        else:
+            raise RuntimeError('BreastfeedingNet requires a Pregnancy module in the simulation to track breastfeeding status')
+        super().init_post(*args, **kwargs)
 
     def add_pairs(self, mother_uids=None, newborn_uids=None):
         """
-        Set breastfeeding durations for new mothers. This method could be extended to
-        store duration of exclusive breastfeeding, partial breastfeeding, etc, and these
-        properties could be stored with the infant for tracking other health outcomes.
+        Add pairs upon delivery if the mother is breastfeeding the newborn - called via Pregnancy.process_delivery()
         """
-        super().add_pairs(mother_uids, newborn_uids)
         if mother_uids is not None:
-            will_breastfeed = self.pars.p_breastfeed.filter(mother_uids)
-            self.breastfeeding[will_breastfeed] = True  # For the mother
-            self.dur_breastfeed[will_breastfeed] = self.pars.dur.rvs(will_breastfeed)
-            self.ti_stop_breastfeed[will_breastfeed] = self.ti + self.dur_breastfeed[will_breastfeed]
-
-            # When setting breastfeeding status for the infant, we need to ensure that multiple newborns to the same
-            # mother will all have the flag set, while older siblings will not be affected.
-            parents = self.sim.people.parent[newborn_uids] # This may not be the same as mother_uids if a mother has multiple children
-            gets_breastfed = newborn_uids[np.isin(parents, will_breastfeed)]
-            self.breastfed[gets_breastfed] = True  # For the infant
-
+            mask = self.pregnancy.breastfeeding[mother_uids] & self.pregnancy.breastfed[newborn_uids]
+            super().add_pairs(mother_uids[mask], newborn_uids[mask])
         return
 
     def end_pairs(self):
-        # TODO - potentially modify DynamicNetwork.end_pairs() to return the UIDs removed to facilitate
-        self.breastfeeding[self.ti >= self.ti_stop_breastfeed] = False
-        return super().end_pairs()
+        """Remove edges for mothers whose breastfeeding status has changed in the Pregnancy module"""
+        active = self.pregnancy.breastfeeding[self.p1]
+        for k in self.meta_keys():
+            self.edges[k] = self.edges[k][active]
+        return np.count_nonzero(active)
 
 #%% Mixing pools
 
