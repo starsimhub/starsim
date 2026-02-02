@@ -119,38 +119,55 @@ def test_arrs():
     assert np.array_equal(s1.people.age[s1.people.age < 5],s1.people.age[s1.people.age.values < 5])
 
     # Test BoolArr & uids operations
-    test_uids = ss.uids([0, 2, 4, 6, 8])
+    test_bool = s1.people.age > 20
+    test_uids = test_bool.uids
 
-    # Test set intersection (BoolArr & uids)
-    result1 = s1.people.female & test_uids
-    assert isinstance(result1, ss.uids), 'BoolArr & uids should return uids'
-    expected1 = s1.people.female.uids & test_uids
-    assert np.array_equal(result1, expected1), 'BoolArr & uids should match BoolArr.uids & uids'
+    # Standard operations
+    assert np.all(test_bool == test_uids)
+    assert np.all(~(test_bool != test_uids))
+    assert np.array_equal(s1.people.female & test_bool, s1.people.female & test_uids)
+    assert np.array_equal(s1.people.female | test_bool, s1.people.female | test_uids)
+    assert np.array_equal(s1.people.female ^ test_bool, s1.people.female ^ test_uids)
+    assert np.array_equal(test_uids & s1.people.female,  test_uids & s1.people.female.uids)
+    assert np.array_equal(test_uids | s1.people.female,  test_uids | s1.people.female.uids)
+    assert np.array_equal(test_uids ^ s1.people.female,  test_uids ^ s1.people.female.uids)
 
-    # Test set union (BoolArr | uids)
-    result2 = s1.people.female | test_uids
-    assert isinstance(result2, ss.uids), 'BoolArr | uids should return uids'
-    expected2 = s1.people.female.uids | test_uids
-    assert np.array_equal(result2, expected2), 'BoolArr | uids should match BoolArr.uids | uids'
+    # Inplace BoolArr operations
+    a = s1.people.female & test_bool
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b &= test_bool
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
 
-    # Test set symmetric difference (BoolArr ^ uids)
-    result3 = s1.people.female ^ test_uids
-    assert isinstance(result3, ss.uids), 'BoolArr ^ uids should return uids'
-    expected3 = s1.people.female.uids ^ test_uids
-    assert np.array_equal(result3, expected3), 'BoolArr ^ uids should match BoolArr.uids ^ uids'
+    a = s1.people.female & test_uids
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b &= test_uids
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
 
-    # Test symmetry (uids & BoolArr should equal BoolArr & uids)
-    result4 = test_uids & s1.people.female
-    assert np.array_equal(result1, result4), 'Operation should be symmetric'
+    a = s1.people.female | test_bool
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b |= test_bool
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
 
-    # Test that BoolArr & BoolArr still returns BoolArr (existing behavior preserved)
-    result5 = s1.people.female & s1.people.male
-    assert isinstance(result5, ss.BoolArr), 'BoolArr & BoolArr should still return BoolArr'
-
-    # Test that in-place operations raise error
-    with pytest.raises(NotImplementedError):
-        bool_copy = s1.people.female.asnew()
-        bool_copy &= test_uids
+    a = s1.people.female ^ test_uids
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b ^= test_uids
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
 
     o.s1 = s1
     o.s2 = s2
@@ -320,16 +337,16 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl   = test_people()
-    sim1  = test_microsim(do_plot)
-    sim2  = test_ppl_construction(do_plot)
+    # ppl   = test_people()
+    # sim1  = test_microsim(do_plot)
+    # sim2  = test_ppl_construction(do_plot)
     sims  = test_arrs()
-    sims2 = test_deepcopy()
-    sims3 = test_deepcopy_until()
-    sim4  = test_results()
-    sim5  = test_check_requires()
-    objs  = test_mock_objects()
-    mods  = test_custom_imports()
+    # sims2 = test_deepcopy()
+    # sims3 = test_deepcopy_until()
+    # sim4  = test_results()
+    # sim5  = test_check_requires()
+    # objs  = test_mock_objects()
+    # mods  = test_custom_imports()
 
     sc.toc(T)
     plt.show()
