@@ -297,14 +297,21 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def _boolmath(self, op, other=None):
-        """ Helper function for performing basic math operations that return a Boolean, e.g. > """
+    def _boolmath(self, op, other=None, inplace=False):
+        """
+        Helper function for boolean operations
+
+        :param op: A string with the operator e.g., ">", "&" etc.,
+        :param other: The object operating on the BoolArr e.g., Arr, np.ndarray
+        :param inplace: If True, overwrite the current object rather than returning a new one
+        :return: A BoolArr with the result of the operation
+        """
         self_raw = self.raw # Always size N
         both_raw = True # Assume this by default
         if isinstance(other, Arr):
             other_raw = other.raw # Also always size N
         elif isinstance(other, (numbers.Number, type(None))):
-            other_raw = other # If its' a scalar, we don't have to worry about array size
+            other_raw = other # If it's a scalar, we don't have to worry about array size
         elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
             raw_size = self_raw.size
             both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
@@ -341,7 +348,11 @@ class Arr(BaseArr):
             result_raw = np.empty(raw_size, dtype=np.bool_)
             result_raw[inds] = c
 
-        return self.asnew(result_raw, cls=BoolArr, copy=False)
+        if inplace:
+            self.raw[:] = result_raw
+            return self
+        else:
+            return self.asnew(result_raw, cls=BoolArr, copy=False)
 
     def __gt__(self, other): return self._boolmath('>', other)
     def __lt__(self, other): return self._boolmath('<', other)
@@ -594,48 +605,78 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
 
-    def __and__(self, other):
-        """ Bitwise AND: returns BoolArr when operating on arrays, or uids when operating on uids (set intersection) """
+    def __eq__(self, other):
         if isinstance(other, uids):
-            return self.uids & other  # Set intersection
+            out = ~self.raw
+            out[other] = self.raw[other]
+            return self.asnew(out, cls=BoolArr, copy=False)
+        return self._boolmath('==', other)
+
+    def __ne__(self, other):
+        if isinstance(other, uids):
+            return self.__xor__(other)
+        return self._boolmath('!=', other)
+
+    def __and__(self, other):
+        """Bitwise AND
+
+        Supports BoolArr and uids as inputs. If input is uids, it is treated as a BoolArr where
+        the provided indices are True and all other elements are False.
+        """
+        if isinstance(other, uids):
+            out = np.zeros_like(self.raw, dtype=bool)
+            out[other] = self.raw[other]
+            return self.asnew(out, cls=BoolArr, copy=False)
         return self._boolmath('&', other)
 
     def __or__(self, other):
-        """ Bitwise OR: returns BoolArr when operating on arrays, or uids when operating on uids (set union) """
+        """ Bitwise OR"""
         if isinstance(other, uids):
-            return self.uids | other  # Set union
+            out = self.raw.copy()
+            out[other] = True
+            return self.asnew(out, cls=BoolArr, copy=False)
         return self._boolmath('|', other)
 
     def __xor__(self, other):
         """ Bitwise XOR: returns BoolArr when operating on arrays, or uids when operating on uids (set symmetric difference) """
         if isinstance(other, uids):
-            return self.uids ^ other  # Set symmetric difference
+            out = self.raw.copy()
+            out[other] = ~out[other]
+            return self.asnew(out, cls=BoolArr, copy=False)
         return self._boolmath('^', other)
 
     def __invert__(self):
         """ Bitwise NOT """
-        return self._boolmath('~')
+        return self.asnew(~self.raw, cls=BoolArr, copy=False)
+
+    # For BoolArr instances implement true in-place operators that reuse the memory from the underlying array
+    # This allows in-place operations to be used directly on `BoolState` instances without breaking references
 
     def __iand__(self, other):
-        """ In-place AND: not supported with uids to avoid accidental state corruption """
+        """In-place AND"""
         if isinstance(other, uids):
-            errormsg = f'In-place operation &= is not supported between BoolArr and uids. Use explicit assignment instead, or use .uids for set operations.'
-            raise NotImplementedError(errormsg)
-        return self._boolmath('&', other)
+            tmp = self.raw[other]
+            self.raw[:] = False
+            self.raw[other] = tmp
+            return self
+        else:
+            return self._boolmath('&', other, inplace=True)
 
     def __ior__(self, other):
-        """ In-place OR: not supported with uids to avoid accidental state corruption """
+        """ In-place OR """
         if isinstance(other, uids):
-            errormsg = f'In-place operation |= is not supported between BoolArr and uids. Use explicit assignment instead, or use .uids for set operations.'
-            raise NotImplementedError(errormsg)
-        return self._boolmath('|', other)
+            self.raw[other] = True
+            return self
+        else:
+            return self._boolmath('|', other, inplace=True)
 
     def __ixor__(self, other):
-        """ In-place XOR: not supported with uids to avoid accidental state corruption """
+        """ In-place XOR """
         if isinstance(other, uids):
-            errormsg = f'In-place operation ^= is not supported between BoolArr and uids. Use explicit assignment instead, or use .uids for set operations.'
-            raise NotImplementedError(errormsg)
-        return self._boolmath('^', other)
+            self.raw[other] = ~self.raw[other]
+            return self
+        else:
+            return self._boolmath('^', other, inplace=True)
 
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
