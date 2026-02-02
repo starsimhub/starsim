@@ -594,6 +594,7 @@ class IntArr(Arr):
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
     """
+
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, dtype=ss_int, nan=int_nan, **kwargs)
         return
@@ -816,6 +817,13 @@ class uids(np.ndarray):
     def __sub__(self, other): return self.remove(other)
     def __xor__(self, other): return self.xor(other)
     def __invert__(self)    : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+
+    # As the size of a set might change, in-place operations must necessarily return a copy
+    # that gets reassigned to the original variable (the same as inplace operations on an immutable type)
+    def __iand__(self, other): return self.__and__(other)
+    def __ior__(self, other) : return self.__or__(other)
+    def __isub__(self, other): return self.__sub__(other)
+    def __ixor__(self, other): return self.__xor__(other)
 
 
 class BooleanOperationError(NotImplementedError):
