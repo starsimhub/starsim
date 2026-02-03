@@ -2166,23 +2166,36 @@ class FloatYearLocator(matplotlib.ticker.Locator):
     float years before returning them.
     """
 
-    def __init__(self):
+    def __init__(self, unit):
         super().__init__()
-        self._date_locator = matplotlib.dates.AutoDateLocator(minticks=3) # Store an AutoDateLocator instance to calculate the tick locations
+        self._convert_dates = unit == 'ss.date'
+
+        if self._convert_dates:
+            self._date_locator = matplotlib.dates.AutoDateLocator(minticks=3) # Store an AutoDateLocator instance to calculate the tick locations
+            self._float_locator = None
+        else:
+            self._date_locator = None
+            self._float_locator = matplotlib.ticker.AutoLocator() # Store an AutoLocator to handle DateArrays that contain dur values rather than dates
 
     def set_axis(self, axis):
         # When binding this locator to an axis, we also need to bind the internal date locator
         # to a MockAxis instance that performs a conversion from our years to matplotlib values.
         # This instance is internally passed from AutoDateLocator to whichever child class instance
-        # gets used to calculate the tick locations
+        # gets used to calculate the tick locations. The float_locator (for dur values) does not need
+        # to be bound to a MockAxis because the axis is already in the raw units (from `to_human()`)
+        # and therefore we can bind it to the actual axis directly.
         super().set_axis(axis)
-        self._date_locator.set_axis(MockAxis(axis))
+        if self._convert_dates:
+            self._date_locator.set_axis(MockAxis(axis))
+        else:
+            self._float_locator.set_axis(axis)
 
     def __call__(self):
-        vmin, vmax = self._date_locator.axis.get_view_interval()
-        return self.tick_values(vmin, vmax)
 
-    def __call__(self):
+        # If not converting dates, just directly call the underlying float locator
+        if not self._convert_dates:
+            return self.tick_values()
+
         # Get the axis view limits in matplotlib date units
         vmin, vmax = self._date_locator.axis.get_view_interval()
 
@@ -2198,9 +2211,12 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
 
     def tick_values(self, *args, **kwargs):
-        vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
-        yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
-        return np.array(yticks)
+        if self._convert_dates:
+            vticks = self._locator() # The internal date locator will return the tick positions in matplotlib units
+            yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
+            return np.array(yticks)
+        else:
+            return self._locator()
 
 
 class FloatYearFormatter(sc.ScirisDateFormatter):
@@ -2242,7 +2258,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def axisinfo(unit, axis):
         # Specify which locators and formatters should be used if an instance
         # of a registered class is the first one plotted
-        loc = FloatYearLocator()
+        loc = FloatYearLocator(unit)
         fmt = FloatYearFormatter(loc)
         axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
         axis._set_converter = lambda converter: None
@@ -2250,9 +2266,13 @@ class DateConverter(matplotlib.units.ConversionInterface):
 
     @staticmethod
     def default_units(x, axis):
-        # Return a unique unit identifier so matplotlib knows that the axis is
-        # in our custom units
-        return 'ss.date'
+        # Return appropriate unit identifier based on the quantity being plotted - generally only gets called once per plot
+        if isinstance(x, ss.DateArray) and x.is_dur:
+            return 'ss.dur'
+        elif isinstance(x, ss.dur):
+            return 'ss.dur'
+        else:
+            return 'ss.date'
 
     @staticmethod
     def _convert_single(v):
