@@ -447,7 +447,7 @@ class Timeline:
         # Finalize timevecs
         self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray
         self.tivec = np.arange(self.npts) # Simple time indices
-        self.timevec = self.tvec.to_human() # The most human-friendly version of the dates: dates if possible, else floats
+        self.timevec = self.tvec # Mirror tvec for deprecation
 
         # Finally, create a vector of relative times in the sim's time unit (if available)
         try:

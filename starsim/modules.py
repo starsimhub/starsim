@@ -206,7 +206,7 @@ class Base:
     @property
     def timevec(self):
         """ Shortcut to self.t.timevec """
-        try:    return self.t.timevec
+        try:    return self.t.tvec
         except: return None
 
     def copy(self, die=True):

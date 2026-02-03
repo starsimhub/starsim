@@ -2148,6 +2148,11 @@ class MockAxis():
         """
         Return converted axis limits
 
+        The underlying Axis has x-values in float years, which means that `self.axis.get_view_interval()`
+        returns float years. However, we need to return these in matplotlib's date2num units so that
+        we can use AutoDateLocator to compute the tick locations. Therefore MockAxis.get_view_interval()
+        performs this conversion and returns native matplotlib date units.
+
         :return: Tuple with (min, max) axis limits in matplotlib date units (days since 1970-01-01)
         """
         ymin, ymax = self.axis.get_view_interval()
@@ -2179,10 +2184,6 @@ class FloatYearLocator(matplotlib.ticker.Locator):
         self._date_locator.set_axis(MockAxis(axis))
 
     def __call__(self):
-        vmin, vmax = self._date_locator.axis.get_view_interval()
-        return self.tick_values(vmin, vmax)
-
-    def __call__(self):
         # Get the axis view limits in matplotlib date units
         vmin, vmax = self._date_locator.axis.get_view_interval()
 
@@ -2195,7 +2196,6 @@ class FloatYearLocator(matplotlib.ticker.Locator):
             self._date_locator.maxticks = collections.defaultdict(lambda: max(self._date_locator.minticks, int(ax_width / label_width)))
 
         return self.tick_values(vmin, vmax)
-
 
     def tick_values(self, *args, **kwargs):
         vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
@@ -2215,6 +2215,24 @@ class FloatYearFormatter(sc.ScirisDateFormatter):
 
     def format_ticks(self, values, *args, **kwargs):
         return super().format_ticks(values, min_year=-np.inf, max_year=np.inf)
+
+class DurConverter(matplotlib.units.ConversionInterface):
+    """
+    Starsim duration converter interface
+
+    This class converts durations
+    """
+    @staticmethod
+    def _convert_single(v):
+        return float(v)
+
+    @staticmethod
+    def convert(value, unit, axis):
+        if sc.isiterable(value):
+            return [DurConverter._convert_single(v) for v in value]
+        else:
+            return DurConverter._convert_single(value)
+
 
 
 class DateConverter(matplotlib.units.ConversionInterface):
@@ -2242,17 +2260,28 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def axisinfo(unit, axis):
         # Specify which locators and formatters should be used if an instance
         # of a registered class is the first one plotted
-        loc = FloatYearLocator()
-        fmt = FloatYearFormatter(loc)
-        axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
-        axis._set_converter = lambda converter: None
-        return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
+        if unit == 'ss.date':
+            loc = FloatYearLocator()
+            fmt = FloatYearFormatter(loc)
+            axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
+            axis._set_converter = lambda converter: None # Prevent the axis from being changed back to a different converter later
+            return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
+        elif unit == 'ss.dur':
+            # TODO - why does this display UserWarning: This axis already has a converter set and is updating to a potentially incompatible converter
+            axis.set_converter(DurConverter()) # All future quantities plotted on this axis should use our converter
+            axis._set_converter = lambda converter: None # Prevent the axis from being changed back to a different converter later
+            # return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
+        return None
 
     @staticmethod
     def default_units(x, axis):
-        # Return a unique unit identifier so matplotlib knows that the axis is
-        # in our custom units
-        return 'ss.date'
+        # Return appropriate unit identifier based on the quantity being plotted - generally only gets called once per plot
+        if isinstance(x, ss.DateArray) and x.is_dur:
+            return 'ss.dur'
+        elif isinstance(x, ss.dur):
+            return 'ss.dur'
+        else:
+            return 'ss.date'
 
     @staticmethod
     def _convert_single(v):
