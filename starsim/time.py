@@ -2301,23 +2301,31 @@ class DateConverter(matplotlib.units.ConversionInterface):
 
     @staticmethod
     def axisinfo(unit, axis):
-        # Specify which locators and formatters should be used if an instance
-        # of a registered class is the first one plotted
-        loc = FloatYearLocator(unit)
-        fmt = FloatYearFormatter(loc)
+        """
+        Specify which locators and formatters should be used if an instance of a registered class is the first one plotted
+        """
+
+        # If the unit is a date, use our custom locators and formatters to set the tick locations/labels
+        # Otherwise, set them to `None` to use matplotlib's defaults
+        if issubclass(unit, ss.date):
+            loc = FloatYearLocator(unit)
+            fmt = FloatYearFormatter(loc)
+        else:
+            loc = None
+            fmt = None
+
         axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
         axis._set_converter = lambda converter: None
         return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
 
     @staticmethod
     def default_units(x, axis):
-        # Return appropriate unit identifier based on the quantity being plotted - generally only gets called once per plot
         if isinstance(x, ss.DateArray) and x.is_dur:
-            return 'ss.dur'
+            return ss.dur
         elif isinstance(x, ss.dur):
-            return 'ss.dur'
+            return ss.dur
         else:
-            return 'ss.date'
+            return ss.date
 
     @staticmethod
     def _convert_single(v):
@@ -2333,10 +2341,13 @@ class DateConverter(matplotlib.units.ConversionInterface):
         # Handle the conversion of registered class instances to numerical values
         # that will appear as the x-values for any plotted data - this is the crucial
         # part so that plotting float year data is compatible with date data.
-        if sc.isiterable(value):
-            return [DateConverter._convert_single(v) for v in value]
+        if issubclass(unit, ss.dur):
+            return value
         else:
-            return DateConverter._convert_single(value)
+            if sc.isiterable(value):
+                return [DateConverter._convert_single(v) for v in value]
+            else:
+                return DateConverter._convert_single(value)
 
 # Register the converter for the Starsim date classes
 matplotlib.units.registry[date] = DateConverter()
