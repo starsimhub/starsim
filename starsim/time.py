@@ -63,6 +63,7 @@ def approx_compare(a, op='==', b=None, **kwargs):
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
+    # TODO: Consider splitting out into DurArray which could have additional validation/functionality for mixed duration types
     def __new__(cls, arr=None, unit=None):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
@@ -78,6 +79,12 @@ class DateArray(np.ndarray):
                         unit = ss.date
                     except: # Otherwise, assume years
                         unit = ss.years
+            else:
+                if not isinstance(unit, type):
+                    raise TypeError(f'unit must be a type (e.g., `ss.months`), not an instance (e.g., `ss.months(1)` or `ss.month`.')
+                if not issubclass(unit, (ss.date, ss.dur)):
+                    raise TypeError(f'unit must be a subclass of ss.date or ss.dur, {unit} is not derived from one of these parent classes.')
+
             out = arr.view(cls)
             out._unit = unit
             return out
@@ -2250,11 +2257,11 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
     def tick_values(self, *args, **kwargs):
         if self._convert_dates:
-            vticks = self._locator() # The internal date locator will return the tick positions in matplotlib units
+            vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
             yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
             return np.array(yticks)
         else:
-            return self._locator()
+            return self._float_locator()
 
 
 class FloatYearFormatter(sc.ScirisDateFormatter):
