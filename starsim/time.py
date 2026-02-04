@@ -94,10 +94,10 @@ class DateArray(np.ndarray):
     def __reduce__(self):
         # Ensure that the unit is propagated when pickling - works in conjunction with __setstate__ below
         reduced = super().__reduce__()
-        if len(reduced) < 2:
+        if len(reduced) >= 2:
+            return *reduced[0:2], reduced[2] + (self.unit, ), *reduced[3:]
+        else:
             return reduced
-        reconstructor, args, state = reduced[:3]
-        return reconstructor, args, state + (self.unit,), *reduced[3:]
 
     def __setstate__(self, state):
         super().__setstate__(state[:-1])
