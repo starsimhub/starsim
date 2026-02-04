@@ -26,6 +26,7 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
+import pickle
 import datetime
 import numbers
 import collections
@@ -83,6 +84,24 @@ class DateArray(np.ndarray):
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
+
+    def __array_finalize__(self, obj):
+        # Ensure that the unit is propagaged when slicing and copying with dcp
+        if obj is not None:
+            self._unit = getattr(obj, "_unit", ss.date)
+        return
+
+    def __reduce__(self):
+        # Ensure that the unit is propagated when pickling - works in conjunction with __setstate__ below
+        reduced = super().__reduce__()
+        if len(reduced) < 2:
+            return reduced
+        reconstructor, args, state = reduced[:3]
+        return reconstructor, args, state + (self.unit,), *reduced[3:]
+
+    def __setstate__(self, state):
+        super().__setstate__(state[:-1])
+        self._unit = state[-1]
 
     @property
     def unit(self):
