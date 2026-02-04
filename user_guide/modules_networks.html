@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.7.32">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -70,19 +70,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -293,8 +292,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -990,7 +988,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <p>Let’s compare a simple SIR model configured with transmission using a single Mixing Pool to a similar model using a contact network. Mixing pools are not the same as contact networks, so the results are not expected to be identical.</p>
 <div id="0fe5b776" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a mixing pool</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>)) <span class="co"># A single mixing pool</span></span>
@@ -1003,51 +1001,44 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>net, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Contact Network'</span>)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim1, sim2]).run()</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f8739a75670&gt;:
-Traceback (most recent call last):
-  File "/home/runner/work/starsim/starsim/starsim/time.py", line 873, in __new__
-    def __new__(cls, value=None, base=None, **kwargs):
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_networks_files/figure-html/cell-2-output-3.png" width="759" height="566" class="figure-img"></p>
+<p><img src="modules_networks_files/figure-html/cell-2-output-2.png" width="759" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>Each MixingPool has several configuration parameters, including <code>src</code> and <code>dst</code>. The value of these parameters can either be an array of uids, like <code>ss.uids([0,1,2])</code> or a callable function that takes <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> as an argument and returns an array of uids (or a BoolArr) like <code>lambda sim: sim.people.age&lt;10</code>. One helper class we have created is called <a href="../api/networks.html#starsim.networks.AgeGroup" title="0"><code>AgeGroup</code></a>, which takes <code>low</code> and <code>high</code> ages as parameters. This class has some performance advantages when using multiple pools via <a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> through caching.</p>
 <p>While mixing pools do not represent individual agent-to-agent connections, each agent does have an “effective” number of contacts, typically drawn from a Poisson distribution. Individuals retain their number of contacts within each pool for the duration of the simulation. Effective contacts are used on the acquisition sides. On the transmission side, the “average” infection level, called <code>trans</code>, against which susceptible agents are challenged is computed as:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>trans <span class="op">=</span> np.mean(disease.infectious[<span class="va">self</span>.src_uids] <span class="op">*</span> disease.rel_trans[<span class="va">self</span>.src_uids])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>trans <span class="op">=</span> np.mean(disease.infectious[<span class="va">self</span>.src_uids] <span class="op">*</span> disease.rel_trans[<span class="va">self</span>.src_uids])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>And on the acquisition side, each susceptible agent can be thought of as connected to <code>eff_contacts</code> average infectious agents, computed as:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>acq <span class="op">=</span> <span class="va">self</span>.eff_contacts[<span class="va">self</span>.dst_uids] <span class="op">*</span> disease.susceptible[<span class="va">self</span>.dst_uids] <span class="op">*</span> disease.rel_sus[<span class="va">self</span>.dst_uids]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>acq <span class="op">=</span> <span class="va">self</span>.eff_contacts[<span class="va">self</span>.dst_uids] <span class="op">*</span> disease.susceptible[<span class="va">self</span>.dst_uids] <span class="op">*</span> disease.rel_sus[<span class="va">self</span>.dst_uids]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>Ultimately, the acquisition probability for each susceptible agent in <code>dst_uids</code> is computed as</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="va">self</span>.pars.beta <span class="op">*</span> trans <span class="op">*</span> acq</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="va">self</span>.pars.beta <span class="op">*</span> trans <span class="op">*</span> acq</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <p>You can see the <code>beta</code> parameter here, which is another pool parameter and should use <code>ss.timeprob()</code> to automatically adjust for time units. Mixing pools do not currently use the <code>beta</code> parameters configured in individual disease modules.</p>
 <div id="e98e700a" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sir'</span>, <span class="co"># Use this pool only for SIR, not other diseases (HIV in this example)</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> <span class="kw">lambda</span> sim: sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>, <span class="co"># Infection sources will be agents under age 15</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> ss.AgeGroup(low<span class="op">=</span><span class="dv">15</span>, high<span class="op">=</span><span class="va">None</span>), <span class="co"># Here demonstrating the AgeGroup class, identical to lambda sim: sim.people.age &gt;= 15</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> ss.poisson(lam<span class="op">=</span><span class="dv">5</span>), <span class="co"># Contacts will be poisson distributed with a mean of 5</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>[<span class="st">'sir'</span>, <span class="st">'sis'</span>], networks<span class="op">=</span>mp) <span class="co"># Two diseases, but only "sir" will have transmission</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sir'</span>, <span class="co"># Use this pool only for SIR, not other diseases (HIV in this example)</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> <span class="kw">lambda</span> sim: sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>, <span class="co"># Infection sources will be agents under age 15</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> ss.AgeGroup(low<span class="op">=</span><span class="dv">15</span>, high<span class="op">=</span><span class="va">None</span>), <span class="co"># Here demonstrating the AgeGroup class, identical to lambda sim: sim.people.age &gt;= 15</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> ss.poisson(lam<span class="op">=</span><span class="dv">5</span>), <span class="co"># Contacts will be poisson distributed with a mean of 5</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>[<span class="st">'sir'</span>, <span class="st">'sis'</span>], networks<span class="op">=</span>mp) <span class="co"># Two diseases, but only "sir" will have transmission</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.10 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.02 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.02 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.03 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.04 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.05 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -1061,60 +1052,60 @@ Figure(896x672)</code></pre>
 </div>
 <p><a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> (plural) allows you to configure multiple individual <a href="../api/networks.html#starsim.networks.MixingPool" title="0"><code>MixingPool</code></a> pools. This first example shows how to do age mixing. Like <a href="../api/networks.html#starsim.networks.MixingPool" title="0"><code>MixingPool</code></a>, <a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> also takes <code>src</code> and <code>dst</code>, however each of these parameters must be a dictionary with key specifying the name of each group and value as in the singlular mixing pool proving the uids by a callable function or list of uids.</p>
 <div id="c4037c42" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>bin_size <span class="op">=</span> <span class="dv">5</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>lows <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">80</span>, bin_size)</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>highs <span class="op">=</span> sc.cat(lows[<span class="dv">1</span>:], <span class="dv">100</span>)</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>groups <span class="op">=</span> ss.ndict([ss.AgeGroup(low<span class="op">=</span>low, high<span class="op">=</span>high) <span class="cf">for</span> low, high <span class="kw">in</span> <span class="bu">zip</span>(lows, highs)])</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>n_groups <span class="op">=</span> <span class="bu">len</span>(groups)</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Let's create a random contact matrix. If using contact matrices from Prem et al., put data here.</span></span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>cm <span class="op">=</span> np.random.random((n_groups, n_groups)) <span class="op">+</span> <span class="dv">3</span><span class="op">*</span>np.diag(np.random.rand(n_groups))</span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'The first axis (rows) of the contact matrix is the SOURCE group'</span>)</span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'The second axis (columns) of the contact matrix is the DESTINATION group'</span>)</span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>plt.imshow(cm)</span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>mps <span class="op">=</span> ss.MixingPools(</span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> cm,</span>
-<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> groups,</span>
-<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> groups,</span>
-<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Track new infections by age using an Analyzer, you'll learn about these in a subsequent tutorial</span></span>
-<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> InfectionsByAge(ss.Analyzer):</span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, bins, <span class="op">**</span>kwargs):</span>
-<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.bins <span class="op">=</span> bins</span>
-<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
-<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_post(<span class="va">self</span>):</span>
-<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_post()</span>
-<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(<span class="va">self</span>.bins)<span class="op">-</span><span class="dv">1</span>))</span>
-<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
-<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>(): <span class="cf">return</span></span>
-<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, :] <span class="op">=</span> np.histogram(<span class="va">self</span>.sim.people.age[new_inf], bins<span class="op">=</span><span class="va">self</span>.bins)[<span class="dv">0</span>]</span>
-<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>):</span>
-<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>        fig, ax <span class="op">=</span> plt.subplots()</span>
-<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>        ax.set_prop_cycle(<span class="st">'color'</span>, plt.cm.nipy_spectral(np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="bu">len</span>(<span class="va">self</span>.bins))))</span>
-<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i, (b1, b2) <span class="kw">in</span> <span class="bu">enumerate</span>(<span class="bu">zip</span>(<span class="va">self</span>.bins[:<span class="op">-</span><span class="dv">1</span>], <span class="va">self</span>.bins[<span class="dv">1</span>:])):</span>
-<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>            ax.plot(<span class="va">self</span>.timevec, <span class="va">self</span>.new_cases[:,i], label<span class="op">=</span><span class="ss">f'Age </span><span class="sc">{</span>b1<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>b2<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>        ax.legend()<span class="op">;</span> ax.set_xlabel(<span class="st">'Year'</span>)<span class="op">;</span> ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
-<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> InfectionsByAge(np.concatenate([lows, [<span class="dv">1000</span>]]))</span>
-<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
-<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dur<span class="op">=</span><span class="dv">5</span>, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">4</span>, n_agents<span class="op">=</span><span class="dv">1000</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb10-53"><a href="#cb10-53" aria-hidden="true" tabindex="-1"></a>sim.analyzers[<span class="dv">0</span>].plot()</span>
-<span id="cb10-54"><a href="#cb10-54" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'↑ The default age distribution is uniform, so the 75+ group contains many more people than the other age groups, explaining the larger number of new infections.'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>bin_size <span class="op">=</span> <span class="dv">5</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>lows <span class="op">=</span> np.arange(<span class="dv">0</span>, <span class="dv">80</span>, bin_size)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>highs <span class="op">=</span> sc.cat(lows[<span class="dv">1</span>:], <span class="dv">100</span>)</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>groups <span class="op">=</span> ss.ndict([ss.AgeGroup(low<span class="op">=</span>low, high<span class="op">=</span>high) <span class="cf">for</span> low, high <span class="kw">in</span> <span class="bu">zip</span>(lows, highs)])</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>n_groups <span class="op">=</span> <span class="bu">len</span>(groups)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Let's create a random contact matrix. If using contact matrices from Prem et al., put data here.</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>cm <span class="op">=</span> np.random.random((n_groups, n_groups)) <span class="op">+</span> <span class="dv">3</span><span class="op">*</span>np.diag(np.random.rand(n_groups))</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'The first axis (rows) of the contact matrix is the SOURCE group'</span>)</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'The second axis (columns) of the contact matrix is the DESTINATION group'</span>)</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>plt.imshow(cm)</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>mps <span class="op">=</span> ss.MixingPools(</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> cm,</span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> groups,</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> groups,</span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Track new infections by age using an Analyzer, you'll learn about these in a subsequent tutorial</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> InfectionsByAge(ss.Analyzer):</span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, bins, <span class="op">**</span>kwargs):</span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.bins <span class="op">=</span> bins</span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_post(<span class="va">self</span>):</span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_post()</span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(<span class="va">self</span>.bins)<span class="op">-</span><span class="dv">1</span>))</span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>(): <span class="cf">return</span></span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, :] <span class="op">=</span> np.histogram(<span class="va">self</span>.sim.people.age[new_inf], bins<span class="op">=</span><span class="va">self</span>.bins)[<span class="dv">0</span>]</span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>):</span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>        fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>        ax.set_prop_cycle(<span class="st">'color'</span>, plt.cm.nipy_spectral(np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="bu">len</span>(<span class="va">self</span>.bins))))</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i, (b1, b2) <span class="kw">in</span> <span class="bu">enumerate</span>(<span class="bu">zip</span>(<span class="va">self</span>.bins[:<span class="op">-</span><span class="dv">1</span>], <span class="va">self</span>.bins[<span class="dv">1</span>:])):</span>
+<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a>            ax.plot(<span class="va">self</span>.timevec, <span class="va">self</span>.new_cases[:,i], label<span class="op">=</span><span class="ss">f'Age </span><span class="sc">{</span>b1<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>b2<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a>        ax.legend()<span class="op">;</span> ax.set_xlabel(<span class="st">'Year'</span>)<span class="op">;</span> ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
+<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> InfectionsByAge(np.concatenate([lows, [<span class="dv">1000</span>]]))</span>
+<span id="cb9-49"><a href="#cb9-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-50"><a href="#cb9-50" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
+<span id="cb9-51"><a href="#cb9-51" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dur<span class="op">=</span><span class="dv">5</span>, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">4</span>, n_agents<span class="op">=</span><span class="dv">1000</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb9-52"><a href="#cb9-52" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb9-53"><a href="#cb9-53" aria-hidden="true" tabindex="-1"></a>sim.analyzers[<span class="dv">0</span>].plot()</span>
+<span id="cb9-54"><a href="#cb9-54" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'↑ The default age distribution is uniform, so the 75+ group contains many more people than the other age groups, explaining the larger number of new infections.'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>The first axis (rows) of the contact matrix is the SOURCE group
 The second axis (columns) of the contact matrix is the DESTINATION group
@@ -1137,60 +1128,60 @@ The second axis (columns) of the contact matrix is the DESTINATION group
 </div>
 <p>Mixing pools work well with properties other than age. Here’s an example that mixes by socio-economic status (SES).</p>
 <div id="291469a2" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define SES states</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>ses <span class="op">=</span> sc.objdict(low<span class="op">=</span><span class="dv">0</span>, mid<span class="op">=</span><span class="dv">1</span>, high<span class="op">=</span><span class="dv">2</span>)</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create 5,000 people adding 50% LOW, 30% MID, and 20% HIGH SES</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>ses_arr <span class="op">=</span> ss.FloatArr(<span class="st">'ses'</span>, default<span class="op">=</span>ss.choice(a<span class="op">=</span>ses.values(), p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.3</span>, <span class="fl">0.2</span>]))</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="dv">5_000</span>, extra_states<span class="op">=</span>ses_arr)</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the mixing pools, note that the contact matrix need not be symmetric</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>mps <span class="op">=</span> ss.MixingPools(</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> {k: <span class="kw">lambda</span> sim, s<span class="op">=</span>v: ss.uids(sim.people.ses <span class="op">==</span> s) <span class="cf">for</span> k,v <span class="kw">in</span> ses.items()},</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> {k: <span class="kw">lambda</span> sim, s<span class="op">=</span>v: ss.uids(sim.people.ses <span class="op">==</span> s) <span class="cf">for</span> k,v <span class="kw">in</span> ses.items()[:<span class="op">-</span><span class="dv">1</span>]}, <span class="co"># People in the HIGH group have no route to acquire new infections, for demonstration purposes here</span></span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># src on rows (1st dimension), dst on cols (2nd dimension)</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> np.array([</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">2.50</span>, <span class="fl">0.00</span>], <span class="co"># low→low,  low→mid</span></span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">0.05</span>, <span class="fl">1.75</span>], <span class="co"># mid→low,  mid→mid</span></span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">0.00</span>, <span class="fl">0.15</span>], <span class="co"># high→low, high→mid</span></span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    ]),</span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Create an analyzer to track results by SES group</span></span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> New_Infections_By_SES(ss.Analyzer):</span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(ses)))</span>
-<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
-<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>():</span>
-<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
-<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> value <span class="kw">in</span> ses.values():</span>
-<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, value] <span class="op">=</span> np.count_nonzero(new_inf <span class="op">&amp;</span> (<span class="va">self</span>.sim.people.ses<span class="op">==</span>value))</span>
-<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> New_Infections_By_SES()</span>
-<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> seeding(<span class="va">self</span>, sim, uids):</span>
-<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.zeros(<span class="bu">len</span>(uids))</span>
-<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a>    high_ses <span class="op">=</span> ss.uids(sim.people.ses <span class="op">==</span> ses.high)</span>
-<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>    p[high_ses] <span class="op">=</span> <span class="fl">0.1</span> <span class="co"># Seed infections into 10% of SES HIGH</span></span>
-<span id="cb12-41"><a href="#cb12-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
-<span id="cb12-42"><a href="#cb12-42" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>seeding), beta<span class="op">=</span>ss.peryear(<span class="fl">0.2</span>)) <span class="co"># The probability of being selected as a seed is determined on a per-agent basis by the above 'seeding' function</span></span>
-<span id="cb12-43"><a href="#cb12-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-44"><a href="#cb12-44" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, dur<span class="op">=</span><span class="dv">35</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb12-45"><a href="#cb12-45" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb12-46"><a href="#cb12-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-47"><a href="#cb12-47" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
-<span id="cb12-48"><a href="#cb12-48" aria-hidden="true" tabindex="-1"></a>new_cases <span class="op">=</span> sim.analyzers[<span class="dv">0</span>].new_cases</span>
-<span id="cb12-49"><a href="#cb12-49" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key,value <span class="kw">in</span> ses.items():</span>
-<span id="cb12-50"><a href="#cb12-50" aria-hidden="true" tabindex="-1"></a>    ax.plot(sim.results.timevec, new_cases[:,value], label<span class="op">=</span>key)</span>
-<span id="cb12-51"><a href="#cb12-51" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
-<span id="cb12-52"><a href="#cb12-52" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'Year'</span>)</span>
-<span id="cb12-53"><a href="#cb12-53" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
-<span id="cb12-54"><a href="#cb12-54" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define SES states</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ses <span class="op">=</span> sc.objdict(low<span class="op">=</span><span class="dv">0</span>, mid<span class="op">=</span><span class="dv">1</span>, high<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create 5,000 people adding 50% LOW, 30% MID, and 20% HIGH SES</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>ses_arr <span class="op">=</span> ss.FloatArr(<span class="st">'ses'</span>, default<span class="op">=</span>ss.choice(a<span class="op">=</span>ses.values(), p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.3</span>, <span class="fl">0.2</span>]))</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="dv">5_000</span>, extra_states<span class="op">=</span>ses_arr)</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the mixing pools, note that the contact matrix need not be symmetric</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>mps <span class="op">=</span> ss.MixingPools(</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> {k: <span class="kw">lambda</span> sim, s<span class="op">=</span>v: ss.uids(sim.people.ses <span class="op">==</span> s) <span class="cf">for</span> k,v <span class="kw">in</span> ses.items()},</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> {k: <span class="kw">lambda</span> sim, s<span class="op">=</span>v: ss.uids(sim.people.ses <span class="op">==</span> s) <span class="cf">for</span> k,v <span class="kw">in</span> ses.items()[:<span class="op">-</span><span class="dv">1</span>]}, <span class="co"># People in the HIGH group have no route to acquire new infections, for demonstration purposes here</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># src on rows (1st dimension), dst on cols (2nd dimension)</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> np.array([</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">2.50</span>, <span class="fl">0.00</span>], <span class="co"># low→low,  low→mid</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">0.05</span>, <span class="fl">1.75</span>], <span class="co"># mid→low,  mid→mid</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>        [<span class="fl">0.00</span>, <span class="fl">0.15</span>], <span class="co"># high→low, high→mid</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    ]),</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Create an analyzer to track results by SES group</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> New_Infections_By_SES(ss.Analyzer):</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.new_cases <span class="op">=</span> np.zeros((<span class="bu">len</span>(<span class="va">self</span>), <span class="bu">len</span>(ses)))</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>        new_inf <span class="op">=</span> <span class="va">self</span>.sim.diseases.sir.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> new_inf.<span class="bu">any</span>():</span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> value <span class="kw">in</span> ses.values():</span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.new_cases[<span class="va">self</span>.ti, value] <span class="op">=</span> np.count_nonzero(new_inf <span class="op">&amp;</span> (<span class="va">self</span>.sim.people.ses<span class="op">==</span>value))</span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>az <span class="op">=</span> New_Infections_By_SES()</span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> seeding(<span class="va">self</span>, sim, uids):</span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.zeros(<span class="bu">len</span>(uids))</span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>    high_ses <span class="op">=</span> ss.uids(sim.people.ses <span class="op">==</span> ses.high)</span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a>    p[high_ses] <span class="op">=</span> <span class="fl">0.1</span> <span class="co"># Seed infections into 10% of SES HIGH</span></span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p</span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span>seeding), beta<span class="op">=</span>ss.peryear(<span class="fl">0.2</span>)) <span class="co"># The probability of being selected as a seed is determined on a per-agent basis by the above 'seeding' function</span></span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>sir, networks<span class="op">=</span>mps, analyzers<span class="op">=</span>az, dt<span class="op">=</span><span class="dv">1</span><span class="op">/</span><span class="dv">12</span>, dur<span class="op">=</span><span class="dv">35</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots()</span>
+<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>new_cases <span class="op">=</span> sim.analyzers[<span class="dv">0</span>].new_cases</span>
+<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> key,value <span class="kw">in</span> ses.items():</span>
+<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>    ax.plot(sim.results.timevec, new_cases[:,value], label<span class="op">=</span>key)</span>
+<span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
+<span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'Year'</span>)</span>
+<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'New Infections'</span>)</span>
+<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -1269,14 +1260,13 @@ The second axis (columns) of the contact matrix is the DESTINATION group
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-      const outerScaffold = trigger.parentElement.cloneNode(true);
-      const codeEl = outerScaffold.querySelector('code');
-      for (const childEl of codeEl.children) {
-        if (isCodeAnnotation(childEl)) {
-          childEl.remove();
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
         }
-      }
-      return codeEl.innerText;
+        return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy

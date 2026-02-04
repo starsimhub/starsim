@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.7.32">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -70,19 +70,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-8057c89b6b57390836df940bcc67f706.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-93366e8fb675778b1d1303b86401c41b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -293,8 +292,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
-    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -696,7 +694,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>The most straightforward way to use connectors is to define a custom class that inherits from <a href="../api/connectors.html#starsim.connectors.Connector" title="0"><code>ss.Connector</code></a> and implements a <code>step()</code> method. This method is called during each simulation timestep and can modify disease parameters based on the current state of the simulation.</p>
 <p>Here’s a simple example showing how HIV and “SIS” diseases can interact, and also illustrates how you would use an analyzer to compare the two simulations:</p>
 <div id="28oc8cqmebri" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -786,7 +784,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-88"><a href="#cb1-88" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot results</span></span>
 <span id="cb1-89"><a href="#cb1-89" aria-hidden="true" tabindex="-1"></a>msim.plot()</span>
 <span id="cb1-90"><a href="#cb1-90" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sim <span class="kw">in</span> msim.sims:</span>
-<span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>    sim.analyzers[<span class="dv">0</span>].plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>    sim.analyzers[<span class="dv">0</span>].plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(896x672)</code></pre>
 </div>
@@ -818,7 +816,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="advanced-usage-with-parameters">Advanced usage with parameters</h2>
 <p>For more complex interactions, you can define parameters in your connector class to control the strength and nature of the interactions. Here’s an example showing bi-directional interactions between HIV and syphilis:</p>
 <div id="kihudbbxze" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HIV_Syphilis(ss.Connector):</span>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HIV_Syphilis(ss.Connector):</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Advanced connector showing bi-directional interactions between HIV and syphilis.</span></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">    Models how HIV affects syphilis susceptibility/transmission and vice versa,</span></span>
@@ -915,7 +913,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb3-95"><a href="#cb3-95" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Year'</span>)</span>
 <span id="cb3-96"><a href="#cb3-96" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Number infected'</span>)</span>
 <span id="cb3-97"><a href="#cb3-97" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
-<span id="cb3-98"><a href="#cb3-98" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb3-98"><a href="#cb3-98" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
 Final infection counts:
@@ -944,7 +942,7 @@ Syphilis infections - With connector: 392.0</code></pre>
 <h2 class="anchored" data-anchor-id="combining-connectors-with-interventions">Combining connectors with interventions</h2>
 <p>Connectors can work alongside interventions to model complex treatment scenarios. Here’s an example that combines the HIV-syphilis connector with a treatment intervention:</p>
 <div id="46o4aojlceu" class="cell" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Penicillin(ss.Intervention):</span>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Penicillin(ss.Intervention):</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Penicillin treatment intervention for syphilis.</span></span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">    Also resets HIV transmission/susceptibility parameters when syphilis is cured.</span></span>
@@ -1055,43 +1053,11 @@ Syphilis infections - With connector: 392.0</code></pre>
 <span id="cb5-109"><a href="#cb5-109" aria-hidden="true" tabindex="-1"></a>    syph_cum <span class="op">=</span> sim.results.syphilis.cum_infections[<span class="op">-</span><span class="dv">1</span>]</span>
 <span id="cb5-110"><a href="#cb5-110" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>sim<span class="sc">.</span>label<span class="sc">}</span><span class="ss">:"</span>)</span>
 <span id="cb5-111"><a href="#cb5-111" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  HIV: </span><span class="sc">{</span>hiv_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>hiv_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span>
-<span id="cb5-112"><a href="#cb5-112" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  Syphilis: </span><span class="sc">{</span>syph_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>syph_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36cd60&gt;:
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/llvmlite/ir/instructions.py", line 139, in descr_arg
-    return '{0} {1}{2}'.format(a.type, attrs, a.get_reference())
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36c5e0&gt;:
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/site-packages/llvmlite/ir/instructions.py", line 139, in descr_arg
-    return '{0} {1}{2}'.format(a.type, attrs, a.get_reference())
-BufferError: Existing exports of data: object cannot be re-sized
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36cd60&gt;:
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
-    def __init__(self, func, args, kwds):Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36cd60&gt;
-:
-BufferError: Existing exports of data: object cannot be re-sizedTraceback (most recent call last):
-
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
-Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36c5e0&gt;    :
-def __init__(self, func, args, kwds):
-Traceback (most recent call last):
-BufferError  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
-:     def __init__(self, func, args, kwds):Existing exports of data: object cannot be re-sized
-BufferError
-: Exception ignored while finalizing file &lt;_io.BytesIO object at 0x7f950d36c5e0&gt;Existing exports of data: object cannot be re-sized:
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.14.2/x64/lib/python3.14/contextlib.py", line 108, in __init__
-
-    def __init__(self, func, args, kwds):
-BufferError: Existing exports of data: object cannot be re-sized</code></pre>
-</div>
+<span id="cb5-112"><a href="#cb5-112" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"  Syphilis: </span><span class="sc">{</span>syph_final<span class="sc">:3.0f}</span><span class="ss"> current, </span><span class="sc">{</span>syph_cum<span class="sc">:4.0f}</span><span class="ss"> cumulative"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_connectors_files/figure-html/cell-4-output-2.png" width="1142" height="758" class="figure-img"></p>
+<p><img src="modules_connectors_files/figure-html/cell-4-output-1.png" width="1142" height="758" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1200,14 +1166,13 @@ Connector + treatment:
       e.clearSelection();
     }
     const getTextToCopy = function(trigger) {
-      const outerScaffold = trigger.parentElement.cloneNode(true);
-      const codeEl = outerScaffold.querySelector('code');
-      for (const childEl of codeEl.children) {
-        if (isCodeAnnotation(childEl)) {
-          childEl.remove();
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
         }
-      }
-      return codeEl.innerText;
+        return codeEl.innerText;
     }
     const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
       text: getTextToCopy
