@@ -90,13 +90,16 @@ class DateArray(np.ndarray):
         except: return ss.date
 
     def __add__(self, other):
-        cls = self.__class__
-        if self.is_date:
-            return cls([np.vectorize()])
-            np.vectorize(ss.date.__add__)(other)
+        return NotImplemented # Delegate to the other class - typically Date__radd__ or Dur.__radd__
 
     def __radd__(self, other):
         return self.__add__(other)
+
+    def __sub__(self, other):
+        return NotImplemented # Delegate to other class
+
+    def __rsub__(self, other):
+        return self.__sub__(other)
 
     def is_(self, which):
         """ Checks if the DateArray is comprised of ss.date objects """
@@ -383,7 +386,10 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
         elif isinstance(other, ss.dur):
-            return date(self.to_year() + other.years)
+            if other.is_array:
+                return ss.DateArray(np.vectorize(self.__add__)(other))
+            else:
+                return date(self.to_year() + other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
@@ -404,7 +410,10 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.datedur):
             return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.dur):
-            return ss.date(self.to_year() - other.years)
+            if other.is_array:
+                return ss.DateArray(np.vectorize(self.__sub__)(other))
+            else:
+                return ss.date(self.to_year() - other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return ss.date(self.to_pandas() - other)
         elif isinstance(other, (ss.date, pd.Timestamp, dt.date, dt.datetime)):
@@ -419,10 +428,9 @@ class date(pd.Timestamp):
     def __rsub__(self, other):
         if isinstance(other, np.ndarray):
             return other.__class__([o-self for o in other]) # TODO: is this right?
-        elif isinstance(other, ss.datedur):
-            return ss.date(other.value - self.to_pandas())
         elif isinstance(other, ss.dur):
-            return ss.date(other.years - self.to_year())
+            # As this is __rsub__, this corresponds to `other - self` hence this operation is not permitted
+            raise TypeError("Cannot subtract a date from a duration")
         elif isinstance(other, (ss.date, dt.date, dt.datetime)):
             if not isinstance(other, pd.Timestamp):
                 other = pd.Timestamp(other)
@@ -975,7 +983,10 @@ class dur(TimePar):
         if isinstance(other, dur):
             return self.__class__(self.value + self.to_base(other))
         elif isinstance(other, date): # If adding to a date, convert to years
-            return date.from_year(other.to_year() + self.years)
+            if self.is_array:
+                return DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
+            else:
+                return date.from_year(other.to_year() + self.years)
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
@@ -986,15 +997,23 @@ class dur(TimePar):
 
     def __sub__(self, other):
         if isinstance(other, dur):
-            out = self.__class__(self.value - self.to_base(other))
-        elif isinstance(other, date):
-            return date.from_year(other.to_year() - self.years)
+            return self.__class__(self.value - self.to_base(other))
+        elif isinstance(other, date) :
+            raise TypeError('Cannot subtract a date from a duration')
+        elif isinstance(other, DateArray):
+            if other.is_date:
+                raise TypeError('Cannot subtract a date from a duration')
+            else:
+                return DateArray(np.vectorize(self.__sub__)(other))
         else:
             out = self.__class__(self.value - other)
             if sc.isnumber(out) and out < 0:
                 warnmsg = f'Subtracting {self} and {other} yields {out}. Durations are rarely negative; are you sure this is intentional?'
                 ss.warn(warnmsg)
-        return out
+            return out
+
+    def __rsub__(self, other):
+        return (-self) + other
 
     def __mul__(self, other):
         if isinstance(other, Rate):
