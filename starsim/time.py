@@ -149,15 +149,15 @@ class DateArray(np.ndarray):
 
     @property
     def is_date(self):
-        return self.is_('date')
+        return issubclass(self.unit, ss.date)
 
     @property
     def is_dur(self):
-        return self.is_('dur')
+        return issubclass(self.unit, ss.dur)
 
     @property
     def is_datedur(self):
-        return self.is_('datedur')
+        return issubclass(self.unit, ss.datedur)
 
     @property
     def is_float(self):
