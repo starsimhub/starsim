@@ -215,7 +215,10 @@ class DateArray(np.ndarray):
         Return the most human-friendly (i.e. plotting-friendly) version of the dates,
         i.e. ss.date if possible, float otherwise
         """
-        return self.to_date(die=False)
+        if self.is_date or not self.is_float:
+            return self.to_date(die=False)
+        else:
+            return sc.dcp(self)
 
     def to_numpy(self):
         return self.to_array()
