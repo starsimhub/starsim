@@ -90,6 +90,7 @@ def test_onepar_normal(do_plot=True):
 
         expected = pd.DataFrame({
             'x': [0.13, 0.16, 0.06],    # Prevalence of infection
+            'sigma2': [0.01, 0.02, 0.005],  # Per-row uncertainty (variance)
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
@@ -97,9 +98,6 @@ def test_onepar_normal(do_plot=True):
             'n': sim.results.n_alive,
         }, index=pd.Index(sim.results.timevec, name='t')),
 
-        # User can specify sigma2, e.g.:
-        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
-        #sigma2 = np.array([0.05, 0.25, 0.01])
     )
 
     # Make the calibration
@@ -208,6 +206,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 35, 10],    # Number of individuals found to be infectious
+            'kappa': [5.0, 7.0, 6.0], # Concentration parameters per timepoint (varied)
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
@@ -227,6 +226,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n':  [100, 27, 54],   # Number of person-years
             'x':  [740, 325, 200], # Number of new infections
+            'k_size': [50.0, 30.0, 40.0], # Dispersion parameters per timepoint
             't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
             't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
         }).set_index(['t', 't1']),
@@ -298,6 +298,7 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
             'x_4': [40, 60], # Friday
             'x_5': [40, 60], # Saturday
             'x_6': [40, 60], # Sunday
+            'kappa': [10.0, 15.0], # Concentration parameters per survey
 
             # incident conform will compute different in comulative counts between the
             # end of step t1 and the end of step t
