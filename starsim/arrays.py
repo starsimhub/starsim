@@ -298,13 +298,15 @@ class Arr(BaseArr):
         return
 
     def _boolmath(self, op, other=None, inplace=False):
-        """
-        Helper function for boolean operations
+        """ Helper function for boolean operations.
 
-        :param op: A string with the operator e.g., ">", "&" etc.,
-        :param other: The object operating on the BoolArr e.g., Arr, np.ndarray
-        :param inplace: If True, overwrite the current object rather than returning a new one
-        :return: A BoolArr with the result of the operation
+        Args:
+            op: A string with the operator e.g., ">", "&" etc.
+            other: The object operating on the BoolArr e.g., Arr, np.ndarray.
+            inplace: If True, overwrite the current object rather than returning a new one.
+
+        Returns:
+            A BoolArr with the result of the operation.
         """
         self_raw = self.raw # Always size N
         both_raw = True # Assume this by default
@@ -433,8 +435,7 @@ class Arr(BaseArr):
             return vals[np.nonzero(~np.isnan(vals))[0]]
 
     def grow(self, new_uids=None, new_vals=None):
-        """
-        Add new agents to an Arr
+        """ Add new agents to an Arr
 
         This method is normally only called via `People.grow()`.
 
@@ -576,8 +577,7 @@ class Arr(BaseArr):
 
 
 class FloatArr(Arr):
-    """
-    Subclass of `ss.Arr` with defaults for floats and ints.
+    """ Subclass of `ss.Arr` with defaults for floats and ints.
 
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
@@ -588,8 +588,7 @@ class FloatArr(Arr):
 
 
 class IntArr(Arr):
-    """
-    Subclass of Arr with defaults for ints.
+    """ Subclass of `ss.Arr` with defaults for ints.
 
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
@@ -601,7 +600,7 @@ class IntArr(Arr):
 
 
 class BoolArr(Arr):
-    """ Subclass of Arr with defaults for booleans """
+    """ Subclass of `ss.Arr` with defaults for booleans """
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
@@ -619,7 +618,7 @@ class BoolArr(Arr):
         return self._boolmath('!=', other)
 
     def __and__(self, other):
-        """Bitwise AND
+        """ Bitwise AND
 
         Supports BoolArr and uids as inputs. If input is uids, it is treated as a BoolArr where
         the provided indices are True and all other elements are False.
@@ -654,7 +653,7 @@ class BoolArr(Arr):
     # This allows in-place operations to be used directly on `BoolState` instances without breaking references
 
     def __iand__(self, other):
-        """In-place AND"""
+        """ In-place AND """
         if isinstance(other, uids):
             tmp = self.raw[other]
             self.raw[:] = False
@@ -701,8 +700,7 @@ class BoolArr(Arr):
 
 
 class BoolState(BoolArr):
-    """
-    A boolean array being used as a state.
+    """ A boolean array being used as a state.
 
     Although functionally identical to `BoolArr`, a `BoolState` is handled differently in
     terms of automation: specifically, results are automatically generated from a
@@ -741,8 +739,7 @@ class IndexArr(Arr):
 
 
 class uids(np.ndarray):
-    """
-    Class to specify that integers should be interpreted as UIDs.
+    """ Class to specify that integers should be interpreted as UIDs.
 
     For all practical purposes, behaves like a NumPy integer array. However,
     has additional methods `uids.concat()` (instance method), [`ss.uids.cat()`](`starsim.arrays.uids.cat`)
