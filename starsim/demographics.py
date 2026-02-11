@@ -453,22 +453,6 @@ class Pregnancy(Demographics):
         """ Women of childbearing age who have never been pregnant """
         return (self.parity == 0) & self.fecund
 
-    # NB - consider moving to modules that check postpartum time? Means postpartum period can be
-    # specific to each module
-    #
-    # @property
-    # def postpartum(self):
-    #     """
-    #     Within a pre-defined postpartum window, as specified by the dur_postpartum par
-    #     This does not directly affect any other functionality within this module, but is
-    #     provided for convenience for modules that need to know which women are X timesteps
-    #     postpartum.
-    #     """
-    #     timesteps_since_birth = self.ti - self.ti_delivery
-    #     pp_timesteps = int(self.pars.dur_postpartum/self.t.dt)
-    #     pp_bools = ~self.pregnant & (timesteps_since_birth >= 0) & (timesteps_since_birth <= pp_timesteps)
-    #     return pp_bools
-
     @property
     def dur_gestation(self):
         """ Return duration of gestation for currently-pregnant women in years """
