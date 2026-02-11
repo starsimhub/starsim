@@ -393,6 +393,7 @@ class Pregnancy(Demographics):
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
             ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
             ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
+            ss.FloatArr('n_miscarriages', label='Number of miscarrianges', default=0),  # Number of micarriages
             ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
@@ -698,7 +699,7 @@ class Pregnancy(Demographics):
 
         # Set maternal death outcomes
         dead = self.pars.p_maternal_death.filter(mother_uids)
-        self.ti_dead[mother_uids[dead]] = self.ti
+        self.ti_dead[dead] = self.ti
 
         # Update networks after the states have been updated above so that the
         # networks can access the latest/current states
@@ -841,10 +842,7 @@ class Pregnancy(Demographics):
 
     def make_pregnancies(self, uids):
         """
-        Make pregnancies
-        Add miscarriage/termination logic here
-        Also reconciliation with birth rates
-        Q, is this also a good place to check for other conditions and set prognoses for the fetus?
+        Make pregnancies, assign durations, and determine multiples
         """
 
         # Change states for the newly pregnant woman
@@ -926,9 +924,15 @@ class Pregnancy(Demographics):
         death_uids = ss.uids(self.sim.people.ti_dead <= self.ti)
         if len(death_uids) == 0:
             return
+        self.process_maternal_deaths(death_uids)
+        self.process_prenatal_deaths(death_uids)
+        return
 
-        # Any pregnant? Consider death of the unborn agent. Default probability is set to 1
-        # meaning we assume that unborn children do not survive.
+    def process_maternal_deaths(self, death_uids):
+        """
+        If any pregnant mothers die, we also process the death of the unborn agent.
+        Default probability is set to 1 meaning we assume that unborn children do not survive.
+        """
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
             unborn_uids = self.find_unborn_children(mother_death_uids)
@@ -936,17 +940,19 @@ class Pregnancy(Demographics):
             if len(unborn_death_uids):
                 self.sim.people.request_death(unborn_death_uids)
             self.step_die(mother_death_uids)
+        return
 
-        # Any prenatal? Handle changes to pregnancy
+    def process_prenatal_deaths(self, death_uids):
+        """
+        If any deaths occur in unborn agents, we handle changes to pregnancy and record as a miscarriage
+        """
         is_prenatal = self.sim.people.age[death_uids] < 0
         prenatal_death_uids = death_uids[is_prenatal]
         if len(prenatal_death_uids):
             mother_uids = self.sim.people.parent[prenatal_death_uids]
-
-            # Figure out whether the mother is still pregnant, which is possible if she was carrying multiple embryos
+            self.n_miscarriages[mother_uids] += 1
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
-
         return
 
     def update_results(self):
