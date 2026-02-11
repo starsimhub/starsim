@@ -118,6 +118,57 @@ def test_arrs():
     assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
     assert np.array_equal(s1.people.age[s1.people.age < 5],s1.people.age[s1.people.age.values < 5])
 
+    # Test BoolArr & uids operations
+    test_bool = s1.people.age > 20
+    test_uids = test_bool.uids
+
+    # Standard operations
+    assert np.all(test_bool == test_uids)
+    assert np.all(~(test_bool != test_uids))
+    assert np.array_equal(s1.people.female & test_bool, s1.people.female & test_uids)
+    assert np.array_equal(s1.people.female | test_bool, s1.people.female | test_uids)
+    assert np.array_equal(s1.people.female ^ test_bool, s1.people.female ^ test_uids)
+    assert np.array_equal(test_uids & s1.people.female,  test_uids & s1.people.female.uids)
+    assert np.array_equal(test_uids | s1.people.female,  test_uids | s1.people.female.uids)
+    assert np.array_equal(test_uids ^ s1.people.female,  test_uids ^ s1.people.female.uids)
+
+    # Inplace BoolArr operations
+    a = s1.people.female & test_bool
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b &= test_bool
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
+
+    a = s1.people.female & test_uids
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b &= test_uids
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
+
+    a = s1.people.female | test_bool
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b |= test_bool
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
+
+    a = s1.people.female ^ test_uids
+    b = sc.dcp(s1.people.female)
+    original_id = id(b)
+    original_id_raw = id(b.raw)
+    b ^= test_uids
+    assert np.array_equal(a, b)
+    assert id(b) == original_id
+    assert id(b.raw) == original_id_raw
+
     o.s1 = s1
     o.s2 = s2
 
