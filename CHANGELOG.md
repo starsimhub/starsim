@@ -17,7 +17,9 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
 - Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. 
 - Fixed bug when multiplying an `ss.prob` by an array of durations
-
+- Renamed arguments to `MaternalNet.add_pairs()` from `mother_inds` to `mother_uids` and `unborn_inds` to `unborn_uids` to clarify that these inputs should be agent UIDs.
+- Removed `dur` argument to `MaternalNet.add_pairs()` as the edge lifespan is now managed by the `Pregnancy` module with edges being removed upon delivery.
+- Removed `Network.prenatal` and `Network.postnatal` attributes as these are now tracked by type (`ss.PrenatalNet` and `ss.PostnatalNet`)
 
 ## Version 3.0.6 (2026-01-28)
 - Fixed bug in plot_cpu() when using pandas v3
