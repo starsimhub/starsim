@@ -816,6 +816,10 @@ class TimePar:
         else:
             return tuple(years)
 
+    def __format__(self, format_spec=''):
+        """Delegate to the underlying value for format specifiers like :n, :g, :f, etc."""
+        return format(self.value, format_spec)
+
     def disp(self):
         return sc.pr(self)
 

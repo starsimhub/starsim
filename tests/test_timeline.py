@@ -167,6 +167,8 @@ def test_timeline_syntax():
     # Test multiple
     kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.months(1))]
     kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=dd20, dt=ss.datedur(months=1))]
+    kw.h3 = [dict(start=1990, dur=40, dt='month')                                 , dict(start=ss.years(1990), stop=ss.years(2030), dur=ss.years(40), dt=ss.months(1))]
+
 
     mismatches = []
     for key in kw:
