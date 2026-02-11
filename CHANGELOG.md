@@ -16,6 +16,9 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added `ss.parse_age_range` utility function to standardize formats for age ranges in data/input files.
 - Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
 - Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. 
+- Implemented operators for `ss.BoolArr` and `ss.uids` where the latter is treated as a `BoolArr`. This makes operations like `people.sir.infected & people.female` and `people.sir.infected & people.female.uids` equivalent.
+- Implemented in-place operators for `ss.BoolArr` and `ss.uids`. The former are true in-place operations that reuse existing memory and preserve references, and thus they can be safely used with `BoolState` instances in modules directly.
+- Fixed/added operators `+` and `-` for `ss.DateArray` when operating on `ss.date` and `ss.dur` instances
 - Fixed bug when multiplying an `ss.prob` by an array of durations
 - Renamed arguments to `MaternalNet.add_pairs()` from `mother_inds` to `mother_uids` and `unborn_inds` to `unborn_uids` to clarify that these inputs should be agent UIDs.
 - Removed `dur` argument to `MaternalNet.add_pairs()` as the edge lifespan is now managed by the `Pregnancy` module with edges being removed upon delivery.
