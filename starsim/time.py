@@ -26,7 +26,6 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
-import pickle
 import datetime
 import numbers
 import collections
@@ -38,6 +37,7 @@ import numpy as np
 import pandas as pd
 import starsim as ss
 ss_float = ss.dtypes.float
+
 # General classes; specific classes are listed below
 __all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
 
@@ -60,6 +60,7 @@ def approx_compare(a, op='==', b=None, **kwargs):
         errormsg = f'Unsupported operation "{op}", should be "==", "<", or ">"'
         raise ValueError(errormsg)
 
+
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
@@ -81,7 +82,7 @@ class DateArray(np.ndarray):
                         unit = ss.years
             else:
                 if not isinstance(unit, type):
-                    raise TypeError(f'unit must be a type (e.g., `ss.months`), not an instance (e.g., `ss.months(1)` or `ss.month`.')
+                    raise TypeError('unit must be a type (e.g., `ss.months`), not an instance (e.g., `ss.months(1)` or `ss.month`.')
                 if not issubclass(unit, (ss.date, ss.dur)):
                     raise TypeError(f'unit must be a subclass of ss.date or ss.dur, {unit} is not derived from one of these parent classes.')
 

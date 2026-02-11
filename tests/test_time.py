@@ -2,9 +2,9 @@
 Test different time units and timesteps
 """
 import numpy as np
-import pytest
 import sciris as sc
 import starsim as ss
+import pytest
 
 # ss.options.warnings = 'error' # For additional debugging
 
