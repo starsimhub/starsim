@@ -8,6 +8,7 @@ deaths_new: 22.356435643564357
 maternalnet_n_edges: 0.0
 mfnet_n_edges: 3596.3960396039606
 n_alive: 11086.128712871287
+n_female: 0.0
 new_deaths: 23.485148514851485
 new_emigrants: 0.0
 randomnet_n_edges: 55321.18811881188
@@ -22,4 +23,4 @@ sis_n_infected: 6339.316831683168
 sis_n_susceptible: 4770.297029702971
 sis_new_infections: 176.4950495049505
 sis_prevalence: 0.5561316251442727
-sis_rel_sus: 0.5175549898407247
+sis_rel_sus: 0.5175549877752171

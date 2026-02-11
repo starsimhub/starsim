@@ -12,6 +12,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Implemented `__bool__` for `ss.bernoulli` which returns `False` if there is no possibility of returning any `True` values.
 - Added automatic result creation for `ss.BoolState` instances in `People`, matching the behavior already present in modules. `People` now has `auto_state_list` property and `init_results()` method. 
 - Fixed bug when multiplying an `ss.prob` by an array of durations
+- Fixed/added operators `+` and `-` for `ss.DateArray` when operating on `ss.date` and `ss.dur` instances
 
 
 ## Version 3.0.6 (2026-01-28)
