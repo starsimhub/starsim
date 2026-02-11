@@ -14,6 +14,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Fixed bug when multiplying an `ss.prob` by an array of durations
 - Implemented operators for `ss.BoolArr` and `ss.uids` where the latter is treated as a `BoolArr`. This makes operations like `people.sir.infected & people.female` and `people.sir.infected & people.female.uids` equivalent.
 - Implemented in-place operators for `ss.BoolArr` and `ss.uids`. The former are true in-place operations that reuse existing memory and preserve references, and thus they can be safely used with `BoolState` instances in modules directly.
+- Fixed/added operators `+` and `-` for `ss.DateArray` when operating on `ss.date` and `ss.dur` instances
 
 
 ## Version 3.0.6 (2026-01-28)
