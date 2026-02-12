@@ -714,6 +714,13 @@ class Pregnancy(Demographics):
             if isinstance(net, ss.PostnatalNet):
                 net.add_pairs(newborn_parents, newborn_uids)
 
+        # Hook for subclasses to add post-delivery logic
+        self._post_delivery(mother_uids, newborn_uids)
+
+        return
+
+    def _post_delivery(self, mother_uids, newborn_uids):
+        """Hook for subclasses to add post-delivery logic. Base implementation does nothing."""
         return
 
     def set_breastfeeding(self, mother_uids, newborn_uids):
@@ -792,7 +799,10 @@ class Pregnancy(Demographics):
         new_slots = list(first_slots)
 
         # Only iterate over pregnancies with multiple embryos to add additional slots
-        multi_idx = np.where(embryo_counts > 1)[0]
+        try:
+            multi_idx = np.where(embryo_counts > 1)[0]
+        except:
+            print('hi')
         insert_offset = 0
         for idx in multi_idx:
             slot = first_slots[idx]
