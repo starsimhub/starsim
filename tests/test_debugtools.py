@@ -3,6 +3,7 @@ Test Starsim debugging features
 """
 import sciris as sc
 import matplotlib.pyplot as plt
+import starsim as ss
 
 sc.options.interactive = False # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
@@ -16,7 +17,18 @@ medium = 1000
 def test_profile():
     sc.heading('Testing sim.profile()')
 
-    pass
+    # Based on advanced_profiling.ipynb
+    pars = dict(
+        n_agents = small,
+        start = '2000-01-01',
+        stop = '2010-01-01',
+        diseases = 'sis',
+        networks = 'random'
+    )
+    sim = ss.Sim(pars)
+    prof = sim.profile()
+
+    return prof
 
 
 @sc.timer()
@@ -42,7 +54,7 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    test_profile()
+    prof = test_profile()
     test_debug_rvs()
     test_debug_states()
 

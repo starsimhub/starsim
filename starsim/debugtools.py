@@ -69,7 +69,7 @@ class Profile(sc.profile):
             raise RuntimeError(errormsg)
         return self.init_prof
 
-    def run(self):
+    def run(self, disp=None):
         """ Profile the performance of the simulation """
         sim = self.sim
         if not self.sim.initialized:
@@ -83,7 +83,7 @@ class Profile(sc.profile):
             self.follow = self.ss_follow
 
         # Run the profiling on the sim run
-        super().run()
+        super().run(disp=disp)
 
         # Add initialization to the other timings
         if self.init_prof:
