@@ -1087,8 +1087,6 @@ class MixingPools(Route):
         self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
-        self.prenatal = False # Does not make sense for mixing pools
-        self.postnatal = False
         return
 
     def __len__(self):
@@ -1215,8 +1213,6 @@ class MixingPool(Route):
         self.diseases = None
         self.src_uids = None
         self.dst_uids = None
-        self.prenatal = False # Does not make sense for mixing pools
-        self.postnatal = False
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
         return
 
