@@ -799,10 +799,7 @@ class Pregnancy(Demographics):
         new_slots = list(first_slots)
 
         # Only iterate over pregnancies with multiple embryos to add additional slots
-        try:
-            multi_idx = np.where(embryo_counts > 1)[0]
-        except:
-            print('hi')
+        multi_idx = np.where(embryo_counts > 1)[0]
         insert_offset = 0
         for idx in multi_idx:
             slot = first_slots[idx]
