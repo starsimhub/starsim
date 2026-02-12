@@ -314,6 +314,8 @@ class Arr(BaseArr):
             other_raw = other.raw # Also always size N
         elif isinstance(other, (numbers.Number, type(None))):
             other_raw = other # If it's a scalar, we don't have to worry about array size
+        elif isinstance(other, ss.date):
+            other_raw = other.years
         elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
             raw_size = self_raw.size
             both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
@@ -593,7 +595,6 @@ class IntArr(Arr):
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
     """
-
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, dtype=ss_int, nan=int_nan, **kwargs)
         return
