@@ -34,14 +34,14 @@ def test_profile():
 @sc.timer()
 def test_debug_rvs():
     sc.heading('Testing sim.debug_rvs()')
-
+    print('Feature not yet implemented')
     pass
 
 
 @sc.timer()
 def test_debug_states():
     sc.heading('Testing sim.debug_states()')
-
+    print('Feature not yet implemented')
     pass
 
 
