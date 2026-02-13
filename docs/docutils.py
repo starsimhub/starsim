@@ -127,6 +127,7 @@ def execute_notebooks(*args, folders=None):
         notebooks = [sc.path(notebook).resolve() for notebook in args]
     else:
         notebooks = []
+        folders = sc.ifelse(folders, default_folders)
         for folder in folders:
             folder_path = cwd / folder
             notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.ipynb')]
