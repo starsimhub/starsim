@@ -26,7 +26,10 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
+import datetime
 import numbers
+import collections
+import matplotlib
 import datetime as dt
 import dateutil.relativedelta as drd
 import sciris as sc
@@ -57,28 +60,56 @@ def approx_compare(a, op='==', b=None, **kwargs):
         errormsg = f'Unsupported operation "{op}", should be "==", "<", or ">"'
         raise ValueError(errormsg)
 
+
 #%% Define dates
 class DateArray(np.ndarray):
     """ Lightweight wrapper for an array of dates """
+    # TODO: Consider splitting out into DurArray which could have additional validation/functionality for mixed duration types
     def __new__(cls, arr=None, unit=None):
         arr = sc.toarray(arr)
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            out = arr.view(cls)
             if unit is None:
-                try:
-                    assert isinstance(arr[0], (ss.date, ss.dur))
+                if isinstance(arr[0], (ss.date, ss.dur)):
                     unit = type(arr[0]) # Get the unit from the input
-                except:
+                elif isinstance(arr[0], (np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
+                    arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
+                    unit = ss.date
+                else:
                     try: # Else, if the input is datelike (>1), assume date
                         assert np.all(arr >= 1.0)
                         unit = ss.date
                     except: # Otherwise, assume years
                         unit = ss.years
-                out._unit = unit
+            else:
+                if not isinstance(unit, type):
+                    raise TypeError('unit must be a type (e.g., `ss.months`), not an instance (e.g., `ss.months(1)` or `ss.month`.')
+                if not issubclass(unit, (ss.date, ss.dur)):
+                    raise TypeError(f'unit must be a subclass of ss.date or ss.dur, {unit} is not derived from one of these parent classes.')
+
+            out = arr.view(cls)
+            out._unit = unit
             return out
         else:
             errormsg = f'Argument must be an array, not {type(arr)}'
             raise TypeError(errormsg)
+
+    def __array_finalize__(self, obj):
+        # Ensure that the unit is propagaged when slicing and copying with dcp
+        if obj is not None:
+            self._unit = getattr(obj, "_unit", ss.date)
+        return
+
+    def __reduce__(self):
+        # Ensure that the unit is propagated when pickling - works in conjunction with __setstate__ below
+        reduced = super().__reduce__()
+        if len(reduced) >= 2:
+            return *reduced[0:2], reduced[2] + (self.unit, ), *reduced[3:]
+        else:
+            return reduced
+
+    def __setstate__(self, state):
+        super().__setstate__(state[:-1])
+        self._unit = state[-1]
 
     @property
     def unit(self):
@@ -86,13 +117,16 @@ class DateArray(np.ndarray):
         except: return ss.date
 
     def __add__(self, other):
-        cls = self.__class__
-        if self.is_date:
-            return cls([np.vectorize()])
-            np.vectorize(ss.date.__add__)(other)
+        return NotImplemented # Delegate to the other class - typically Date__radd__ or Dur.__radd__
 
     def __radd__(self, other):
         return self.__add__(other)
+
+    def __sub__(self, other):
+        return NotImplemented # Delegate to other class
+
+    def __rsub__(self, other):
+        return self.__sub__(other)
 
     def is_(self, which):
         """ Checks if the DateArray is comprised of ss.date objects """
@@ -116,15 +150,15 @@ class DateArray(np.ndarray):
 
     @property
     def is_date(self):
-        return self.is_('date')
+        return issubclass(self.unit, ss.date)
 
     @property
     def is_dur(self):
-        return self.is_('dur')
+        return issubclass(self.unit, ss.dur)
 
     @property
     def is_datedur(self):
-        return self.is_('datedur')
+        return issubclass(self.unit, ss.datedur)
 
     @property
     def is_float(self):
@@ -182,7 +216,10 @@ class DateArray(np.ndarray):
         Return the most human-friendly (i.e. plotting-friendly) version of the dates,
         i.e. ss.date if possible, float otherwise
         """
-        return self.to_date(die=False)
+        if self.is_date or not self.is_float:
+            return self.to_date(die=False)
+        else:
+            return sc.dcp(self)
 
     def to_numpy(self):
         return self.to_array()
@@ -379,7 +416,10 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
         elif isinstance(other, ss.dur):
-            return date(self.to_year() + other.years)
+            if other.is_array:
+                return ss.DateArray(np.vectorize(self.__add__)(other))
+            else:
+                return date(self.to_year() + other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)
         elif isinstance(other, pd.Timestamp):
@@ -400,7 +440,10 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.datedur):
             return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.dur):
-            return ss.date(self.to_year() - other.years)
+            if other.is_array:
+                return ss.DateArray(np.vectorize(self.__sub__)(other))
+            else:
+                return ss.date(self.to_year() - other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return ss.date(self.to_pandas() - other)
         elif isinstance(other, (ss.date, pd.Timestamp, dt.date, dt.datetime)):
@@ -415,10 +458,9 @@ class date(pd.Timestamp):
     def __rsub__(self, other):
         if isinstance(other, np.ndarray):
             return other.__class__([o-self for o in other]) # TODO: is this right?
-        elif isinstance(other, ss.datedur):
-            return ss.date(other.value - self.to_pandas())
         elif isinstance(other, ss.dur):
-            return ss.date(other.years - self.to_year())
+            # As this is __rsub__, this corresponds to `other - self` hence this operation is not permitted
+            raise TypeError("Cannot subtract a date from a duration")
         elif isinstance(other, (ss.date, dt.date, dt.datetime)):
             if not isinstance(other, pd.Timestamp):
                 other = pd.Timestamp(other)
@@ -774,6 +816,10 @@ class TimePar:
         else:
             return tuple(years)
 
+    def __format__(self, format_spec=''):
+        """Delegate to the underlying value for format specifiers like :n, :g, :f, etc."""
+        return format(self.value, format_spec)
+
     def disp(self):
         return sc.pr(self)
 
@@ -901,6 +947,10 @@ class dur(TimePar):
             base (str): the base unit, e.g. 'years'
         """
         super().__init__()
+
+        if isinstance(value, ss.Arr):
+            value = value.values
+
         if isinstance(value, dur):
             if self.base is not None:
                 self.value = self.to_base(value)
@@ -967,7 +1017,10 @@ class dur(TimePar):
         if isinstance(other, dur):
             return self.__class__(self.value + self.to_base(other))
         elif isinstance(other, date): # If adding to a date, convert to years
-            return date.from_year(other.to_year() + self.years)
+            if self.is_array:
+                return DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
+            else:
+                return date.from_year(other.to_year() + self.years)
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
@@ -978,15 +1031,23 @@ class dur(TimePar):
 
     def __sub__(self, other):
         if isinstance(other, dur):
-            out = self.__class__(self.value - self.to_base(other))
-        elif isinstance(other, date):
-            return date.from_year(other.to_year() - self.years)
+            return self.__class__(self.value - self.to_base(other))
+        elif isinstance(other, date) :
+            raise TypeError('Cannot subtract a date from a duration')
+        elif isinstance(other, DateArray):
+            if other.is_date:
+                raise TypeError('Cannot subtract a date from a duration')
+            else:
+                return DateArray(np.vectorize(self.__sub__)(other))
         else:
             out = self.__class__(self.value - other)
             if sc.isnumber(out) and out < 0:
                 warnmsg = f'Subtracting {self} and {other} yields {out}. Durations are rarely negative; are you sure this is intentional?'
                 ss.warn(warnmsg)
-        return out
+            return out
+
+    def __rsub__(self, other):
+        return (-self) + other
 
     def __mul__(self, other):
         if isinstance(other, Rate):
@@ -1793,7 +1854,7 @@ class prob(Rate):
                     errormsg = f'You are trying to convert a unitless probability "{self}" to a different probability with units "{dur}". Are you using ss.prob() instead of e.g. ss.probperyear() or ss.peryear()?'
                     raise TypeError(errormsg)
                 factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
-                if factor == 1:
+                if sc.isnumber(factor) and factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
                 return 1 - np.exp(-self._rate*factor) # Main use case
         elif sc.isnumber(dur):
@@ -2113,3 +2174,189 @@ def rate_prob(value, unit=None):
     """ Backwards compatibility function for per """
     warn_deprecation('rate_prob', value, unit)
     return ss.per(value, unit)
+
+#%% Plotting functionality
+
+class MockAxis():
+    """
+    Emulator for Axis.get_view_internal() to return converted values
+
+    Matplotlib's date locators (AutoDateLocator, YearLocator, MonthLocator etc.)
+    call Axis.get_view_internal() to get the current axis limits. These locators all
+    expect the values to be returned in matplotlib dates (i.e., days since 1970-01-01).
+    This helper class is bound to the actual axis, and emulates `Axis.get_view_interval()`
+    performing the conversion to return the values in the expected units. That way, the
+    Locator instances can be used directly without needing any other changes.
+
+    When this class is instantiated, it is bound to an actual Axis instance. The axis
+    instance would have our custom date units and values in floating point years. Then
+    `MockAxis.get_view_interval()` converts these years to standard matplotlib date values
+    before they get passed to the Matplotlib locators.
+    """
+
+    def __init__(self, axis):
+        self.axis = axis
+
+    def get_view_interval(self):
+        """
+        Return converted axis limits
+
+        :return: Tuple with (min, max) axis limits in matplotlib date units (days since 1970-01-01)
+        """
+        ymin, ymax = self.axis.get_view_interval()
+        vmin, vmax = matplotlib.dates.date2num(ss.date(ymin)), matplotlib.dates.date2num(ss.date(ymax))
+        return vmin, vmax
+
+class FloatYearLocator(matplotlib.ticker.Locator):
+    """
+    Locator to calculate tick positions for float year axes
+
+    Matplotlib's AutoDateLocator is the standard way to calculating date-based tick
+    positions, incorporating a lot of functionality around sensibly setting the tick intervals
+    e.g., to whole months. This class wraps AutoDateLocator to allow it to be used
+    with float year axis values, by converting the float year values to matplotlib date values
+    before calling the locator, and then converting the calculated tick positions back to
+    float years before returning them.
+    """
+
+    def __init__(self, unit):
+        super().__init__()
+        self._convert_dates = unit == 'ss.date'
+
+        if self._convert_dates:
+            self._date_locator = matplotlib.dates.AutoDateLocator(minticks=3) # Store an AutoDateLocator instance to calculate the tick locations
+            self._float_locator = None
+        else:
+            self._date_locator = None
+            self._float_locator = matplotlib.ticker.AutoLocator() # Store an AutoLocator to handle DateArrays that contain dur values rather than dates
+
+    def set_axis(self, axis):
+        # When binding this locator to an axis, we also need to bind the internal date locator
+        # to a MockAxis instance that performs a conversion from our years to matplotlib values.
+        # This instance is internally passed from AutoDateLocator to whichever child class instance
+        # gets used to calculate the tick locations. The float_locator (for dur values) does not need
+        # to be bound to a MockAxis because the axis is already in the raw units (from `to_human()`)
+        # and therefore we can bind it to the actual axis directly.
+        super().set_axis(axis)
+        if self._convert_dates:
+            self._date_locator.set_axis(MockAxis(axis))
+        else:
+            self._float_locator.set_axis(axis)
+
+    def __call__(self):
+
+        # If not converting dates, just directly call the underlying float locator
+        if not self._convert_dates:
+            return self.tick_values()
+
+        # Get the axis view limits in matplotlib date units
+        vmin, vmax = self._date_locator.axis.get_view_interval()
+
+        # Calculate approximate number of ticks that can fit
+        if self.axis is not None:
+            ax_width = self.axis.axes.bbox.width  # Width in points
+            char_width = 10  # Approximate points per character
+            label_chars = 6  # Approximate characters per label
+            label_width = char_width * label_chars
+            self._date_locator.maxticks = collections.defaultdict(lambda: max(self._date_locator.minticks, int(ax_width / label_width)))
+
+        return self.tick_values(vmin, vmax)
+
+
+    def tick_values(self, *args, **kwargs):
+        if self._convert_dates:
+            vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
+            yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
+            return np.array(yticks)
+        else:
+            return self._float_locator()
+
+
+class FloatYearFormatter(sc.ScirisDateFormatter):
+    """
+    Formatter that renders float years as calendar dates
+
+    This class provides the same formatting as sc.ScirisDateFormatter, but works with
+    axis values that are float years, rather than matplotlib date values (days since 1970-01-01)
+    """
+    def format_data_short(self, value):
+        return super().format_data_short(matplotlib.dates.date2num(ss.date(value)))
+
+    def format_ticks(self, values, *args, **kwargs):
+        return super().format_ticks(values, min_year=-np.inf, max_year=np.inf)
+
+
+class DateConverter(matplotlib.units.ConversionInterface):
+    """
+    Starsim date conversion interface for matplotlib
+
+    This class gets registered with matplotlib as the converter for Starsim
+    date and DateArray types, allowing them to be used directly as axis values. This achieves
+    two outcomes
+
+    1. When Starsim date or DateArray values are plotted, the x-axis values are automatically converted
+       to float years for plotting. If this class is not used, matplotlib will instead convert them to
+       days since 1970-01-01, which is the default behaviour for pd.Timestamp.
+    2. If the first plotting command used on an axis has date/DateArray as the x-axis, our standard
+       custom date locators and formatters will be used, so that the float years will automatically be
+       labelled with dates.
+
+    Together, this means that users can freely plot both Starsim date/DateArray values and
+    plain float years on the same axis without needing any conversions, and they'll also automatically
+    get date-based ticks without needing to set the locator, even if they are using custom plotting
+    code rather than ss.Result.plot().
+    """
+
+    @staticmethod
+    def axisinfo(unit, axis):
+        """
+        Specify which locators and formatters should be used if an instance of a registered class is the first one plotted
+        """
+
+        # If the unit is a date, use our custom locators and formatters to set the tick locations/labels
+        # Otherwise, set them to `None` to use matplotlib's defaults
+        if issubclass(unit, ss.date):
+            loc = FloatYearLocator(unit)
+            fmt = FloatYearFormatter(loc)
+        else:
+            loc = None
+            fmt = None
+
+        axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
+        axis._set_converter = lambda converter: None
+        return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
+
+    @staticmethod
+    def default_units(x, axis):
+        if isinstance(x, ss.DateArray) and x.is_dur:
+            return ss.dur
+        elif isinstance(x, ss.dur):
+            return ss.dur
+        else:
+            return ss.date
+
+    @staticmethod
+    def _convert_single(v):
+        if isinstance(v, ss.date):
+            return v.years
+        elif isinstance(v, (pd.Timestamp, datetime.date, datetime.datetime)):
+            return ss.date(v).years
+        else:
+            return v
+
+    @staticmethod
+    def convert(value, unit, axis):
+        # Handle the conversion of registered class instances to numerical values
+        # that will appear as the x-values for any plotted data - this is the crucial
+        # part so that plotting float year data is compatible with date data.
+        if issubclass(unit, ss.dur):
+            return value
+        else:
+            if sc.isiterable(value):
+                return [DateConverter._convert_single(v) for v in value]
+            else:
+                return DateConverter._convert_single(value)
+
+# Register the converter for the Starsim date classes
+matplotlib.units.registry[date] = DateConverter()
+matplotlib.units.registry[DateArray] = DateConverter()

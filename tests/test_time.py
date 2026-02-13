@@ -4,6 +4,7 @@ Test different time units and timesteps
 import numpy as np
 import sciris as sc
 import starsim as ss
+import pytest
 
 # ss.options.warnings = 'error' # For additional debugging
 
@@ -162,6 +163,72 @@ def test_syntax():
     return p
 
 
+@sc.timer()
+def test_datearray_operations():
+    sc.heading('Test DateArray add/sub operations')
+
+    a = ss.DateArray([ss.date('2020-01-01'), ss.date('2021-01-01')])
+    b = ss.DateArray([ss.years(1), ss.years(2)])
+    c = ss.years([1, 2])
+
+    expected_dates_plus_month = ss.DateArray([ss.date('2020-01-31'), ss.date('2021-01-31')])
+    assert np.array_equal(a + ss.months(1), expected_dates_plus_month)
+    assert np.array_equal(ss.months(1) + a, expected_dates_plus_month)
+
+    expected_months_plus = ss.DateArray([ss.months(13), ss.months(25)])
+    assert np.array_equal(ss.months(1) + b, expected_months_plus)
+    assert np.array_equal(b + ss.months(1), expected_months_plus)
+
+    expected_months_plus_float = ss.months([13, 25])
+    assert np.array_equal(ss.months(1) + c, expected_months_plus_float)
+    expected_years_plus = ss.years([1 + 1/12, 2 + 1/12])
+    assert np.array_equal(c + ss.months(1), expected_years_plus)
+
+    with pytest.raises(TypeError):
+        _ = a + ss.date('2020-01-01')
+    with pytest.raises(TypeError):
+        _ = ss.date('2020-01-01') + a
+
+    expected_dates_plus = ss.DateArray([ss.date('2021-01-01'), ss.date('2022-01-01')])
+    assert np.array_equal(b + ss.date('2020-01-01'), expected_dates_plus)
+    assert np.array_equal(ss.date('2020-01-01') + b, expected_dates_plus)
+    assert np.array_equal(c + ss.date('2020-01-01'), expected_dates_plus)
+    assert np.array_equal(ss.date('2020-01-01') + c, expected_dates_plus)
+
+    expected_dates_minus_month = ss.DateArray([ss.date('2019-12-02'), ss.date('2020-12-02')])
+    assert np.array_equal(a - ss.months(1), expected_dates_minus_month)
+
+    with pytest.raises(TypeError):
+        _ = ss.months(1) - a
+
+    expected_months_minus = ss.DateArray([ss.months(-11), ss.months(-23)])
+    assert np.array_equal(ss.months(1) - b, expected_months_minus)
+
+    expected_months_sub = ss.DateArray([ss.months(11), ss.months(23)])
+    assert np.array_equal(b - ss.months(1), expected_months_sub)
+    expected_months_minus_float = ss.months([-11, -23])
+    assert np.array_equal(ss.months(1) - c, expected_months_minus_float)
+    expected_years_minus = ss.years([1 - 1/12, 2 - 1/12])
+    assert np.array_equal(c - ss.months(1), expected_years_minus)
+
+    expected_datedur_from_date = ss.DateArray([ss.datedur(years=0), ss.datedur(years=-1)])
+    assert np.array_equal(ss.date('2020-01-01') - a, expected_datedur_from_date)
+
+    expected_datedur_from_array = ss.DateArray([ss.datedur(years=0), ss.datedur(years=1)])
+    assert np.array_equal(a - ss.date('2020-01-01'), expected_datedur_from_array)
+
+    with pytest.raises(TypeError):
+        _ = b - ss.date('2020-01-01')
+    with pytest.raises(TypeError):
+        _ = c - ss.date('2020-01-01')
+
+    expected_dates_from_date = ss.DateArray([ss.date('2019-01-01'), ss.date('2018-01-01')])
+    assert np.array_equal(ss.date('2020-01-01') - b, expected_dates_from_date)
+    assert np.array_equal(ss.date('2020-01-01') - c, expected_dates_from_date)
+
+    return
+
+
 # Run as a script
 if __name__ == '__main__':
     T = sc.timer('\nTotal time')
@@ -170,5 +237,6 @@ if __name__ == '__main__':
     o2 = test_classes()
     o3 = test_callable_dists()
     o4 = test_syntax()
+    o5 = test_datearray_operations()
 
     T.toc()

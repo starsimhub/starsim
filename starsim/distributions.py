@@ -85,14 +85,21 @@ class Dists(sc.prettyobj):
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
 
-        # Do not look for distributions in the people states, since they shadow the "real" states
-        skip = dict(
-            ids=id(sim.people._states) if sim is not None else None,
-            keys='module',
-        )
+        if isinstance(obj, ss.Sim):
+            # Sim-specific prioritization of where to look for dists
+            skip_ids = set()
+            skip_ids.add(id(sim))
+            skip_ids.add(id(sim.people._states))
+            skip_ids.add(id(sim.people)) # Skip checking people on the first round
+            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+            skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
+            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already foun
+            skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
+            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+        else:
+            dists = sc.search(obj, type=Dist, flatten=True)
+        self.dists = dists
 
-        # Find and initialize the distributions
-        self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.init(trace=trace, seed=base_seed, sim=sim, force=force)
@@ -678,6 +685,9 @@ class Dist:
         for key,val in self._pars.items():
             if isinstance(val, ss.TimePar):
                 timepar_type = type(val)
+                timepar_dict[key] = timepar_type
+            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
+                timepar_type = type(val.flat[0])
                 timepar_dict[key] = timepar_type
 
         # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
@@ -1284,9 +1294,9 @@ class randint(Dist):
     def convert_timepars(self):
         for key, v in self._pars.items():
             if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('randint parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('randint parameters must be nondimensional')
 
     def ppf(self, rands):
         p = self._pars
@@ -1387,6 +1397,12 @@ class bernoulli(Dist):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
 
+    def __bool__(self):
+        if callable(self.pars.p) or np.any(sc.promotetoarray(self.pars.p) > 0):
+            return True
+        else:
+            return False
+
     def make_rvs(self):
         rvs = self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
         return rvs
@@ -1439,13 +1455,6 @@ class choice(Dist):
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
         self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
         return
-
-    def convert_timepars(self):
-        for key, v in self._pars.items():
-            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
 
     def ppf(self, rands):
         """ Shouldn't actually be needed since dynamic pars not supported """

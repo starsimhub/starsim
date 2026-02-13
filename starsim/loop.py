@@ -229,6 +229,7 @@ class Loop:
 
         Compare sim.run_one_step(), which runs a full timestep (which involves multiple function calls).
         """
+        self._check_initialized()
         f = self.plan.func[self.index] # Get the next function
         f() # Call it
         self.index += 1 # Increment the time
@@ -237,7 +238,7 @@ class Loop:
     def _check_initialized(self):
         """ Check that the Loop has been initialized """
         if not self.initialized:
-            errormsg = 'Please initialize the loop (typically sim.init()) before calling insert().'
+            errormsg = 'Please initialize the loop (typically sim.init()) before calling this method.'
             raise RuntimeError(errormsg)
         return
 

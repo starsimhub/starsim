@@ -35,7 +35,7 @@ def test_manual():
     sim.init()
     nw2 = ss.MaternalNet()
     nw2.init_pre(sim)
-    nw2.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
+    nw2.add_pairs(mother_uids=[1, 2, 3], unborn_uids=[100, 101, 102])
 
     # Tidy
     o = sc.objdict(nw1=nw1, nw2=nw2)

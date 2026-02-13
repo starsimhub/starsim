@@ -10,7 +10,8 @@ ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None
 
-__all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
+
+__all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy']
 
 
 class Demographics(ss.Module):
@@ -55,7 +56,7 @@ class Births(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
-        self.n_births = 0 # For results tracking
+        self.n_births_this_step = 0 # For results tracking
         self.dist = ss.bernoulli(p=0) # Used to generate random numbers; set to use the birth rate above
         return
 
@@ -120,7 +121,7 @@ class Births(Demographics):
 
     def step(self):
         new_uids = self.add_births()
-        self.n_births = len(new_uids)
+        self.n_births_this_step = len(new_uids)
         return new_uids
 
     def add_births(self):
@@ -135,11 +136,11 @@ class Births(Demographics):
     def update_results(self):
         """ Calculate new births and crude birth rate """
         # New births -- already calculated
-        self.results.new[self.ti] = self.n_births
+        self.results.new[self.ti] = self.n_births_this_step
 
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
-        births_per_year = self.n_births/self.sim.t.dt_year
+        births_per_year = self.n_births_this_step/self.sim.t.dt_year
         denom = self.sim.people.alive.sum()
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
@@ -296,6 +297,49 @@ class Deaths(Demographics):
         return
 
 
+class PregnancyPars(ss.Pars):
+    """
+    Pregnancy parameters and default values
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+
+        # Parameters related to probability of getting pregnant
+        self.fertility_rate=ss.peryear(100)  # Can be a number or a Pandas DataFrame
+        self.rel_fertility=1  # Constant to scale all fertility rates, useful if a dataframe is used
+        self.p_infertile=ss.bernoulli(p=0)  # Primary infertility
+        self.min_age=15  # Minimum age to become pregnant
+        self.max_age=50  # Maximum age to become pregnant
+        self.rate_units=1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+
+        # Parameters related to pregnancy duration
+        self.dur_pregnancy=ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
+
+        # Parameters related to breastfeeding
+        self.dur_breastfeed=ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))
+        self.p_breastfeed=ss.bernoulli(p=1)
+
+        # Parameters related to implantation rate
+        self.embryos_per_pregnancy = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0]))  # Embryos per pregnancy
+
+        # Pregnancy outcome parameters - PTBs, deaths
+        self.rr_ptb=ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
+        self.rr_ptb_age= np.array([[18, 35, 1000], [1.2, 1, 1.2]]) # Relative risk of pre-term birth by maternal age
+        self.p_maternal_death=ss.bernoulli(0)
+        self.p_survive_maternal_death=ss.bernoulli(0)
+
+        # Parameters related to newborn agents
+        self.sex_ratio=ss.bernoulli(0.5)  # Ratio of babies born female
+        self.slot_scale=5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+        self.min_slots=100  # Minimum number of slots, useful if the population size is very small
+
+        # Settings
+        self.burnin=True # Should we seed pregnancies that would have happened before the start of the simulation?
+        self.trimesters=[ss.weeks(13), ss.weeks(26)]
+        self.update(kwargs)
+        return
+
+
 class Pregnancy(Demographics):
     """
     Create births via pregnancies for each agent.
@@ -306,54 +350,66 @@ class Pregnancy(Demographics):
     pregnancies at simulation start.
 
     Args:
-        dur_pregnancy (float/dur): duration of pregnancy (default 9 months)
-        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
         fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
         rel_fertility (float): constant used to scale all fertility rates
-        p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
-        p_neonatal_death (float): probability of neonatal death (default 0.0)
-        sex_ratio (float): probability of female births (default 0.5)
+        p_infertile (bernoulli): probability of primary infertility (default 0)
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
         rate_units (float): units for fertility rates (default assumes per 1000)
+        dur_pregnancy (float/dur): duration of pregnancy (drawn from choice distribution by default)
+        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+
+        rr_ptb (float): base relative risk of pre-term birth (default normal with mean 1, std 0.1)
+        rr_ptb_age (array): relative risk of pre-term birth by maternal age (default [[18,35,100],[1.2,1,1.2]])
+        p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
+        p_survive_maternal_death (float): probability that an unborn agent will survive death of the mother (default 0)
+        sex_ratio (float): probability of female births (default 0.5)
         burnin (bool): whether to seed pregnancies from before simulation start (default true)
+        slot_scale (float): scale factor for assigning slots to newborn agents (default 5)
+        min_slots (int): minimum number of slots for newborn agents (default 100)
+        trimesters (list): list of durations defining the end of each trimester
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
     """
-    def __init__(self, pars=None, dur_pregnancy=_, dur_postpartum=_, fertility_rate=_, rel_fertility=_,
-                 p_maternal_death=_, p_neonatal_death=_, sex_ratio=_, min_age=_, max_age=_,
-                 rate_units=_, burnin=_, slot_scale=_, min_slots=_, metadata=None, **kwargs):
+    def __init__(self, pars=None, fertility_rate=_, rel_fertility=_, p_infertile=_, min_age=_, max_age=_,
+                 rate_units=_, dur_pregnancy=_, dur_breastfeed=_, p_breastfeed=_, rr_ptb=_,
+                 rr_ptb_age=_, p_maternal_death=_, p_survive_maternal_death=_, sex_ratio=_, burnin=_, slot_scale=_,
+                 min_slots=_, trimesters=_, metadata=None, **kwargs):
         super().__init__()
-        self.define_pars(
-            dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
-            dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = ss.peryear(100), # Can be a number of Pandas DataFrame
-            rel_fertility = 1,
-            p_maternal_death = ss.bernoulli(0),
-            p_neonatal_death = ss.bernoulli(0),
-            sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
-            min_age = 15, # Minimum age to become pregnant
-            max_age = 50, # Maximum age to become pregnant
-            rate_units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
-            burnin = True, # Should we seed pregnancies that would have happened before the start of the simulation?
-            slot_scale = 5, # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
-            min_slots  = 100, # Minimum number of slots, useful if the population size is very small
-        )
+        default_pars = PregnancyPars()
+        self.define_pars(**default_pars)
         self.update_pars(pars, **kwargs)
 
-        self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_p_fertility
+        # Distributions: binary outcomes
+        self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage - placeholder, not used
+        self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
+        self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth - placeholder, not used
 
-        # Other, e.g. postpartum, on contraception...
+        # States
         self.define_states(
-            ss.BoolState('fecund', default=True, label='Female of childbearing age'),
+            # Pregnancy and fertility
             ss.BoolState('pregnant', label='Pregnant'),  # Currently pregnant
-            ss.BoolState('postpartum', label="Post-partum"),  # Currently post-partum
-            ss.FloatArr('parity', label='Parity', default=0),  # Number of pregnancies
-            ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
-            ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
+            ss.BoolState('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
+            ss.FloatArr('rel_sus', default=0),  # Susceptibility to pregnancy, set to 1 for non-pregnant women
+            ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
+            ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
+            ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
+            ss.FloatArr('n_miscarriages', label='Number of miscarrianges', default=0),  # Number of micarriages
+            ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
+            ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
-            ss.FloatArr('ti_delivery', label='Time of delivery'),  # Time of delivery
-            ss.FloatArr('ti_postpartum', label='Time post-partum ends'),  # Time postpartum ends
+            ss.FloatArr('ti_delivery', label='Timestep of delivery'),  # Timestep of delivery (integer)
             ss.FloatArr('ti_dead', label='Time of maternal death'),  # Maternal mortality
+            ss.BoolState('carrying_multiple', label='Carrying multiple embryos'),  # Carrying multiple embryos
+
+            # Pre-term birth
+            ss.FloatArr('rel_ptb_base', label='Relative risk of pre-term birth at base', default=1),  # Baseline relative risk of pre-term birth - constant throughout lifetime of mother
+            ss.FloatArr('rel_ptb', label='Relative risk of pre-term birth', default=1),  # Relative risk of pre-term birth - resets every timestep
+
+            # Breastfeeding
+            ss.BoolState('breastfeeding', label='Breastfeeding'),  # Currently breastfeeding
+            ss.FloatArr('dur_breastfeed', label='Duration of breastfeeding'),  # Duration of breastfeeding
+            ss.FloatArr('ti_stop_breastfeed', label='Time breastfeeding stops'),  # Time breastfeeding stops
+            ss.BoolState('breastfed', label='Breastfed'),  # Property of newborn indicating whether they were breastfed
         )
 
         # Process metadata. Defaults here are the labels used by UN data
@@ -361,23 +417,82 @@ class Pregnancy(Demographics):
             sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-        self.choose_slots = None # Distribution for choosing slots; set in self.init()
+        self.choose_slots = None  # Distribution for choosing slots; set in self.init()
+        self.fertility_rate_data = None  # Processed data; set in self.init_pre() if fertility rate data is in pars
 
         # For results tracking
-        self.n_pregnancies = 0
-        self.n_births = 0
+        self.n_pregnancies_this_step = 0
+        self.n_births_this_step = 0
+        self.derived_results = None  # Updated in init_results
+
+        # Define ASFR
+        self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
+        self.asfr_width = self.asfr_bins[1]-self.asfr_bins[0]
+        self.asfr = None  # Storing this separately from results as it has a different format
+
         return
 
-    def make_p_fertility(self, filter_uids=None):
-        """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
-        sim = self.sim
-        ppl = sim.people
+    @property
+    def fecund(self):
+        """ Defined as women of childbearing age """
+        ppl = self.sim.people
+        pars = self.pars
+        return (ppl.age >= pars.min_age) & (ppl.age <= pars.max_age) & ppl.female
 
-        # Filter UIDS and age
-        may_conceive = ppl.female & (ppl.age >= self.pars.min_age) & (ppl.age <= self.pars.max_age)
-        uids = may_conceive
+    @property
+    def fertile(self):
+        """ Defined as women of childbearing age who are not infertile. Includes women who may be pregnant """
+        return self.fecund & (~self.infertile)
+
+    @property
+    def susceptible(self):
+        """ Defined as fertile women of childbearing age who are not pregnant, and so are susceptible to conception """
+        return self.fertile & (~self.pregnant)
+
+    @property
+    def nulliparous(self):
+        """ Women of childbearing age who have never been pregnant """
+        return (self.parity == 0) & self.fecund
+
+    @property
+    def dur_gestation(self):
+        """ Return duration of gestation for currently-pregnant women in years """
+        return ss.years((self.ti - self.ti_pregnant[self.pregnant])*self.t.dt_year)
+
+    @property
+    def dur_gestation_at_birth(self):
+        """ Return duration of gestation at birth for agents born during the simulation """
+        born_during_sim = self.sim.people.parent.notnan & (self.sim.people.age > self.t.dt.years)
+        return ss.weeks(self.people.pregnancy.gestation_at_birth[born_during_sim]).to('years')
+
+    @property
+    def tri1_uids(self):
+        """ Return UIDs of those in their first trimester """
+        return self.pregnant.uids[self.dur_gestation < self.pars.trimesters[0]]
+
+    @property
+    def tri2_uids(self):
+        """ Return UIDs of those in their second trimester """
+        return self.pregnant.uids[(self.dur_gestation >= self.pars.trimesters[0]) & (self.dur_gestation < self.pars.trimesters[1])]
+
+    @property
+    def tri3_uids(self):
+        """ Return UIDs of those in their third trimester """
+        return self.pregnant.uids[self.dur_gestation >= self.pars.trimesters[1]]
+
+    def find_unborn_children(self, parent_uids):
+        all_children = self.sim.people.find_children(parent_uids)
+        unborn_children = all_children[self.sim.people.age[all_children] < self.t.dt.years]
+        return unborn_children
+
+    def make_p_conceive(self, filter_uids=None):
+        """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
+        ppl = self.sim.people
+
+        # Apply filter UIDS and get ages
+        uids = self.fecund
         if filter_uids is not None: uids = filter_uids & uids
-        age = sim.people.age[uids]
+        age = ppl.age[uids]
 
         # Get data, check it's in the right form
         frd = self.fertility_rate_data
@@ -385,44 +500,46 @@ class Pregnancy(Demographics):
             raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
 
         # Initialize rate as an array the length of raw UIDs, so we can index it with UIDs
-        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float)
+        fertility_rate = np.zeros(len(ppl.uid.raw), dtype=ss_float)
 
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = ss.prob(frd.value * (self.pars.rate_units * self.pars.rel_fertility), frd.unit).to_prob(ss.years(1))
         else:
-            conception_time = self.t.year-self.pars.dur_pregnancy.years
-            if isinstance(conception_time, ss.years):
-                conception_time = conception_time.years
-            year_ind = sc.findnearest(frd.index, conception_time)
-            nearest_year = frd.index[year_ind]
+            # Get the time of birth for pregnancies conceived now and pull out the birth rates for that year.
+            # We adjust the birth rates to account for the fact that some women are already pregnant, which
+            # is why we make a copy.
+            birth_year = self.t.year + self.pars.dur_pregnancy.pars.a.years
+            birth_year_inds = sc.findnearest(frd.index, birth_year)
+            nearest_year = frd.index[birth_year_inds][0]  # 0 because the corner case of spanning 2 years can be ignored
+            new_rate = self.fertility_rate_data.loc[nearest_year].values.copy()  # Initialize array with new rates
 
             # Assign agents to age bins
             age_bins = self.fertility_rate_data.columns.values
             age_bin_all = np.digitize(age, age_bins) - 1
-            new_rate = self.fertility_rate_data.loc[nearest_year].values.copy()  # Initialize array with new rates
 
-            if (~self.fecund).any():
-                # Scale the new rate to convert the denominator from all women to fecund women
+            if self.pregnant.any():
+                # Scale the new rate to convert the denominator from all women to non-pregnant women
                 v, c = np.unique(age_bin_all, return_counts=True)
-                age_counts = np.zeros(len(age_bins))
+                age_counts = np.zeros_like(new_rate)
                 age_counts[v] = c
 
-                age_bin_infecund = np.digitize(sim.people.age[~self.fecund], age_bins) - 1
-                v, c = np.unique(age_bin_infecund, return_counts=True)
-                infecund_age_counts = np.zeros(len(age_bins))
-                infecund_age_counts[v] = c
+                age_bin_pregnant = np.digitize(ppl.age[self.pregnant], age_bins) - 1
+                v, c = np.unique(age_bin_pregnant, return_counts=True)
+                pregnant_age_counts = np.zeros_like(new_rate)
+                pregnant_age_counts[v] = c
 
                 num_to_make = new_rate * age_counts  # Number that we need to make pregnant
-                new_denom = age_counts - infecund_age_counts  # New denominator for rates
+                new_denom = age_counts - pregnant_age_counts  # New denominator for rates
                 np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
+            # Overall fertility rate
             fertility_rate[uids] = new_rate[age_bin_all] * (self.pars.rate_units * self.pars.rel_fertility)  # Prob per year
 
         # Scale from rate to probability
-        fertility_rate[(~self.fecund).uids] = 0  # Currently infecund women cannot become pregnant
+        fertility_rate[self.pregnant.uids] = 0  # Currently pregnant women cannot become pregnant
         fertility_rate = ss.peryear(fertility_rate[filter_uids])  # Only return rates for requested UIDs
-        p_fertility = fertility_rate.to_prob(self.t.dt)  # Convert to probability per timestep
-        return p_fertility
+        p_conceive = fertility_rate.to_prob(self.t.dt)  # Convert to probability per timestep
+        return p_conceive
 
     def standardize_fertility_data(self):
         """
@@ -447,103 +564,215 @@ class Pregnancy(Demographics):
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.fertility_rate_data = self.standardize_fertility_data()
+        if self.pars.fertility_rate is not None:
+            self.fertility_rate_data = self.standardize_fertility_data()
 
         low = sim.pars.n_agents + 1
         high = int(self.pars.slot_scale*sim.pars.n_agents)
         high = np.maximum(high, self.pars.min_slots) # Make sure there are at least min_slots slots to avoid artifacts related to small populations
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
+
+        return
+
+    def init_post(self):
+        super().init_post()
+        self.updates_pre()
+
+        # Burn-in
+        if self.ti == 0 and self.pars.burnin:  # TODO: refactor
+            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
+            for dti in dtis:
+                self.t.ti = dti
+                self.step()
+            self.t.ti = 0
+
         return
 
     def init_results(self):
         """
-        Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
-        Still unclear whether this logic should live in the pregnancy module, the
-        individual disease modules, the connectors, or the sim.
+        Initialize results. By default, this includes:
+        - pregnancies: number of new pregnancies on each timestep
+        - births: number of new births on each timestep
+        - cbr: crude birth rate on each timestep
+        - tfr: total fertility rate on each timestep
+        - The number of people who are fecund, (in)fertile, susceptible, postpartum, pregnant, infertile, breastfeeding
         """
         super().init_results()
-        self.define_results(
-            ss.Result('pregnancies', dtype=int,   scale=True,  summarize_by='sum',  label='New pregnancies'),
-            ss.Result('births',      dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
-            ss.Result('cbr',         dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
-        )
+
+        scaling_kw = dict(dtype=int, scale=True)
+        nonscaling_kw = dict(dtype=float, scale=False)
+        self.derived_results = ['n_fecund', 'n_fertile', 'n_susceptible']
+
+        # Define results
+        results = sc.autolist()
+        results += [
+            ss.Result('pregnancies', **scaling_kw, label='New pregnancies', summarize_by='sum'),
+            ss.Result('births', **scaling_kw, label='New births', summarize_by='sum'),
+            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum'),
+            ss.Result('mmr', **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate'),
+            ss.Result('cbr', **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
+            ss.Result('tfr', **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
+        ]
+        for res in self.derived_results:
+            results += ss.Result(res, **scaling_kw)
+        self.define_results(*results)
+
+        # Extra results
+        self.asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
+
         return
 
-    def step(self):
-        if self.ti == 0 and self.pars.burnin: # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy/self.dt), 0, 1).astype(int)
-            for dti in dtis:
-                self.t.ti = dti
-                self.do_step()
-            self.t.ti = 0
-        new_uids = self.do_step()
-        return new_uids
+    # Helper methods
+    def _get_uids(self, upper_age=None, female_only=True):
+        """ Get the UIDs of people, usually only females, who are below a certain age """
+        people = self.sim.people
+        if upper_age is None: upper_age = 1000
+        within_age = people.age <= upper_age
+        if female_only:
+            f_uids = (within_age & people.female).uids
+            return f_uids
+        else:
+            uids = within_age.uids
+            return uids
 
-    def do_step(self):
-        """ Perform all updates """
-        self.update_states()
-        conceive_uids = self.make_pregnancies()
-        self.n_pregnancies += len(conceive_uids) # += to handle burn-in
-        new_uids = self.make_embryos(conceive_uids)
-        return new_uids
+    # Methods for setting states
+    def set_ptb(self):
+        """ Update relative risk of pre-term birth """
+        self.rel_ptb[:] = self.rel_ptb_base[:]  # Reset to baseline
+        rr_ptb_age_bins = self.pars.rr_ptb_age[0].astype(int)
+        age_ind = np.searchsorted(rr_ptb_age_bins, self.sim.people.age, side="left")
+        self.rel_ptb[:] *= self.pars.rr_ptb_age[1][age_ind]
+        return
 
-    def update_states(self):
-        """ Update states """
-        # Check for new deliveries
-        ti = self.ti
-        deliveries = self.pregnant & (self.ti_delivery <= ti)
-        self.n_births = np.count_nonzero(deliveries)
-        self.pregnant[deliveries] = False
-        self.postpartum[deliveries] = True
-        self.fecund[deliveries] = False
-        self.parity[deliveries] += 1  # Increment parity for the mothers
+    def set_rel_sus(self):
+        """
+        Set relative susceptibility to pregnancy. Note that rel_sus isn't used in this module,
+        but it's a key ingredient for derived modules that compute pregnancies based on exposure.
+        """
+        self.rel_sus[self.susceptible] = 1.0
+        self.rel_sus[~self.susceptible] = 0.0
+        return
 
-        # Add connections to any postnatal transmission layers
-        for lkey, layer in self.sim.networks.items():
-            if layer.postnatal and self.n_births:
+    def updates_pre(self, uids=None, upper_age=None):
+        """
+        This runs prior at the beginning of each timestep, prior to calculating pregnancy exposure,
+        advancing pregnancies, adding new pregnancies, or determing delivery outcomes. Here we make
+        any updates that affect the risk of pregnancy or pre-term birth on this timestep. We also
+        set the baseline values for newborn agents.
+        """
+        if uids is None: uids = self._get_uids(upper_age=upper_age)
+        self.infertile[uids] = self.pars.p_infertile.rvs(uids)  # Infertility
+        self.rel_ptb_base[uids] = self.pars.rr_ptb.rvs(uids)  # Baseline relative risk of pre-term birth
+        self.set_ptb()  # Update pre-term birth relative risk
 
-                # Add postnatal connections by finding the prenatal contacts
-                # Validation of the networks is done during initialization to ensure that 1 prenatal netwrok is present
-                prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
+        # Check if anyone stops breastfeeding
+        if self.breastfeeding.any():
+            self.update_breastfeeding(self.breastfeeding.uids)
 
-                # Find the prenatal connections that are ending
-                prenatal_ending = prenatalnet.edges.end <= ti
-                new_mother_uids = prenatalnet.edges.p1[prenatal_ending]
-                new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
+        return uids
 
-                # Validation
-                if not set(new_mother_uids) == set(deliveries.uids): # Not sure why sometimes out of order
-                    errormsg = 'IDs of new mothers do not match IDs of new deliveries'
-                    raise ValueError(errormsg)
+    def update_breastfeeding(self, uids):
+        stopping = uids[self.ti >= self.ti_stop_breastfeed[uids]]
+        if np.any(stopping):
+            self.breastfeeding[stopping] = False
+        return stopping
 
-                # Create durations and start dates, and add connections
-                durs = self.dur_postpartum[new_mother_uids]
-                start = np.full(self.n_births, fill_value=ti)
+    def process_delivery(self, mother_uids, newborn_uids):
+        """
+        Handle delivery by updating all states for the mother. This method also transfers
+        recorded information stored with the mother to the newborn. During pregnancy,
+        gestational age is tracked with the mother; at birth, this value is transferred
+        to the newborn agent before being reset for the mother. Likewise, during pregnancy,
+        the child UID is stored with the mother; at birth, this value is removed from the mother,
+        although newborn agents can still be linked to the mother via the parent state.
+        """
+        newborn_parents = self.sim.people.parent[newborn_uids]  # Find which parent each newborn belongs to
+        self.gestation_at_birth[newborn_uids] = self.gestation[newborn_parents]  # Transfer to newborn
+        self.pregnant[mother_uids] = False
+        self.ti_delivery[mother_uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
+        self.carrying_multiple[mother_uids] = False  # Reset multiple embryo status
+        self.gestation[mother_uids] = np.nan  # No longer pregnant so remove gestational clock
+        self.parity[mother_uids] += 1  # Increment parity for the mothers
 
-                # # Remove pairs from prenatal network and add to postnatal
-                prenatalnet.end_pairs()
-                layer.add_pairs(new_mother_uids, new_infant_uids, dur=durs, start=start)
+        # Set breastfeeding status
+        self.set_breastfeeding(mother_uids, newborn_uids)  # Update transmission networks
 
-        # Check for new women emerging from post-partum
-        postpartum = self.postpartum & (self.ti_postpartum <= ti)
-        self.postpartum[postpartum] = False
-        self.fecund[postpartum] = True
-        self.child_uid[postpartum] = np.nan
+        # Set maternal death outcomes
+        dead = self.pars.p_maternal_death.filter(mother_uids)
+        self.ti_dead[dead] = self.ti
 
-        # Maternal deaths
-        maternal_deaths = (self.ti_dead <= ti).uids
+        # Update networks after the states have been updated above so that the
+        # networks can access the latest/current states
+
+        for net in self.sim.networks.values():
+
+            # Update prenatal networks - remove newborns
+            if isinstance(net, ss.PrenatalNet):
+                net.remove_uids(newborn_uids)
+
+            # Update postnatal networks - add newborns
+            if isinstance(net, ss.PostnatalNet):
+                net.add_pairs(newborn_parents, newborn_uids)
+
+        # Hook for subclasses to add post-delivery logic
+        self._post_delivery(mother_uids, newborn_uids)
+
+        return
+
+    def _post_delivery(self, mother_uids, newborn_uids):
+        """Hook for subclasses to add post-delivery logic. Base implementation does nothing."""
+        return
+
+    def set_breastfeeding(self, mother_uids, newborn_uids):
+        """
+        Set breastfeeding durations for new mothers. This method could be extended to
+        store duration of exclusive breastfeeding, partial breastfeeding, etc, and these
+        properties could be stored with the infant for tracking other health outcomes.
+        """
+        will_breastfeed = self.pars.p_breastfeed.filter(mother_uids)
+        self.breastfeeding[will_breastfeed] = True  # For the mother
+        self.dur_breastfeed[will_breastfeed] = self.pars.dur_breastfeed.rvs(will_breastfeed)
+        self.ti_stop_breastfeed[will_breastfeed] = self.ti + self.dur_breastfeed[will_breastfeed]
+
+        gets_breastfed = np.isin(self.sim.people.parent[newborn_uids], will_breastfeed)
+        self.breastfed[newborn_uids[gets_breastfed]] = True
+        return
+
+    def process_newborns(self, uids):
+        """ Set states for newborn agents """
+        return
+
+    def progress_pregnancies(self):
+        """
+        Update pregnant women. The method can be enhanced by derived classes that add logic
+        for miscarriage, termination, maternal death, etc.
+        """
+        # Update gestational clock for ongoing pregnancies
+        if self.pregnant.any():
+            will_deliver = self.pregnant & (self.ti_delivery <= self.ti)
+            self.gestation[self.pregnant] += self.dt.weeks
+            # For those delivering, set to the gestational age at delivery, which may be part-way through the timestep
+            self.gestation[will_deliver] = (self.t.dt*self.dur_pregnancy[will_deliver]).weeks
+
+        return
+
+    def update_maternal_deaths(self):
+        """
+        Check for maternal deaths
+        """
+        maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
+        self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
         return
 
-    def make_pregnancies(self):
-        """ Select people to make pregnant using incidence data """
+    def select_conceivers(self, uids=None):
+        """ Select people to make pregnant """
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        eligible_uids = self.sim.people.female.uids
-        p_fertility = self.make_p_fertility(eligible_uids)
-        self.pars.p_fertility.set(p_fertility)
-        dist = self.pars.p_fertility
-        conceive_uids = dist.filter(eligible_uids)
+        if uids is None: uids = self.sim.people.female.uids
+        p_conceive = self.make_p_conceive(uids)
+        self._p_conceive.set(p_conceive)
+        conceive_uids = self._p_conceive.filter(uids)
 
         if len(conceive_uids) == 0:
             return ss.uids()
@@ -554,65 +783,147 @@ class Pregnancy(Demographics):
             errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
 
-        # Set prognoses for the pregnancies
-        self.set_prognoses(conceive_uids)
         return conceive_uids
 
-    def make_embryos(self, conceive_uids):
-        """ Add properties for the just-conceived """
+    def _make_newborn_uids(self, conceive_uids, embryo_counts):
+        """ Helper method to link embryos to mothers """
+        # Choose slots for the first embryo of each pregnancy
+        first_slots = self.choose_slots.rvs(conceive_uids)
+
+        # If all pregnancies are singletons, just return
+        if np.all(embryo_counts == 1):
+            new_uids = self.sim.people.grow(len(first_slots), first_slots)
+            return conceive_uids, new_uids, first_slots
+
+        # Otherwise, build the full list of slots for multiple embryos
+        new_slots = list(first_slots)
+
+        # Only iterate over pregnancies with multiple embryos to add additional slots
+        multi_idx = np.where(embryo_counts > 1)[0]
+        insert_offset = 0
+        for idx in multi_idx:
+            slot = first_slots[idx]
+            count = embryo_counts[idx]
+            # Insert additional embryos after the first one
+            insert_pos = idx + 1 + insert_offset
+            for i in range(1, count):
+                new_slots.insert(insert_pos, slot + i)
+                insert_pos += 1
+            insert_offset += count - 1
+
+        # Grow the population to accommodate all embryos
+        new_uids = self.sim.people.grow(len(new_slots), new_slots)
+
+        # Expand conceive_uids to match the number of embryos
+        conceive_uids_with_repeats = np.repeat(conceive_uids, embryo_counts)
+
+        return conceive_uids_with_repeats, new_uids, new_slots
+
+    def _set_embryo_states(self, conceive_uids, new_uids, new_slots):
+        """ Set states for the just-conceived """
+        people = self.sim.people
+        gest_years = self.dur_pregnancy[conceive_uids] * self.t.dt_year
+        people.age[new_uids] = -gest_years
+        people.slot[new_uids] = new_slots  # Before sampling female_dist
+        people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
+        people.parent[new_uids] = conceive_uids
+        return
+
+    def make_embryos(self, conceive_uids, embryo_counts=None):
+        """
+        Make newly-conceived agents. This method calls two helper methods, which grow the population
+        and set the states for the newborn agents.
+        """
         people = self.sim.people
         n_unborn = len(conceive_uids)
         if n_unborn == 0:
             new_uids = ss.uids()
         else:
-
-            # Choose slots for the unborn agents
-            new_slots = self.choose_slots.rvs(conceive_uids)
-
-            # Grow the arrays and set properties for the unborn agents
-            new_uids = people.grow(len(new_slots), new_slots)
-            people.age[new_uids] = -self.pars.dur_pregnancy.years
-            people.slot[new_uids] = new_slots  # Before sampling female_dist
-            people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
-            people.parent[new_uids] = conceive_uids
-            self.child_uid[conceive_uids] = new_uids
-
-            # Add connections to any prenatal transmission layers
-            for lkey, layer in self.sim.networks.items():
-                if layer.prenatal:
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy/layer.t.dt) # Network edge duration is stored in units of timesteps, so we need to convert dur_pregnancy to a number of timesteps here
-                    start = np.full(n_unborn, fill_value=self.ti)
-                    layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
+            conceive_uids_with_repeats, new_uids, new_slots = self._make_newborn_uids(conceive_uids, embryo_counts)
+            self._set_embryo_states(conceive_uids_with_repeats, new_uids, new_slots)
 
         if self.ti < 0:
-            people.age[new_uids] += -self.ti * self.sim.t.dt_year # Age to ti=0
+            people.age[new_uids] += -self.ti * self.sim.t.dt_year  # Age to ti=0
 
-        return new_uids
+        return conceive_uids_with_repeats, new_uids
 
-    def set_prognoses(self, uids):
+    def make_pregnancies(self, uids):
         """
-        Make pregnancies
-        Add miscarriage/termination logic here
-        Also reconciliation with birth rates
-        Q, is this also a good place to check for other conditions and set prognoses for the fetus?
+        Make pregnancies, assign durations, and determine multiples
         """
 
         # Change states for the newly pregnant woman
         ti = self.ti
-        self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti
+        self.gestation[uids] = 0
+        self.n_pregnancies[uids] += 1
 
-        # Outcomes for pregnancies
-        dur_preg = self.pars.dur_pregnancy
-        dur_postpartum = self.pars.dur_postpartum.rvs(uids)
-        dead = self.pars.p_maternal_death.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg/self.t.dt # Currently assumes maternal deaths still result in a live baby. Note that since we are adding the duration to `ti` (the number of timesteps) we need to convert `dur_preg` into a number of timesteps
-        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
-        self.dur_postpartum[uids] = dur_postpartum
+        # Use rel_ptb to assign pregnancy durations
+        rel_ptb = self.rel_ptb[uids]
+        sorted_uids = uids[np.argsort(-rel_ptb)]
+        dur_preg = self.pars.dur_pregnancy.rvs(uids)
+        self.dur_pregnancy[sorted_uids] = np.sort(dur_preg)
+        self.ti_delivery[sorted_uids] = ti + self.dur_pregnancy[sorted_uids]
 
-        if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = ti + dur_preg
+        # Figure out how many embryos each UID will gestate
+        # Could do something here to adjust for age, parity, etc.
+        # Could also adjust pre-term birth rates based on number of embryos
+        embryo_counts = self.pars.embryos_per_pregnancy.rvs(uids)
+        self.carrying_multiple[uids[(embryo_counts > 1)]] = True
+
+        # Check that all pregnant women have a delivery time set
+        missing_delivery = self.pregnant[uids] & np.isnan(self.ti_delivery[uids])
+        if np.any(missing_delivery):
+            which_uids = uids[missing_delivery]
+            errormsg = f'Delivery time has NaN values for {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
+            raise ValueError(errormsg)
+
+        return embryo_counts
+
+    def step(self):
+        """ Perform all updates except for deaths, which are handled in finish_step """
+
+        # Set base states
+        self.updates_pre(upper_age=self.t.dt_year)  # Set base states for new agents
+
+        # Update ongoing pregnancies
+        self.progress_pregnancies()
+
+        # Process deliveries and births
+        mothers = (self.pregnant & (self.ti_delivery <= self.ti)).uids
+        if len(mothers):
+            newborns = self.find_unborn_children(mothers)
+            self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
+            self.n_births_this_step += len(newborns)    # += to handle burn-in
+            self.process_newborns(newborns)             # Process newborns
+
+        # Figure out who conceives, set prognoses, and make embryos
+        self.set_rel_sus()                              # Update rel_sus
+        conceivers = self.select_conceivers()           # Get the UIDs of women who are going to conceive this timestep
+        self.n_pregnancies_this_step += len(conceivers) # += to handle burn-in
+
+        # Make pregnancies and embryos
+        if len(conceivers):
+            embryo_counts = self.make_pregnancies(conceivers)
+            conceive_uids_with_repeats, new_uids = self.make_embryos(conceivers, embryo_counts)
+
+            # Add embryos to prenatal networks
+            for net in self.sim.networks.values():
+                if isinstance(net, ss.PrenatalNet):
+                    net.add_pairs(conceive_uids_with_repeats, new_uids)
+
+        # Other updates - maternal deaths
+        self.update_maternal_deaths()                   # Handle maternal deaths
+
+        return
+
+    def step_die(self, uids):
+        """ Wipe dates and states following death """
+        self.pregnant[uids] = False
+        self.dur_pregnancy[uids] = np.nan
+        self.gestation[uids] = np.nan
+        self.ti_delivery[uids] = np.nan
         return
 
     def finish_step(self):
@@ -620,37 +931,69 @@ class Pregnancy(Demographics):
         death_uids = ss.uids(self.sim.people.ti_dead <= self.ti)
         if len(death_uids) == 0:
             return
+        self.process_maternal_deaths(death_uids)
+        self.process_prenatal_deaths(death_uids)
+        return
 
-        # Any pregnant? Consider death of the neonate
+    def process_maternal_deaths(self, death_uids):
+        """
+        If any pregnant mothers die, we also process the death of the unborn agent.
+        Default probability is set to 1 meaning we assume that unborn children do not survive.
+        """
         mother_death_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_death_uids):
-            neonate_uids = ss.uids(self.child_uid[mother_death_uids])
-            neonatal_death_uids = self.pars.p_neonatal_death.filter(neonate_uids)
-            if len(neonatal_death_uids):
-                self.sim.people.request_death(neonatal_death_uids)
+            unborn_uids = self.find_unborn_children(mother_death_uids)
+            _, unborn_death_uids = self.pars.p_survive_maternal_death.filter(unborn_uids, both=True)
+            if len(unborn_death_uids):
+                self.sim.people.request_death(unborn_death_uids)
+            self.step_die(mother_death_uids)
+        return
 
-        # Any prenatal? Handle changes to pregnancy
+    def process_prenatal_deaths(self, death_uids):
+        """
+        If any deaths occur in unborn agents, we handle changes to pregnancy and record as a miscarriage
+        """
         is_prenatal = self.sim.people.age[death_uids] < 0
         prenatal_death_uids = death_uids[is_prenatal]
         if len(prenatal_death_uids):
             mother_uids = self.sim.people.parent[prenatal_death_uids]
-            self.pregnant[mother_uids] = False # Baby lost, mother no longer pregnant
-            self.fecund[mother_uids] = True # Or wait?
-            self.postpartum[mother_uids] = False
-            self.child_uid[mother_uids] = np.nan
-            self.ti_delivery[mother_uids] = np.nan
-            self.ti_postpartum[mother_uids] = np.nan
+            self.n_miscarriages[mother_uids] += 1
+            singletons = mother_uids[~self.carrying_multiple[mother_uids]]
+            self.step_die(singletons)
         return
 
     def update_results(self):
+        super().update_results()
         ti = self.ti
-        self.results['pregnancies'][ti] = self.n_pregnancies
-        self.results['births'][ti] = self.n_births
+        self.results['pregnancies'][ti] = self.n_pregnancies_this_step
+        self.results['births'][ti] = self.n_births_this_step
+
+        for res in self.derived_results:
+            state = getattr(self, res.replace('n_', ''))
+            self.results[res][self.ti] = state.sum()
 
         # Reset for the next step
-        self.n_pregnancies = 0
-        self.n_births = 0
+        self.n_pregnancies_this_step = 0
+        self.n_births_this_step = 0
 
+        # Update ASFR, TFR, and MMR
+        res = self.results
+        self.compute_asfr()
+        self.results.tfr[ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
+        self.results.mmr[ti] = sc.safedivide(res.maternal_deaths[ti], res.births[ti]) * 100e3
+
+        return
+
+    def compute_asfr(self):
+        """
+        Computes age-specific fertility rates (ASFR). Since this is calculated each timestep,
+        the annualized results should compute the sum.
+        """
+        new_mother_uids = (self.ti_delivery == self.ti).uids
+        new_mother_ages = self.sim.people.age[new_mother_uids]
+        births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins)
+        women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins)
+        self.asfr[:, self.ti] = sc.safedivide(births_by_age, women_by_age) * 1000
         return
 
     def finalize(self):
@@ -660,4 +1003,12 @@ class Pregnancy(Demographics):
         n_alive = self.sim.results.n_alive[inds]
         births = np.divide(self.results['births'], n_alive, where=n_alive>0)
         self.results['cbr'][:] = births/units
+
+        # Aggregate the ASFR results, taking rolling annual sums
+        asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
+        tdim = int(1/self.t.dt_year)
+        for i in range(len(self.asfr_bins)-1):
+            asfr[i, (tdim-1):] = np.convolve(self.asfr[i, :], np.ones(tdim), mode='valid')
+        self.asfr = asfr
+
         return

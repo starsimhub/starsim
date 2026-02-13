@@ -2,6 +2,7 @@
 Define array-handling classes, including agent states
 """
 # import sys
+import itertools
 import numbers
 import numpy as np
 import numba as nb
@@ -74,6 +75,9 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
         inputs = [self._arr(x) for x in inputs]
         kwargs = {k:self._arr(v) for k,v in kwargs.items()}
+        for x in itertools.chain(inputs, kwargs.values()):
+            if isinstance(x, ss.TimePar):
+                return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
@@ -293,14 +297,25 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def _boolmath(self, op, other=None):
-        """ Helper function for performing basic math operations that return a Boolean, e.g. > """
+    def _boolmath(self, op, other=None, inplace=False):
+        """ Helper function for boolean operations.
+
+        Args:
+            op: A string with the operator e.g., ">", "&" etc.
+            other: The object operating on the BoolArr e.g., Arr, np.ndarray.
+            inplace: If True, overwrite the current object rather than returning a new one.
+
+        Returns:
+            A BoolArr with the result of the operation.
+        """
         self_raw = self.raw # Always size N
         both_raw = True # Assume this by default
         if isinstance(other, Arr):
             other_raw = other.raw # Also always size N
         elif isinstance(other, (numbers.Number, type(None))):
-            other_raw = other # If its' a scalar, we don't have to worry about array size
+            other_raw = other # If it's a scalar, we don't have to worry about array size
+        elif isinstance(other, ss.date):
+            other_raw = other.years
         elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
             raw_size = self_raw.size
             both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
@@ -337,7 +352,11 @@ class Arr(BaseArr):
             result_raw = np.empty(raw_size, dtype=np.bool_)
             result_raw[inds] = c
 
-        return self.asnew(result_raw, cls=BoolArr, copy=False)
+        if inplace:
+            self.raw[:] = result_raw
+            return self
+        else:
+            return self.asnew(result_raw, cls=BoolArr, copy=False)
 
     def __gt__(self, other): return self._boolmath('>', other)
     def __lt__(self, other): return self._boolmath('<', other)
@@ -418,8 +437,7 @@ class Arr(BaseArr):
             return vals[np.nonzero(~np.isnan(vals))[0]]
 
     def grow(self, new_uids=None, new_vals=None):
-        """
-        Add new agents to an Arr
+        """ Add new agents to an Arr
 
         This method is normally only called via `People.grow()`.
 
@@ -561,8 +579,7 @@ class Arr(BaseArr):
 
 
 class FloatArr(Arr):
-    """
-    Subclass of `ss.Arr` with defaults for floats and ints.
+    """ Subclass of `ss.Arr` with defaults for floats and ints.
 
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
@@ -573,8 +590,7 @@ class FloatArr(Arr):
 
 
 class IntArr(Arr):
-    """
-    Subclass of Arr with defaults for ints.
+    """ Subclass of `ss.Arr` with defaults for ints.
 
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
@@ -585,15 +601,83 @@ class IntArr(Arr):
 
 
 class BoolArr(Arr):
-    """ Subclass of Arr with defaults for booleans """
+    """ Subclass of `ss.Arr` with defaults for booleans """
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
 
-    def __and__(self, other): return self._boolmath('&', other)
-    def __or__(self, other):  return self._boolmath('|', other)
-    def __xor__(self, other): return self._boolmath('^', other)
-    def __invert__(self):     return self._boolmath('~')
+    def __eq__(self, other):
+        if isinstance(other, uids):
+            out = ~self.raw
+            out[other] = self.raw[other]
+            return self.asnew(out, cls=BoolArr, copy=False)
+        return self._boolmath('==', other)
+
+    def __ne__(self, other):
+        if isinstance(other, uids):
+            return self.__xor__(other)
+        return self._boolmath('!=', other)
+
+    def __and__(self, other):
+        """ Bitwise AND
+
+        Supports BoolArr and uids as inputs. If input is uids, it is treated as a BoolArr where
+        the provided indices are True and all other elements are False.
+        """
+        if isinstance(other, uids):
+            out = np.zeros_like(self.raw, dtype=bool)
+            out[other] = self.raw[other]
+            return self.asnew(out, cls=BoolArr, copy=False)
+        return self._boolmath('&', other)
+
+    def __or__(self, other):
+        """ Bitwise OR"""
+        if isinstance(other, uids):
+            out = self.raw.copy()
+            out[other] = True
+            return self.asnew(out, cls=BoolArr, copy=False)
+        return self._boolmath('|', other)
+
+    def __xor__(self, other):
+        """ Bitwise XOR: returns BoolArr when operating on arrays, or uids when operating on uids (set symmetric difference) """
+        if isinstance(other, uids):
+            out = self.raw.copy()
+            out[other] = ~out[other]
+            return self.asnew(out, cls=BoolArr, copy=False)
+        return self._boolmath('^', other)
+
+    def __invert__(self):
+        """ Bitwise NOT """
+        return self.asnew(~self.raw, cls=BoolArr, copy=False)
+
+    # For BoolArr instances implement true in-place operators that reuse the memory from the underlying array
+    # This allows in-place operations to be used directly on `BoolState` instances without breaking references
+
+    def __iand__(self, other):
+        """ In-place AND """
+        if isinstance(other, uids):
+            tmp = self.raw[other]
+            self.raw[:] = False
+            self.raw[other] = tmp
+            return self
+        else:
+            return self._boolmath('&', other, inplace=True)
+
+    def __ior__(self, other):
+        """ In-place OR """
+        if isinstance(other, uids):
+            self.raw[other] = True
+            return self
+        else:
+            return self._boolmath('|', other, inplace=True)
+
+    def __ixor__(self, other):
+        """ In-place XOR """
+        if isinstance(other, uids):
+            self.raw[other] = ~self.raw[other]
+            return self
+        else:
+            return self._boolmath('^', other, inplace=True)
 
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
@@ -617,8 +701,7 @@ class BoolArr(Arr):
 
 
 class BoolState(BoolArr):
-    """
-    A boolean array being used as a state.
+    """ A boolean array being used as a state.
 
     Although functionally identical to `BoolArr`, a `BoolState` is handled differently in
     terms of automation: specifically, results are automatically generated from a
@@ -657,8 +740,7 @@ class IndexArr(Arr):
 
 
 class uids(np.ndarray):
-    """
-    Class to specify that integers should be interpreted as UIDs.
+    """ Class to specify that integers should be interpreted as UIDs.
 
     For all practical purposes, behaves like a NumPy integer array. However,
     has additional methods `uids.concat()` (instance method), [`ss.uids.cat()`](`starsim.arrays.uids.cat`)
@@ -733,6 +815,13 @@ class uids(np.ndarray):
     def __sub__(self, other): return self.remove(other)
     def __xor__(self, other): return self.xor(other)
     def __invert__(self)    : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+
+    # As the size of a set might change, in-place operations must necessarily return a copy
+    # that gets reassigned to the original variable (the same as inplace operations on an immutable type)
+    def __iand__(self, other): return self.__and__(other)
+    def __ior__(self, other) : return self.__or__(other)
+    def __isub__(self, other): return self.__sub__(other)
+    def __ixor__(self, other): return self.__xor__(other)
 
 
 class BooleanOperationError(NotImplementedError):
