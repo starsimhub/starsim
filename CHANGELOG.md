@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-## Version 3.1.0 (2026-XX-XX)
+## Version 3.1.0 (2026-02-12)
 - Added new functionality to the `Pregnancy` module:
     - renamed `make_p_fertility()` -> `make_p_conceive()`
     - added variable durations of pregnancies and tracking of pre-term birth outcomes
@@ -23,9 +23,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Renamed arguments to `MaternalNet.add_pairs()` from `mother_inds` to `mother_uids` and `unborn_inds` to `unborn_uids` to clarify that these inputs should be agent UIDs.
 - Removed `dur` argument to `MaternalNet.add_pairs()` as the edge lifespan is now managed by the `Pregnancy` module with edges being removed upon delivery.
 - Removed `Network.prenatal` and `Network.postnatal` attributes as these are now tracked by type (`ss.PrenatalNet` and `ss.PostnatalNet`)
+- *GitHub info*: PR [1065](https://github.com/starsimhub/starsim/pull/1065)
+
 
 ## Version 3.0.6 (2026-01-28)
-- Fixed bug in plot_cpu() when using pandas v3
+- Fixed bug in `sim.loop.plot_cpu()` when using pandas v3
 
 
 ## Version 3.0.5 (2025-10-22).

@@ -181,8 +181,8 @@ interlinks:
       url: https://docs.scipy.org/doc/scipy/
     matplotlib:
       url: https://matplotlib.org/stable/
-    # sciris: # TODO: need to build this first
-    #   url: https://docs.sciris.org/
+    sciris:
+      url: https://docs.sciris.org/en/latest
   autolink: true
   aliases:
     numpy: [np]

@@ -255,23 +255,24 @@ class Timeline:
             self.stop = ss.date(self.stop)
 
         # Check to see if any inputs were provided as durations: if so, reset the default type
-        args = [self.dt, self.start, self.stop, self.dur]
+        args = [self.dt, self.start, self.stop, self.dur] # Order of priority of units: dt first, then start, stop, and dur
         for arg in args:
             if isinstance(arg, ss.dur) and not isinstance(arg, ss.datedur):
                 self.default_type = type(arg)
                 break # Stop at the first one
 
         # Decide if the time provided is "datelike" (actual dates or a date-like starting year)
-        args = [self.start, self.stop, self.dur, self.dt] # These are modified from the above
+        args = dict(start=self.start, stop=self.stop, dur=self.dur, dt=self.dt) # These are modified from the above
         cal_year_like = self.default_type.base == 'years' # The default default_type is ss.years(), so this is True
         use_dates = False
-        for arg in args:
+        for key,arg in args.items():
             if isinstance(arg, (ss.date, ss.datedur)):
                 cal_year_like = True
                 use_dates = True
                 break # Dates take precedence, so stop the loop here
-            elif ss.time.assume_cal_year(arg):
+            elif key == 'start' and ss.time.assume_cal_year(arg): # Only start for "yearishness", since start=0, stop=3000 is not intended as years
                 cal_year_like = True # Use 2000 as the start, but do not convert to dates
+                self.default_type = ss.years # Restore years as the default type (e.g. if dt has a different unit)
 
         # Set the default start based on whether we have datelike inputs
         self.default_start = self.default_year_start if cal_year_like else self.default_rel_start # Sets to the start to 2000 or 0
@@ -302,18 +303,16 @@ class Timeline:
         else:
             if sc.isnumber(self.start): self.start = self.default_type(self.start) # Only convert numbers to durations
             if sc.isnumber(self.stop):  self.stop  = self.default_type(self.stop)
-            self.default_start = self.default_type(self.default_start) # e.g. ss.years(2000)
+            self.default_start = self.start or self.default_type(self.default_start) # e.g. ss.years(2000)
 
         # Validate durations: dt and dur
-        for attr in ['dt', 'dur']:
-            val = getattr(self, attr)
+        for attr,val in dict(dt=self.dt, dur=self.dur).items():
             if not (val is None or isinstance(val, ss.dur)):
                 errormsg = f'Failed to parse {attr} = {val}: expecting ss.dur or None, not {type(val)}'
                 raise TypeError(errormsg)
 
         # Validate start and stop
-        for attr in ['start', 'stop']:
-            val = getattr(self, attr)
+        for attr,val in dict(start=self.start, stop=self.stop).items():
             if not (val is None or isinstance(val, (ss.date, ss.dur))):
                 errormsg = f'Failed to parse {attr} = {val}: expecting ss.date, ss.dur, or None, not {type(val)}'
                 raise TypeError(errormsg)

@@ -339,6 +339,7 @@ class Sim(ss.Base):
 
         Note: the verbose here is only for the Loop object, not the sim.
         """
+        if not self.initialized: self.init() # Automatically initialize if not initialized
         self.loop.run(self.t.now(), verbose)
         return self
 
@@ -352,7 +353,7 @@ class Sim(ss.Base):
             check_method_calls (bool): whether to check that all required methods were called
         """
         # Initialization steps
-        if not self.initialized: self.init()
+        if not self.initialized: self.init() # Automatically initialize if not initialized
         if verbose is not None:
             self._orig_verbose = self.verbose
             self.verbose = verbose
