@@ -2,6 +2,10 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+## Version 3.1.1 (2026-XX-XX)
+
+
+
 ## Version 3.1.0 (2026-02-12)
 - Added new functionality to the `Pregnancy` module:
     - renamed `make_p_fertility()` -> `make_p_conceive()`
