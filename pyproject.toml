@@ -55,7 +55,9 @@ dev = [
     "pytest-xdist",
     "quartodoc",
     "jupyter",
-    "jupyter-cache"
+    "jupyter-cache",
+    "dask",
+    "distributed"
 ]
 
 optuna = ["scikit-learn"]
