@@ -356,8 +356,8 @@ class Pregnancy(Demographics):
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
         rate_units (float): units for fertility rates (default assumes per 1000)
-        dur_pregnancy (float/dur): duration of pregnancy (drawn from choice distribution by default)
-        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+        dur_pregnancy (float/dur): duration of pregnancy (default: drawn from choice distribution, 32-42 weeks)
+        dur_breastfeed (float/dur): duration of breastfeeding (default: drawn from lognormal distribution, 9±6 months)
 
         rr_ptb (float): base relative risk of pre-term birth (default normal with mean 1, std 0.1)
         rr_ptb_age (array): relative risk of pre-term birth by maternal age (default [[18,35,100],[1.2,1,1.2]])
