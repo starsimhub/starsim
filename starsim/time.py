@@ -183,7 +183,7 @@ class DateArray(np.ndarray):
 
         Args:
             inplace (bool): whether to modify in place
-            round (bool): whether to round dates to the nearest day (otherwise, keep timestamp); if None, round if and only if the span of the first timestep is at least one day
+            day_round (bool): whether to round dates to the nearest day (otherwise, keep timestamp); if None, round if and only if the span of the first timestep is at least one day
             die (bool): if False, then fall back to float if conversion to date fails (e.g. year 0)
         """
         day_round = sc.ifelse(day_round, not(self.subdaily))

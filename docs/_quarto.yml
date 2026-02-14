@@ -182,7 +182,7 @@ interlinks:
     matplotlib:
       url: https://matplotlib.org/stable/
     sciris:
-      url: https://docs.sciris.org/en/latest
+      url: https://docs.sciris.org/en/latest/
   autolink: true
   aliases:
     numpy: [np]

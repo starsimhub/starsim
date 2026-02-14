@@ -1,18 +1,23 @@
 # What's new
 
-All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
+All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
+
+## Version 3.1.1 (2026-02-16)
+- TBC
+
 
 ## Version 3.1.1 (2026-XX-XX)
 
 
 
 ## Version 3.1.0 (2026-02-12)
+- *Regression information*: See `docs/migration/v3.0_v3.1.md` for a detailed, LLM-friendly migration guide.
 - Added new functionality to the `Pregnancy` module:
-    - renamed `make_p_fertility()` -> `make_p_conceive()`
-    - added variable durations of pregnancies and tracking of pre-term birth outcomes
-    - added variable breastfeeding durations
-    - refactored the logic of how pregnancies and births are handled with new helper methods for better extensibility
-    - added results on age-specific fertility rates and total fertility rates
+    - Renamed `make_p_fertility()` -> `make_p_conceive()`
+    - Added variable durations of pregnancies and tracking of pre-term birth outcomes
+    - Added variable breastfeeding durations
+    - Refactored the logic of how pregnancies and births are handled with new helper methods for better extensibility
+    - Added results on age-specific fertility rates and total fertility rates
 - Previously `People.(module_name).(state_name)` could be used to access module states (e.g., `people.sir.infected`). However, this mechanism fails to pass on property attributes that are dynamically computed (e.g., `SIR.infectious`). Now `People.(module_name)` simply contains a reference to the module, so all attributes can be accessed. 
 - Add support for operating on `ss.BaseArr` with time parameters (e.g., multiplying a state by a duration)
 - Add support for creating an `ss.dur` from an `ss.BaseArr` 
@@ -190,7 +195,7 @@ Starsim v3 comes with several new options, set via `ss.options`:
 `ss.options` also now has a `help` method that will print detailed help on a given option or all options, e.g. `ss.options.help(detailed=True)`.
 
 #### Migration summary
-- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then `docs/migration_v2v3/README.md`. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
+- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then `docs/migration/v2_v3/README.md`. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
 - *GitHub info*: PR [1008](https://github.com/starsimhub/starsim/pull/1008)
 
 
