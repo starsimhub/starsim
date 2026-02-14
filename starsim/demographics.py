@@ -1007,6 +1007,7 @@ class Pregnancy(Demographics):
         # Aggregate the ASFR results, taking rolling annual sums
         asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
         tdim = int(1/self.t.dt_year)
+        tdim = min(tdim, self.t.npts)  # Handle sims shorter than 1 year
         for i in range(len(self.asfr_bins)-1):
             asfr[i, (tdim-1):] = np.convolve(self.asfr[i, :], np.ones(tdim), mode='valid')
         self.asfr = asfr
