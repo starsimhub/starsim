@@ -393,7 +393,7 @@ class Pregnancy(Demographics):
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
             ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
             ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
-            ss.FloatArr('n_miscarriages', label='Number of miscarrianges', default=0),  # Number of micarriages
+            ss.FloatArr('n_miscarriages', label='Number of miscarriages', default=0),  # Number of miscarriages
             ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
