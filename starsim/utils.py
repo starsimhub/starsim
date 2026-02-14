@@ -20,7 +20,7 @@ class ndict(sc.objdict):
     A dictionary-like class that provides additional functionalities for handling named items.
 
     Args:
-        name (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
+        nameattr (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
         type (type): The expected type of items.
         strict (bool): If True, only items with the specified attribute will be accepted.
         overwrite (bool): whether to allow adding a key when one has already been added

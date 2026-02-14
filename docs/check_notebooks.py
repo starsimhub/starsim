@@ -6,5 +6,6 @@ Run all the Jupyter notebook tutorials and user guide entries. Usage:
 It will execute all notebooks in parallel, print out any errors
 encountered, and print a summary of results.
 """
+import sys
 import docutils as ut
 results = ut.execute_notebooks(*sys.argv[1:])

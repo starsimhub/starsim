@@ -94,7 +94,7 @@ def init_cache(folders=None):
 
 def execute_notebook(path):
     """ Executes a single Jupyter notebook and returns success/failure """
-    with sc.timer(label=f'Execution time for {path}') as T:
+    with sc.timer(label=sc.ansi.green(f'    Execution time for {path}')) as T:
         try:
             with open(path) as f:
                 print(f'Executing {path}...')
@@ -127,6 +127,7 @@ def execute_notebooks(*args, folders=None):
         notebooks = [sc.path(notebook).resolve() for notebook in args]
     else:
         notebooks = []
+        folders = sc.ifelse(folders, default_folders)
         for folder in folders:
             folder_path = cwd / folder
             notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.ipynb')]
@@ -137,7 +138,7 @@ def execute_notebooks(*args, folders=None):
         return execute_notebook(path.name)
 
     sc.heading(f'Running {len(notebooks)} notebooks...')
-    out = sc.parallelize(execute_with_chdir, notebooks, maxcpu=0.9, interval=0.3)
+    out = sc.parallelize(execute_with_chdir, notebooks, maxcpu=0.9, interval=0.3, lbkwargs=dict(verbose=False))
     string += sc.strjoin(out, sep=f'\n\n\n{"—"*90}\n')
     for nb, res in zip(notebooks, out):
         results[str(nb)] = res

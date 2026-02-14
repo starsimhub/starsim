@@ -882,7 +882,6 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         full (bool): whether to print out all values (not just those that differ)
         output (bool): whether to return the output as a string (otherwise print)
         die (bool): whether to raise an exception if the sims don't match
-        require_run (bool): require that the simulations have been run
 
     **Example**:
 
