@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.7.32">
+<meta name="generator" content="quarto-1.6.42">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -21,9 +21,8 @@ ul.task-list li input[type="checkbox"] {
   vertical-align: middle;
 }
 /* CSS for syntax highlighting */
-html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span { line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -34,7 +33,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -68,20 +67,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../user_guide/advanced_nonstandard.html" rel="next">
 <link href="../user_guide/advanced_random.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
-<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
-<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/quarto.js"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-0348920b7671f696dc9078d39bff215e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de84f8d6bb715db06a919283c2d1e787.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-9a023c9ade86a60361e96e3e3f11bc54.css" rel="prefetch" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-5b3fce9591f609771f3fc6325a03de21.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-6b5ea9e9a4b01830bd6d14ec679728af.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-59543038ce2dbea0d2434f74fa4d1829.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-7ea877b0c499ea30230d408925a201b3.min.css" rel="prefetch" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -122,169 +118,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <link rel="stylesheet" href="../assets/styles.css">
 </head>
 
-<body class="nav-sidebar floating nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
-    const toggleBodyColorMode = (bsSheetEl) => {
-      const mode = bsSheetEl.getAttribute("data-mode");
-      const bodyEl = window.document.querySelector("body");
-      if (mode === "dark") {
-        bodyEl.classList.add("quarto-dark");
-        bodyEl.classList.remove("quarto-light");
-      } else {
-        bodyEl.classList.add("quarto-light");
-        bodyEl.classList.remove("quarto-dark");
-      }
-    }
-    const toggleBodyColorPrimary = () => {
-      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
-      if (bsSheetEl) {
-        toggleBodyColorMode(bsSheetEl);
-      }
-    }
-    const setColorSchemeToggle = (alternate) => {
-      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
-      for (let i=0; i < toggles.length; i++) {
-        const toggle = toggles[i];
-        if (toggle) {
-          if (alternate) {
-            toggle.classList.add("alternate");
-          } else {
-            toggle.classList.remove("alternate");
-          }
-        }
-      }
-    };
-    const toggleColorMode = (alternate) => {
-      // Switch the stylesheets
-      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
-      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
-      manageTransitions('#quarto-margin-sidebar .nav-link', false);
-      if (alternate) {
-        // note: dark is layered on light, we don't disable primary!
-        enableStylesheet(alternateStylesheets);
-        for (const sheetNode of alternateStylesheets) {
-          if (sheetNode.id === "quarto-bootstrap") {
-            toggleBodyColorMode(sheetNode);
-          }
-        }
-      } else {
-        disableStylesheet(alternateStylesheets);
-        enableStylesheet(primaryStylesheets)
-        toggleBodyColorPrimary();
-      }
-      manageTransitions('#quarto-margin-sidebar .nav-link', true);
-      // Switch the toggles
-      setColorSchemeToggle(alternate)
-      // Hack to workaround the fact that safari doesn't
-      // properly recolor the scrollbar when toggling (#1455)
-      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
-        manageTransitions("body", false);
-        window.scrollTo(0, 1);
-        setTimeout(() => {
-          window.scrollTo(0, 0);
-          manageTransitions("body", true);
-        }, 40);
-      }
-    }
-    const disableStylesheet = (stylesheets) => {
-      for (let i=0; i < stylesheets.length; i++) {
-        const stylesheet = stylesheets[i];
-        stylesheet.rel = 'disabled-stylesheet';
-      }
-    }
-    const enableStylesheet = (stylesheets) => {
-      for (let i=0; i < stylesheets.length; i++) {
-        const stylesheet = stylesheets[i];
-        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
-          stylesheet.rel = 'stylesheet';
-        }
-      }
-    }
-    const manageTransitions = (selector, allowTransitions) => {
-      const els = window.document.querySelectorAll(selector);
-      for (let i=0; i < els.length; i++) {
-        const el = els[i];
-        if (allowTransitions) {
-          el.classList.remove('notransition');
-        } else {
-          el.classList.add('notransition');
-        }
-      }
-    }
-    const isFileUrl = () => {
-      return window.location.protocol === 'file:';
-    }
-    const hasAlternateSentinel = () => {
-      let styleSentinel = getColorSchemeSentinel();
-      if (styleSentinel !== null) {
-        return styleSentinel === "alternate";
-      } else {
-        return false;
-      }
-    }
-    const setStyleSentinel = (alternate) => {
-      const value = alternate ? "alternate" : "default";
-      if (!isFileUrl()) {
-        window.localStorage.setItem("quarto-color-scheme", value);
-      } else {
-        localAlternateSentinel = value;
-      }
-    }
-    const getColorSchemeSentinel = () => {
-      if (!isFileUrl()) {
-        const storageValue = window.localStorage.getItem("quarto-color-scheme");
-        return storageValue != null ? storageValue : localAlternateSentinel;
-      } else {
-        return localAlternateSentinel;
-      }
-    }
-    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
-      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
-      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
-      let newTheme = '';
-      if(authorPrefersDark) {
-        newTheme = isAlternate ? baseTheme : alternateTheme;
-      } else {
-        newTheme = isAlternate ? alternateTheme : baseTheme;
-      }
-      const changeGiscusTheme = () => {
-        // From: https://github.com/giscus/giscus/issues/336
-        const sendMessage = (message) => {
-          const iframe = document.querySelector('iframe.giscus-frame');
-          if (!iframe) return;
-          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
-        }
-        sendMessage({
-          setConfig: {
-            theme: newTheme
-          }
-        });
-      }
-      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
-      if (isGiscussLoaded) {
-        changeGiscusTheme();
-      }
-    };
-    const authorPrefersDark = false;
-    const darkModeDefault = authorPrefersDark;
-      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
-      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
-    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
-    // Dark / light mode switch
-    window.quartoToggleColorScheme = () => {
-      // Read the current dark / light value
-      let toAlternate = !hasAlternateSentinel();
-      toggleColorMode(toAlternate);
-      setStyleSentinel(toAlternate);
-      toggleGiscusIfUsed(toAlternate, darkModeDefault);
-      window.dispatchEvent(new Event('resize'));
-    };
-    // Switch to dark mode if need be
-    if (hasAlternateSentinel()) {
-      toggleColorMode(true);
-    } else {
-      toggleColorMode(false);
-    }
-  </script>
+<body class="nav-sidebar floating nav-fixed">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
@@ -560,7 +394,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Reidentify known parameters for a simple SIR model</span></a>
+ <span class="menu-text">Parameter identification</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -662,7 +496,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
-
 <header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/advanced_time.html">Advanced topics</a></li><li class="breadcrumb-item"><a href="../user_guide/advanced_profiling.html">Profiling and debugging</a></li></ol></nav>
 <div class="quarto-title">
 <h1 class="title">Profiling and debugging</h1>
@@ -703,1039 +536,528 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span>
 <span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<div class="ansi-escaped-output">
-<pre>Initializing sim with 10000 agents
-
+<pre><code>Initializing sim with 10000 agents
 Profiling 15 function(s):
-
  &lt;bound method Sim.run of Sim(n=10000; 2000.01.01—2020.01.01; networks=randomnet; diseases=sis)&gt;
-
 &lt;bound method Sim.start_step of Sim(n=10000; 2000.01.01—2020.01.01; networks=randomnet; diseases=sis [...]
-
-&lt;function Module.start_step at 0x7ba25d07ef20&gt;
-
-&lt;function Module.start_step at 0x7ba25d07ef20&gt;
-
+&lt;function Module.start_step at 0x7dd03f47eb60&gt;
+&lt;function Module.start_step at 0x7dd03f47eb60&gt;
 &lt;bound method SIS.step_state of sis(pars=[init_prev, beta, dur_inf, waning, imm_boost, _n_initial_ca [...]
-
 &lt;bound method DynamicNetwork.step of randomnet(n_edges=50000; pars=[n_contacts, dur, beta]; states=[ [...]
-
 &lt;bound method Infection.step of sis(pars=[init_prev, beta, dur_inf, waning, imm_boost, _n_initial_ca [...]
-
 &lt;bound method People.step_die of People(n=10000; age=30.0±17.3)&gt;
-
 &lt;bound method People.update_results of People(n=10000; age=30.0±17.3)&gt;
-
 &lt;bound method Network.update_results of randomnet(n_edges=50000; pars=[n_contacts, dur, beta]; state [...]
-
-&lt;function SIS.update_results at 0x7ba25cc2bba0&gt;
-
-&lt;function Module.finish_step at 0x7ba25d07f100&gt;
-
-&lt;function Module.finish_step at 0x7ba25d07f100&gt;
-
+&lt;function SIS.update_results at 0x7dd03ee7d3a0&gt;
+&lt;function Module.finish_step at 0x7dd03f47ed40&gt;
+&lt;function Module.finish_step at 0x7dd03f47ed40&gt;
 &lt;bound method People.finish_step of People(n=10000; age=30.0±17.3)&gt;
-
 &lt;bound method Sim.finish_step of Sim(n=10000; 2000.01.01—2020.01.01; networks=randomnet; diseases=si [...] 
 
-
-
-
   Running 2000.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
+  Running 2010.01.01 (10/21) (0.49 s)  ••••••••••—————————— 52%
+  Running 2020.01.01 (20/21) (0.54 s)  •••••••••••••••••••• 100%
 
-
-  Running 2010.01.01 (10/21) (0.25 s)  ••••••••••—————————— 52%
-
-
-  Running 2020.01.01 (20/21) (0.29 s)  •••••••••••••••••••• 100%
-
-
-
-Elapsed time: 0.298 s
-
-<span class="ansi-cyan-fg">
-
+Elapsed time: 0.556 s
 
 
 ——————————————————————————————————————————————————————————————————————
-
-Profile of networks.Network.update_results: 0.000115168 s (0.0386046%)
-
+Profile of networks.Network.update_results: 0.000370856 s (0.0667428%)
 ——————————————————————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.000115168 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/networks.py
-
-Function: update_results at line 256
-
-
+Total time: 0.000370856 s
+File: /home/cliffk/idm/starsim/starsim/networks.py
+Function: Network.update_results at line 254
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
-   256                                               def update_results(self):
-
-   257                                                   """ Store the number of edges in the network """
-
-   258        21     110255.0   5250.2     95.7          self.results['n_edges'][self.ti] = len(self)
-
-   259        21       4913.0    234.0      4.3          return
-
-
-
-<span class="ansi-cyan-fg">
-
-
-
-———————————————————————————————————————————————————————————————
-
-Profile of people.People.finish_step: 0.000375545 s (0.125884%)
-
-———————————————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.000375545 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/people.py
-
-Function: finish_step at line 422
-
-
-
-Line #      Hits         Time  Per Hit   % Time  Line Contents
-
-==============================================================
-
-   422                                               def finish_step(self):
-
-   423        21     293707.0  13986.0     78.2          self.remove_dead()
-
-   424        21      77389.0   3685.2     20.6          self.update_post()
-
-   425        21       4449.0    211.9      1.2          return
-
-
-
-<span class="ansi-cyan-fg">
-
-
-
-————————————————————————————————————————————————————————————
-
-Profile of people.People.step_die: 0.000787899 s (0.264106%)
-
-————————————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.000787899 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/people.py
-
-Function: step_die at line 384
-
-
-
-Line #      Hits         Time  Per Hit   % Time  Line Contents
-
-==============================================================
-
-   384                                               def step_die(self):
-
-   385                                                   """ Carry out any deaths or removals that took place this timestep """
-
-   386        21     660890.0  31471.0     83.9          death_uids = ((self.ti_dead &lt;= self.sim.ti) | (self.ti_removed &lt;= self.sim.ti)).uids
-
-   387        21      34459.0   1640.9      4.4          self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
-
-   388                                           
-
-   389                                                   # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
-
-   390                                                   # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-
-   391        42      57830.0   1376.9      7.3          for disease in self.sim.diseases():
-
-   392        21      11826.0    563.1      1.5              if isinstance(disease, ss.Disease):
-
-   393        21      12890.0    613.8      1.6                  disease.step_die(death_uids)
-
-   394                                           
-
-   395        21      10004.0    476.4      1.3          return death_uids
-
-
-
-<span class="ansi-cyan-fg">
+   254                                               def update_results(self):
+   255                                                   """ Store the number of edges in the network """
+   256        21      99548.0   4740.4     26.8          super().update_results()
+   257        21     261994.0  12475.9     70.6          self.results['n_edges'][self.ti] = len(self)
+   258        21       9314.0    443.5      2.5          return
 
 
 
 ————————————————————————————————————————————————————————————————
-
-Profile of people.People.update_results: 0.00118964 s (0.39877%)
-
+Profile of people.People.finish_step: 0.000542667 s (0.0976635%)
 ————————————————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.00118964 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/people.py
-
-Function: update_results at line 413
-
-
+Total time: 0.000542667 s
+File: /home/cliffk/idm/starsim/starsim/people.py
+Function: People.finish_step at line 475
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
-   413                                               def update_results(self):
-
-   414        21      10370.0    493.8      0.9          ti = self.sim.ti
-
-   415        21       3803.0    181.1      0.3          res = self.sim.results
-
-   416        21     282257.0  13440.8     23.7          res.n_alive[ti] = np.count_nonzero(self.alive)
-
-   417        21     298831.0  14230.0     25.1          res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-
-   418        21     222065.0  10574.5     18.7          res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
-
-   419        21     359758.0  17131.3     30.2          res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
-
-   420        21      12556.0    597.9      1.1          return
+   475                                               def finish_step(self):
+   476        21     361739.0  17225.7     66.7          self.remove_dead()
+   477        21     171654.0   8174.0     31.6          self.update_post()
+   478        21       9274.0    441.6      1.7          return
 
 
 
-<span class="ansi-cyan-fg">
+———————————————————————————————————————————————————————————
+Profile of people.People.step_die: 0.00143625 s (0.258481%)
+———————————————————————————————————————————————————————————
+
+Total time: 0.00143625 s
+File: /home/cliffk/idm/starsim/starsim/people.py
+Function: People.step_die at line 437
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   437                                               def step_die(self):
+   438                                                   """ Carry out any deaths or removals that took place this timestep """
+   439        21    1203757.0  57321.8     83.8          death_uids = ((self.ti_dead &lt;= self.sim.ti) | (self.ti_removed &lt;= self.sim.ti)).uids
+   440        21      54355.0   2588.3      3.8          self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
+   441                                           
+   442                                                   # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
+   443                                                   # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
+   444        42     117468.0   2796.9      8.2          for disease in self.sim.diseases():
+   445        21      17513.0    834.0      1.2              if isinstance(disease, ss.Disease):
+   446        21      28388.0   1351.8      2.0                  disease.step_die(death_uids)
+   447                                           
+   448        21      14769.0    703.3      1.0          return death_uids
+
+
+
+—————————————————————————————————————————————————————————————————
+Profile of people.People.update_results: 0.00214351 s (0.385766%)
+—————————————————————————————————————————————————————————————————
+
+Total time: 0.00214351 s
+File: /home/cliffk/idm/starsim/starsim/people.py
+Function: People.update_results at line 466
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   466                                               def update_results(self):
+   467        21      18901.0    900.0      0.9          ti = self.sim.ti
+   468        21       7392.0    352.0      0.3          res = self.sim.results
+   469        21     508266.0  24203.1     23.7          res.n_alive[ti] = np.count_nonzero(self.alive)
+   470        21     541601.0  25790.5     25.3          res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+   471        21     442591.0  21075.8     20.6          res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
+   472        21     607162.0  28912.5     28.3          res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+   473        21      17599.0    838.0      0.8          return
 
 
 
 ————————————————————————————————————————————————————
-
-Profile of diseases.py:670: 0.00141319 s (0.473705%)
-
+Profile of diseases.py:670: 0.00230529 s (0.414882%)
 ————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.00141319 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: update_results at line 670
-
-
+Total time: 0.00230529 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: SIS.update_results at line 670
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    670                                               @ss.required()
-
    671                                               def update_results(self):
-
    672                                                   """ Store the population immunity (susceptibility) """
-
-   673        21     964459.0  45926.6     68.2          super().update_results()
-
-   674        21     442169.0  21055.7     31.3          self.results['rel_sus'][self.ti] = self.rel_sus.mean()
-
-   675        21       6566.0    312.7      0.5          return
+   673        21    1596974.0  76046.4     69.3          super().update_results()
+   674        21     697955.0  33236.0     30.3          self.results['rel_sus'][self.ti] = self.rel_sus.mean()
+   675        21      10357.0    493.2      0.4          return
 
 
 
-<span class="ansi-cyan-fg">
+———————————————————————————————————————————————————————
+Profile of sim.Sim.start_step: 0.00368424 s (0.663051%)
+———————————————————————————————————————————————————————
 
-
-
-—————————————————————————————————————————————————————
-
-Profile of sim.Sim.start_step: 0.002339 s (0.784038%)
-
-—————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.002339 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/sim.py
-
-Function: start_step at line 306
-
-
+Total time: 0.00368424 s
+File: /home/cliffk/idm/starsim/starsim/sim.py
+Function: Sim.start_step at line 306
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    306                                               def start_step(self):
-
    307                                                   """ Start the step -- only print progress; all actual changes happen in the modules """
-
    308                                           
-
    309                                                   # Set the time and if we have reached the end of the simulation, then do nothing
-
-   310        21       3390.0    161.4      0.1          if self.complete:
-
+   310        21       7642.0    363.9      0.2          if self.complete:
    311                                                       errormsg = 'Simulation already complete (call sim.init() to re-run)'
-
    312                                                       raise AlreadyRunError(errormsg)
-
    313                                           
-
    314                                                   # Print out progress if needed
-
-   315        21    1744842.0  83087.7     74.6          self.elapsed = self.timer.toc(output=True)
-
-   316        21       6311.0    300.5      0.3          if self.verbose: # Print progress
-
-   317        21       2849.0    135.7      0.1              t = self.t
-
-   318        21      67550.0   3216.7      2.9              simlabel = f'"{self.label}": ' if self.label else ''
-
-   319        21     347118.0  16529.4     14.8              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
-
-   320        21       5205.0    247.9      0.2              if self.verbose &gt;= 1:
-
+   315        21    2504678.0 119270.4     68.0          self.elapsed = self.timer.toc(output=True)
+   316        21      11508.0    548.0      0.3          if self.verbose: # Print progress
+   317        21       6123.0    291.6      0.2              t = self.t
+   318        21     148133.0   7054.0      4.0              simlabel = f'"{self.label}": ' if self.label else ''
+   319        21     683401.0  32542.9     18.5              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
+   320        21       9644.0    459.2      0.3              if self.verbose &gt;= 1:
    321                                                           sc.heading(string)
-
-   322        21       4644.0    221.1      0.2              elif self.verbose &gt; 0:
-
-   323        21      12254.0    583.5      0.5                  if not (t.ti % int(1.0 / self.verbose)):
-
-   324         3     129786.0  43262.0      5.5                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
-
-   325        21      15050.0    716.7      0.6          return
-
-
-
-<span class="ansi-cyan-fg">
+   322        21       7289.0    347.1      0.2              elif self.verbose &gt; 0:
+   323        21      15407.0    733.7      0.4                  if not (t.ti % int(1.0 / self.verbose)):
+   324         3     269323.0  89774.3      7.3                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
+   325        21      21096.0   1004.6      0.6          return
 
 
 
 ————————————————————————————————————————————————————————————
-
-Profile of diseases.SIS.step_state: 0.00267096 s (0.895312%)
-
+Profile of diseases.SIS.step_state: 0.00393148 s (0.707546%)
 ————————————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.00267096 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: step_state at line 631
-
-
+Total time: 0.00393148 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: SIS.step_state at line 631
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    631                                               def step_state(self):
-
    632                                                   """ Progress infectious -&gt; recovered """
-
-   633        21     869873.0  41422.5     32.6          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
-
-   634        21      45884.0   2185.0      1.7          self.infected[recovered] = False
-
-   635        21      21709.0   1033.8      0.8          self.susceptible[recovered] = True
-
-   636        21    1725495.0  82166.4     64.6          self.update_immunity()
-
-   637        21       8002.0    381.0      0.3          return
+   633        21    1222804.0  58228.8     31.1          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
+   634        21      67807.0   3228.9      1.7          self.infected[recovered] = False
+   635        21      39496.0   1880.8      1.0          self.susceptible[recovered] = True
+   636        21    2587513.0 123214.9     65.8          self.update_immunity()
+   637        21      13862.0    660.1      0.4          return
 
 
 
-<span class="ansi-cyan-fg">
+——————————————————————————————————————————————————
+Profile of modules.py:673: 0.00672401 s (1.21012%)
+——————————————————————————————————————————————————
 
-
-
-—————————————————————————————————————————————————
-
-Profile of modules.py:673: 0.0044255 s (1.48344%)
-
-—————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.0044255 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/modules.py
-
-Function: start_step at line 673
-
-
+Total time: 0.00672401 s
+File: /home/cliffk/idm/starsim/starsim/modules.py
+Function: Module.start_step at line 673
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    673                                               @required()
-
    674                                               def start_step(self):
-
    675                                                   """ Tasks to perform at the beginning of the step """
-
-   676        42      13180.0    313.8      0.3          if self.finalized:
-
+   676        42      24797.0    590.4      0.4          if self.finalized:
    677                                                       errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
-
    678                                                       raise RuntimeError(errormsg)
-
-   679        42      10167.0    242.1      0.2          if self.dists is not None: # Will be None if no distributions are defined
-
-   680        42    4387593.0 104466.5     99.1              self.dists.jump_dt() # Advance random number generators forward for calls on this step
-
-   681        42      14564.0    346.8      0.3          return
-
-
-
-<span class="ansi-cyan-fg">
+   679        42      19795.0    471.3      0.3          if self.dists is not None: # Will be None if no distributions are defined
+   680        42    6654161.0 158432.4     99.0              self.dists.jump_dt() # Advance random number generators forward for calls on this step
+   681        42      25259.0    601.4      0.4          return
 
 
 
 ———————————————————————————————————————————————————————————————
-
-Profile of networks.DynamicNetwork.step: 0.0265104 s (8.88635%)
-
+Profile of networks.DynamicNetwork.step: 0.0355001 s (6.38893%)
 ———————————————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.0265104 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/networks.py
-
-Function: step at line 413
-
-
+Total time: 0.0355001 s
+File: /home/cliffk/idm/starsim/starsim/networks.py
+Function: DynamicNetwork.step at line 412
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
-   413                                               def step(self):
-
-   414        21    5393925.0 256853.6     20.3          self.end_pairs()
-
-   415        21   21109469.0    1e+06     79.6          self.add_pairs()
-
-   416        21       7014.0    334.0      0.0          return
+   412                                               def step(self):
+   413        21   10101223.0 481010.6     28.5          self.end_pairs()
+   414        21   25384704.0 1.21e+06     71.5          self.add_pairs()
+   415        21      14157.0    674.1      0.0          return
 
 
 
-<span class="ansi-cyan-fg">
+————————————————————————————————————————————————————————
+Profile of diseases.Infection.step: 0.483204 s (86.962%)
+————————————————————————————————————————————————————————
 
-
-
-—————————————————————————————————————————————————————————
-
-Profile of diseases.Infection.step: 0.252568 s (84.6614%)
-
-—————————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.252568 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: step at line 208
-
-
+Total time: 0.483204 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: Infection.step at line 208
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    208                                               def step(self):
-
    209                                                   """
-
    210                                                   Perform key infection updates, including infection and setting prognoses
-
    211                                                   """
-
    212                                                   # Create new cases
-
-   213        21  244875806.0    1e+07     97.0          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
-
+   213        21  472348159.0 2.25e+07     97.8          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
    214                                           
-
    215                                                   # Set prognoses
-
-   216        21       7761.0    369.6      0.0          if len(new_cases):
-
-   217        21    7674984.0 365475.4      3.0              self.set_outcomes(new_cases, sources)
-
+   216        21      18036.0    858.9      0.0          if len(new_cases):
+   217        21   10821773.0 515322.5      2.2              self.set_outcomes(new_cases, sources)
    218                                           
+   219        21      15765.0    750.7      0.0          return new_cases, sources, networks
 
-   219        21       9708.0    462.3      0.0          return new_cases, sources, networks
-
-
-
-Figure(672x480)
-</pre>
-</div>
+Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="advanced_profiling_files/figure-html/cell-2-output-2.png" width="662" height="470" class="figure-img"></p>
+<p><img src="advanced_profiling_files/figure-html/cell-2-output-2.png" width="663" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>This graph (which is a shortcut to <code>sim.loop.plot_cpu()</code>) shows us how much time each step in the integration loop takes. We can get line-by-line detail of where each function is taking time, though:</p>
 <div id="732427e9" class="cell" data-execution_count="2">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>prof.disp(maxentries<span class="op">=</span><span class="dv">5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>prof.disp(maxentries<span class="op">=</span><span class="dv">5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<div class="ansi-escaped-output">
-<pre><span class="ansi-cyan-fg">
+<pre><code>
 
+———————————————————————————————————————————————————————
+Profile of sim.Sim.start_step: 0.00368424 s (0.663051%)
+———————————————————————————————————————————————————————
 
-
-—————————————————————————————————————————————————————
-
-Profile of sim.Sim.start_step: 0.002339 s (0.784038%)
-
-—————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.002339 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/sim.py
-
-Function: start_step at line 306
-
-
+Total time: 0.00368424 s
+File: /home/cliffk/idm/starsim/starsim/sim.py
+Function: Sim.start_step at line 306
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    306                                               def start_step(self):
-
    307                                                   """ Start the step -- only print progress; all actual changes happen in the modules """
-
    308                                           
-
    309                                                   # Set the time and if we have reached the end of the simulation, then do nothing
-
-   310        21       3390.0    161.4      0.1          if self.complete:
-
+   310        21       7642.0    363.9      0.2          if self.complete:
    311                                                       errormsg = 'Simulation already complete (call sim.init() to re-run)'
-
    312                                                       raise AlreadyRunError(errormsg)
-
    313                                           
-
    314                                                   # Print out progress if needed
-
-   315        21    1744842.0  83087.7     74.6          self.elapsed = self.timer.toc(output=True)
-
-   316        21       6311.0    300.5      0.3          if self.verbose: # Print progress
-
-   317        21       2849.0    135.7      0.1              t = self.t
-
-   318        21      67550.0   3216.7      2.9              simlabel = f'"{self.label}": ' if self.label else ''
-
-   319        21     347118.0  16529.4     14.8              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
-
-   320        21       5205.0    247.9      0.2              if self.verbose &gt;= 1:
-
+   315        21    2504678.0 119270.4     68.0          self.elapsed = self.timer.toc(output=True)
+   316        21      11508.0    548.0      0.3          if self.verbose: # Print progress
+   317        21       6123.0    291.6      0.2              t = self.t
+   318        21     148133.0   7054.0      4.0              simlabel = f'"{self.label}": ' if self.label else ''
+   319        21     683401.0  32542.9     18.5              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
+   320        21       9644.0    459.2      0.3              if self.verbose &gt;= 1:
    321                                                           sc.heading(string)
-
-   322        21       4644.0    221.1      0.2              elif self.verbose &gt; 0:
-
-   323        21      12254.0    583.5      0.5                  if not (t.ti % int(1.0 / self.verbose)):
-
-   324         3     129786.0  43262.0      5.5                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
-
-   325        21      15050.0    716.7      0.6          return
-
-
-
-<span class="ansi-cyan-fg">
+   322        21       7289.0    347.1      0.2              elif self.verbose &gt; 0:
+   323        21      15407.0    733.7      0.4                  if not (t.ti % int(1.0 / self.verbose)):
+   324         3     269323.0  89774.3      7.3                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
+   325        21      21096.0   1004.6      0.6          return
 
 
 
 ————————————————————————————————————————————————————————————
-
-Profile of diseases.SIS.step_state: 0.00267096 s (0.895312%)
-
+Profile of diseases.SIS.step_state: 0.00393148 s (0.707546%)
 ————————————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.00267096 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: step_state at line 631
-
-
+Total time: 0.00393148 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: SIS.step_state at line 631
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    631                                               def step_state(self):
-
    632                                                   """ Progress infectious -&gt; recovered """
-
-   633        21     869873.0  41422.5     32.6          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
-
-   634        21      45884.0   2185.0      1.7          self.infected[recovered] = False
-
-   635        21      21709.0   1033.8      0.8          self.susceptible[recovered] = True
-
-   636        21    1725495.0  82166.4     64.6          self.update_immunity()
-
-   637        21       8002.0    381.0      0.3          return
+   633        21    1222804.0  58228.8     31.1          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
+   634        21      67807.0   3228.9      1.7          self.infected[recovered] = False
+   635        21      39496.0   1880.8      1.0          self.susceptible[recovered] = True
+   636        21    2587513.0 123214.9     65.8          self.update_immunity()
+   637        21      13862.0    660.1      0.4          return
 
 
 
-<span class="ansi-cyan-fg">
+——————————————————————————————————————————————————
+Profile of modules.py:673: 0.00672401 s (1.21012%)
+——————————————————————————————————————————————————
 
-
-
-—————————————————————————————————————————————————
-
-Profile of modules.py:673: 0.0044255 s (1.48344%)
-
-—————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.0044255 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/modules.py
-
-Function: start_step at line 673
-
-
+Total time: 0.00672401 s
+File: /home/cliffk/idm/starsim/starsim/modules.py
+Function: Module.start_step at line 673
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    673                                               @required()
-
    674                                               def start_step(self):
-
    675                                                   """ Tasks to perform at the beginning of the step """
-
-   676        42      13180.0    313.8      0.3          if self.finalized:
-
+   676        42      24797.0    590.4      0.4          if self.finalized:
    677                                                       errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
-
    678                                                       raise RuntimeError(errormsg)
-
-   679        42      10167.0    242.1      0.2          if self.dists is not None: # Will be None if no distributions are defined
-
-   680        42    4387593.0 104466.5     99.1              self.dists.jump_dt() # Advance random number generators forward for calls on this step
-
-   681        42      14564.0    346.8      0.3          return
-
-
-
-<span class="ansi-cyan-fg">
+   679        42      19795.0    471.3      0.3          if self.dists is not None: # Will be None if no distributions are defined
+   680        42    6654161.0 158432.4     99.0              self.dists.jump_dt() # Advance random number generators forward for calls on this step
+   681        42      25259.0    601.4      0.4          return
 
 
 
 ———————————————————————————————————————————————————————————————
-
-Profile of networks.DynamicNetwork.step: 0.0265104 s (8.88635%)
-
+Profile of networks.DynamicNetwork.step: 0.0355001 s (6.38893%)
 ———————————————————————————————————————————————————————————————
 
-</span>
-
-Total time: 0.0265104 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/networks.py
-
-Function: step at line 413
-
-
+Total time: 0.0355001 s
+File: /home/cliffk/idm/starsim/starsim/networks.py
+Function: DynamicNetwork.step at line 412
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
-   413                                               def step(self):
-
-   414        21    5393925.0 256853.6     20.3          self.end_pairs()
-
-   415        21   21109469.0    1e+06     79.6          self.add_pairs()
-
-   416        21       7014.0    334.0      0.0          return
+   412                                               def step(self):
+   413        21   10101223.0 481010.6     28.5          self.end_pairs()
+   414        21   25384704.0 1.21e+06     71.5          self.add_pairs()
+   415        21      14157.0    674.1      0.0          return
 
 
 
-<span class="ansi-cyan-fg">
+————————————————————————————————————————————————————————
+Profile of diseases.Infection.step: 0.483204 s (86.962%)
+————————————————————————————————————————————————————————
 
-
-
-—————————————————————————————————————————————————————————
-
-Profile of diseases.Infection.step: 0.252568 s (84.6614%)
-
-—————————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.252568 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: step at line 208
-
-
+Total time: 0.483204 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: Infection.step at line 208
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    208                                               def step(self):
-
    209                                                   """
-
    210                                                   Perform key infection updates, including infection and setting prognoses
-
    211                                                   """
-
    212                                                   # Create new cases
-
-   213        21  244875806.0    1e+07     97.0          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
-
+   213        21  472348159.0 2.25e+07     97.8          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
    214                                           
-
    215                                                   # Set prognoses
-
-   216        21       7761.0    369.6      0.0          if len(new_cases):
-
-   217        21    7674984.0 365475.4      3.0              self.set_outcomes(new_cases, sources)
-
+   216        21      18036.0    858.9      0.0          if len(new_cases):
+   217        21   10821773.0 515322.5      2.2              self.set_outcomes(new_cases, sources)
    218                                           
-
-   219        21       9708.0    462.3      0.0          return new_cases, sources, networks
-
-
-</pre>
-</div>
+   219        21      15765.0    750.7      0.0          return new_cases, sources, networks
+</code></pre>
 </div>
 </div>
 <p>(Note that the names of the functions here refer to the <em>actual</em> functions called, which may not match the graph above. That’s because, for example, <a href="../api/diseases.html#starsim.diseases.SIS" title="0"><code>ss.SIS</code></a> does not define its own <code>step()</code> method, but instead inherits <code>step()</code> from <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>Infection</code></a>. In the graph, this is shown as <code>sis.step()</code>, but is listed in the table as <a href="../api/diseases.html#starsim.diseases.Infection.step" title="0"><code>Infection.step()</code></a>. This is because it’s referring to the actual code being run, so refers to where those lines of code exist in the codebase; there is no code corresponding to <code>SIS.step()</code> since it’s just inherited from <a href="../api/diseases.html#starsim.diseases.Infection.step" title="0"><code>Infection.step()</code></a>.)</p>
 <p>If you want more detail, you can also define custom functions to follow. For example, we can see that <code>ss.SIS.infect()</code> takes the most time in <code>ss.SIS.step()</code>, so let’s profile that:</p>
 <div id="19b8b00a" class="cell" data-execution_count="3">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile(follow<span class="op">=</span>ss.SIS.infect, plot<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>prof.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile(follow<span class="op">=</span>ss.SIS.infect, plot<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>prof.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<div class="ansi-escaped-output">
-<pre>Initializing sim with 10000 agents
-
+<pre><code>Initializing sim with 10000 agents
 Profiling 1 function(s):
-
- &lt;function Infection.infect at 0x7ba25cc2a7a0&gt; 
-
-
-
+ &lt;function Infection.infect at 0x7dd03ee63f60&gt; 
 
   Running 2000.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
+  Running 2010.01.01 (10/21) (0.05 s)  ••••••••••—————————— 52%
+  Running 2020.01.01 (20/21) (0.10 s)  •••••••••••••••••••• 100%
+
+Elapsed time: 0.113 s
 
 
-  Running 2010.01.01 (10/21) (0.04 s)  ••••••••••—————————— 52%
+———————————————————————————————————————————————————————————
+Profile of diseases.Infection.infect: 0.042982 s (37.9613%)
+———————————————————————————————————————————————————————————
 
-
-  Running 2020.01.01 (20/21) (0.08 s)  •••••••••••••••••••• 100%
-
-
-
-Elapsed time: 85.7 ms
-
-<span class="ansi-cyan-fg">
-
-
-
-————————————————————————————————————————————————————————————
-
-Profile of diseases.Infection.infect: 0.0369667 s (43.1283%)
-
-————————————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.0369667 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: infect at line 230
-
-
+Total time: 0.042982 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: Infection.infect at line 230
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    230                                               def infect(self):
-
    231                                                   """ Determine who gets infected on this timestep via transmission on the network """
-
-   232        21      10642.0    506.8      0.0          new_cases = []
-
-   233        21       4749.0    226.1      0.0          sources = []
-
-   234        21       1756.0     83.6      0.0          networks = []
-
-   235        21     224427.0  10687.0      0.6          betamap = self.validate_beta()
-
+   232        21      12402.0    590.6      0.0          new_cases = []
+   233        21       7146.0    340.3      0.0          sources = []
+   234        21       4669.0    222.3      0.0          networks = []
+   235        21     389916.0  18567.4      0.9          betamap = self.validate_beta()
    236                                           
-
-   237        21     589148.0  28054.7      1.6          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-
-   238        21     305209.0  14533.8      0.8          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-
+   237        21     852127.0  40577.5      2.0          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+   238        21     553232.0  26344.4      1.3          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
    239                                           
-
-   240        42      52105.0   1240.6      0.1          for i, (nkey,route) in enumerate(self.sim.networks.items()):
-
-   241        21      10627.0    506.0      0.0              nk = ss.standardize_netkey(nkey)
-
+   240        42      97080.0   2311.4      0.2          for i, (nkey,route) in enumerate(self.sim.networks.items()):
+   241        21      21190.0   1009.0      0.0              nk = ss.standardize_netkey(nkey)
    242                                           
-
    243                                                       # Main use case: networks
-
-   244        21       6425.0    306.0      0.0              if isinstance(route, ss.Network):
-
-   245        21      59407.0   2828.9      0.2                  if len(route): # Skip networks with no edges
-
-   246        21       2961.0    141.0      0.0                      edges = route.edges
-
-   247        21      65851.0   3135.8      0.2                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
-
-   248        21      57666.0   2746.0      0.2                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
-
-   249        63      21433.0    340.2      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
-
-   250        42      28865.0    687.3      0.1                          if beta: # Skip networks with no transmission
-
-   251        42     506770.0  12066.0      1.4                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-
-   252        42    1240820.0  29543.3      3.4                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-
-   253        42   26331810.0 626947.9     71.2                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-
-   254        42      19538.0    465.2      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
-
-   255        42    6053298.0 144126.1     16.4                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
-
-   256        42       6880.0    163.8      0.0                              new_cases.append(target_uids)
-
-   257        42       6438.0    153.3      0.0                              sources.append(source_uids)
-
-   258        42     234319.0   5579.0      0.6                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
-
+   244        21      10084.0    480.2      0.0              if isinstance(route, ss.Network):
+   245        21     134554.0   6407.3      0.3                  if len(route): # Skip networks with no edges
+   246        21       7615.0    362.6      0.0                      edges = route.edges
+   247        21     188632.0   8982.5      0.4                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+   248        21     180462.0   8593.4      0.4                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
+   249        63      34038.0    540.3      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
+   250        42      50539.0   1203.3      0.1                          if beta: # Skip networks with no transmission
+   251        42     763187.0  18171.1      1.8                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
+   252        42    1335047.0  31786.8      3.1                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+   253        42   30330721.0 722160.0     70.6                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
+   254        42      33662.0    801.5      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+   255        42    6247050.0 148739.3     14.5                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
+   256        42      18655.0    444.2      0.0                              new_cases.append(target_uids)
+   257        42      14189.0    337.8      0.0                              sources.append(source_uids)
+   258        42     314183.0   7480.5      0.7                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
    259                                           
-
    260                                                       # Handle everything else: mixing pools, environmental transmission, etc.
-
    261                                                       elif isinstance(route, ss.Route):
-
    262                                                           # Mixing pools are unidirectional, only use the first beta value
-
    263                                                           disease_beta = betamap[nk][0].to_prob(self.t.dt) if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
-
    264                                                           target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
-
    265                                                           new_cases.append(target_uids)
-
    266                                                           sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
-
    267                                                           networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
-
    268                                                       else:
-
    269                                                           errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
-
    270                                                           raise TypeError(errormsg)
-
    271                                           
-
    272                                                   # Finalize
-
-   273        21       7574.0    360.7      0.0          if len(new_cases) and len(sources):
-
-   274        21     130000.0   6190.5      0.4              new_cases = ss.uids.cat(new_cases)
-
-   275        21     802650.0  38221.4      2.2              new_cases, inds = new_cases.unique(return_index=True)
-
-   276        21      89745.0   4273.6      0.2              sources = ss.uids.cat(sources)[inds]
-
-   277        21      54498.0   2595.1      0.1              networks = np.concatenate(networks)[inds]
-
+   273        21      12564.0    598.3      0.0          if len(new_cases) and len(sources):
+   274        21     158220.0   7534.3      0.4              new_cases = ss.uids.cat(new_cases)
+   275        21     977391.0  46542.4      2.3              new_cases, inds = new_cases.unique(return_index=True)
+   276        21     119650.0   5697.6      0.3              sources = ss.uids.cat(sources)[inds]
+   277        21      63468.0   3022.3      0.1              networks = np.concatenate(networks)[inds]
    278                                                   else:
-
    279                                                       new_cases = ss.uids()
-
    280                                                       sources = ss.uids()
-
    281                                                       networks = np.empty(0, dtype=ss_int)
-
    282                                           
-
-   283        21      41051.0   1954.8      0.1          return new_cases, sources, networks
-
-
-
-<span class="ansi-cyan-fg">
+   283        21      50344.0   2397.3      0.1          return new_cases, sources, networks
 
 
 
-————————————————————————————————————————————————————————————
+———————————————————————————————————————————————————————————
+Profile of diseases.Infection.infect: 0.042982 s (37.9613%)
+———————————————————————————————————————————————————————————
 
-Profile of diseases.Infection.infect: 0.0369667 s (43.1283%)
-
-————————————————————————————————————————————————————————————
-
-</span>
-
-Total time: 0.0369667 s
-
-File: /software/conda/lib/python3.12/site-packages/starsim/diseases.py
-
-Function: infect at line 230
-
-
+Total time: 0.042982 s
+File: /home/cliffk/idm/starsim/starsim/diseases.py
+Function: Infection.infect at line 230
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
-
 ==============================================================
-
    230                                               def infect(self):
-
    231                                                   """ Determine who gets infected on this timestep via transmission on the network """
-
-   232        21      10642.0    506.8      0.0          new_cases = []
-
-   233        21       4749.0    226.1      0.0          sources = []
-
-   234        21       1756.0     83.6      0.0          networks = []
-
-   235        21     224427.0  10687.0      0.6          betamap = self.validate_beta()
-
+   232        21      12402.0    590.6      0.0          new_cases = []
+   233        21       7146.0    340.3      0.0          sources = []
+   234        21       4669.0    222.3      0.0          networks = []
+   235        21     389916.0  18567.4      0.9          betamap = self.validate_beta()
    236                                           
-
-   237        21     589148.0  28054.7      1.6          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-
-   238        21     305209.0  14533.8      0.8          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-
+   237        21     852127.0  40577.5      2.0          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+   238        21     553232.0  26344.4      1.3          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
    239                                           
-
-   240        42      52105.0   1240.6      0.1          for i, (nkey,route) in enumerate(self.sim.networks.items()):
-
-   241        21      10627.0    506.0      0.0              nk = ss.standardize_netkey(nkey)
-
+   240        42      97080.0   2311.4      0.2          for i, (nkey,route) in enumerate(self.sim.networks.items()):
+   241        21      21190.0   1009.0      0.0              nk = ss.standardize_netkey(nkey)
    242                                           
-
    243                                                       # Main use case: networks
-
-   244        21       6425.0    306.0      0.0              if isinstance(route, ss.Network):
-
-   245        21      59407.0   2828.9      0.2                  if len(route): # Skip networks with no edges
-
-   246        21       2961.0    141.0      0.0                      edges = route.edges
-
-   247        21      65851.0   3135.8      0.2                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
-
-   248        21      57666.0   2746.0      0.2                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
-
-   249        63      21433.0    340.2      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
-
-   250        42      28865.0    687.3      0.1                          if beta: # Skip networks with no transmission
-
-   251        42     506770.0  12066.0      1.4                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-
-   252        42    1240820.0  29543.3      3.4                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-
-   253        42   26331810.0 626947.9     71.2                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-
-   254        42      19538.0    465.2      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
-
-   255        42    6053298.0 144126.1     16.4                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
-
-   256        42       6880.0    163.8      0.0                              new_cases.append(target_uids)
-
-   257        42       6438.0    153.3      0.0                              sources.append(source_uids)
-
-   258        42     234319.0   5579.0      0.6                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
-
+   244        21      10084.0    480.2      0.0              if isinstance(route, ss.Network):
+   245        21     134554.0   6407.3      0.3                  if len(route): # Skip networks with no edges
+   246        21       7615.0    362.6      0.0                      edges = route.edges
+   247        21     188632.0   8982.5      0.4                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+   248        21     180462.0   8593.4      0.4                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
+   249        63      34038.0    540.3      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
+   250        42      50539.0   1203.3      0.1                          if beta: # Skip networks with no transmission
+   251        42     763187.0  18171.1      1.8                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
+   252        42    1335047.0  31786.8      3.1                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+   253        42   30330721.0 722160.0     70.6                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
+   254        42      33662.0    801.5      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+   255        42    6247050.0 148739.3     14.5                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
+   256        42      18655.0    444.2      0.0                              new_cases.append(target_uids)
+   257        42      14189.0    337.8      0.0                              sources.append(source_uids)
+   258        42     314183.0   7480.5      0.7                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
    259                                           
-
    260                                                       # Handle everything else: mixing pools, environmental transmission, etc.
-
    261                                                       elif isinstance(route, ss.Route):
-
    262                                                           # Mixing pools are unidirectional, only use the first beta value
-
    263                                                           disease_beta = betamap[nk][0].to_prob(self.t.dt) if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
-
    264                                                           target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
-
    265                                                           new_cases.append(target_uids)
-
    266                                                           sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
-
    267                                                           networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
-
    268                                                       else:
-
    269                                                           errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
-
    270                                                           raise TypeError(errormsg)
-
    271                                           
-
    272                                                   # Finalize
-
-   273        21       7574.0    360.7      0.0          if len(new_cases) and len(sources):
-
-   274        21     130000.0   6190.5      0.4              new_cases = ss.uids.cat(new_cases)
-
-   275        21     802650.0  38221.4      2.2              new_cases, inds = new_cases.unique(return_index=True)
-
-   276        21      89745.0   4273.6      0.2              sources = ss.uids.cat(sources)[inds]
-
-   277        21      54498.0   2595.1      0.1              networks = np.concatenate(networks)[inds]
-
+   273        21      12564.0    598.3      0.0          if len(new_cases) and len(sources):
+   274        21     158220.0   7534.3      0.4              new_cases = ss.uids.cat(new_cases)
+   275        21     977391.0  46542.4      2.3              new_cases, inds = new_cases.unique(return_index=True)
+   276        21     119650.0   5697.6      0.3              sources = ss.uids.cat(sources)[inds]
+   277        21      63468.0   3022.3      0.1              networks = np.concatenate(networks)[inds]
    278                                                   else:
-
    279                                                       new_cases = ss.uids()
-
    280                                                       sources = ss.uids()
-
    281                                                       networks = np.empty(0, dtype=ss_int)
-
    282                                           
-
-   283        21      41051.0   1954.8      0.1          return new_cases, sources, networks
-
-
-</pre>
-</div>
+   283        21      50344.0   2397.3      0.1          return new_cases, sources, networks
+</code></pre>
 </div>
 </div>
 <p>(Note: you can only follow functions that are called as part of <code>sim.run()</code> this way. To follow other functions, such as those run by <code>sim.init()</code>, you can use <code>sc.profile()</code> directly.)</p>
@@ -1744,74 +1066,74 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 <h2 class="anchored" data-anchor-id="debugging">Debugging</h2>
 <p>When figuring out what your sim is doing – whether it’s doing something it shouldn’t be, or not doing something it should – <code>sim.loop</code> is your friend. It shows everything that will happen in the sim, and in what order:</p>
 <div id="52b6b2a5" class="cell" data-execution_count="4">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    start <span class="op">=</span> <span class="dv">2000</span>,</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    stop <span class="op">=</span> <span class="dv">2002</span>,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sis'</span>,</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="st">'random'</span>,</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    verbose <span class="op">=</span> <span class="dv">0</span>,</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>sim.loop.df.disp()</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"># %%</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    start <span class="op">=</span> <span class="dv">2000</span>,</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    stop <span class="op">=</span> <span class="dv">2002</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sis'</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="st">'random'</span>,</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    verbose <span class="op">=</span> <span class="dv">0</span>,</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>sim.loop.df.disp()</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co"># %%</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>    time  ti  func_order                     label     module       func_name    cpu_time
-0   2000   0           0            sim.start_step        sim      start_step  2.7590e-04
-1   2000   0           1      randomnet.start_step  randomnet      start_step  1.2053e-04
-2   2000   0           2            sis.start_step        sis      start_step  1.2818e-04
-3   2000   0           3            sis.step_state        sis      step_state  8.7697e-05
-4   2000   0           4            randomnet.step  randomnet            step  1.0904e-03
-5   2000   0           5                  sis.step        sis            step  2.1562e-03
-6   2000   0           6           people.step_die     people        step_die  3.8452e-05
-7   2000   0           7     people.update_results     people  update_results  5.7630e-05
-8   2000   0           8  randomnet.update_results  randomnet  update_results  5.9020e-06
-9   2000   0           9        sis.update_results        sis  update_results  7.5204e-05
-10  2000   0          10     randomnet.finish_step  randomnet     finish_step  3.0190e-06
-11  2000   0          11           sis.finish_step        sis     finish_step  1.1930e-06
-12  2000   0          12        people.finish_step     people     finish_step  1.7938e-05
-13  2000   0          13           sim.finish_step        sim     finish_step  1.4360e-06
-14  2001   1           0            sim.start_step        sim      start_step  6.7025e-05
-15  2001   1           1      randomnet.start_step  randomnet      start_step  9.1300e-05
-16  2001   1           2            sis.start_step        sis      start_step  1.1721e-04
-17  2001   1           3            sis.step_state        sis      step_state  6.6335e-05
-18  2001   1           4            randomnet.step  randomnet            step  1.0325e-03
-19  2001   1           5                  sis.step        sis            step  2.1105e-03
-20  2001   1           6           people.step_die     people        step_die  3.7533e-05
-21  2001   1           7     people.update_results     people  update_results  5.4211e-05
-22  2001   1           8  randomnet.update_results  randomnet  update_results  6.2500e-06
-23  2001   1           9        sis.update_results        sis  update_results  6.8892e-05
-24  2001   1          10     randomnet.finish_step  randomnet     finish_step  2.5380e-06
-25  2001   1          11           sis.finish_step        sis     finish_step  1.3900e-06
-26  2001   1          12        people.finish_step     people     finish_step  1.6907e-05
-27  2001   1          13           sim.finish_step        sim     finish_step  1.2570e-06
-28  2002   2           0            sim.start_step        sim      start_step  6.6293e-05
-29  2002   2           1      randomnet.start_step  randomnet      start_step  9.0055e-05
-30  2002   2           2            sis.start_step        sis      start_step  1.1318e-04
-31  2002   2           3            sis.step_state        sis      step_state  6.8366e-05
-32  2002   2           4            randomnet.step  randomnet            step  1.1808e-03
-33  2002   2           5                  sis.step        sis            step  1.9292e-03
-34  2002   2           6           people.step_die     people        step_die  3.9475e-05
-35  2002   2           7     people.update_results     people  update_results  5.8985e-05
-36  2002   2           8  randomnet.update_results  randomnet  update_results  5.7620e-06
-37  2002   2           9        sis.update_results        sis  update_results  6.9506e-05
-38  2002   2          10     randomnet.finish_step  randomnet     finish_step  2.6530e-06
-39  2002   2          11           sis.finish_step        sis     finish_step  1.5040e-06
-40  2002   2          12        people.finish_step     people     finish_step  1.8273e-05
-41  2002   2          13           sim.finish_step        sim     finish_step  1.2890e-06</code></pre>
+0   2000   0           0            sim.start_step        sim      start_step  2.0854e-04
+1   2000   0           1      randomnet.start_step  randomnet      start_step  1.1106e-04
+2   2000   0           2            sis.start_step        sis      start_step  1.0002e-04
+3   2000   0           3            sis.step_state        sis      step_state  8.1091e-05
+4   2000   0           4            randomnet.step  randomnet            step  1.1102e-03
+5   2000   0           5                  sis.step        sis            step  2.2622e-03
+6   2000   0           6           people.step_die     people        step_die  3.7400e-05
+7   2000   0           7     people.update_results     people  update_results  4.4885e-05
+8   2000   0           8  randomnet.update_results  randomnet  update_results  8.6730e-06
+9   2000   0           9        sis.update_results        sis  update_results  6.2612e-05
+10  2000   0          10     randomnet.finish_step  randomnet     finish_step  3.3670e-06
+11  2000   0          11           sis.finish_step        sis     finish_step  1.7570e-06
+12  2000   0          12        people.finish_step     people     finish_step  1.1204e-05
+13  2000   0          13           sim.finish_step        sim     finish_step  1.6490e-06
+14  2001   1           0            sim.start_step        sim      start_step  5.3382e-05
+15  2001   1           1      randomnet.start_step  randomnet      start_step  8.2708e-05
+16  2001   1           2            sis.start_step        sis      start_step  9.3020e-05
+17  2001   1           3            sis.step_state        sis      step_state  5.9762e-05
+18  2001   1           4            randomnet.step  randomnet            step  1.0267e-03
+19  2001   1           5                  sis.step        sis            step  1.6051e-03
+20  2001   1           6           people.step_die     people        step_die  3.1857e-05
+21  2001   1           7     people.update_results     people  update_results  4.1163e-05
+22  2001   1           8  randomnet.update_results  randomnet  update_results  7.0070e-06
+23  2001   1           9        sis.update_results        sis  update_results  5.4160e-05
+24  2001   1          10     randomnet.finish_step  randomnet     finish_step  3.3090e-06
+25  2001   1          11           sis.finish_step        sis     finish_step  1.6930e-06
+26  2001   1          12        people.finish_step     people     finish_step  1.0562e-05
+27  2001   1          13           sim.finish_step        sim     finish_step  1.4910e-06
+28  2002   2           0            sim.start_step        sim      start_step  5.0586e-05
+29  2002   2           1      randomnet.start_step  randomnet      start_step  7.7721e-05
+30  2002   2           2            sis.start_step        sis      start_step  8.9695e-05
+31  2002   2           3            sis.step_state        sis      step_state  5.2579e-05
+32  2002   2           4            randomnet.step  randomnet            step  9.9232e-04
+33  2002   2           5                  sis.step        sis            step  1.5362e-03
+34  2002   2           6           people.step_die     people        step_die  3.0093e-05
+35  2002   2           7     people.update_results     people  update_results  3.8311e-05
+36  2002   2           8  randomnet.update_results  randomnet  update_results  6.4450e-06
+37  2002   2           9        sis.update_results        sis  update_results  4.9012e-05
+38  2002   2          10     randomnet.finish_step  randomnet     finish_step  2.7030e-06
+39  2002   2          11           sis.finish_step        sis     finish_step  1.3510e-06
+40  2002   2          12        people.finish_step     people     finish_step  9.6950e-06
+41  2002   2          13           sim.finish_step        sim     finish_step  1.2550e-06</code></pre>
 </div>
 </div>
 <p>As you can see, it’s a lot – this is only three timesteps and two modules, and it’s already 41 steps.</p>
 <p>The typical way to do debugging is to insert breakpoints or print statements into your modules for custom debugging (e.g., to print a value), or to use analyzers for heavier-lift debugging. Starsim also lets you manually modify the loop by inserting “probes” or other arbitrary functions. For example, if you wanted to check the population size after each time the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> object is updated:</p>
 <div id="ec2c7e2e" class="cell" data-execution_count="5">
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> check_pop_size(sim):</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'Population size is </span><span class="sc">{</span><span class="bu">len</span>(sim.people)<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, demographics<span class="op">=</span><span class="va">True</span>, dur<span class="op">=</span><span class="dv">10</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>sim.loop.insert(check_pop_size, label<span class="op">=</span><span class="st">'people.finish_step'</span>)</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> check_pop_size(sim):</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'Population size is </span><span class="sc">{</span><span class="bu">len</span>(sim.people)<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, demographics<span class="op">=</span><span class="va">True</span>, dur<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>sim.loop.insert(check_pop_size, label<span class="op">=</span><span class="st">'people.finish_step'</span>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/11) (0.00 s)  •——————————————————— 9%
@@ -1825,21 +1147,21 @@ Population size is 10739
 Population size is 10817
 Population size is 10917
 Population size is 11033
-  Running 2010.01.01 (10/11) (0.06 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/11) (0.05 s)  •••••••••••••••••••• 100%
 
 Population size is 11124</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="5">
-<pre><code>Sim(n=10000; 2000—2010; demographics=births, deaths; networks=randomnet; diseases=sir)</code></pre>
+<pre><code>Sim(n=10000; 2000—2010.0; demographics=births, deaths; networks=randomnet; diseases=sir)</code></pre>
 </div>
 </div>
 <p>In this case, you get the same output as using an analyzer:</p>
 <div id="0eeb8f16" class="cell" data-execution_count="6">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> check_pop_size(sim):</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'Population size is </span><span class="sc">{</span><span class="bu">len</span>(sim.people)<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, demographics<span class="op">=</span><span class="va">True</span>, dur<span class="op">=</span><span class="dv">10</span>, analyzers<span class="op">=</span>check_pop_size)</span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> check_pop_size(sim):</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'Population size is </span><span class="sc">{</span><span class="bu">len</span>(sim.people)<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, demographics<span class="op">=</span><span class="va">True</span>, dur<span class="op">=</span><span class="dv">10</span>, analyzers<span class="op">=</span>check_pop_size)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/11) (0.00 s)  •——————————————————— 9%
@@ -1858,13 +1180,13 @@ Population size is 11033
 Population size is 11124</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="6">
-<pre><code>Sim(n=10000; 2000—2010; demographics=births, deaths; networks=randomnet; diseases=sir; analyzers=check_pop_size)</code></pre>
+<pre><code>Sim(n=10000; 2000—2010.0; demographics=births, deaths; networks=randomnet; diseases=sir; analyzers=check_pop_size)</code></pre>
 </div>
 </div>
 <p>However, inserting functions directly in the loop gives you more control over their exact placement, whereas analyzers are always executed last in the timestep.</p>
 <p>The loop also has methods for visualizing itself. You can get a simple representation of the loop with <code>loop.plot()</code>:</p>
 <div id="36444926" class="cell" data-execution_count="7">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>sim.loop.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>sim.loop.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(672x480)</code></pre>
 </div>
@@ -1878,7 +1200,7 @@ Population size is 11124</code></pre>
 </div>
 <p>Or a slightly more detailed one with <code>loop.plot_step_order()</code>:</p>
 <div id="a8791d97" class="cell" data-execution_count="8">
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>sim.loop.plot_step_order()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>sim.loop.plot_step_order()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(672x480)</code></pre>
 </div>
@@ -1892,12 +1214,12 @@ Population size is 11124</code></pre>
 </div>
 <p>This is especially useful if your simulation has modules with different timesteps, e.g.:</p>
 <div id="fe04ee05" class="cell" data-execution_count="9">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS(dt<span class="op">=</span><span class="fl">0.1</span>)</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(dt<span class="op">=</span><span class="fl">0.5</span>)</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(dt<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(dt<span class="op">=</span><span class="fl">0.1</span>, dur<span class="op">=</span><span class="dv">5</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>net, demographics<span class="op">=</span>births)</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>sim.loop.plot_step_order()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS(dt<span class="op">=</span><span class="fl">0.1</span>)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(dt<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>births <span class="op">=</span> ss.Births(dt<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(dt<span class="op">=</span><span class="fl">0.1</span>, dur<span class="op">=</span><span class="dv">5</span>, diseases<span class="op">=</span>sis, networks<span class="op">=</span>net, demographics<span class="op">=</span>births)</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>sim.loop.plot_step_order()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
 Figure(672x480)</code></pre>
@@ -1917,255 +1239,380 @@ Figure(672x480)</code></pre>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
-  window.document.addEventListener("DOMContentLoaded", function (event) {
-    // Ensure there is a toggle, if there isn't float one in the top right
-    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
-      const a = window.document.createElement('a');
-      a.classList.add('top-right');
-      a.classList.add('quarto-color-scheme-toggle');
-      a.href = "";
-      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
-      const i = window.document.createElement("i");
-      i.classList.add('bi');
-      a.appendChild(i);
-      window.document.body.appendChild(a);
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
     }
-    setColorSchemeToggle(hasAlternateSentinel())
-    const icon = "";
-    const anchorJS = new window.AnchorJS();
-    anchorJS.options = {
-      placement: 'right',
-      icon: icon
-    };
-    anchorJS.add('.anchored');
-    const isCodeAnnotation = (el) => {
-      for (const clz of el.classList) {
-        if (clz.startsWith('code-annotation-')) {                     
-          return true;
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const disableStylesheet = (stylesheets) => {
+    for (let i=0; i < stylesheets.length; i++) {
+      const stylesheet = stylesheets[i];
+      stylesheet.rel = 'prefetch';
+    }
+  }
+  const enableStylesheet = (stylesheets) => {
+    for (let i=0; i < stylesheets.length; i++) {
+      const stylesheet = stylesheets[i];
+      stylesheet.rel = 'stylesheet';
+    }
+  }
+  const manageTransitions = (selector, allowTransitions) => {
+    const els = window.document.querySelectorAll(selector);
+    for (let i=0; i < els.length; i++) {
+      const el = els[i];
+      if (allowTransitions) {
+        el.classList.remove('notransition');
+      } else {
+        el.classList.add('notransition');
+      }
+    }
+  }
+  const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+    const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+    const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+    let newTheme = '';
+    if(darkModeDefault) {
+      newTheme = isAlternate ? baseTheme : alternateTheme;
+    } else {
+      newTheme = isAlternate ? alternateTheme : baseTheme;
+    }
+    const changeGiscusTheme = () => {
+      // From: https://github.com/giscus/giscus/issues/336
+      const sendMessage = (message) => {
+        const iframe = document.querySelector('iframe.giscus-frame');
+        if (!iframe) return;
+        iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+      }
+      sendMessage({
+        setConfig: {
+          theme: newTheme
+        }
+      });
+    }
+    const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+    if (isGiscussLoaded) {
+      changeGiscusTheme();
+    }
+  }
+  const toggleColorMode = (alternate) => {
+    // Switch the stylesheets
+    const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+    manageTransitions('#quarto-margin-sidebar .nav-link', false);
+    if (alternate) {
+      enableStylesheet(alternateStylesheets);
+      for (const sheetNode of alternateStylesheets) {
+        if (sheetNode.id === "quarto-bootstrap") {
+          toggleBodyColorMode(sheetNode);
         }
       }
+    } else {
+      disableStylesheet(alternateStylesheets);
+      toggleBodyColorPrimary();
+    }
+    manageTransitions('#quarto-margin-sidebar .nav-link', true);
+    // Switch the toggles
+    const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+    for (let i=0; i < toggles.length; i++) {
+      const toggle = toggles[i];
+      if (toggle) {
+        if (alternate) {
+          toggle.classList.add("alternate");     
+        } else {
+          toggle.classList.remove("alternate");
+        }
+      }
+    }
+    // Hack to workaround the fact that safari doesn't
+    // properly recolor the scrollbar when toggling (#1455)
+    if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+      manageTransitions("body", false);
+      window.scrollTo(0, 1);
+      setTimeout(() => {
+        window.scrollTo(0, 0);
+        manageTransitions("body", true);
+      }, 40);  
+    }
+  }
+  const isFileUrl = () => { 
+    return window.location.protocol === 'file:';
+  }
+  const hasAlternateSentinel = () => {  
+    let styleSentinel = getColorSchemeSentinel();
+    if (styleSentinel !== null) {
+      return styleSentinel === "alternate";
+    } else {
       return false;
     }
-    const onCopySuccess = function(e) {
-      // button target
-      const button = e.trigger;
-      // don't keep focus
-      button.blur();
-      // flash "checked"
-      button.classList.add('code-copy-button-checked');
-      var currentTitle = button.getAttribute("title");
-      button.setAttribute("title", "Copied!");
-      let tooltip;
-      if (window.bootstrap) {
-        button.setAttribute("data-bs-toggle", "tooltip");
-        button.setAttribute("data-bs-placement", "left");
-        button.setAttribute("data-bs-title", "Copied!");
-        tooltip = new bootstrap.Tooltip(button, 
-          { trigger: "manual", 
-            customClass: "code-copy-button-tooltip",
-            offset: [0, -8]});
-        tooltip.show();    
+  }
+  const setStyleSentinel = (alternate) => {
+    const value = alternate ? "alternate" : "default";
+    if (!isFileUrl()) {
+      window.localStorage.setItem("quarto-color-scheme", value);
+    } else {
+      localAlternateSentinel = value;
+    }
+  }
+  const getColorSchemeSentinel = () => {
+    if (!isFileUrl()) {
+      const storageValue = window.localStorage.getItem("quarto-color-scheme");
+      return storageValue != null ? storageValue : localAlternateSentinel;
+    } else {
+      return localAlternateSentinel;
+    }
+  }
+  const darkModeDefault = false;
+  let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+  // Dark / light mode switch
+  window.quartoToggleColorScheme = () => {
+    // Read the current dark / light value 
+    let toAlternate = !hasAlternateSentinel();
+    toggleColorMode(toAlternate);
+    setStyleSentinel(toAlternate);
+    toggleGiscusIfUsed(toAlternate, darkModeDefault);
+  };
+  // Ensure there is a toggle, if there isn't float one in the top right
+  if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+    const a = window.document.createElement('a');
+    a.classList.add('top-right');
+    a.classList.add('quarto-color-scheme-toggle');
+    a.href = "";
+    a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+    const i = window.document.createElement("i");
+    i.classList.add('bi');
+    a.appendChild(i);
+    window.document.body.appendChild(a);
+  }
+  // Switch to dark mode if need be
+  if (hasAlternateSentinel()) {
+    toggleColorMode(true);
+  } else {
+    toggleColorMode(false);
+  }
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
       }
-      setTimeout(function() {
-        if (tooltip) {
-          tooltip.hide();
-          button.removeAttribute("data-bs-title");
-          button.removeAttribute("data-bs-toggle");
-          button.removeAttribute("data-bs-placement");
-        }
-        button.setAttribute("title", currentTitle);
-        button.classList.remove('code-copy-button-checked');
-      }, 1000);
-      // clear code selection
-      e.clearSelection();
     }
-    const getTextToCopy = function(trigger) {
-        const codeEl = trigger.previousElementSibling.cloneNode(true);
-        for (const childEl of codeEl.children) {
-          if (isCodeAnnotation(childEl)) {
-            childEl.remove();
-          }
-        }
-        return codeEl.innerText;
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
     }
-    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
-      text: getTextToCopy
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
     });
-    clipboard.on('success', onCopySuccess);
-    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
-      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
-        text: getTextToCopy,
-        container: window.document.getElementById('quarto-embedded-source-code-modal')
-      });
-      clipboardModal.on('success', onCopySuccess);
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
     }
-      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
-      var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
-      var isInternal = (href) => {
-          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
-      }
-      // Inspect non-navigation links and adorn them if external
-     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
-      for (var i=0; i<links.length; i++) {
-        const link = links[i];
-        if (!isInternal(link.href)) {
-          // undo the damage that might have been done by quarto-nav.js in the case of
-          // links that we want to consider external
-          if (link.dataset.originalHref !== undefined) {
-            link.href = link.dataset.originalHref;
-          }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
         }
       }
-    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
-      const config = {
-        allowHTML: true,
-        maxWidth: 500,
-        delay: 100,
-        arrow: false,
-        appendTo: function(el) {
-            return el.parentElement;
-        },
-        interactive: true,
-        interactiveBorder: 10,
-        theme: 'quarto',
-        placement: 'bottom-start',
-      };
-      if (contentFn) {
-        config.content = contentFn;
-      }
-      if (onTriggerFn) {
-        config.onTrigger = onTriggerFn;
-      }
-      if (onUntriggerFn) {
-        config.onUntrigger = onUntriggerFn;
-      }
-      window.tippy(el, config); 
     }
-    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
-    for (var i=0; i<noterefs.length; i++) {
-      const ref = noterefs[i];
-      tippyHover(ref, function() {
-        // use id or data attribute instead here
-        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
-        try { href = new URL(href).hash; } catch {}
-        const id = href.replace(/^#\/?/, "");
-        const note = window.document.getElementById(id);
-        if (note) {
-          return note.innerHTML;
-        } else {
-          return "";
-        }
-      });
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
     }
-    const xrefs = window.document.querySelectorAll('a.quarto-xref');
-    const processXRef = (id, note) => {
-      // Strip column container classes
-      const stripColumnClz = (el) => {
-        el.classList.remove("page-full", "page-columns");
-        if (el.children) {
-          for (const child of el.children) {
-            stripColumnClz(child);
-          }
-        }
-      }
-      stripColumnClz(note)
-      if (id === null || id.startsWith('sec-')) {
-        // Special case sections, only their first couple elements
-        const container = document.createElement("div");
-        if (note.children && note.children.length > 2) {
-          container.appendChild(note.children[0].cloneNode(true));
-          for (let i = 1; i < note.children.length; i++) {
-            const child = note.children[i];
-            if (child.tagName === "P" && child.innerText === "") {
-              continue;
-            } else {
-              container.appendChild(child.cloneNode(true));
-              break;
-            }
-          }
-          if (window.Quarto?.typesetMath) {
-            window.Quarto.typesetMath(container);
-          }
-          return container.innerHTML
-        } else {
-          if (window.Quarto?.typesetMath) {
-            window.Quarto.typesetMath(note);
-          }
-          return note.innerHTML;
-        }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
       } else {
-        // Remove any anchor links if they are present
-        const anchorLink = note.querySelector('a.anchorjs-link');
-        if (anchorLink) {
-          anchorLink.remove();
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
         }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
         if (window.Quarto?.typesetMath) {
           window.Quarto.typesetMath(note);
         }
-        if (note.classList.contains("callout")) {
-          return note.outerHTML;
-        } else {
-          return note.innerHTML;
-        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
       }
     }
-    for (var i=0; i<xrefs.length; i++) {
-      const xref = xrefs[i];
-      tippyHover(xref, undefined, function(instance) {
-        instance.disable();
-        let url = xref.getAttribute('href');
-        let hash = undefined; 
-        if (url.startsWith('#')) {
-          hash = url;
-        } else {
-          try { hash = new URL(url).hash; } catch {}
-        }
-        if (hash) {
-          const id = hash.replace(/^#\/?/, "");
-          const note = window.document.getElementById(id);
-          if (note !== null) {
-            try {
-              const html = processXRef(id, note.cloneNode(true));
-              instance.setContent(html);
-            } finally {
-              instance.enable();
-              instance.show();
-            }
-          } else {
-            // See if we can fetch this
-            fetch(url.split('#')[0])
-            .then(res => res.text())
-            .then(html => {
-              const parser = new DOMParser();
-              const htmlDoc = parser.parseFromString(html, "text/html");
-              const note = htmlDoc.getElementById(id);
-              if (note !== null) {
-                const html = processXRef(id, note);
-                instance.setContent(html);
-              } 
-            }).finally(() => {
-              instance.enable();
-              instance.show();
-            });
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
           }
         } else {
-          // See if we can fetch a full url (with no hash to target)
-          // This is a special case and we should probably do some content thinning / targeting
-          fetch(url)
+          // See if we can fetch this
+          fetch(url.split('#')[0])
           .then(res => res.text())
           .then(html => {
             const parser = new DOMParser();
             const htmlDoc = parser.parseFromString(html, "text/html");
-            const note = htmlDoc.querySelector('main.content');
+            const note = htmlDoc.getElementById(id);
             if (note !== null) {
-              // This should only happen for chapter cross references
-              // (since there is no id in the URL)
-              // remove the first header
-              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
-                note.children[0].remove();
-              }
-              const html = processXRef(null, note);
+              const html = processXRef(id, note);
               instance.setContent(html);
             } 
           }).finally(() => {
@@ -2173,161 +1620,185 @@ Figure(672x480)</code></pre>
             instance.show();
           });
         }
-      }, function(instance) {
-      });
-    }
-        let selectedAnnoteEl;
-        const selectorForAnnotation = ( cell, annotation) => {
-          let cellAttr = 'data-code-cell="' + cell + '"';
-          let lineAttr = 'data-code-annotation="' +  annotation + '"';
-          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
-          return selector;
-        }
-        const selectCodeLines = (annoteEl) => {
-          const doc = window.document;
-          const targetCell = annoteEl.getAttribute("data-target-cell");
-          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
-          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
-          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
-          const lineIds = lines.map((line) => {
-            return targetCell + "-" + line;
-          })
-          let top = null;
-          let height = null;
-          let parent = null;
-          if (lineIds.length > 0) {
-              //compute the position of the single el (top and bottom and make a div)
-              const el = window.document.getElementById(lineIds[0]);
-              top = el.offsetTop;
-              height = el.offsetHeight;
-              parent = el.parentElement.parentElement;
-            if (lineIds.length > 1) {
-              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
-              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
-              height = bottom - top;
-            }
-            if (top !== null && height !== null && parent !== null) {
-              // cook up a div (if necessary) and position it 
-              let div = window.document.getElementById("code-annotation-line-highlight");
-              if (div === null) {
-                div = window.document.createElement("div");
-                div.setAttribute("id", "code-annotation-line-highlight");
-                div.style.position = 'absolute';
-                parent.appendChild(div);
-              }
-              div.style.top = top - 2 + "px";
-              div.style.height = height + 4 + "px";
-              div.style.left = 0;
-              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
-              if (gutterDiv === null) {
-                gutterDiv = window.document.createElement("div");
-                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
-                gutterDiv.style.position = 'absolute';
-                const codeCell = window.document.getElementById(targetCell);
-                const gutter = codeCell.querySelector('.code-annotation-gutter');
-                gutter.appendChild(gutterDiv);
-              }
-              gutterDiv.style.top = top - 2 + "px";
-              gutterDiv.style.height = height + 4 + "px";
-            }
-            selectedAnnoteEl = annoteEl;
-          }
-        };
-        const unselectCodeLines = () => {
-          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
-          elementsIds.forEach((elId) => {
-            const div = window.document.getElementById(elId);
-            if (div) {
-              div.remove();
-            }
-          });
-          selectedAnnoteEl = undefined;
-        };
-          // Handle positioning of the toggle
-      window.addEventListener(
-        "resize",
-        throttle(() => {
-          elRect = undefined;
-          if (selectedAnnoteEl) {
-            selectCodeLines(selectedAnnoteEl);
-          }
-        }, 10)
-      );
-      function throttle(fn, ms) {
-      let throttle = false;
-      let timer;
-        return (...args) => {
-          if(!throttle) { // first call gets through
-              fn.apply(this, args);
-              throttle = true;
-          } else { // all the others get throttled
-              if(timer) clearTimeout(timer); // cancel #2
-              timer = setTimeout(() => {
-                fn.apply(this, args);
-                timer = throttle = false;
-              }, ms);
-          }
-        };
-      }
-        // Attach click handler to the DT
-        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
-        for (const annoteDlNode of annoteDls) {
-          annoteDlNode.addEventListener('click', (event) => {
-            const clickedEl = event.target;
-            if (clickedEl !== selectedAnnoteEl) {
-              unselectCodeLines();
-              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
-              if (activeEl) {
-                activeEl.classList.remove('code-annotation-active');
-              }
-              selectCodeLines(clickedEl);
-              clickedEl.classList.add('code-annotation-active');
-            } else {
-              // Unselect the line
-              unselectCodeLines();
-              clickedEl.classList.remove('code-annotation-active');
-            }
-          });
-        }
-    const findCites = (el) => {
-      const parentEl = el.parentElement;
-      if (parentEl) {
-        const cites = parentEl.dataset.cites;
-        if (cites) {
-          return {
-            el,
-            cites: cites.split(' ')
-          };
-        } else {
-          return findCites(el.parentElement)
-        }
       } else {
-        return undefined;
-      }
-    };
-    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
-    for (var i=0; i<bibliorefs.length; i++) {
-      const ref = bibliorefs[i];
-      const citeInfo = findCites(ref);
-      if (citeInfo) {
-        tippyHover(citeInfo.el, function() {
-          var popup = window.document.createElement('div');
-          citeInfo.cites.forEach(function(cite) {
-            var citeDiv = window.document.createElement('div');
-            citeDiv.classList.add('hanging-indent');
-            citeDiv.classList.add('csl-entry');
-            var biblioDiv = window.document.getElementById('ref-' + cite);
-            if (biblioDiv) {
-              citeDiv.innerHTML = biblioDiv.innerHTML;
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
             }
-            popup.appendChild(citeDiv);
-          });
-          return popup.innerHTML;
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
         });
       }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
     }
-  });
-  </script>
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
       <a href="../user_guide/advanced_random.html" class="pagination-link" aria-label="Random numbers">
@@ -2347,7 +1818,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.0.6 (2026-01-28).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
