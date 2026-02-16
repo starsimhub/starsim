@@ -28,16 +28,16 @@ def test_profile():
     # Based on advanced_profiling.ipynb
     sim = ss.Sim(**debug_pars)
     prof = sim.profile()
-
     return prof
 
 
 @sc.timer()
-def test_debug_rvs():
-    sc.heading('Testing sim.debug_rvs()')
-    sim = ss.Sim(**debug_pars, debug='rvs')
+def test_diagnostics_rvs():
+    sc.heading('Testing sim diagnostics for random numbers')
+    sim = ss.Sim(**debug_pars, diagnostics='rvs')
     sim.run()
-    rvs = sim.debug.rvs
+
+    rvs = sim.diagnostics.rvs
     key = 'diseases_sis_trans_rng_dists_0' # Should be unique every time
     hashes = [entry[key].hash for entry in rvs.values()]
     assert len(hashes) == len(set(hashes))
@@ -45,12 +45,13 @@ def test_debug_rvs():
 
 
 @sc.timer()
-def test_debug_states():
-    sc.heading('Testing sim.debug_states()')
+def test_diagnostics_states():
+    sc.heading('Testing sim diagnostics for states')
     sim = ss.Sim(**debug_pars, demographics=True)
-    sim.set_debug(states=True, detailed=True)
+    sim.set_diagnostics(states=True, detailed=True)
     sim.run()
-    states = sim.debug.states
+
+    states = sim.diagnostics.states
     assert len(states[-1].alive) == len(sim.people)
     return states
 
@@ -65,8 +66,8 @@ if __name__ == '__main__':
 
     # Run tests
     prof = test_profile()
-    rvs = test_debug_rvs()
-    states = test_debug_states()
+    rvs = test_diagnostics_rvs()
+    states = test_diagnostics_states()
 
     sc.toc(T)
     plt.show()

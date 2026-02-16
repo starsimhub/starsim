@@ -916,8 +916,8 @@ class Dist:
             rvs = self.randround(rvs)
 
         # Tidy up
-        if self.sim.has_debugger and self.sim.debug.has_rvs:
-            self.sim.debug.store_rvs(self, rvs)
+        if self.sim and self.sim.has_diagnostics and self.sim.diagnostics.has_rvs:
+            self.sim.diagnostics.store_rvs(self, rvs)
         self.called += 1
         if reset:
             self.reset(-1)
