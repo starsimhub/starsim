@@ -319,7 +319,7 @@ class Sim(ss.Base):
         sim run time and memory usage.
 
         Args:
-            which (str/list): shortcut for setting rvs and/or states; valid args are 'rvs', 'states', and 'both'/True
+            which (str): shortcut for setting rvs and/or states; valid args are 'rvs', 'states', and 'both' (equivalent to True)
             rvs (bool/str): whether to enable diagnostics for random numbers/variates; if a string is provided, export to this file
             states (bool/str): as above, for people states
             export (bool): whether to export to file; if None, export if a string is provided
@@ -327,8 +327,8 @@ class Sim(ss.Base):
 
         *Examples:*
 
-            # General settings
-            kw = dict(n_agents=1000, start=0, stop=10, networks='random', diseases='sis')
+            # General settings -- use a small sim and few timesteps if possible
+            kw = dict(n_agents=100, start=0, stop=10, networks='random', diseases='sis')
 
             # Simplest usage: store agent-state info
             sim = ss.Sim(diagnostics='states', **kw)
@@ -343,7 +343,7 @@ class Sim(ss.Base):
         rvs    = rvs    or which in [True, 'both', 'rvs']
         states = states or which in [True, 'both', 'states']
         if rvs or states:
-            print('Enabling sim diagnostics ...')
+            print('Enabling sim diagnostics ...') # Always print regardless of verbosity
             self.diagnostics = ss.Diagnostics(sim=self, rvs=rvs, states=states, export=export, detailed=detailed)
         return
 
