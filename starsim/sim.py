@@ -915,6 +915,7 @@ class SimDebug(sc.quickobj):
             mean = v.mean(),
             min = v.min(),
             max = v.max(),
+            hash = sc.sha(v).hexdigest()[:16],
         )
         return stats
 
