@@ -42,7 +42,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fastmath = ["intel-cmplr-lib-rt"]
+fastmath = [
+  "mkl",
+  "intel-cmplr-lib-rt"
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov",
