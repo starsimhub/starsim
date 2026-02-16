@@ -11,6 +11,14 @@ sc.options.interactive = False # Assume not running interactively
 small = 100
 medium = 1000
 
+debug_pars = dict(
+    n_agents = small,
+    start = '2000-01-01',
+    stop = '2010-01-01',
+    diseases = 'sis',
+    networks = 'random'
+)
+
 # %% Define the tests
 
 @sc.timer()
@@ -18,14 +26,7 @@ def test_profile():
     sc.heading('Testing sim.profile()')
 
     # Based on advanced_profiling.ipynb
-    pars = dict(
-        n_agents = small,
-        start = '2000-01-01',
-        stop = '2010-01-01',
-        diseases = 'sis',
-        networks = 'random'
-    )
-    sim = ss.Sim(pars)
+    sim = ss.Sim(**debug_pars)
     prof = sim.profile()
 
     return prof
@@ -34,15 +35,24 @@ def test_profile():
 @sc.timer()
 def test_debug_rvs():
     sc.heading('Testing sim.debug_rvs()')
-    print('Feature not yet implemented')
-    pass
+    sim = ss.Sim(**debug_pars, debug='rvs')
+    sim.run()
+    rvs = sim.debug.rvs
+    key = 'diseases_sis_trans_rng_dists_0' # Should be unique every time
+    hashes = [entry[key].hash for entry in rvs.values()]
+    assert len(hashes) == len(set(hashes))
+    return rvs
 
 
 @sc.timer()
 def test_debug_states():
     sc.heading('Testing sim.debug_states()')
-    print('Feature not yet implemented')
-    pass
+    sim = ss.Sim(**debug_pars, demographics=True)
+    sim.set_debug(states=True, detailed=True)
+    sim.run()
+    states = sim.debug.states
+    assert len(states[-1].alive) == len(sim.people)
+    return states
 
 
 # %% Run as a script
@@ -55,8 +65,8 @@ if __name__ == '__main__':
 
     # Run tests
     prof = test_profile()
-    test_debug_rvs()
-    test_debug_states()
+    rvs = test_debug_rvs()
+    states = test_debug_states()
 
     sc.toc(T)
     plt.show()

@@ -892,10 +892,10 @@ class SimDebug(sc.quickobj):
         self.do_export = export or isinstance(rvs, str) or isinstance(states, str)
         self.detailed = detailed
         if rvs:
-            self.rvs = {}
+            self.rvs = sc.objdict()
             self.rvs_file = rvs if isinstance(rvs, str) else 'debug_rvs.json'
         if states:
-            self.states = {}
+            self.states = sc.objdict()
             self.states_file = states if isinstance(states, str) else 'debug_states.json'
         return
 
@@ -919,13 +919,18 @@ class SimDebug(sc.quickobj):
         )
         return stats
 
+    @property
+    def ti_key(self):
+        return f'ti{self.sim.ti}'
+
     def store_rvs(self, dist, rvs):
         """ Store random numbers (random variates) """
-        if self.sim.ti not in self.rvs:
+        key = self.ti_key
+        if key not in self.rvs:
             entry = sc.objdict()
-            self.rvs[self.sim.ti] = entry
+            self.rvs[key] = entry
         else:
-            entry = self.rvs[self.sim.ti]
+            entry = self.rvs[key]
 
         if self.detailed:
             entry[dist.trace] = rvs
@@ -942,7 +947,7 @@ class SimDebug(sc.quickobj):
             else:
                 entry[key] = self.compute_stats(state)
 
-        self.states[self.sim.ti] = entry
+        self.states[self.ti_key] = entry
         return
 
     def finalize(self):
