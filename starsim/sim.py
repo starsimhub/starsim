@@ -19,7 +19,7 @@ class Sim(ss.Base):
     Args:
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
         label (str): the human-readable name of the simulation
-        people (People): if provided, use this ss.People object
+        people (People): if provided, use this `ss.People` object
         modules (Module/list): if provided, use these modules (and divide among demographics, diseases, etc. based on type)
         demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
         connectors (str/Connector/list): as above, for connectors
@@ -29,6 +29,7 @@ class Sim(ss.Base):
         analyzers (str/Analyzer/list): as above, for analyzers
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
+        debug (str/list): whether to enable debugging random numbers or people states for this sim run; see `sim.set_debug()` for details
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
     **Examples**:
@@ -38,7 +39,7 @@ class Sim(ss.Base):
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
     """
     def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
-                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
+                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, debug=None, **kwargs):
         self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
@@ -60,6 +61,8 @@ class Sim(ss.Base):
         self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
+        self.debug = None # Store debugging results
+        self.set_debug(debug) # Set debugging options
         return
 
     def __getitem__(self, key):
@@ -287,8 +290,7 @@ class Sim(ss.Base):
         return
 
     def init_results(self):
-        """
-        Create initial results that are present in all simulations
+        """ Create initial results that are present in all simulations
 
         This method initializes results by calling `People.init_results()` to let
         People handle its own result initialization (including automatic BoolState results).
@@ -302,6 +304,53 @@ class Sim(ss.Base):
         data = data if data is not None else self.data
         self.data = ss.validate_sim_data(data)
         return
+
+    def set_debug(self, which=None, rvs=False, states=False, export=None, detailed=False):
+        """ Store detailed debugging information in the sim
+
+        Stores every random number produced during a sim run (by `ss.Dist` objects)
+        and/or every state of every agent, at every timestep, and optionally export
+        to file. This allows e.g. understanding exactly where two runs that should
+        have been identical diverged. Results can be exported (in JSON format) and
+        analyzed externally.
+
+        Although the states export could be used for analysis, users are encouraged
+        to write an `ss.Analyzer` instead, as enabling debugging significantly degrades
+        sim run time and memory usage.
+
+        Args:
+            which (str/list): shortcut for setting rvs and/or states; valid args are 'rvs', 'states', and 'both'/True
+            rvs (bool/str): whether to enable debugging of random numbers/variates; if a string is provided, export to this file
+            states (bool/str): as above, for people states
+            export (bool): whether to export to file; if None, export if a string is provided
+            detailed (bool): if true, store literally every random number and agent state (otherwise, use summary stats)
+
+        *Examples:*
+
+            # General settings
+            kw = dict(n_agents=1000, start=0, stop=10, networks='random', diseases='sis')
+
+            # Simplest usage: store agent-state info
+            sim = ss.Sim(debug='states', **kw)
+            sim.run()
+            print(sim.debug.states)
+
+            # Configure separately, with custom file export and saving all detail
+            sim = ss.Sim(**kw)
+            sim.set_debug(rvs='debug_rvs.json', states='debug_states.json', detailed=True)
+            sim.run()
+        """
+        print('Turning on sim debugger ...')
+        rvs = rvs or (which == True) or (which == 'rvs')
+        states = states or (which == True) or (which == 'states')
+        if rvs or states:
+            self.debug = SimDebug(sim=self, rvs=rvs, states=states, export=export, detailed=detailed)
+        return
+
+    @property
+    def has_debugger(self):
+        """ Check if the sim has an active debugger """
+        return self.debug is not None
 
     def start_step(self):
         """ Start the step -- only print progress; all actual changes happen in the modules """
@@ -326,6 +375,8 @@ class Sim(ss.Base):
 
     def finish_step(self):
         """ Finish the simulation timestep """
+        if self.has_debugger and self.debug.has_states:
+            self.debug.store_states()
         self.t.ti += 1
         return
 
@@ -400,6 +451,8 @@ class Sim(ss.Base):
 
         # Generate the summary and finish up
         self.summarize() # Create summary
+        if self.has_debugger:
+            self.debug.finalize()
         return
 
     def finalize_results(self):
@@ -830,6 +883,74 @@ class Sim(ss.Base):
         sc.figlayout(fig=fig)
 
         return ss.return_fig(fig, **kw.return_fig)
+
+
+class SimDebug(sc.quickobj):
+    """ Helper class fo rhandling debugging information; see sim.set_debug() for usage """
+    def __init__(self, sim, rvs=False, states=False, export=None, detailed=False):
+        self.sim = sim
+        self.do_export = export or isinstance(rvs, str) or isinstance(states, str)
+        self.detailed = detailed
+        if rvs:
+            self.rvs = {}
+            self.rvs_file = rvs if isinstance(rvs, str) else 'debug_rvs.json'
+        if states:
+            self.states = {}
+            self.states_file = states if isinstance(states, str) else 'debug_states.json'
+        return
+
+    @property
+    def has_rvs(self):
+        return hasattr(self, 'rvs')
+
+    @property
+    def has_states(self):
+        return hasattr(self, 'states')
+
+    @staticmethod
+    def compute_stats(v):
+        """ Compute length, mean, min, and max """
+        stats = sc.objdict(
+            n = len(v),
+            mean = v.mean(),
+            min = v.min(),
+            max = v.max(),
+        )
+        return stats
+
+    def store_rvs(self, dist, rvs):
+        """ Store random numbers (random variates) """
+        if self.sim.ti not in self.rvs:
+            entry = sc.objdict()
+            self.rvs[self.sim.ti] = entry
+        else:
+            entry = self.rvs[self.sim.ti]
+
+        if self.detailed:
+            entry[dist.trace] = rvs
+        else:
+            entry[dist.trace] = self.compute_stats(rvs)
+        return
+
+    def store_states(self):
+        """ Store all states from people """
+        entry = sc.objdict()
+        for key,state in self.sim.people.states.items():
+            if self.detailed:
+                entry[key] = state.values
+            else:
+                entry[key] = self.compute_stats(state)
+
+        self.states[self.sim.ti] = entry
+        return
+
+    def finalize(self):
+        if self.do_export:
+            if self.has_rvs:
+                sc.savejson(filename=self.rvs_file, obj=self.rvs)
+            if self.has_states:
+                sc.savejson(filename=self.states_file, obj=self.states)
+        return
 
 
 class AlreadyRunError(RuntimeError):
