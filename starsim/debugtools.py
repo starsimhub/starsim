@@ -324,12 +324,7 @@ class Diagnostics(sc.quickobj):
 
     def store_rvs(self, dist, rvs):
         """ Store random numbers (random variates) """
-        key = self.ti_key
-        if key not in self.rvs:
-            entry = sc.objdict()
-            self.rvs[key] = entry
-        else:
-            entry = self.rvs[key]
+        entry = self.rvs.setdefault(self.ti_key, sc.objdict())
 
         if self.detailed:
             entry[dist.trace] = rvs
@@ -340,7 +335,7 @@ class Diagnostics(sc.quickobj):
     def store_states(self):
         """ Store all states from people """
         entry = sc.objdict()
-        for key,state in self.sim.people.states.items():
+        for key, state in self.sim.people.states.items():
             if self.detailed:
                 entry[key] = state.values
             else:
