@@ -141,6 +141,11 @@ class Sim(ss.Base):
         """ Return a dictionary of all Module instances; see `sim.module_list` for the list version """
         return ss.utils.nlist_to_dict(self.module_list)
 
+    @property
+    def label_to_name(self):
+        """ Return a mapping from module labels to module names, e.g. {'HIV': 'hiv', 'Pregnancy': 'pregnancy'} """
+        return {mod.label: mod.name for mod in self.module_list}
+
     def init(self, force=False, timer=False, **kwargs):
         """
         Perform all initializations for the sim
@@ -738,7 +743,7 @@ class Sim(ss.Base):
         return sc.saveyaml(filename=filename, obj=json, sort_keys=sort_keys)
 
     def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
-             show_label=False, n_ticks=None, **kwargs):
+             show_label=False, n_ticks=None, annualize=False, **kwargs):
         """
         Plot all results in the Sim object
 
@@ -751,6 +756,7 @@ class Sim(ss.Base):
             show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
             n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
+            annualize (bool): if True, resample results to annual values before plotting (uses each Result's summarize_by to determine sum/mean/last)
             fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
             data_kw (dict): passed to `plt.scatter()`, for plotting the data
@@ -774,6 +780,10 @@ class Sim(ss.Base):
 
         # Figure out the flat structure of results to plot
         flat = ss.utils.match_result_keys(self.results, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
+
+        # Annualize results if requested
+        if annualize:
+            flat = sc.objdict({k: res.annualize() if isinstance(res, ss.Result) else res for k, res in flat.items()})
 
         # Set figure defaults
         n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes
@@ -811,9 +821,11 @@ class Sim(ss.Base):
                 # Plot data
                 if df is not None:
                     mod = res.module
+                    if mod not in self.module_dict and mod in self.label_to_name: # res.module stores the label; resolve to the name
+                        mod = self.label_to_name[mod]
                     name = res.name
                     found = False
-                    for dfkey in [f'{mod}.{name}', f'{mod}_{name}']: # Allow dot or underscore
+                    for dfkey in [f'{mod}.{name}', f'{mod}_{name}', name]: # Allow dot, underscore, or just the name
                         if dfkey in df.cols:
                             found = True
                             break

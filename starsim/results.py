@@ -222,6 +222,53 @@ class Result(ss.BaseArr):
 
         return out
 
+    def annualize(self):
+        """
+        Fast numpy-based resampling of results to annual values.
+
+        Uses summarize_by if set, otherwise the summary_method() heuristic
+        (new_* → sum, n_* → mean, cum_* → last). Does not modify the original.
+
+        Returns:
+            Result: a new Result with annual timevec and values
+        """
+        method = self.summarize_by if self.summarize_by else self.summary_method()
+
+        # Group by integer year
+        yearvec = self.timevec.years if hasattr(self.timevec, 'years') else np.asarray(self.timevec, dtype=float)
+        year_labels = np.floor(yearvec).astype(int)
+        unique_years, inverse = np.unique(year_labels, return_inverse=True)
+        n_groups = len(unique_years)
+
+        # Aggregate an array by year group
+        def _aggregate(arr):
+            if arr is None:
+                return None
+            out = np.empty(n_groups, dtype=float)
+            for i in range(n_groups):
+                mask = (inverse == i)
+                if method == 'sum':
+                    out[i] = arr[mask].sum()
+                elif method == 'mean':
+                    out[i] = arr[mask].mean()
+                elif method == 'last':
+                    out[i] = arr[mask][-1]
+            return out
+
+        # Build the new result
+        new_res = sc.dcp(self)
+        new_res.values = _aggregate(self.values)
+        new_res.low = _aggregate(self.low)
+        new_res.high = _aggregate(self.high)
+
+        # New timevec: midpoint of each year
+        if self.has_dates:
+            new_res.timevec = ss.DateArray([ss.date(f'{y}-07-01') for y in unique_years])
+        else:
+            new_res.timevec = unique_years.astype(float) + 0.5
+
+        return new_res
+
     def from_df(self, df):
         """ Make a copy of the result with new values from a dataframe """
         new_res = sc.dcp(self)
