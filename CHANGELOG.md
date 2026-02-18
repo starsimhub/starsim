@@ -2,12 +2,8 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.1.1 (2026-02-16)
-- TBC
-
-
-## Version 3.1.1 (2026-XX-XX)
-
+## Version 3.1.1 (2026-02-XX)
+- Provide methods to annualize results for plotting
 
 
 ## Version 3.1.0 (2026-02-12)
