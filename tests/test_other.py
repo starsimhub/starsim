@@ -239,6 +239,16 @@ def test_results():
     assert isinstance(resampled, ss.Result)
     assert len(resampled.values) < len(rs1.new_infections.values)
 
+    # Test that resample and annualize produce the same values
+    annualized = rs1.new_infections.annualize()
+    assert np.allclose(resampled.values, annualized.values, rtol=1e-10)
+
+    # Test Results.annualize() (annualizes all results in the group)
+    rs1_annual = rs1.annualize()
+    assert isinstance(rs1_annual, ss.Results)
+    assert len(rs1_annual.new_infections.values) == len(annualized.values)
+    assert np.allclose(rs1_annual.new_infections.values, annualized.values, rtol=1e-10)
+
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()
     assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections

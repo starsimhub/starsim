@@ -236,7 +236,11 @@ class Result(ss.BaseArr):
         method = self.summarize_by if self.summarize_by else self.summary_method()
 
         # Group by integer year
-        yearvec = self.timevec.years if hasattr(self.timevec, 'years') else np.asarray(self.timevec, dtype=float)
+        has_dates = self.has_dates
+        if has_dates:
+            yearvec = self.timevec.years
+        else:
+            yearvec = np.asarray(self.timevec, dtype=float)
         year_labels = np.floor(yearvec).astype(int)
         unique_years, inverse = np.unique(year_labels, return_inverse=True)
         n_groups = len(unique_years)
@@ -245,29 +249,27 @@ class Result(ss.BaseArr):
         def _aggregate(arr):
             if arr is None:
                 return None
-            out = np.empty(n_groups, dtype=float)
-            for i in range(n_groups):
-                mask = (inverse == i)
-                if method == 'sum':
-                    out[i] = arr[mask].sum()
-                elif method == 'mean':
-                    out[i] = arr[mask].mean()
-                elif method == 'last':
-                    out[i] = arr[mask][-1]
-            return out
+            if method == 'sum':
+                return np.bincount(inverse, weights=arr, minlength=n_groups).astype(float)
+            elif method == 'mean':
+                counts = np.bincount(inverse, minlength=n_groups)
+                return np.bincount(inverse, weights=arr, minlength=n_groups) / counts
+            elif method == 'last':
+                out = np.empty(n_groups, dtype=float)
+                for i in range(n_groups):
+                    out[i] = arr[inverse == i][-1]
+                return out
 
-        # Build the new result
-        new_res = sc.dcp(self)
-        new_res.values = _aggregate(self.values)
-        new_res.low = _aggregate(self.low)
-        new_res.high = _aggregate(self.high)
-
-        # New timevec: midpoint of each year
-        if self.has_dates:
-            new_res.timevec = ss.DateArray([ss.date(f'{y}-07-01') for y in unique_years])
-        else:
-            new_res.timevec = unique_years.astype(float) + 0.5
-
+        # Build the new result (avoid deep-copying the timevec)
+        new_timevec = ss.DateArray([ss.date(f'{y}-07-01') for y in unique_years]) if has_dates else unique_years.astype(float) + 0.5
+        new_res = Result(
+            name=self.name, label=self.label, dtype=self.dtype, scale=self.scale,
+            auto_plot=self.auto_plot, module=self.module, summarize_by=self.summarize_by,
+            timevec=new_timevec,
+            values=_aggregate(self.values),
+            low=_aggregate(self.low),
+            high=_aggregate(self.high),
+        )
         return new_res
 
     def from_df(self, df):
@@ -500,6 +502,18 @@ class Results(ss.ndict):
                 out = sc.objdict({k:v for k,v in out.items() if v.auto_plot})
         return out
 
+    def annualize(self):
+        """ Annualize all results, returning a new Results object """
+        new = Results(self._module, strict=False)
+        for key, res in self.items():
+            if isinstance(res, Results):
+                new[key] = res.annualize()
+            elif isinstance(res, Result):
+                new[key] = res.annualize()
+            else:
+                new[key] = res
+        return new
+
     def to_df(self, sep='_', descend=False, **kwargs):
         """
         Merge all results dataframes into one
@@ -510,12 +524,16 @@ class Results(ss.ndict):
         """
         if not descend:
             dfs = []
+            # If resampling, use date index to avoid duplicate timevec columns
+            if 'resample' in kwargs and kwargs.get('resample') is not None:
+                kwargs.setdefault('set_date_index', True)
             for rname, res in self.all_results_dict.items():
                 col_names = rname
                 res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
                 dfs.append(res_df)
             if len(dfs):
                 df = pd.concat(dfs, axis=1)
+                df = df.loc[:, ~df.columns.duplicated()]  # Remove duplicate columns
             else:
                 df = None
         else:
