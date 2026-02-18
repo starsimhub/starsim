@@ -234,11 +234,10 @@ def test_results():
     res_series = res.to_series()
     assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
 
-    # Test resampling to various types
-    rs1.new_infections.resample()
-    rs1.new_infections.resample(output_form='series')
-    rs1.new_infections.resample(output_form='dataframe')
-    rs1.new_infections.resample(output_form='result')
+    # Test resampling (always returns a Result)
+    resampled = rs1.new_infections.resample(new_unit='year')
+    assert isinstance(resampled, ss.Result)
+    assert len(resampled.values) < len(rs1.new_infections.values)
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()

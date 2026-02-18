@@ -161,7 +161,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit='year', summarize_by=None, col_names='vlh', die=False, output_form='series', use_years=False, sep='_'):
+    def resample(self, new_unit=None, summarize_by=None, col_names='vlh', die=False, use_years=False, sep='_'):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -172,12 +172,19 @@ class Result(ss.BaseArr):
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
             col_names (str): whether to rename the columns with the name of the result
             die (bool): whether to raise an error if the summarization method cannot be determined
-            output_form (str): 'series', 'dataframe', or 'result'
             use_years (bool): whether to use years as the unit of time
+
+        Returns:
+            Result: a new Result with resampled values
         """
         # Manage timevec
         if self.timevec is None:
             raise ValueError('Cannot resample: timevec is not set')
+
+        # Validate new_unit
+        if new_unit is None:
+            valid_units = ['year', 'month', 'week', 'day'] + ['1YE', '1m', '1w'] # Starsim and pandas units
+            raise ValueError(f'new_unit must be specified; valid options include: {sc.strjoin(valid_units)}')
 
         # Convert the timevec if needed
         orig_timevec = self.timevec # TODO: refactor
@@ -210,14 +217,8 @@ class Result(ss.BaseArr):
         # Handle years
         if use_years: df.index = df.index.year
 
-        # Figure out return format
-        if output_form == 'series':
-            out = df.value
-        elif output_form == 'dataframe':
-            out = df
-        elif output_form == 'result':
-            out = self.from_df(df)
-
+        # Convert back to a Result
+        out = self.from_df(df)
         self.timevec = orig_timevec
 
         return out
@@ -290,7 +291,8 @@ class Result(ss.BaseArr):
         """
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, set_name=set_name, sep=sep, **kwargs)
+            resampled = self.resample(new_unit=resample, sep=sep, **kwargs)
+            return resampled.to_series(set_name=set_name, sep=sep)
         name = self.name if set_name else None
         timevec = self.convert_timevec()
         s = pd.Series(self.values, index=timevec, name=name)
@@ -321,7 +323,8 @@ class Result(ss.BaseArr):
 
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, output_form='dataframe', col_names=col_names, **kwargs)
+            resampled = self.resample(new_unit=resample, **kwargs)
+            return resampled.to_df(col_names=col_names, set_date_index=set_date_index, sep=sep, bounds=bounds)
 
         # Checks
         if self.timevec is None and set_date_index:
@@ -490,7 +493,7 @@ class Results(ss.ndict):
             resample = kwargs.pop('resample')
             for k,v in out.items():
                 if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, output_form='result', **kwargs)
+                    out[k] = v.resample(new_unit=resample, **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
             if only_auto:
