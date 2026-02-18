@@ -356,8 +356,8 @@ class Pregnancy(Demographics):
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
         rate_units (float): units for fertility rates (default assumes per 1000)
-        dur_pregnancy (float/dur): duration of pregnancy (drawn from choice distribution by default)
-        dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+        dur_pregnancy (float/dur): duration of pregnancy (default: drawn from choice distribution, 32-42 weeks)
+        dur_breastfeed (float/dur): duration of breastfeeding (default: drawn from lognormal distribution, 9±6 months)
 
         rr_ptb (float): base relative risk of pre-term birth (default normal with mean 1, std 0.1)
         rr_ptb_age (array): relative risk of pre-term birth by maternal age (default [[18,35,100],[1.2,1,1.2]])
@@ -393,7 +393,7 @@ class Pregnancy(Demographics):
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
             ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
             ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
-            ss.FloatArr('n_miscarriages', label='Number of miscarrianges', default=0),  # Number of micarriages
+            ss.FloatArr('n_miscarriages', label='Number of miscarriages', default=0),  # Number of miscarriages
             ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins

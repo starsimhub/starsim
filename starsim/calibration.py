@@ -298,8 +298,8 @@ class Calibration(sc.prettyobj):
         for parname, spec in after_pars.items():
             spec['value'] = self.best_pars[parname] # Use best parameters from calibration
 
-        self.before_msim = self.build_fn(self.sim.copy(), calib_pars=before_pars, **self.build_kw)
-        self.after_msim = self.build_fn(self.sim.copy(), calib_pars=after_pars, **self.build_kw)
+        self.before_msim = self.build_fn(sc.dcp(self.sim), calib_pars=before_pars, **self.build_kw)
+        self.after_msim = self.build_fn(sc.dcp(self.sim), calib_pars=after_pars, **self.build_kw)
 
         fix_before = isinstance(self.before_msim, ss.Sim)
         fix_after = isinstance(self.after_msim, ss.Sim)
