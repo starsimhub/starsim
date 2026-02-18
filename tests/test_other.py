@@ -234,11 +234,20 @@ def test_results():
     res_series = res.to_series()
     assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
 
-    # Test resampling to various types
-    rs1.new_infections.resample()
-    rs1.new_infections.resample(output_form='series')
-    rs1.new_infections.resample(output_form='dataframe')
-    rs1.new_infections.resample(output_form='result')
+    # Test resampling (always returns a Result)
+    resampled = rs1.new_infections.resample(new_unit='year')
+    assert isinstance(resampled, ss.Result)
+    assert len(resampled.values) < len(rs1.new_infections.values)
+
+    # Test that resample and annualize produce the same values
+    annualized = rs1.new_infections.annualize()
+    assert np.allclose(resampled.values, annualized.values, rtol=1e-10)
+
+    # Test Results.annualize() (annualizes all results in the group)
+    rs1_annual = rs1.annualize()
+    assert isinstance(rs1_annual, ss.Results)
+    assert len(rs1_annual.new_infections.values) == len(annualized.values)
+    assert np.allclose(rs1_annual.new_infections.values, annualized.values, rtol=1e-10)
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()

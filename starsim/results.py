@@ -161,7 +161,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit='year', summarize_by=None, col_names='vlh', die=False, output_form='series', use_years=False, sep='_'):
+    def resample(self, new_unit=None, summarize_by=None, col_names='vlh', die=False, use_years=False, sep='_'):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -172,12 +172,19 @@ class Result(ss.BaseArr):
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
             col_names (str): whether to rename the columns with the name of the result
             die (bool): whether to raise an error if the summarization method cannot be determined
-            output_form (str): 'series', 'dataframe', or 'result'
             use_years (bool): whether to use years as the unit of time
+
+        Returns:
+            Result: a new Result with resampled values
         """
         # Manage timevec
         if self.timevec is None:
             raise ValueError('Cannot resample: timevec is not set')
+
+        # Validate new_unit
+        if new_unit is None:
+            valid_units = ['year', 'month', 'week', 'day'] + ['1YE', '1m', '1w'] # Starsim and pandas units
+            raise ValueError(f'new_unit must be specified; valid options include: {sc.strjoin(valid_units)}')
 
         # Convert the timevec if needed
         orig_timevec = self.timevec # TODO: refactor
@@ -210,17 +217,60 @@ class Result(ss.BaseArr):
         # Handle years
         if use_years: df.index = df.index.year
 
-        # Figure out return format
-        if output_form == 'series':
-            out = df.value
-        elif output_form == 'dataframe':
-            out = df
-        elif output_form == 'result':
-            out = self.from_df(df)
-
+        # Convert back to a Result
+        out = self.from_df(df)
         self.timevec = orig_timevec
 
         return out
+
+    def annualize(self):
+        """
+        Fast numpy-based resampling of results to annual values.
+
+        Uses summarize_by if set, otherwise the summary_method() heuristic
+        (new_* → sum, n_* → mean, cum_* → last). Does not modify the original.
+
+        Returns:
+            Result: a new Result with annual timevec and values
+        """
+        method = self.summarize_by if self.summarize_by else self.summary_method()
+
+        # Group by integer year
+        has_dates = self.has_dates
+        if has_dates:
+            yearvec = self.timevec.years
+        else:
+            yearvec = np.asarray(self.timevec, dtype=float)
+        year_labels = np.floor(yearvec).astype(int)
+        unique_years, inverse = np.unique(year_labels, return_inverse=True)
+        n_groups = len(unique_years)
+
+        # Aggregate an array by year group
+        def _aggregate(arr):
+            if arr is None:
+                return None
+            if method == 'sum':
+                return np.bincount(inverse, weights=arr, minlength=n_groups).astype(float)
+            elif method == 'mean':
+                counts = np.bincount(inverse, minlength=n_groups)
+                return np.bincount(inverse, weights=arr, minlength=n_groups) / counts
+            elif method == 'last':
+                out = np.empty(n_groups, dtype=float)
+                for i in range(n_groups):
+                    out[i] = arr[inverse == i][-1]
+                return out
+
+        # Build the new result (avoid deep-copying the timevec)
+        new_timevec = ss.DateArray([ss.date(f'{y}-07-01') for y in unique_years]) if has_dates else unique_years.astype(float) + 0.5
+        new_res = Result(
+            name=self.name, label=self.label, dtype=self.dtype, scale=self.scale,
+            auto_plot=self.auto_plot, module=self.module, summarize_by=self.summarize_by,
+            timevec=new_timevec,
+            values=_aggregate(self.values),
+            low=_aggregate(self.low),
+            high=_aggregate(self.high),
+        )
+        return new_res
 
     def from_df(self, df):
         """ Make a copy of the result with new values from a dataframe """
@@ -243,7 +293,8 @@ class Result(ss.BaseArr):
         """
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, set_name=set_name, sep=sep, **kwargs)
+            resampled = self.resample(new_unit=resample, sep=sep, **kwargs)
+            return resampled.to_series(set_name=set_name, sep=sep)
         name = self.name if set_name else None
         timevec = self.convert_timevec()
         s = pd.Series(self.values, index=timevec, name=name)
@@ -274,7 +325,8 @@ class Result(ss.BaseArr):
 
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, output_form='dataframe', col_names=col_names, **kwargs)
+            resampled = self.resample(new_unit=resample, **kwargs)
+            return resampled.to_df(col_names=col_names, set_date_index=set_date_index, sep=sep, bounds=bounds)
 
         # Checks
         if self.timevec is None and set_date_index:
@@ -443,12 +495,24 @@ class Results(ss.ndict):
             resample = kwargs.pop('resample')
             for k,v in out.items():
                 if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, output_form='result', **kwargs)
+                    out[k] = v.resample(new_unit=resample, **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
             if only_auto:
                 out = sc.objdict({k:v for k,v in out.items() if v.auto_plot})
         return out
+
+    def annualize(self):
+        """ Annualize all results, returning a new Results object """
+        new = Results(self._module, strict=False)
+        for key, res in self.items():
+            if isinstance(res, Results):
+                new[key] = res.annualize()
+            elif isinstance(res, Result):
+                new[key] = res.annualize()
+            else:
+                new[key] = res
+        return new
 
     def to_df(self, sep='_', descend=False, **kwargs):
         """
@@ -460,12 +524,16 @@ class Results(ss.ndict):
         """
         if not descend:
             dfs = []
+            # If resampling, use date index to avoid duplicate timevec columns
+            if 'resample' in kwargs and kwargs.get('resample') is not None:
+                kwargs.setdefault('set_date_index', True)
             for rname, res in self.all_results_dict.items():
                 col_names = rname
                 res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
                 dfs.append(res_df)
             if len(dfs):
                 df = pd.concat(dfs, axis=1)
+                df = df.loc[:, ~df.columns.duplicated()]  # Remove duplicate columns
             else:
                 df = None
         else:
