@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.42">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>v3.0_v3.1 – Starsim</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="..//assets/favicon.ico" rel="icon">
+<script src="../site_libs/quarto-html/quarto.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de84f8d6bb715db06a919283c2d1e787.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-9a023c9ade86a60361e96e3e3f11bc54.css" rel="prefetch" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-59543038ce2dbea0d2434f74fa4d1829.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-7ea877b0c499ea30230d408925a201b3.min.css" rel="prefetch" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
+
+<script type="text/javascript">
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
+</script>
+
+
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+
+<body class="nav-fixed">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo">
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../whatsnew.html"> 
+<span class="menu-text">What’s new</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../tutorials.html"> 
+<span class="menu-text">Tutorials</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../user_guide.html"> 
+<span class="menu-text">User guide</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../conduct.html"> 
+<span class="menu-text">Code of conduct</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../contributing.html"> 
+<span class="menu-text">Contributing</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../api/index.html"> 
+<span class="menu-text">API reference</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools tools-wide">
+    <a href="https://github.com/starsimhub/starsim" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-github"></i></a>
+    <a href="mailto:info@starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-envelope-at-fill"></i></a>
+    <a href="https://starsim-idm.slack.com" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-slack"></i></a>
+    <a href="https://starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-globe"></i></a>
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#starsim-v3.0-to-v3.1-migration-guide" id="toc-starsim-v3.0-to-v3.1-migration-guide" class="nav-link active" data-scroll-target="#starsim-v3.0-to-v3.1-migration-guide">Starsim v3.0 to v3.1 migration guide</a>
+  <ul class="collapse">
+  <li><a href="#overview" id="toc-overview" class="nav-link" data-scroll-target="#overview">Overview</a></li>
+  <li><a href="#general-changes" id="toc-general-changes" class="nav-link" data-scroll-target="#general-changes">General changes</a>
+  <ul class="collapse">
+  <li><a href="#people.module_name-now-returns-the-module-not-a-state-container" id="toc-people.module_name-now-returns-the-module-not-a-state-container" class="nav-link" data-scroll-target="#people.module_name-now-returns-the-module-not-a-state-container">1. <code>People.(module_name)</code> now returns the module, not a state container</a></li>
+  <li><a href="#network.prenatal-and-network.postnatal-attributes-removed" id="toc-network.prenatal-and-network.postnatal-attributes-removed" class="nav-link" data-scroll-target="#network.prenatal-and-network.postnatal-attributes-removed">2. <code>Network.prenatal</code> and <code>Network.postnatal</code> attributes removed</a></li>
+  <li><a href="#maternalnet.add_pairs-argument-names-and-signature-changed" id="toc-maternalnet.add_pairs-argument-names-and-signature-changed" class="nav-link" data-scroll-target="#maternalnet.add_pairs-argument-names-and-signature-changed">3. <code>MaternalNet.add_pairs()</code> argument names and signature changed</a></li>
+  <li><a href="#postnatalnet-is-now-a-dynamicnetwork-with-a-dur-parameter" id="toc-postnatalnet-is-now-a-dynamicnetwork-with-a-dur-parameter" class="nav-link" data-scroll-target="#postnatalnet-is-now-a-dynamicnetwork-with-a-dur-parameter">4. <code>PostnatalNet</code> is now a <code>DynamicNetwork</code> with a <code>dur</code> parameter</a></li>
+  <li><a href="#new-breastfeedingnet-network" id="toc-new-breastfeedingnet-network" class="nav-link" data-scroll-target="#new-breastfeedingnet-network">5. New <code>BreastfeedingNet</code> network</a></li>
+  </ul></li>
+  <li><a href="#pregnancy-module-changes" id="toc-pregnancy-module-changes" class="nav-link" data-scroll-target="#pregnancy-module-changes">Pregnancy module changes</a>
+  <ul class="collapse">
+  <li><a href="#fecund-is-now-a-computed-property-not-a-boolstate" id="toc-fecund-is-now-a-computed-property-not-a-boolstate" class="nav-link" data-scroll-target="#fecund-is-now-a-computed-property-not-a-boolstate">6. <code>fecund</code> is now a computed property, not a <code>BoolState</code></a></li>
+  <li><a href="#postpartum-state-removed-breastfeeding-states-added" id="toc-postpartum-state-removed-breastfeeding-states-added" class="nav-link" data-scroll-target="#postpartum-state-removed-breastfeeding-states-added">7. <code>postpartum</code> state removed; breastfeeding states added</a></li>
+  <li><a href="#child_uid-state-removed" id="toc-child_uid-state-removed" class="nav-link" data-scroll-target="#child_uid-state-removed">8. <code>child_uid</code> state removed</a></li>
+  <li><a href="#make_p_fertility-renamed-to-make_p_conceive" id="toc-make_p_fertility-renamed-to-make_p_conceive" class="nav-link" data-scroll-target="#make_p_fertility-renamed-to-make_p_conceive">9. <code>make_p_fertility()</code> renamed to <code>make_p_conceive()</code></a></li>
+  <li><a href="#p_neonatal_death-replaced-by-p_survive_maternal_death" id="toc-p_neonatal_death-replaced-by-p_survive_maternal_death" class="nav-link" data-scroll-target="#p_neonatal_death-replaced-by-p_survive_maternal_death">10. <code>p_neonatal_death</code> replaced by <code>p_survive_maternal_death</code></a></li>
+  <li><a href="#dur_pregnancy-is-now-a-distribution-not-a-fixed-duration" id="toc-dur_pregnancy-is-now-a-distribution-not-a-fixed-duration" class="nav-link" data-scroll-target="#dur_pregnancy-is-now-a-distribution-not-a-fixed-duration">11. <code>dur_pregnancy</code> is now a distribution, not a fixed duration</a></li>
+  <li><a href="#set_prognoses-removed-logic-split-across-new-methods" id="toc-set_prognoses-removed-logic-split-across-new-methods" class="nav-link" data-scroll-target="#set_prognoses-removed-logic-split-across-new-methods">12. <code>set_prognoses()</code> removed; logic split across new methods</a></li>
+  <li><a href="#do_step-and-update_states-removed-step-restructured" id="toc-do_step-and-update_states-removed-step-restructured" class="nav-link" data-scroll-target="#do_step-and-update_states-removed-step-restructured">13. <code>do_step()</code> and <code>update_states()</code> removed; <code>step()</code> restructured</a></li>
+  <li><a href="#make_embryos-return-value-changed" id="toc-make_embryos-return-value-changed" class="nav-link" data-scroll-target="#make_embryos-return-value-changed">14. <code>make_embryos()</code> return value changed</a></li>
+  <li><a href="#make_pregnancies-renamed-to-select_conceivers-for-selection-make_pregnancies-now-sets-pregnancy-states" id="toc-make_pregnancies-renamed-to-select_conceivers-for-selection-make_pregnancies-now-sets-pregnancy-states" class="nav-link" data-scroll-target="#make_pregnancies-renamed-to-select_conceivers-for-selection-make_pregnancies-now-sets-pregnancy-states">15. <code>make_pregnancies()</code> renamed to <code>select_conceivers()</code> for selection; <code>make_pregnancies()</code> now sets pregnancy states</a></li>
+  <li><a href="#new-parameters-added-to-pregnancy" id="toc-new-parameters-added-to-pregnancy" class="nav-link" data-scroll-target="#new-parameters-added-to-pregnancy">16. New parameters added to <code>Pregnancy</code></a></li>
+  <li><a href="#new-results-added-to-pregnancy" id="toc-new-results-added-to-pregnancy" class="nav-link" data-scroll-target="#new-results-added-to-pregnancy">17. New results added to <code>Pregnancy</code></a></li>
+  </ul></li>
+  </ul></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"></header>
+
+
+
+
+<section id="starsim-v3.0-to-v3.1-migration-guide" class="level1">
+<h1>Starsim v3.0 to v3.1 migration guide</h1>
+<section id="overview" class="level2">
+<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<p>This guide describes the breaking changes introduced in Starsim v3.1.0 and the steps required to migrate code from Starsim v3.0.x. It was mostly written by an LLM, and is mostly written for other LLMs.</p>
+<p>Most of the changes are in the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module and maternal networks. If your code does not use <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a>, <a href="../api/networks.html#starsim.networks.MaternalNet" title="0"><code>ss.MaternalNet</code></a>, <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>ss.PrenatalNet</code></a>, or <a href="../api/networks.html#starsim.networks.PostnatalNet" title="0"><code>ss.PostnatalNet</code></a>, you may only need to check the general changes in sections 1-3.</p>
+<p><em>Note</em>: If you are an LLM reading this, perform each of the following migrations one at a time and confirm with the user after each step.</p>
+</section>
+<section id="general-changes" class="level2">
+<h2 class="anchored" data-anchor-id="general-changes">General changes</h2>
+<section id="people.module_name-now-returns-the-module-not-a-state-container" class="level3">
+<h3 class="anchored" data-anchor-id="people.module_name-now-returns-the-module-not-a-state-container">1. <code>People.(module_name)</code> now returns the module, not a state container</h3>
+<p>Previously, <code>people.sir</code> returned a proxy object that exposed only module <em>states</em> (e.g.&nbsp;<code>people.sir.infected</code>). Now it returns a direct reference to the module itself, so all attributes – including dynamically computed <code>@property</code> values – are accessible.</p>
+<p><strong>What to change</strong>: In most cases, no change is needed – <code>people.sir.infected</code> still works. However, if your code relied on <code>people.sir</code> being a state-only namespace, be aware that it is now the full module object.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0 -- worked for states, but not for properties</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>people.sir.infected      <span class="co"># OK</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>people.sir.infectious    <span class="co"># AttributeError</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1 -- both work</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>people.sir.infected      <span class="co"># OK (state)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>people.sir.infectious    <span class="co"># OK (property)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="network.prenatal-and-network.postnatal-attributes-removed" class="level3">
+<h3 class="anchored" data-anchor-id="network.prenatal-and-network.postnatal-attributes-removed">2. <code>Network.prenatal</code> and <code>Network.postnatal</code> attributes removed</h3>
+<p>These boolean attributes have been removed. Type checking is used instead.</p>
+<p><strong>What to change</strong>: Replace attribute checks with <a href="https://docs.python.org/3/library/functions.html#isinstance" title="1"><code>isinstance()</code></a> checks.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nw <span class="kw">in</span> sim.networks.values():</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> nw.prenatal:</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        ...</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> nw.postnatal:</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        ...</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nw <span class="kw">in</span> sim.networks.values():</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(nw, ss.PrenatalNet):</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        ...</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(nw, ss.PostnatalNet):</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        ...</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="maternalnet.add_pairs-argument-names-and-signature-changed" class="level3">
+<h3 class="anchored" data-anchor-id="maternalnet.add_pairs-argument-names-and-signature-changed">3. <code>MaternalNet.add_pairs()</code> argument names and signature changed</h3>
+<p>The arguments <code>mother_inds</code> and <code>unborn_inds</code> have been renamed to <code>mother_uids</code> and <code>unborn_uids</code>. The <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a>, <code>start</code>, and <code>end</code> arguments have been removed – edge lifespans are now managed by the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module.</p>
+<p><strong>What to change</strong>: Update argument names and remove <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a>/<code>start</code>/<code>end</code> arguments.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>net.add_pairs(mother_inds<span class="op">=</span>mothers, unborn_inds<span class="op">=</span>babies, dur<span class="op">=</span>dur_preg, start<span class="op">=</span>ti)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>net.add_pairs(mother_uids<span class="op">=</span>mothers, unborn_uids<span class="op">=</span>babies)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="postnatalnet-is-now-a-dynamicnetwork-with-a-dur-parameter" class="level3">
+<h3 class="anchored" data-anchor-id="postnatalnet-is-now-a-dynamicnetwork-with-a-dur-parameter">4. <a href="../api/networks.html#starsim.networks.PostnatalNet" title="0"><code>PostnatalNet</code></a> is now a <a href="../api/networks.html#starsim.networks.DynamicNetwork" title="0"><code>DynamicNetwork</code></a> with a <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> parameter</h3>
+<p><a href="../api/networks.html#starsim.networks.PostnatalNet" title="0"><code>PostnatalNet</code></a> is no longer a subclass of <a href="../api/networks.html#starsim.networks.MaternalNet" title="0"><code>MaternalNet</code></a>. It is now a <a href="../api/networks.html#starsim.networks.DynamicNetwork" title="0"><code>DynamicNetwork</code></a> that accepts an optional <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> parameter for the postnatal period. Its <code>add_pairs()</code> method now takes <code>mother_uids</code> and <code>infant_uids</code> (not <code>unborn_uids</code>).</p>
+<p><strong>What to change</strong>: Update how you construct and interact with <a href="../api/networks.html#starsim.networks.PostnatalNet" title="0"><code>PostnatalNet</code></a>.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>postnatal <span class="op">=</span> ss.PostnatalNet()</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Pairs were added by Pregnancy with dur/start/end</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>postnatal <span class="op">=</span> ss.PostnatalNet(dur<span class="op">=</span>ss.lognorm_ex(mean<span class="op">=</span>ss.years(<span class="fl">0.5</span>), std<span class="op">=</span>ss.years(<span class="fl">0.5</span>)))</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Pairs are automatically added at delivery by Pregnancy</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="new-breastfeedingnet-network" class="level3">
+<h3 class="anchored" data-anchor-id="new-breastfeedingnet-network">5. New <a href="../api/networks.html#starsim.networks.BreastfeedingNet" title="0"><code>BreastfeedingNet</code></a> network</h3>
+<p>A new <a href="../api/networks.html#starsim.networks.BreastfeedingNet" title="0"><code>ss.BreastfeedingNet</code></a> is available for modeling breastfeeding transmission. It automatically tracks breastfeeding status from the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module. This is additive – no migration is required – but if you were previously using <a href="../api/networks.html#starsim.networks.PostnatalNet" title="0"><code>PostnatalNet</code></a> to model breastfeeding transmission, consider switching.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    demographics<span class="op">=</span>ss.Pregnancy(),</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span>[ss.PrenatalNet(), ss.BreastfeedingNet()],</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    diseases<span class="op">=</span>ss.SIR(),</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+</section>
+<section id="pregnancy-module-changes" class="level2">
+<h2 class="anchored" data-anchor-id="pregnancy-module-changes">Pregnancy module changes</h2>
+<section id="fecund-is-now-a-computed-property-not-a-boolstate" class="level3">
+<h3 class="anchored" data-anchor-id="fecund-is-now-a-computed-property-not-a-boolstate">6. <code>fecund</code> is now a computed property, not a <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a></h3>
+<p>Previously <code>fecund</code> was a <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a> that was manually set to <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a>/<a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a>. It is now a read-only <code>@property</code> that dynamically computes fecundity based on age and sex.</p>
+<p><strong>What to change</strong>: Remove any code that sets <code>fecund</code> directly.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>pregnancy.fecund[uids] <span class="op">=</span> <span class="va">False</span>  <span class="co"># Manually mark as infecund</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>pregnancy.fecund[uids] <span class="op">=</span> <span class="va">True</span>   <span class="co"># Manually mark as fecund</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="co"># fecund is now read-only, computed from age, sex, and min_age/max_age</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Use pregnancy.infertile to mark agents as unable to conceive</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>pregnancy.infertile[uids] <span class="op">=</span> <span class="va">True</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="postpartum-state-removed-breastfeeding-states-added" class="level3">
+<h3 class="anchored" data-anchor-id="postpartum-state-removed-breastfeeding-states-added">7. <code>postpartum</code> state removed; breastfeeding states added</h3>
+<p>The <code>postpartum</code> BoolState and associated <code>dur_postpartum</code> / <code>ti_postpartum</code> states have been removed. Breastfeeding is now tracked separately.</p>
+<p><strong>What to change</strong>: Replace <code>postpartum</code> references with <code>breastfeeding</code> or use <a href="../api/networks.html#starsim.networks.PostnatalNet" title="0"><code>PostnatalNet</code></a> with a <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> parameter.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>pregnancy.postpartum         <span class="co"># BoolState</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>pregnancy.dur_postpartum     <span class="co"># FloatArr</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>pregnancy.ti_postpartum      <span class="co"># FloatArr</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>pregnancy.breastfeeding      <span class="co"># BoolState (mothers currently breastfeeding)</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>pregnancy.dur_breastfeed     <span class="co"># FloatArr (duration of breastfeeding)</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>pregnancy.ti_stop_breastfeed <span class="co"># FloatArr (time breastfeeding stops)</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>pregnancy.breastfed          <span class="co"># BoolState (newborns who were breastfed)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="child_uid-state-removed" class="level3">
+<h3 class="anchored" data-anchor-id="child_uid-state-removed">8. <code>child_uid</code> state removed</h3>
+<p>The <code>child_uid</code> FloatArr has been removed. Unborn children are now found dynamically via <code>people.parent</code>.</p>
+<p><strong>What to change</strong>: Use <code>pregnancy.find_unborn_children(parent_uids)</code> instead.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>child <span class="op">=</span> pregnancy.child_uid[mother_uid]</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>children <span class="op">=</span> pregnancy.find_unborn_children(mother_uids)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="make_p_fertility-renamed-to-make_p_conceive" class="level3">
+<h3 class="anchored" data-anchor-id="make_p_fertility-renamed-to-make_p_conceive">9. <code>make_p_fertility()</code> renamed to <code>make_p_conceive()</code></h3>
+<p>The method and associated distribution have been renamed.</p>
+<p><strong>What to change</strong>: Rename method calls and references.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> pregnancy.make_p_fertility(eligible_uids)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>pregnancy.pars.p_fertility  <span class="co"># Bernoulli distribution</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> pregnancy.make_p_conceive(eligible_uids)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>pregnancy._p_conceive  <span class="co"># Bernoulli distribution (now private)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="p_neonatal_death-replaced-by-p_survive_maternal_death" class="level3">
+<h3 class="anchored" data-anchor-id="p_neonatal_death-replaced-by-p_survive_maternal_death">10. <code>p_neonatal_death</code> replaced by <code>p_survive_maternal_death</code></h3>
+<p>The semantics have been inverted and the name clarified. Despite its name, <code>p_neonatal_death</code> in v3.0 was <strong>only</strong> applied when a mother dies during pregnancy – it was the probability that the neonate also dies <em>conditional on maternal death</em>. It was never a general neonatal mortality parameter.</p>
+<p>In v3.1, <code>p_survive_maternal_death</code> makes this conditional relationship explicit: it is the probability that an unborn child <em>survives</em> the mother’s death (default 0, meaning unborn children do not survive maternal death).</p>
+<p><strong>Note</strong>: Neither v3.0 nor v3.1 includes a built-in parameter for general neonatal mortality (e.g.&nbsp;from prematurity or birth complications). To model that, override the <code>process_newborns()</code> hook in a <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> subclass.</p>
+<p><strong>What to change</strong>: Rename the parameter and invert the probability value.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(p_neonatal_death<span class="op">=</span>ss.bernoulli(<span class="fl">0.8</span>))  <span class="co"># 80% chance neonate dies given maternal death</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(p_survive_maternal_death<span class="op">=</span>ss.bernoulli(<span class="fl">0.2</span>))  <span class="co"># 20% chance unborn survives maternal death</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="dur_pregnancy-is-now-a-distribution-not-a-fixed-duration" class="level3">
+<h3 class="anchored" data-anchor-id="dur_pregnancy-is-now-a-distribution-not-a-fixed-duration">11. <code>dur_pregnancy</code> is now a distribution, not a fixed duration</h3>
+<p>Previously, <code>dur_pregnancy</code> was a fixed value (default <code>ss.years(0.75)</code>). It is now an <code>ss.choice</code> distribution that draws from gestational weeks 32-42, and duration is assigned per-agent.</p>
+<p><strong>What to change</strong>: If you were relying on a fixed pregnancy duration or accessing <code>self.pars.dur_pregnancy.years</code>, update accordingly.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(dur_pregnancy<span class="op">=</span>ss.years(<span class="fl">0.75</span>))</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Internally: self.pars.dur_pregnancy.years was a single float</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Default draws from weeks 32-42; to override with a fixed duration:</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(dur_pregnancy<span class="op">=</span>ss.choice(a<span class="op">=</span>ss.weeks(np.arange(<span class="dv">38</span>, <span class="dv">43</span>))))</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Per-agent durations are stored in: pregnancy.dur_pregnancy[uids]  (a FloatArr)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="set_prognoses-removed-logic-split-across-new-methods" class="level3">
+<h3 class="anchored" data-anchor-id="set_prognoses-removed-logic-split-across-new-methods">12. <code>set_prognoses()</code> removed; logic split across new methods</h3>
+<p>The <code>set_prognoses()</code> method has been removed. Its functionality is now split across <code>make_pregnancies()</code>, <code>process_delivery()</code>, and <code>set_breastfeeding()</code>.</p>
+<p><strong>What to change</strong>: If you had a subclass that overrode <code>set_prognoses()</code>, move the logic to the appropriate new method.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyPregnancy(ss.Pregnancy):</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids):</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom logic for new pregnancies</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyPregnancy(ss.Pregnancy):</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> make_pregnancies(<span class="va">self</span>, uids):</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        embryo_counts <span class="op">=</span> <span class="bu">super</span>().make_pregnancies(uids)</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom logic for new pregnancies</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> embryo_counts</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="do_step-and-update_states-removed-step-restructured" class="level3">
+<h3 class="anchored" data-anchor-id="do_step-and-update_states-removed-step-restructured">13. <code>do_step()</code> and <code>update_states()</code> removed; <code>step()</code> restructured</h3>
+<p>The <code>step()</code> method no longer delegates to <code>do_step()</code> and <code>update_states()</code>. The burn-in logic has also been moved from <code>step()</code> to <code>init_post()</code>. The new <code>step()</code> calls a sequence of smaller, overridable methods.</p>
+<p><strong>What to change</strong>: If you had a subclass that overrode <code>do_step()</code> or <code>update_states()</code>, restructure to override the new methods.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0 step flow</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>step() <span class="op">-&gt;</span> do_step() <span class="op">-&gt;</span> update_states() <span class="op">+</span> make_pregnancies() <span class="op">+</span> make_embryos()</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1 step flow</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>init_post()           <span class="co"># Burn-in happens here now</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>step():</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    updates_pre()           <span class="co"># Set base states, check breastfeeding</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    progress_pregnancies()  <span class="co"># Advance gestational clock</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    process_delivery()      <span class="co"># Handle births</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    set_rel_sus()           <span class="co"># Update susceptibility</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    select_conceivers()     <span class="co"># Find who conceives</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    make_pregnancies()      <span class="co"># Set pregnancy states</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    make_embryos()          <span class="co"># Create embryo agents</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    update_maternal_deaths()<span class="co"># Handle maternal deaths</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Use the <code>_post_delivery()</code> hook for custom post-delivery logic:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyPregnancy(ss.Pregnancy):</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _post_delivery(<span class="va">self</span>, mother_uids, newborn_uids):</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom post-delivery logic here</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">pass</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="make_embryos-return-value-changed" class="level3">
+<h3 class="anchored" data-anchor-id="make_embryos-return-value-changed">14. <code>make_embryos()</code> return value changed</h3>
+<p><code>make_embryos()</code> now returns a tuple <code>(conceive_uids_with_repeats, new_uids)</code> instead of just <code>new_uids</code>. The first element accounts for multiple embryos per pregnancy (e.g.&nbsp;twins).</p>
+<p><strong>What to change</strong>: Update any code that captures the return value.</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>new_uids <span class="op">=</span> pregnancy.make_embryos(conceive_uids)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>conceive_uids_with_repeats, new_uids <span class="op">=</span> pregnancy.make_embryos(conceive_uids, embryo_counts)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="make_pregnancies-renamed-to-select_conceivers-for-selection-make_pregnancies-now-sets-pregnancy-states" class="level3">
+<h3 class="anchored" data-anchor-id="make_pregnancies-renamed-to-select_conceivers-for-selection-make_pregnancies-now-sets-pregnancy-states">15. <code>make_pregnancies()</code> renamed to <code>select_conceivers()</code> for selection; <code>make_pregnancies()</code> now sets pregnancy states</h3>
+<p>The old <code>make_pregnancies()</code> both selected who conceives <em>and</em> set prognoses. These are now separate: <code>select_conceivers()</code> returns UIDs of women who will conceive, and <code>make_pregnancies()</code> sets pregnancy states and durations for those UIDs.</p>
+<p><strong>What to change</strong>: If you overrode <code>make_pregnancies()</code> in a subclass, split the logic.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyPregnancy(ss.Pregnancy):</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> make_pregnancies(<span class="va">self</span>):</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom selection + prognosis logic</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.1</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyPregnancy(ss.Pregnancy):</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> select_conceivers(<span class="va">self</span>, uids<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom selection logic</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> conceive_uids</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> make_pregnancies(<span class="va">self</span>, uids):</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom prognosis logic</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>        embryo_counts <span class="op">=</span> <span class="bu">super</span>().make_pregnancies(uids)</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> embryo_counts</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="new-parameters-added-to-pregnancy" class="level3">
+<h3 class="anchored" data-anchor-id="new-parameters-added-to-pregnancy">16. New parameters added to <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a></h3>
+<p>The following new parameters are available via <a href="../api/demographics.html#starsim.demographics.PregnancyPars" title="0"><code>PregnancyPars</code></a>. No migration is required, but you may want to use them:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>p_infertile</code></td>
+<td><code>ss.bernoulli(p=0)</code></td>
+<td>Primary infertility probability</td>
+</tr>
+<tr class="even">
+<td><code>dur_breastfeed</code></td>
+<td><code>ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))</code></td>
+<td>Breastfeeding duration</td>
+</tr>
+<tr class="odd">
+<td><code>p_breastfeed</code></td>
+<td><code>ss.bernoulli(p=1)</code></td>
+<td>Probability of breastfeeding</td>
+</tr>
+<tr class="even">
+<td><code>embryos_per_pregnancy</code></td>
+<td><code>ss.choice(a=[1,2], p=[1.0, 0.0])</code></td>
+<td>Number of embryos (twins support)</td>
+</tr>
+<tr class="odd">
+<td><code>rr_ptb</code></td>
+<td><code>ss.normal(loc=1, scale=0.1)</code></td>
+<td>Baseline relative risk of pre-term birth</td>
+</tr>
+<tr class="even">
+<td><code>rr_ptb_age</code></td>
+<td>Age-dependent array</td>
+<td>Relative risk of pre-term birth by age</td>
+</tr>
+<tr class="odd">
+<td><code>p_survive_maternal_death</code></td>
+<td><code>ss.bernoulli(0)</code></td>
+<td>Probability unborn survives mother’s death</td>
+</tr>
+<tr class="even">
+<td><code>trimesters</code></td>
+<td><code>[ss.weeks(13), ss.weeks(26)]</code></td>
+<td>Trimester boundaries</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="new-results-added-to-pregnancy" class="level3">
+<h3 class="anchored" data-anchor-id="new-results-added-to-pregnancy">17. New results added to <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a></h3>
+<p>The following results are now available. No migration is required.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Result</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>maternal_deaths</code></td>
+<td>Number of maternal deaths per timestep</td>
+</tr>
+<tr class="even">
+<td><code>mmr</code></td>
+<td>Maternal mortality rate (per 100,000 births)</td>
+</tr>
+<tr class="odd">
+<td><code>tfr</code></td>
+<td>Total fertility rate</td>
+</tr>
+<tr class="even">
+<td><code>n_fecund</code></td>
+<td>Number of fecund women</td>
+</tr>
+<tr class="odd">
+<td><code>n_fertile</code></td>
+<td>Number of fertile women</td>
+</tr>
+<tr class="even">
+<td><code>n_susceptible</code></td>
+<td>Number of susceptible (non-pregnant fertile) women</td>
+</tr>
+</tbody>
+</table>
+<p>Age-specific fertility rates are available via <code>pregnancy.asfr</code> (a 2D array, not a standard <a href="../api/results.html#starsim.results.Result" title="0"><code>Result</code></a>).</p>
+
+
+</section>
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const disableStylesheet = (stylesheets) => {
+    for (let i=0; i < stylesheets.length; i++) {
+      const stylesheet = stylesheets[i];
+      stylesheet.rel = 'prefetch';
+    }
+  }
+  const enableStylesheet = (stylesheets) => {
+    for (let i=0; i < stylesheets.length; i++) {
+      const stylesheet = stylesheets[i];
+      stylesheet.rel = 'stylesheet';
+    }
+  }
+  const manageTransitions = (selector, allowTransitions) => {
+    const els = window.document.querySelectorAll(selector);
+    for (let i=0; i < els.length; i++) {
+      const el = els[i];
+      if (allowTransitions) {
+        el.classList.remove('notransition');
+      } else {
+        el.classList.add('notransition');
+      }
+    }
+  }
+  const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+    const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+    const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+    let newTheme = '';
+    if(darkModeDefault) {
+      newTheme = isAlternate ? baseTheme : alternateTheme;
+    } else {
+      newTheme = isAlternate ? alternateTheme : baseTheme;
+    }
+    const changeGiscusTheme = () => {
+      // From: https://github.com/giscus/giscus/issues/336
+      const sendMessage = (message) => {
+        const iframe = document.querySelector('iframe.giscus-frame');
+        if (!iframe) return;
+        iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+      }
+      sendMessage({
+        setConfig: {
+          theme: newTheme
+        }
+      });
+    }
+    const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+    if (isGiscussLoaded) {
+      changeGiscusTheme();
+    }
+  }
+  const toggleColorMode = (alternate) => {
+    // Switch the stylesheets
+    const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+    manageTransitions('#quarto-margin-sidebar .nav-link', false);
+    if (alternate) {
+      enableStylesheet(alternateStylesheets);
+      for (const sheetNode of alternateStylesheets) {
+        if (sheetNode.id === "quarto-bootstrap") {
+          toggleBodyColorMode(sheetNode);
+        }
+      }
+    } else {
+      disableStylesheet(alternateStylesheets);
+      toggleBodyColorPrimary();
+    }
+    manageTransitions('#quarto-margin-sidebar .nav-link', true);
+    // Switch the toggles
+    const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+    for (let i=0; i < toggles.length; i++) {
+      const toggle = toggles[i];
+      if (toggle) {
+        if (alternate) {
+          toggle.classList.add("alternate");     
+        } else {
+          toggle.classList.remove("alternate");
+        }
+      }
+    }
+    // Hack to workaround the fact that safari doesn't
+    // properly recolor the scrollbar when toggling (#1455)
+    if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+      manageTransitions("body", false);
+      window.scrollTo(0, 1);
+      setTimeout(() => {
+        window.scrollTo(0, 0);
+        manageTransitions("body", true);
+      }, 40);  
+    }
+  }
+  const isFileUrl = () => { 
+    return window.location.protocol === 'file:';
+  }
+  const hasAlternateSentinel = () => {  
+    let styleSentinel = getColorSchemeSentinel();
+    if (styleSentinel !== null) {
+      return styleSentinel === "alternate";
+    } else {
+      return false;
+    }
+  }
+  const setStyleSentinel = (alternate) => {
+    const value = alternate ? "alternate" : "default";
+    if (!isFileUrl()) {
+      window.localStorage.setItem("quarto-color-scheme", value);
+    } else {
+      localAlternateSentinel = value;
+    }
+  }
+  const getColorSchemeSentinel = () => {
+    if (!isFileUrl()) {
+      const storageValue = window.localStorage.getItem("quarto-color-scheme");
+      return storageValue != null ? storageValue : localAlternateSentinel;
+    } else {
+      return localAlternateSentinel;
+    }
+  }
+  const darkModeDefault = false;
+  let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+  // Dark / light mode switch
+  window.quartoToggleColorScheme = () => {
+    // Read the current dark / light value 
+    let toAlternate = !hasAlternateSentinel();
+    toggleColorMode(toAlternate);
+    setStyleSentinel(toAlternate);
+    toggleGiscusIfUsed(toAlternate, darkModeDefault);
+  };
+  // Ensure there is a toggle, if there isn't float one in the top right
+  if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+    const a = window.document.createElement('a');
+    a.classList.add('top-right');
+    a.classList.add('quarto-color-scheme-toggle');
+    a.href = "";
+    a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+    const i = window.document.createElement("i");
+    i.classList.add('bi');
+    a.appendChild(i);
+    window.document.body.appendChild(a);
+  }
+  // Switch to dark mode if need be
+  if (hasAlternateSentinel()) {
+    toggleColorMode(true);
+  } else {
+    toggleColorMode(false);
+  }
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/starsimhub/starsim">
+      <i class="bi bi-github" role="img" aria-label="GitHub">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="mailto:info@starsim.org">
+      <i class="bi bi-envelope-at-fill" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsim.org/">
+      <i class="bi bi-globe" role="img">
+</i> 
+    </a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
