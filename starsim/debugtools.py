@@ -286,9 +286,10 @@ class Diagnostics(sc.quickobj):
 
     See also ss.Debugger() for a user API for debugging multiple sims.
     """
-    def __init__(self, sim, rvs=False, states=False, export=None, detailed=False):
+    def __init__(self, sim, rvs=True, states=True, detailed=False):
         self.sim = sim
-        self.do_export = export or isinstance(rvs, str) or isinstance(states, str)
+        self.rvs = None
+        self.states = None
         self.detailed = detailed
         if rvs:
             self.rvs = sc.objdict()
@@ -298,17 +299,9 @@ class Diagnostics(sc.quickobj):
             self.states_file = states if isinstance(states, str) else 'debug_states.json'
         return
 
-    @property
-    def has_rvs(self):
-        return hasattr(self, 'rvs')
-
-    @property
-    def has_states(self):
-        return hasattr(self, 'states')
-
     @staticmethod
     def compute_stats(v):
-        """ Compute length, mean, min, and max """
+        """ Compute length, mean, min, max, and unique hash """
         stats = sc.objdict(
             n = len(v),
             mean = v.mean(),
@@ -332,8 +325,9 @@ class Diagnostics(sc.quickobj):
             entry[dist.trace] = self.compute_stats(rvs)
         return
 
-    def store_states(self):
+    def store_states(self, key=None):
         """ Store all states from people """
+        key = sc.ifelse(key, self.ti_key)
         entry = sc.objdict()
         for key, state in self.sim.people.states.items():
             if self.detailed:
@@ -341,15 +335,15 @@ class Diagnostics(sc.quickobj):
             else:
                 entry[key] = self.compute_stats(state)
 
-        self.states[self.ti_key] = entry
+        self.states[key] = entry
         return
 
-    def finalize(self):
-        if self.do_export:
-            if self.has_rvs:
-                sc.savejson(filename=self.rvs_file, obj=self.rvs)
-            if self.has_states:
-                sc.savejson(filename=self.states_file, obj=self.states)
+    def export(self):
+        """ Export saved data to file(s); filenames must be set when the object is created """
+        if self.rvs:
+            sc.savejson(filename=self.rvs_file, obj=self.rvs)
+        if self.states:
+            sc.savejson(filename=self.states_file, obj=self.states)
         return
 
 

@@ -29,7 +29,6 @@ class Sim(ss.Base):
         analyzers (str/Analyzer/list): as above, for analyzers
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
-        diagnostics (str/list): whether to enable diagnostics for random numbers or people states for this sim run; see `sim.set_diagnostics()` for details
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
     **Examples**:
@@ -39,7 +38,7 @@ class Sim(ss.Base):
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
     """
     def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
-                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, diagnostics=None, **kwargs):
+                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
         self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
@@ -62,7 +61,6 @@ class Sim(ss.Base):
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
-        self.set_diagnostics(diagnostics) # Set diagnostics options
         return
 
     def __getitem__(self, key):
@@ -180,6 +178,8 @@ class Sim(ss.Base):
         self.initialized = True
         if timer:
             self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
+        if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
+            self.diagnostics.store_states(key='init')
         return self
 
     def init_time(self):
@@ -305,33 +305,31 @@ class Sim(ss.Base):
         self.data = ss.validate_sim_data(data)
         return
 
-    def set_diagnostics(self, which=None, rvs=False, states=False, export=None, detailed=False):
+    def set_diagnostics(self, rvs=True, states=True, detailed=False):
         """ Store detailed diagnostics information in the sim
 
         Stores every random number produced during a sim run (by `ss.Dist` objects)
-        and/or every state of every agent, at every timestep, and optionally export
-        to file. This allows e.g. understanding exactly where two runs that should
-        have been identical diverged. Results can be exported (in JSON format) and
-        analyzed externally.
+        and/or every state of every agent, at every timestep. This allows e.g.
+        understanding exactly where two runs that should have been identical diverged.
+        Results can be exported (in JSON format) and analyzed externally.
 
         Although the states export could be used for analysis, users are encouraged
         to write an `ss.Analyzer` instead, as enabling diagnostics significantly degrades
         sim run time and memory usage.
 
         Args:
-            which (str): shortcut for setting rvs and/or states; valid args are 'rvs', 'states', and 'both' (equivalent to True)
-            rvs (bool/str): whether to enable diagnostics for random numbers/variates; if a string is provided, export to this file
-            states (bool/str): as above, for people states
-            export (bool): whether to export to file; if None, export if a string is provided
-            detailed (bool): if true, store literally every random number and agent state (otherwise, use summary stats)
+            rvs (bool): whether to enable diagnostics for random numbers/variates (default True)
+            states (bool): as above, for people states (default True)
+            detailed (bool): if true, store literally every random number and agent state (otherwise, use summary stats) (default False)
 
         *Examples:*
 
             # General settings -- use a small sim and few timesteps if possible
             kw = dict(n_agents=100, start=0, stop=10, networks='random', diseases='sis')
 
-            # Simplest usage: store agent-state info
-            sim = ss.Sim(diagnostics='states', **kw)
+            # Simplest usage: store info and print states
+            sim = ss.Sim(**kw)
+            sim.set_diagnostics()
             sim.run()
             print(sim.diagnostics.states)
 
@@ -339,18 +337,15 @@ class Sim(ss.Base):
             sim = ss.Sim(**kw)
             sim.set_diagnostics(rvs='diagnostics_rvs.json', states='diagnostics_states.json', detailed=True)
             sim.run()
+            sim.diagnostics.export()
         """
-        rvs    = rvs    or which in [True, 'both', 'rvs']
-        states = states or which in [True, 'both', 'states']
         if rvs or states:
             print('Enabling sim diagnostics ...') # Always print regardless of verbosity
-            self.diagnostics = ss.Diagnostics(sim=self, rvs=rvs, states=states, export=export, detailed=detailed)
+            self.diagnostics = ss.Diagnostics(sim=self, rvs=rvs, states=states, detailed=detailed)
+        else:
+            errormsg = 'sim.set_diagnostics() was invoked, but nothing is being tracked'
+            raise ValueError(errormsg)
         return
-
-    @property
-    def has_diagnostics(self):
-        """ Check if the sim has active diagnostics """
-        return self.diagnostics is not None
 
     def start_step(self):
         """ Start the step -- only print progress; all actual changes happen in the modules """
@@ -375,7 +370,7 @@ class Sim(ss.Base):
 
     def finish_step(self):
         """ Finish the simulation timestep """
-        if self.has_diagnostics and self.diagnostics.has_states:
+        if self.diagnostics and self.diagnostics.states:
             self.diagnostics.store_states()
         self.t.ti += 1
         return
@@ -451,8 +446,6 @@ class Sim(ss.Base):
 
         # Generate the summary and finish up
         self.summarize() # Create summary
-        if self.has_diagnostics:
-            self.diagnostics.finalize()
         return
 
     def finalize_results(self):
