@@ -17,7 +17,7 @@ website:
     type: overlay
 
   page-footer:
-    center: "The docs were built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2025, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
+    center: "The docs were built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2026, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
     right:
       - icon: github
         href: https://github.com/starsimhub/starsim
@@ -182,7 +182,7 @@ interlinks:
     matplotlib:
       url: https://matplotlib.org/stable/
     sciris:
-      url: https://docs.sciris.org/en/latest
+      url: https://docs.sciris.org/en/latest/
   autolink: true
   aliases:
     numpy: [np]

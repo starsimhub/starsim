@@ -23,7 +23,7 @@ class People:
     as well as the additional housekeeping methods (saving, loading, exporting, etc.).
 
     Args:
-        pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
+        n_agents (int): the initial number of agents in the model
         age_data (dataframe): a dataframe of years and population sizes, if available
         extra_states (list): non-default states to initialize
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
