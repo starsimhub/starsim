@@ -822,26 +822,27 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Let’s compare a simple SIR model configured with transmission using a single Mixing Pool to a similar model using a contact network. Mixing pools are not the same as contact networks, so the results are not expected to be identical.</p>
 <div id="0fe5b776" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a mixing pool</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>)) <span class="co"># A single mixing pool</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mp, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Mixing Pool'</span>)</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a network</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>net, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Contact Network'</span>)</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim1, sim2]).run()</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a mixing pool</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>)) <span class="co"># A single mixing pool</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>sim1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>mp, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Mixing Pool'</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Transmission using a network</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>sim2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span>net, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Contact Network'</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim([sim1, sim2]).run()</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_networks_files/figure-html/cell-2-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="modules_networks_files/figure-html/cell-2-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -878,7 +879,7 @@ Figure(896x672)</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_networks_files/figure-html/cell-3-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="modules_networks_files/figure-html/cell-3-output-2.png" width="886" height="662" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -944,6 +945,20 @@ Figure(896x672)</code></pre>
 The second axis (columns) of the contact matrix is the DESTINATION group
 ↑ The default age distribution is uniform, so the 75+ group contains many more people than the other age groups, explaining the larger number of new infections.</code></pre>
 </div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_networks_files/figure-html/cell-4-output-2.png" width="415" height="411" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_networks_files/figure-html/cell-4-output-3.png" width="576" height="429" class="figure-img"></p>
+</figure>
+</div>
+</div>
 </div>
 <p>Mixing pools work well with properties other than age. Here’s an example that mixes by socio-economic status (SES).</p>
 <div id="291469a2" class="cell" data-execution_count="4">
@@ -1004,21 +1019,7 @@ The second axis (columns) of the contact matrix is the DESTINATION group
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_networks_files/figure-html/cell-5-output-1.png" class="img-fluid figure-img"></p>
-</figure>
-</div>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_networks_files/figure-html/cell-5-output-2.png" class="img-fluid figure-img"></p>
-</figure>
-</div>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="modules_networks_files/figure-html/cell-5-output-3.png" class="img-fluid figure-img"></p>
+<p><img src="modules_networks_files/figure-html/cell-5-output-1.png" width="593" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1609,7 +1610,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

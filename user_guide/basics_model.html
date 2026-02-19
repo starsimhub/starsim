@@ -524,11 +524,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>More details on the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class can be easily exported to a dataframe, e.g.:</p>
 <div id="d6fcbe2a" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10 agents
    uid  slot  alive        age  female  ti_dead  ti_removed  scale
@@ -556,7 +557,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <pre><code>Initializing sim with 20 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.14 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.15 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.16 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.17 s)  ••••••••••••———————— 61%
   Running 2040.01.01 (40/51) (0.18 s)  ••••••••••••••••———— 80%
   Running 2050.01.01 (50/51) (0.19 s)  •••••••••••••••••••• 100%
@@ -1208,7 +1209,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

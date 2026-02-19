@@ -523,49 +523,50 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="923fb5fc" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    start <span class="op">=</span> <span class="st">'2000-01-01'</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    stop <span class="op">=</span> <span class="st">'2020-01-01'</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sis'</span>,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="st">'random'</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Profile sim</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sc.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    start <span class="op">=</span> <span class="st">'2000-01-01'</span>,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    stop <span class="op">=</span> <span class="st">'2020-01-01'</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sis'</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="st">'random'</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Profile sim</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
 Profiling 15 function(s):
  &lt;bound method Sim.run of Sim(n=10000; 2000.01.01—2020.01.01; networks=randomnet; diseases=sis)&gt;
 &lt;bound method Sim.start_step of Sim(n=10000; 2000.01.01—2020.01.01; networks=randomnet; diseases=sis [...]
-&lt;function Module.start_step at 0x7dd03f47eb60&gt;
-&lt;function Module.start_step at 0x7dd03f47eb60&gt;
+&lt;function Module.start_step at 0x794781e4a840&gt;
+&lt;function Module.start_step at 0x794781e4a840&gt;
 &lt;bound method SIS.step_state of sis(pars=[init_prev, beta, dur_inf, waning, imm_boost, _n_initial_ca [...]
 &lt;bound method DynamicNetwork.step of randomnet(n_edges=50000; pars=[n_contacts, dur, beta]; states=[ [...]
 &lt;bound method Infection.step of sis(pars=[init_prev, beta, dur_inf, waning, imm_boost, _n_initial_ca [...]
 &lt;bound method People.step_die of People(n=10000; age=30.0±17.3)&gt;
 &lt;bound method People.update_results of People(n=10000; age=30.0±17.3)&gt;
 &lt;bound method Network.update_results of randomnet(n_edges=50000; pars=[n_contacts, dur, beta]; state [...]
-&lt;function SIS.update_results at 0x7dd03ee7d3a0&gt;
-&lt;function Module.finish_step at 0x7dd03f47ed40&gt;
-&lt;function Module.finish_step at 0x7dd03f47ed40&gt;
+&lt;function SIS.update_results at 0x7947815fcf40&gt;
+&lt;function Module.finish_step at 0x794781e4aa20&gt;
+&lt;function Module.finish_step at 0x794781e4aa20&gt;
 &lt;bound method People.finish_step of People(n=10000; age=30.0±17.3)&gt;
 &lt;bound method Sim.finish_step of Sim(n=10000; 2000.01.01—2020.01.01; networks=randomnet; diseases=si [...] 
 
   Running 2000.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
-  Running 2010.01.01 (10/21) (0.49 s)  ••••••••••—————————— 52%
-  Running 2020.01.01 (20/21) (0.54 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/21) (0.46 s)  ••••••••••—————————— 52%
+  Running 2020.01.01 (20/21) (0.51 s)  •••••••••••••••••••• 100%
 
-Elapsed time: 0.556 s
+Elapsed time: 0.523 s
 
 
 ——————————————————————————————————————————————————————————————————————
-Profile of networks.Network.update_results: 0.000370856 s (0.0667428%)
+Profile of networks.Network.update_results: 0.000331624 s (0.0633578%)
 ——————————————————————————————————————————————————————————————————————
 
-Total time: 0.000370856 s
+Total time: 0.000331624 s
 File: /home/cliffk/idm/starsim/starsim/networks.py
 Function: Network.update_results at line 254
 
@@ -573,34 +574,34 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    254                                               def update_results(self):
    255                                                   """ Store the number of edges in the network """
-   256        21      99548.0   4740.4     26.8          super().update_results()
-   257        21     261994.0  12475.9     70.6          self.results['n_edges'][self.ti] = len(self)
-   258        21       9314.0    443.5      2.5          return
+   256        21      91815.0   4372.1     27.7          super().update_results()
+   257        21     230253.0  10964.4     69.4          self.results['n_edges'][self.ti] = len(self)
+   258        21       9556.0    455.0      2.9          return
 
 
 
-————————————————————————————————————————————————————————————————
-Profile of people.People.finish_step: 0.000542667 s (0.0976635%)
-————————————————————————————————————————————————————————————————
+———————————————————————————————————————————————————————————————
+Profile of people.People.finish_step: 0.000535019 s (0.102217%)
+———————————————————————————————————————————————————————————————
 
-Total time: 0.000542667 s
+Total time: 0.000535019 s
 File: /home/cliffk/idm/starsim/starsim/people.py
 Function: People.finish_step at line 475
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    475                                               def finish_step(self):
-   476        21     361739.0  17225.7     66.7          self.remove_dead()
-   477        21     171654.0   8174.0     31.6          self.update_post()
-   478        21       9274.0    441.6      1.7          return
+   476        21     359774.0  17132.1     67.2          self.remove_dead()
+   477        21     166499.0   7928.5     31.1          self.update_post()
+   478        21       8746.0    416.5      1.6          return
 
 
 
 ———————————————————————————————————————————————————————————
-Profile of people.People.step_die: 0.00143625 s (0.258481%)
+Profile of people.People.step_die: 0.00136948 s (0.261644%)
 ———————————————————————————————————————————————————————————
 
-Total time: 0.00143625 s
+Total time: 0.00136948 s
 File: /home/cliffk/idm/starsim/starsim/people.py
 Function: People.step_die at line 437
 
@@ -608,45 +609,45 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    437                                               def step_die(self):
    438                                                   """ Carry out any deaths or removals that took place this timestep """
-   439        21    1203757.0  57321.8     83.8          death_uids = ((self.ti_dead &lt;= self.sim.ti) | (self.ti_removed &lt;= self.sim.ti)).uids
-   440        21      54355.0   2588.3      3.8          self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
+   439        21    1148330.0  54682.4     83.9          death_uids = ((self.ti_dead &lt;= self.sim.ti) | (self.ti_removed &lt;= self.sim.ti)).uids
+   440        21      51957.0   2474.1      3.8          self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
    441                                           
    442                                                   # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
    443                                                   # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-   444        42     117468.0   2796.9      8.2          for disease in self.sim.diseases():
-   445        21      17513.0    834.0      1.2              if isinstance(disease, ss.Disease):
-   446        21      28388.0   1351.8      2.0                  disease.step_die(death_uids)
+   444        42     111505.0   2654.9      8.1          for disease in self.sim.diseases():
+   445        21      16821.0    801.0      1.2              if isinstance(disease, ss.Disease):
+   446        21      26630.0   1268.1      1.9                  disease.step_die(death_uids)
    447                                           
-   448        21      14769.0    703.3      1.0          return death_uids
+   448        21      14241.0    678.1      1.0          return death_uids
 
 
 
 —————————————————————————————————————————————————————————————————
-Profile of people.People.update_results: 0.00214351 s (0.385766%)
+Profile of people.People.update_results: 0.00207669 s (0.396758%)
 —————————————————————————————————————————————————————————————————
 
-Total time: 0.00214351 s
+Total time: 0.00207669 s
 File: /home/cliffk/idm/starsim/starsim/people.py
 Function: People.update_results at line 466
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    466                                               def update_results(self):
-   467        21      18901.0    900.0      0.9          ti = self.sim.ti
-   468        21       7392.0    352.0      0.3          res = self.sim.results
-   469        21     508266.0  24203.1     23.7          res.n_alive[ti] = np.count_nonzero(self.alive)
-   470        21     541601.0  25790.5     25.3          res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-   471        21     442591.0  21075.8     20.6          res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
-   472        21     607162.0  28912.5     28.3          res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
-   473        21      17599.0    838.0      0.8          return
+   467        21      19891.0    947.2      1.0          ti = self.sim.ti
+   468        21       8106.0    386.0      0.4          res = self.sim.results
+   469        21     455192.0  21675.8     21.9          res.n_alive[ti] = np.count_nonzero(self.alive)
+   470        21     548970.0  26141.4     26.4          res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+   471        21     449305.0  21395.5     21.6          res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
+   472        21     576990.0  27475.7     27.8          res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+   473        21      18234.0    868.3      0.9          return
 
 
 
 ————————————————————————————————————————————————————
-Profile of diseases.py:670: 0.00230529 s (0.414882%)
+Profile of diseases.py:670: 0.00221398 s (0.422988%)
 ————————————————————————————————————————————————————
 
-Total time: 0.00230529 s
+Total time: 0.00221398 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: SIS.update_results at line 670
 
@@ -655,50 +656,50 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    670                                               @ss.required()
    671                                               def update_results(self):
    672                                                   """ Store the population immunity (susceptibility) """
-   673        21    1596974.0  76046.4     69.3          super().update_results()
-   674        21     697955.0  33236.0     30.3          self.results['rel_sus'][self.ti] = self.rel_sus.mean()
-   675        21      10357.0    493.2      0.4          return
+   673        21    1529434.0  72830.2     69.1          super().update_results()
+   674        21     674182.0  32103.9     30.5          self.results['rel_sus'][self.ti] = self.rel_sus.mean()
+   675        21      10365.0    493.6      0.5          return
 
 
 
 ———————————————————————————————————————————————————————
-Profile of sim.Sim.start_step: 0.00368424 s (0.663051%)
+Profile of sim.Sim.start_step: 0.00360812 s (0.689343%)
 ———————————————————————————————————————————————————————
 
-Total time: 0.00368424 s
+Total time: 0.00360812 s
 File: /home/cliffk/idm/starsim/starsim/sim.py
-Function: Sim.start_step at line 306
+Function: Sim.start_step at line 350
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
-   306                                               def start_step(self):
-   307                                                   """ Start the step -- only print progress; all actual changes happen in the modules """
-   308                                           
-   309                                                   # Set the time and if we have reached the end of the simulation, then do nothing
-   310        21       7642.0    363.9      0.2          if self.complete:
-   311                                                       errormsg = 'Simulation already complete (call sim.init() to re-run)'
-   312                                                       raise AlreadyRunError(errormsg)
-   313                                           
-   314                                                   # Print out progress if needed
-   315        21    2504678.0 119270.4     68.0          self.elapsed = self.timer.toc(output=True)
-   316        21      11508.0    548.0      0.3          if self.verbose: # Print progress
-   317        21       6123.0    291.6      0.2              t = self.t
-   318        21     148133.0   7054.0      4.0              simlabel = f'"{self.label}": ' if self.label else ''
-   319        21     683401.0  32542.9     18.5              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
-   320        21       9644.0    459.2      0.3              if self.verbose &gt;= 1:
-   321                                                           sc.heading(string)
-   322        21       7289.0    347.1      0.2              elif self.verbose &gt; 0:
-   323        21      15407.0    733.7      0.4                  if not (t.ti % int(1.0 / self.verbose)):
-   324         3     269323.0  89774.3      7.3                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
-   325        21      21096.0   1004.6      0.6          return
+   350                                               def start_step(self):
+   351                                                   """ Start the step -- only print progress; all actual changes happen in the modules """
+   352                                           
+   353                                                   # Set the time and if we have reached the end of the simulation, then do nothing
+   354        21       6987.0    332.7      0.2          if self.complete:
+   355                                                       errormsg = 'Simulation already complete (call sim.init() to re-run)'
+   356                                                       raise AlreadyRunError(errormsg)
+   357                                           
+   358                                                   # Print out progress if needed
+   359        21    2471746.0 117702.2     68.5          self.elapsed = self.timer.toc(output=True)
+   360        21      10170.0    484.3      0.3          if self.verbose: # Print progress
+   361        21       5847.0    278.4      0.2              t = self.t
+   362        21     160055.0   7621.7      4.4              simlabel = f'"{self.label}": ' if self.label else ''
+   363        21     634080.0  30194.3     17.6              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
+   364        21       8526.0    406.0      0.2              if self.verbose &gt;= 1:
+   365                                                           sc.heading(string)
+   366        21       6284.0    299.2      0.2              elif self.verbose &gt; 0:
+   367        21      13791.0    656.7      0.4                  if not (t.ti % int(1.0 / self.verbose)):
+   368         3     269682.0  89894.0      7.5                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
+   369        21      20955.0    997.9      0.6          return
 
 
 
 ————————————————————————————————————————————————————————————
-Profile of diseases.SIS.step_state: 0.00393148 s (0.707546%)
+Profile of diseases.SIS.step_state: 0.00386903 s (0.739191%)
 ————————————————————————————————————————————————————————————
 
-Total time: 0.00393148 s
+Total time: 0.00386903 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: SIS.step_state at line 631
 
@@ -706,19 +707,19 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    631                                               def step_state(self):
    632                                                   """ Progress infectious -&gt; recovered """
-   633        21    1222804.0  58228.8     31.1          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
-   634        21      67807.0   3228.9      1.7          self.infected[recovered] = False
-   635        21      39496.0   1880.8      1.0          self.susceptible[recovered] = True
-   636        21    2587513.0 123214.9     65.8          self.update_immunity()
-   637        21      13862.0    660.1      0.4          return
+   633        21    1165151.0  55483.4     30.1          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
+   634        21      71222.0   3391.5      1.8          self.infected[recovered] = False
+   635        21      41086.0   1956.5      1.1          self.susceptible[recovered] = True
+   636        21    2578165.0 122769.8     66.6          self.update_immunity()
+   637        21      13409.0    638.5      0.3          return
 
 
 
-——————————————————————————————————————————————————
-Profile of modules.py:673: 0.00672401 s (1.21012%)
-——————————————————————————————————————————————————
+—————————————————————————————————————————————————
+Profile of modules.py:673: 0.00682637 s (1.3042%)
+—————————————————————————————————————————————————
 
-Total time: 0.00672401 s
+Total time: 0.00682637 s
 File: /home/cliffk/idm/starsim/starsim/modules.py
 Function: Module.start_step at line 673
 
@@ -727,37 +728,37 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    673                                               @required()
    674                                               def start_step(self):
    675                                                   """ Tasks to perform at the beginning of the step """
-   676        42      24797.0    590.4      0.4          if self.finalized:
+   676        42      19810.0    471.7      0.3          if self.finalized:
    677                                                       errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
    678                                                       raise RuntimeError(errormsg)
-   679        42      19795.0    471.3      0.3          if self.dists is not None: # Will be None if no distributions are defined
-   680        42    6654161.0 158432.4     99.0              self.dists.jump_dt() # Advance random number generators forward for calls on this step
-   681        42      25259.0    601.4      0.4          return
+   679        42      17287.0    411.6      0.3          if self.dists is not None: # Will be None if no distributions are defined
+   680        42    6766145.0 161098.7     99.1              self.dists.jump_dt() # Advance random number generators forward for calls on this step
+   681        42      23129.0    550.7      0.3          return
 
 
 
 ———————————————————————————————————————————————————————————————
-Profile of networks.DynamicNetwork.step: 0.0355001 s (6.38893%)
+Profile of networks.DynamicNetwork.step: 0.0337762 s (6.45305%)
 ———————————————————————————————————————————————————————————————
 
-Total time: 0.0355001 s
+Total time: 0.0337762 s
 File: /home/cliffk/idm/starsim/starsim/networks.py
 Function: DynamicNetwork.step at line 412
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    412                                               def step(self):
-   413        21   10101223.0 481010.6     28.5          self.end_pairs()
-   414        21   25384704.0 1.21e+06     71.5          self.add_pairs()
-   415        21      14157.0    674.1      0.0          return
+   413        21    9289367.0 442350.8     27.5          self.end_pairs()
+   414        21   24473522.0 1.17e+06     72.5          self.add_pairs()
+   415        21      13333.0    634.9      0.0          return
 
 
 
-————————————————————————————————————————————————————————
-Profile of diseases.Infection.step: 0.483204 s (86.962%)
-————————————————————————————————————————————————————————
+—————————————————————————————————————————————————————————
+Profile of diseases.Infection.step: 0.453323 s (86.6088%)
+—————————————————————————————————————————————————————————
 
-Total time: 0.483204 s
+Total time: 0.453323 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: Infection.step at line 208
 
@@ -768,20 +769,20 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    210                                                   Perform key infection updates, including infection and setting prognoses
    211                                                   """
    212                                                   # Create new cases
-   213        21  472348159.0 2.25e+07     97.8          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
+   213        21  442802120.0 2.11e+07     97.7          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
    214                                           
    215                                                   # Set prognoses
-   216        21      18036.0    858.9      0.0          if len(new_cases):
-   217        21   10821773.0 515322.5      2.2              self.set_outcomes(new_cases, sources)
+   216        21      14735.0    701.7      0.0          if len(new_cases):
+   217        21   10492326.0 499634.6      2.3              self.set_outcomes(new_cases, sources)
    218                                           
-   219        21      15765.0    750.7      0.0          return new_cases, sources, networks
+   219        21      13676.0    651.2      0.0          return new_cases, sources, networks
 
 Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="advanced_profiling_files/figure-html/cell-2-output-2.png" width="663" height="470" class="figure-img"></p>
+<p><img src="advanced_profiling_files/figure-html/cell-2-output-2.png" width="662" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -793,43 +794,43 @@ Figure(672x480)</code></pre>
 <pre><code>
 
 ———————————————————————————————————————————————————————
-Profile of sim.Sim.start_step: 0.00368424 s (0.663051%)
+Profile of sim.Sim.start_step: 0.00360812 s (0.689343%)
 ———————————————————————————————————————————————————————
 
-Total time: 0.00368424 s
+Total time: 0.00360812 s
 File: /home/cliffk/idm/starsim/starsim/sim.py
-Function: Sim.start_step at line 306
+Function: Sim.start_step at line 350
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
-   306                                               def start_step(self):
-   307                                                   """ Start the step -- only print progress; all actual changes happen in the modules """
-   308                                           
-   309                                                   # Set the time and if we have reached the end of the simulation, then do nothing
-   310        21       7642.0    363.9      0.2          if self.complete:
-   311                                                       errormsg = 'Simulation already complete (call sim.init() to re-run)'
-   312                                                       raise AlreadyRunError(errormsg)
-   313                                           
-   314                                                   # Print out progress if needed
-   315        21    2504678.0 119270.4     68.0          self.elapsed = self.timer.toc(output=True)
-   316        21      11508.0    548.0      0.3          if self.verbose: # Print progress
-   317        21       6123.0    291.6      0.2              t = self.t
-   318        21     148133.0   7054.0      4.0              simlabel = f'"{self.label}": ' if self.label else ''
-   319        21     683401.0  32542.9     18.5              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
-   320        21       9644.0    459.2      0.3              if self.verbose &gt;= 1:
-   321                                                           sc.heading(string)
-   322        21       7289.0    347.1      0.2              elif self.verbose &gt; 0:
-   323        21      15407.0    733.7      0.4                  if not (t.ti % int(1.0 / self.verbose)):
-   324         3     269323.0  89774.3      7.3                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
-   325        21      21096.0   1004.6      0.6          return
+   350                                               def start_step(self):
+   351                                                   """ Start the step -- only print progress; all actual changes happen in the modules """
+   352                                           
+   353                                                   # Set the time and if we have reached the end of the simulation, then do nothing
+   354        21       6987.0    332.7      0.2          if self.complete:
+   355                                                       errormsg = 'Simulation already complete (call sim.init() to re-run)'
+   356                                                       raise AlreadyRunError(errormsg)
+   357                                           
+   358                                                   # Print out progress if needed
+   359        21    2471746.0 117702.2     68.5          self.elapsed = self.timer.toc(output=True)
+   360        21      10170.0    484.3      0.3          if self.verbose: # Print progress
+   361        21       5847.0    278.4      0.2              t = self.t
+   362        21     160055.0   7621.7      4.4              simlabel = f'"{self.label}": ' if self.label else ''
+   363        21     634080.0  30194.3     17.6              string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
+   364        21       8526.0    406.0      0.2              if self.verbose &gt;= 1:
+   365                                                           sc.heading(string)
+   366        21       6284.0    299.2      0.2              elif self.verbose &gt; 0:
+   367        21      13791.0    656.7      0.4                  if not (t.ti % int(1.0 / self.verbose)):
+   368         3     269682.0  89894.0      7.5                      sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
+   369        21      20955.0    997.9      0.6          return
 
 
 
 ————————————————————————————————————————————————————————————
-Profile of diseases.SIS.step_state: 0.00393148 s (0.707546%)
+Profile of diseases.SIS.step_state: 0.00386903 s (0.739191%)
 ————————————————————————————————————————————————————————————
 
-Total time: 0.00393148 s
+Total time: 0.00386903 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: SIS.step_state at line 631
 
@@ -837,19 +838,19 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    631                                               def step_state(self):
    632                                                   """ Progress infectious -&gt; recovered """
-   633        21    1222804.0  58228.8     31.1          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
-   634        21      67807.0   3228.9      1.7          self.infected[recovered] = False
-   635        21      39496.0   1880.8      1.0          self.susceptible[recovered] = True
-   636        21    2587513.0 123214.9     65.8          self.update_immunity()
-   637        21      13862.0    660.1      0.4          return
+   633        21    1165151.0  55483.4     30.1          recovered = (self.infected &amp; (self.ti_recovered &lt;= self.ti)).uids
+   634        21      71222.0   3391.5      1.8          self.infected[recovered] = False
+   635        21      41086.0   1956.5      1.1          self.susceptible[recovered] = True
+   636        21    2578165.0 122769.8     66.6          self.update_immunity()
+   637        21      13409.0    638.5      0.3          return
 
 
 
-——————————————————————————————————————————————————
-Profile of modules.py:673: 0.00672401 s (1.21012%)
-——————————————————————————————————————————————————
+—————————————————————————————————————————————————
+Profile of modules.py:673: 0.00682637 s (1.3042%)
+—————————————————————————————————————————————————
 
-Total time: 0.00672401 s
+Total time: 0.00682637 s
 File: /home/cliffk/idm/starsim/starsim/modules.py
 Function: Module.start_step at line 673
 
@@ -858,37 +859,37 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    673                                               @required()
    674                                               def start_step(self):
    675                                                   """ Tasks to perform at the beginning of the step """
-   676        42      24797.0    590.4      0.4          if self.finalized:
+   676        42      19810.0    471.7      0.3          if self.finalized:
    677                                                       errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
    678                                                       raise RuntimeError(errormsg)
-   679        42      19795.0    471.3      0.3          if self.dists is not None: # Will be None if no distributions are defined
-   680        42    6654161.0 158432.4     99.0              self.dists.jump_dt() # Advance random number generators forward for calls on this step
-   681        42      25259.0    601.4      0.4          return
+   679        42      17287.0    411.6      0.3          if self.dists is not None: # Will be None if no distributions are defined
+   680        42    6766145.0 161098.7     99.1              self.dists.jump_dt() # Advance random number generators forward for calls on this step
+   681        42      23129.0    550.7      0.3          return
 
 
 
 ———————————————————————————————————————————————————————————————
-Profile of networks.DynamicNetwork.step: 0.0355001 s (6.38893%)
+Profile of networks.DynamicNetwork.step: 0.0337762 s (6.45305%)
 ———————————————————————————————————————————————————————————————
 
-Total time: 0.0355001 s
+Total time: 0.0337762 s
 File: /home/cliffk/idm/starsim/starsim/networks.py
 Function: DynamicNetwork.step at line 412
 
 Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    412                                               def step(self):
-   413        21   10101223.0 481010.6     28.5          self.end_pairs()
-   414        21   25384704.0 1.21e+06     71.5          self.add_pairs()
-   415        21      14157.0    674.1      0.0          return
+   413        21    9289367.0 442350.8     27.5          self.end_pairs()
+   414        21   24473522.0 1.17e+06     72.5          self.add_pairs()
+   415        21      13333.0    634.9      0.0          return
 
 
 
-————————————————————————————————————————————————————————
-Profile of diseases.Infection.step: 0.483204 s (86.962%)
-————————————————————————————————————————————————————————
+—————————————————————————————————————————————————————————
+Profile of diseases.Infection.step: 0.453323 s (86.6088%)
+—————————————————————————————————————————————————————————
 
-Total time: 0.483204 s
+Total time: 0.453323 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: Infection.step at line 208
 
@@ -899,13 +900,13 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    210                                                   Perform key infection updates, including infection and setting prognoses
    211                                                   """
    212                                                   # Create new cases
-   213        21  472348159.0 2.25e+07     97.8          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
+   213        21  442802120.0 2.11e+07     97.7          new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
    214                                           
    215                                                   # Set prognoses
-   216        21      18036.0    858.9      0.0          if len(new_cases):
-   217        21   10821773.0 515322.5      2.2              self.set_outcomes(new_cases, sources)
+   216        21      14735.0    701.7      0.0          if len(new_cases):
+   217        21   10492326.0 499634.6      2.3              self.set_outcomes(new_cases, sources)
    218                                           
-   219        21      15765.0    750.7      0.0          return new_cases, sources, networks
+   219        21      13676.0    651.2      0.0          return new_cases, sources, networks
 </code></pre>
 </div>
 </div>
@@ -917,20 +918,20 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
 Profiling 1 function(s):
- &lt;function Infection.infect at 0x7dd03ee63f60&gt; 
+ &lt;function Infection.infect at 0x7947817e7b00&gt; 
 
   Running 2000.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
   Running 2010.01.01 (10/21) (0.05 s)  ••••••••••—————————— 52%
   Running 2020.01.01 (20/21) (0.10 s)  •••••••••••••••••••• 100%
 
-Elapsed time: 0.113 s
+Elapsed time: 0.111 s
 
 
-———————————————————————————————————————————————————————————
-Profile of diseases.Infection.infect: 0.042982 s (37.9613%)
-———————————————————————————————————————————————————————————
+————————————————————————————————————————————————————————————
+Profile of diseases.Infection.infect: 0.0425779 s (38.3398%)
+————————————————————————————————————————————————————————————
 
-Total time: 0.042982 s
+Total time: 0.0425779 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: Infection.infect at line 230
 
@@ -938,33 +939,33 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    230                                               def infect(self):
    231                                                   """ Determine who gets infected on this timestep via transmission on the network """
-   232        21      12402.0    590.6      0.0          new_cases = []
-   233        21       7146.0    340.3      0.0          sources = []
-   234        21       4669.0    222.3      0.0          networks = []
-   235        21     389916.0  18567.4      0.9          betamap = self.validate_beta()
+   232        21      10778.0    513.2      0.0          new_cases = []
+   233        21       7293.0    347.3      0.0          sources = []
+   234        21       4576.0    217.9      0.0          networks = []
+   235        21     370234.0  17630.2      0.9          betamap = self.validate_beta()
    236                                           
-   237        21     852127.0  40577.5      2.0          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-   238        21     553232.0  26344.4      1.3          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+   237        21     844409.0  40210.0      2.0          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+   238        21     554474.0  26403.5      1.3          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
    239                                           
-   240        42      97080.0   2311.4      0.2          for i, (nkey,route) in enumerate(self.sim.networks.items()):
-   241        21      21190.0   1009.0      0.0              nk = ss.standardize_netkey(nkey)
+   240        42      93904.0   2235.8      0.2          for i, (nkey,route) in enumerate(self.sim.networks.items()):
+   241        21      21905.0   1043.1      0.1              nk = ss.standardize_netkey(nkey)
    242                                           
    243                                                       # Main use case: networks
-   244        21      10084.0    480.2      0.0              if isinstance(route, ss.Network):
-   245        21     134554.0   6407.3      0.3                  if len(route): # Skip networks with no edges
-   246        21       7615.0    362.6      0.0                      edges = route.edges
-   247        21     188632.0   8982.5      0.4                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
-   248        21     180462.0   8593.4      0.4                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
-   249        63      34038.0    540.3      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
-   250        42      50539.0   1203.3      0.1                          if beta: # Skip networks with no transmission
-   251        42     763187.0  18171.1      1.8                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-   252        42    1335047.0  31786.8      3.1                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-   253        42   30330721.0 722160.0     70.6                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-   254        42      33662.0    801.5      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
-   255        42    6247050.0 148739.3     14.5                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
-   256        42      18655.0    444.2      0.0                              new_cases.append(target_uids)
-   257        42      14189.0    337.8      0.0                              sources.append(source_uids)
-   258        42     314183.0   7480.5      0.7                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
+   244        21      10192.0    485.3      0.0              if isinstance(route, ss.Network):
+   245        21     135548.0   6454.7      0.3                  if len(route): # Skip networks with no edges
+   246        21       6142.0    292.5      0.0                      edges = route.edges
+   247        21     185668.0   8841.3      0.4                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+   248        21     179020.0   8524.8      0.4                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
+   249        63      31490.0    499.8      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
+   250        42      48155.0   1146.5      0.1                          if beta: # Skip networks with no transmission
+   251        42     728776.0  17351.8      1.7                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
+   252        42    1311361.0  31222.9      3.1                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+   253        42   30613891.0 728902.2     71.9                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
+   254        42      30321.0    721.9      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+   255        42    5687327.0 135412.5     13.4                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
+   256        42      21151.0    503.6      0.0                              new_cases.append(target_uids)
+   257        42      16038.0    381.9      0.0                              sources.append(source_uids)
+   258        42     297012.0   7071.7      0.7                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
    259                                           
    260                                                       # Handle everything else: mixing pools, environmental transmission, etc.
    261                                                       elif isinstance(route, ss.Route):
@@ -979,25 +980,25 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    270                                                           raise TypeError(errormsg)
    271                                           
    272                                                   # Finalize
-   273        21      12564.0    598.3      0.0          if len(new_cases) and len(sources):
-   274        21     158220.0   7534.3      0.4              new_cases = ss.uids.cat(new_cases)
-   275        21     977391.0  46542.4      2.3              new_cases, inds = new_cases.unique(return_index=True)
-   276        21     119650.0   5697.6      0.3              sources = ss.uids.cat(sources)[inds]
-   277        21      63468.0   3022.3      0.1              networks = np.concatenate(networks)[inds]
+   273        21      11478.0    546.6      0.0          if len(new_cases) and len(sources):
+   274        21     151663.0   7222.0      0.4              new_cases = ss.uids.cat(new_cases)
+   275        21     973731.0  46368.1      2.3              new_cases, inds = new_cases.unique(return_index=True)
+   276        21     119052.0   5669.1      0.3              sources = ss.uids.cat(sources)[inds]
+   277        21      62852.0   2993.0      0.1              networks = np.concatenate(networks)[inds]
    278                                                   else:
    279                                                       new_cases = ss.uids()
    280                                                       sources = ss.uids()
    281                                                       networks = np.empty(0, dtype=ss_int)
    282                                           
-   283        21      50344.0   2397.3      0.1          return new_cases, sources, networks
+   283        21      49508.0   2357.5      0.1          return new_cases, sources, networks
 
 
 
-———————————————————————————————————————————————————————————
-Profile of diseases.Infection.infect: 0.042982 s (37.9613%)
-———————————————————————————————————————————————————————————
+————————————————————————————————————————————————————————————
+Profile of diseases.Infection.infect: 0.0425779 s (38.3398%)
+————————————————————————————————————————————————————————————
 
-Total time: 0.042982 s
+Total time: 0.0425779 s
 File: /home/cliffk/idm/starsim/starsim/diseases.py
 Function: Infection.infect at line 230
 
@@ -1005,33 +1006,33 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 ==============================================================
    230                                               def infect(self):
    231                                                   """ Determine who gets infected on this timestep via transmission on the network """
-   232        21      12402.0    590.6      0.0          new_cases = []
-   233        21       7146.0    340.3      0.0          sources = []
-   234        21       4669.0    222.3      0.0          networks = []
-   235        21     389916.0  18567.4      0.9          betamap = self.validate_beta()
+   232        21      10778.0    513.2      0.0          new_cases = []
+   233        21       7293.0    347.3      0.0          sources = []
+   234        21       4576.0    217.9      0.0          networks = []
+   235        21     370234.0  17630.2      0.9          betamap = self.validate_beta()
    236                                           
-   237        21     852127.0  40577.5      2.0          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-   238        21     553232.0  26344.4      1.3          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+   237        21     844409.0  40210.0      2.0          rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+   238        21     554474.0  26403.5      1.3          rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
    239                                           
-   240        42      97080.0   2311.4      0.2          for i, (nkey,route) in enumerate(self.sim.networks.items()):
-   241        21      21190.0   1009.0      0.0              nk = ss.standardize_netkey(nkey)
+   240        42      93904.0   2235.8      0.2          for i, (nkey,route) in enumerate(self.sim.networks.items()):
+   241        21      21905.0   1043.1      0.1              nk = ss.standardize_netkey(nkey)
    242                                           
    243                                                       # Main use case: networks
-   244        21      10084.0    480.2      0.0              if isinstance(route, ss.Network):
-   245        21     134554.0   6407.3      0.3                  if len(route): # Skip networks with no edges
-   246        21       7615.0    362.6      0.0                      edges = route.edges
-   247        21     188632.0   8982.5      0.4                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
-   248        21     180462.0   8593.4      0.4                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
-   249        63      34038.0    540.3      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
-   250        42      50539.0   1203.3      0.1                          if beta: # Skip networks with no transmission
-   251        42     763187.0  18171.1      1.8                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-   252        42    1335047.0  31786.8      3.1                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-   253        42   30330721.0 722160.0     70.6                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-   254        42      33662.0    801.5      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
-   255        42    6247050.0 148739.3     14.5                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
-   256        42      18655.0    444.2      0.0                              new_cases.append(target_uids)
-   257        42      14189.0    337.8      0.0                              sources.append(source_uids)
-   258        42     314183.0   7480.5      0.7                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
+   244        21      10192.0    485.3      0.0              if isinstance(route, ss.Network):
+   245        21     135548.0   6454.7      0.3                  if len(route): # Skip networks with no edges
+   246        21       6142.0    292.5      0.0                      edges = route.edges
+   247        21     185668.0   8841.3      0.4                      p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+   248        21     179020.0   8524.8      0.4                      p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
+   249        63      31490.0    499.8      0.1                      for src, trg, beta in [p1p2b0, p2p1b1]:
+   250        42      48155.0   1146.5      0.1                          if beta: # Skip networks with no transmission
+   251        42     728776.0  17351.8      1.7                              disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
+   252        42    1311361.0  31222.9      3.1                              beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+   253        42   30613891.0 728902.2     71.9                              randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
+   254        42      30321.0    721.9      0.1                              args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+   255        42    5687327.0 135412.5     13.4                              target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
+   256        42      21151.0    503.6      0.0                              new_cases.append(target_uids)
+   257        42      16038.0    381.9      0.0                              sources.append(source_uids)
+   258        42     297012.0   7071.7      0.7                              networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
    259                                           
    260                                                       # Handle everything else: mixing pools, environmental transmission, etc.
    261                                                       elif isinstance(route, ss.Route):
@@ -1046,17 +1047,17 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    270                                                           raise TypeError(errormsg)
    271                                           
    272                                                   # Finalize
-   273        21      12564.0    598.3      0.0          if len(new_cases) and len(sources):
-   274        21     158220.0   7534.3      0.4              new_cases = ss.uids.cat(new_cases)
-   275        21     977391.0  46542.4      2.3              new_cases, inds = new_cases.unique(return_index=True)
-   276        21     119650.0   5697.6      0.3              sources = ss.uids.cat(sources)[inds]
-   277        21      63468.0   3022.3      0.1              networks = np.concatenate(networks)[inds]
+   273        21      11478.0    546.6      0.0          if len(new_cases) and len(sources):
+   274        21     151663.0   7222.0      0.4              new_cases = ss.uids.cat(new_cases)
+   275        21     973731.0  46368.1      2.3              new_cases, inds = new_cases.unique(return_index=True)
+   276        21     119052.0   5669.1      0.3              sources = ss.uids.cat(sources)[inds]
+   277        21      62852.0   2993.0      0.1              networks = np.concatenate(networks)[inds]
    278                                                   else:
    279                                                       new_cases = ss.uids()
    280                                                       sources = ss.uids()
    281                                                       networks = np.empty(0, dtype=ss_int)
    282                                           
-   283        21      50344.0   2397.3      0.1          return new_cases, sources, networks
+   283        21      49508.0   2357.5      0.1          return new_cases, sources, networks
 </code></pre>
 </div>
 </div>
@@ -1080,48 +1081,48 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
 <span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co"># %%</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>    time  ti  func_order                     label     module       func_name    cpu_time
-0   2000   0           0            sim.start_step        sim      start_step  2.0854e-04
-1   2000   0           1      randomnet.start_step  randomnet      start_step  1.1106e-04
-2   2000   0           2            sis.start_step        sis      start_step  1.0002e-04
-3   2000   0           3            sis.step_state        sis      step_state  8.1091e-05
-4   2000   0           4            randomnet.step  randomnet            step  1.1102e-03
-5   2000   0           5                  sis.step        sis            step  2.2622e-03
-6   2000   0           6           people.step_die     people        step_die  3.7400e-05
-7   2000   0           7     people.update_results     people  update_results  4.4885e-05
-8   2000   0           8  randomnet.update_results  randomnet  update_results  8.6730e-06
-9   2000   0           9        sis.update_results        sis  update_results  6.2612e-05
-10  2000   0          10     randomnet.finish_step  randomnet     finish_step  3.3670e-06
-11  2000   0          11           sis.finish_step        sis     finish_step  1.7570e-06
-12  2000   0          12        people.finish_step     people     finish_step  1.1204e-05
-13  2000   0          13           sim.finish_step        sim     finish_step  1.6490e-06
-14  2001   1           0            sim.start_step        sim      start_step  5.3382e-05
-15  2001   1           1      randomnet.start_step  randomnet      start_step  8.2708e-05
-16  2001   1           2            sis.start_step        sis      start_step  9.3020e-05
-17  2001   1           3            sis.step_state        sis      step_state  5.9762e-05
-18  2001   1           4            randomnet.step  randomnet            step  1.0267e-03
-19  2001   1           5                  sis.step        sis            step  1.6051e-03
-20  2001   1           6           people.step_die     people        step_die  3.1857e-05
-21  2001   1           7     people.update_results     people  update_results  4.1163e-05
-22  2001   1           8  randomnet.update_results  randomnet  update_results  7.0070e-06
-23  2001   1           9        sis.update_results        sis  update_results  5.4160e-05
-24  2001   1          10     randomnet.finish_step  randomnet     finish_step  3.3090e-06
-25  2001   1          11           sis.finish_step        sis     finish_step  1.6930e-06
-26  2001   1          12        people.finish_step     people     finish_step  1.0562e-05
-27  2001   1          13           sim.finish_step        sim     finish_step  1.4910e-06
-28  2002   2           0            sim.start_step        sim      start_step  5.0586e-05
-29  2002   2           1      randomnet.start_step  randomnet      start_step  7.7721e-05
-30  2002   2           2            sis.start_step        sis      start_step  8.9695e-05
-31  2002   2           3            sis.step_state        sis      step_state  5.2579e-05
-32  2002   2           4            randomnet.step  randomnet            step  9.9232e-04
-33  2002   2           5                  sis.step        sis            step  1.5362e-03
-34  2002   2           6           people.step_die     people        step_die  3.0093e-05
-35  2002   2           7     people.update_results     people  update_results  3.8311e-05
-36  2002   2           8  randomnet.update_results  randomnet  update_results  6.4450e-06
-37  2002   2           9        sis.update_results        sis  update_results  4.9012e-05
-38  2002   2          10     randomnet.finish_step  randomnet     finish_step  2.7030e-06
-39  2002   2          11           sis.finish_step        sis     finish_step  1.3510e-06
-40  2002   2          12        people.finish_step     people     finish_step  9.6950e-06
-41  2002   2          13           sim.finish_step        sim     finish_step  1.2550e-06</code></pre>
+0   2000   0           0            sim.start_step        sim      start_step  2.0447e-04
+1   2000   0           1      randomnet.start_step  randomnet      start_step  9.6261e-05
+2   2000   0           2            sis.start_step        sis      start_step  9.4611e-05
+3   2000   0           3            sis.step_state        sis      step_state  7.0716e-05
+4   2000   0           4            randomnet.step  randomnet            step  1.0927e-03
+5   2000   0           5                  sis.step        sis            step  2.2908e-03
+6   2000   0           6           people.step_die     people        step_die  3.8166e-05
+7   2000   0           7     people.update_results     people  update_results  4.4612e-05
+8   2000   0           8  randomnet.update_results  randomnet  update_results  8.2040e-06
+9   2000   0           9        sis.update_results        sis  update_results  6.0455e-05
+10  2000   0          10     randomnet.finish_step  randomnet     finish_step  3.0580e-06
+11  2000   0          11           sis.finish_step        sis     finish_step  1.7450e-06
+12  2000   0          12        people.finish_step     people     finish_step  1.0901e-05
+13  2000   0          13           sim.finish_step        sim     finish_step  1.9100e-06
+14  2001   1           0            sim.start_step        sim      start_step  4.8153e-05
+15  2001   1           1      randomnet.start_step  randomnet      start_step  8.1882e-05
+16  2001   1           2            sis.start_step        sis      start_step  9.7632e-05
+17  2001   1           3            sis.step_state        sis      step_state  5.4605e-05
+18  2001   1           4            randomnet.step  randomnet            step  9.3643e-04
+19  2001   1           5                  sis.step        sis            step  1.5398e-03
+20  2001   1           6           people.step_die     people        step_die  3.1861e-05
+21  2001   1           7     people.update_results     people  update_results  4.2423e-05
+22  2001   1           8  randomnet.update_results  randomnet  update_results  7.2590e-06
+23  2001   1           9        sis.update_results        sis  update_results  6.0201e-05
+24  2001   1          10     randomnet.finish_step  randomnet     finish_step  3.2910e-06
+25  2001   1          11           sis.finish_step        sis     finish_step  1.5740e-06
+26  2001   1          12        people.finish_step     people     finish_step  1.0469e-05
+27  2001   1          13           sim.finish_step        sim     finish_step  1.5430e-06
+28  2002   2           0            sim.start_step        sim      start_step  4.7788e-05
+29  2002   2           1      randomnet.start_step  randomnet      start_step  7.3736e-05
+30  2002   2           2            sis.start_step        sis      start_step  8.8270e-05
+31  2002   2           3            sis.step_state        sis      step_state  5.3173e-05
+32  2002   2           4            randomnet.step  randomnet            step  9.0659e-04
+33  2002   2           5                  sis.step        sis            step  1.5031e-03
+34  2002   2           6           people.step_die     people        step_die  3.0074e-05
+35  2002   2           7     people.update_results     people  update_results  3.8169e-05
+36  2002   2           8  randomnet.update_results  randomnet  update_results  6.8980e-06
+37  2002   2           9        sis.update_results        sis  update_results  4.9583e-05
+38  2002   2          10     randomnet.finish_step  randomnet     finish_step  2.6710e-06
+39  2002   2          11           sis.finish_step        sis     finish_step  1.5730e-06
+40  2002   2          12        people.finish_step     people     finish_step  9.9360e-06
+41  2002   2          13           sim.finish_step        sim     finish_step  1.5140e-06</code></pre>
 </div>
 </div>
 <p>As you can see, it’s a lot – this is only three timesteps and two modules, and it’s already 41 steps.</p>
@@ -1147,7 +1148,7 @@ Population size is 10739
 Population size is 10817
 Population size is 10917
 Population size is 11033
-  Running 2010.01.01 (10/11) (0.05 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/11) (0.06 s)  •••••••••••••••••••• 100%
 
 Population size is 11124</code></pre>
 </div>
@@ -1818,7 +1819,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

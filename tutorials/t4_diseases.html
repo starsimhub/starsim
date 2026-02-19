@@ -527,15 +527,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>The easiest way to customize a disease is by changing its parameters. Much like sims or networks, a <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>Disease</code></a> can be customized by passing in a <code>pars</code> dictionary containing parameters. Let’s start with a simple SIR model and see how different parameters affect the simulation:</p>
 <div id="ba3ff270" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2_000</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2_000</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.15 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.16 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.17 s)  ••••••••••••———————— 61%
+  Running 2030.01.01 (30/51) (0.18 s)  ••••••••••••———————— 61%
   Running 2040.01.01 (40/51) (0.19 s)  ••••••••••••••••———— 80%
   Running 2050.01.01 (50/51) (0.20 s)  •••••••••••••••••••• 100%
 
@@ -544,7 +545,7 @@ Figure(768x576)</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-3-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-3-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -606,17 +607,17 @@ Figure(768x576)</code></pre>
 <pre><code>Initializing sim with 5000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.07 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.06 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.10 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.14 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.17 s)  •••••••••••••••••••• 100%
+  Running 2040.01.01 (40/51) (0.13 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.16 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-4-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-4-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -626,7 +627,7 @@ Figure(768x576)</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-4-output-4.png" class="img-fluid figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-4-output-4.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -723,17 +724,17 @@ Figure(768x576)</code></pre>
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.04 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.09 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.12 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.15 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.17 s)  •••••••••••••••••••• 100%
+  Running 2020.01.01 (20/51) (0.08 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.11 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.13 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.16 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-6-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-6-output-2.png" width="886" height="662" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -744,7 +745,7 @@ None</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-6-output-4.png" class="img-fluid figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-6-output-4.png" width="614" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1342,7 +1343,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

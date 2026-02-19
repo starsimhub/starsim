@@ -523,11 +523,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">##%% Imports and settings</span></span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="fl">2e3</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>debug <span class="op">=</span> <span class="va">False</span> <span class="co"># If true, will run in serial</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>n_agents <span class="op">=</span> <span class="fl">2e3</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>debug <span class="op">=</span> <span class="va">False</span> <span class="co"># If true, will run in serial</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The calibration class will require a base <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> object. This <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> will later be modified according to parameters selected by the optimization engine. The following function creates the base <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> object.</p>
 <div id="cell-6" class="cell" data-execution_count="2">
@@ -616,7 +617,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-6-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-6-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -692,17 +693,17 @@ Beginning calibration
 Performing calibration...</code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>[I 2026-02-13 23:26:13,450] A new study created in RDB with name: starsim_calibration</code></pre>
+<pre><code>[I 2026-02-18 22:54:10,749] A new study created in RDB with name: starsim_calibration</code></pre>
 </div>
 </div>
 <p>Let’s look at the best parameters that were found. Note that the <code>rand_seed</code> was selected at random, but the other parameters are meaningful.</p>
 <div id="cell-18" class="cell" data-execution_count="8">
 <div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>calib.best_pars</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-display" data-execution_count="8">
-<pre><code>{'beta': 0.010096640575685052,
- 'init_prev': 0.04001580625187935,
+<pre><code>{'beta': 0.011980683331247877,
+ 'init_prev': 0.044281371997501644,
  'n_contacts': 3,
- 'rand_seed': 682806}</code></pre>
+ 'rand_seed': 101605}</code></pre>
 </div>
 </div>
 <p>Once the calibration is complete, we can compare the <code>guess</code> values to the best values found by calling <code>check_fit</code>.</p>
@@ -718,8 +719,8 @@ Performing calibration...</code></pre>
 <pre><code>
 Confirming fit...
 Fit with original pars: 6.927809785316569
-Fit with best-fit pars: -0.5314127146834339
-✓ Calibration improved fit 6.927809785316569 --&gt; -0.5314127146834339</code></pre>
+Fit with best-fit pars: -0.535157825794545
+✓ Calibration improved fit 6.927809785316569 --&gt; -0.535157825794545</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="9">
 <pre><code>True</code></pre>
@@ -731,7 +732,7 @@ Fit with best-fit pars: -0.5314127146834339
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-11-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-11-output-1.png" width="1286" height="569" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -740,13 +741,15 @@ Fit with best-fit pars: -0.5314127146834339
 <div id="cell-24" class="cell" data-execution_count="11">
 <div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:1137: UserWarning: Dataset has 0 variance; skipping density estimate. Pass `warn_singular=False` to disable this warning.
-  ax = sns.kdeplot(means)</code></pre>
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:1137: UserWarning:
+
+Dataset has 0 variance; skipping density estimate. Pass `warn_singular=False` to disable this warning.
+</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-12-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-12-output-2.png" width="1286" height="569" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -781,8 +784,10 @@ Fit with best-fit pars: -0.5314127146834339
 <div id="cell-28" class="cell" data-execution_count="13">
 <div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:440: ExperimentalWarning: optuna.visualization.matplotlib._optimization_history.plot_optimization_history is experimental (supported from v2.2.0). The interface can change in the future.
-  fig = getattr(vis, method)(self.study)</code></pre>
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:440: ExperimentalWarning:
+
+optuna.visualization.matplotlib._optimization_history.plot_optimization_history is experimental (supported from v2.2.0). The interface can change in the future.
+</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -795,8 +800,10 @@ Fit with best-fit pars: -0.5314127146834339
 <div id="cell-29" class="cell" data-execution_count="14">
 <div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:438: ExperimentalWarning: optuna.visualization.matplotlib._contour.plot_contour is experimental (supported from v2.2.0). The interface can change in the future.
-  fig = vis.plot_contour(self.study, params=params)</code></pre>
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:438: ExperimentalWarning:
+
+optuna.visualization.matplotlib._contour.plot_contour is experimental (supported from v2.2.0). The interface can change in the future.
+</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -812,8 +819,10 @@ Fit with best-fit pars: -0.5314127146834339
 <pre><code>Could not run plot_param_importances: Tried to import 'sklearn' but failed. Please make sure that the package is installed correctly to use this feature. Actual error: No module named 'sklearn'.</code></pre>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:440: ExperimentalWarning: optuna.visualization.matplotlib._param_importances.plot_param_importances is experimental (supported from v2.2.0). The interface can change in the future.
-  fig = getattr(vis, method)(self.study)</code></pre>
+<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:440: ExperimentalWarning:
+
+optuna.visualization.matplotlib._param_importances.plot_param_importances is experimental (supported from v2.2.0). The interface can change in the future.
+</code></pre>
 </div>
 </div>
 <p>If you choose not to use components, you can always create your own mismatch function, as in the following example:</p>
@@ -866,14 +875,14 @@ Fit with best-fit pars: -0.5314127146834339
 <span id="cb27-46"><a href="#cb27-46" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
 <span id="cb27-47"><a href="#cb27-47" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>[I 2026-02-13 23:26:30,679] A new study created in RDB with name: starsim_calibration</code></pre>
+<pre><code>[I 2026-02-18 22:54:28,662] A new study created in RDB with name: starsim_calibration</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
 Peforming calibration...
 Fit with original pars: 1.07281525
-Fit with best-fit pars: 0.0024852500000000005
-✓ Calibration improved fit 1.07281525 --&gt; 0.0024852500000000005</code></pre>
+Fit with best-fit pars: 0.005525000000000001
+✓ Calibration improved fit 1.07281525 --&gt; 0.005525000000000001</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="16">
 <pre><code>True</code></pre>
@@ -1464,7 +1473,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

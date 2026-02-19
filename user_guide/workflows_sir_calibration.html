@@ -560,21 +560,23 @@ window.Quarto = {
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>matplotlib inline</span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">##%% Imports and settings</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> optuna</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>optuna.logging.set_verbosity(optuna.logging.CRITICAL)</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.dates <span class="im">as</span> mdates</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> seaborn <span class="im">as</span> sns</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> IPython.display <span class="im">import</span> display</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.special <span class="im">import</span> betaln, gammaln</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> warnings</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> optuna</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.dates <span class="im">as</span> mdates</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> seaborn <span class="im">as</span> sns</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> IPython.display <span class="im">import</span> display</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.special <span class="im">import</span> betaln, gammaln</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> warnings</span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>warnings.simplefilter(action<span class="op">=</span><span class="st">'ignore'</span>, category<span class="op">=</span><span class="pp">FutureWarning</span>)</span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>warnings.filterwarnings(<span class="st">'ignore'</span>, category<span class="op">=</span>optuna.exceptions.ExperimentalWarning)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Set additional options</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>optuna.logging.set_verbosity(optuna.logging.CRITICAL)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>warnings.simplefilter(action<span class="op">=</span><span class="st">'ignore'</span>, category<span class="op">=</span><span class="pp">FutureWarning</span>)</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>warnings.filterwarnings(<span class="st">'ignore'</span>, category<span class="op">=</span>optuna.exceptions.ExperimentalWarning)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <section id="sir-model-setup" class="level3">
 <h3 class="anchored" data-anchor-id="sir-model-setup">SIR model setup</h3>
@@ -843,7 +845,7 @@ window.Quarto = {
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-7-output-3.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-7-output-3.png" width="597" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -902,10 +904,10 @@ window.Quarto = {
 <span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a><span class="ss">    The best parameters resulted in a loss of </span><span class="sc">{</span>calib<span class="sc">.</span>study<span class="sc">.</span>best_value<span class="sc">}</span><span class="ss">.'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>The best parameters identified by the optimization are:
-    * {'beta': 0.0632120323704147, 'gamma': 0.03260109138334929, 'rand_seed': 41802}
+    * {'beta': 0.06425917067125746, 'gamma': 0.028905049797043905, 'rand_seed': 512214}
     These parameters should be close to the true parameters:
     * {'beta': {'value': 0.05}, 'gamma': {'value': 0.03}}
-    The best parameters resulted in a loss of 3.71360251126859.</code></pre>
+    The best parameters resulted in a loss of 5.405224228421322.</code></pre>
 </div>
 </div>
 <p>It seems like the best parameter values are pretty close to the right values, so that’s good. We can look at all the results and easily create a DataFrame containing the top K runs.</p>
@@ -943,113 +945,113 @@ window.Quarto = {
 </thead>
 <tbody>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">83</td>
-<td>3.713603</td>
-<td>2026-02-13 23:23:48.889812</td>
-<td>2026-02-13 23:23:49.409839</td>
-<td>0 days 00:00:00.520027</td>
-<td>0.063212</td>
-<td>0.032601</td>
-<td>41802</td>
+<td data-quarto-table-cell-role="th">62</td>
+<td>5.405224</td>
+<td>2026-02-18 22:51:28.095575</td>
+<td>2026-02-18 22:51:28.425701</td>
+<td>0 days 00:00:00.330126</td>
+<td>0.064259</td>
+<td>0.028905</td>
+<td>512214</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<td data-quarto-table-cell-role="th">78</td>
-<td>3.761700</td>
-<td>2026-02-13 23:23:48.828736</td>
-<td>2026-02-13 23:23:49.288364</td>
-<td>0 days 00:00:00.459628</td>
-<td>0.062957</td>
-<td>0.032999</td>
-<td>131811</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="odd">
 <td data-quarto-table-cell-role="th">80</td>
-<td>3.769859</td>
-<td>2026-02-13 23:23:48.888945</td>
-<td>2026-02-13 23:23:49.250507</td>
-<td>0 days 00:00:00.361562</td>
-<td>0.061501</td>
-<td>0.032714</td>
-<td>132531</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">89</td>
-<td>3.786013</td>
-<td>2026-02-13 23:23:49.142138</td>
-<td>2026-02-13 23:23:49.568695</td>
-<td>0 days 00:00:00.426557</td>
-<td>0.061217</td>
-<td>0.033471</td>
-<td>149744</td>
+<td>6.202955</td>
+<td>2026-02-18 22:51:28.588150</td>
+<td>2026-02-18 22:51:28.822620</td>
+<td>0 days 00:00:00.234470</td>
+<td>0.069649</td>
+<td>0.027683</td>
+<td>553375</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">82</td>
-<td>3.799132</td>
-<td>2026-02-13 23:23:48.949156</td>
-<td>2026-02-13 23:23:49.373515</td>
-<td>0 days 00:00:00.424359</td>
-<td>0.060890</td>
-<td>0.033478</td>
-<td>124973</td>
+<td data-quarto-table-cell-role="th">4</td>
+<td>8.548640</td>
+<td>2026-02-18 22:51:26.781882</td>
+<td>2026-02-18 22:51:27.190088</td>
+<td>0 days 00:00:00.408206</td>
+<td>0.071536</td>
+<td>0.026600</td>
+<td>593056</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
+<td data-quarto-table-cell-role="th">84</td>
+<td>9.127975</td>
+<td>2026-02-18 22:51:28.670442</td>
+<td>2026-02-18 22:51:28.882656</td>
+<td>0 days 00:00:00.212214</td>
+<td>0.067871</td>
+<td>0.037163</td>
+<td>721441</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="odd">
 <td data-quarto-table-cell-role="th">85</td>
-<td>3.817062</td>
-<td>2026-02-13 23:23:49.026231</td>
-<td>2026-02-13 23:23:49.256838</td>
-<td>0 days 00:00:00.230607</td>
-<td>0.060755</td>
-<td>0.033794</td>
-<td>141432</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">88</td>
-<td>3.825704</td>
-<td>2026-02-13 23:23:49.128587</td>
-<td>2026-02-13 23:23:49.446739</td>
-<td>0 days 00:00:00.318152</td>
-<td>0.061037</td>
-<td>0.033811</td>
-<td>142797</td>
+<td>9.307919</td>
+<td>2026-02-18 22:51:28.697895</td>
+<td>2026-02-18 22:51:28.934293</td>
+<td>0 days 00:00:00.236398</td>
+<td>0.068429</td>
+<td>0.035750</td>
+<td>574449</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<td data-quarto-table-cell-role="th">72</td>
-<td>3.841721</td>
-<td>2026-02-13 23:23:48.664321</td>
-<td>2026-02-13 23:23:49.121829</td>
-<td>0 days 00:00:00.457508</td>
-<td>0.061450</td>
-<td>0.032218</td>
-<td>144634</td>
+<td data-quarto-table-cell-role="th">2</td>
+<td>11.192279</td>
+<td>2026-02-18 22:51:26.779703</td>
+<td>2026-02-18 22:51:27.236677</td>
+<td>0 days 00:00:00.456974</td>
+<td>0.073494</td>
+<td>0.027499</td>
+<td>925141</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">90</td>
-<td>3.873609</td>
-<td>2026-02-13 23:23:49.143004</td>
-<td>2026-02-13 23:23:49.363857</td>
-<td>0 days 00:00:00.220853</td>
-<td>0.060985</td>
-<td>0.034179</td>
-<td>150398</td>
+<td data-quarto-table-cell-role="th">99</td>
+<td>11.959525</td>
+<td>2026-02-18 22:51:29.267181</td>
+<td>2026-02-18 22:51:29.401499</td>
+<td>0 days 00:00:00.134318</td>
+<td>0.066174</td>
+<td>0.025160</td>
+<td>829630</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<td data-quarto-table-cell-role="th">91</td>
-<td>3.887816</td>
-<td>2026-02-13 23:23:49.169115</td>
-<td>2026-02-13 23:23:49.399879</td>
-<td>0 days 00:00:00.230764</td>
-<td>0.061777</td>
-<td>0.034210</td>
-<td>166763</td>
+<td data-quarto-table-cell-role="th">83</td>
+<td>11.978459</td>
+<td>2026-02-18 22:51:28.648266</td>
+<td>2026-02-18 22:51:28.871534</td>
+<td>0 days 00:00:00.223268</td>
+<td>0.069258</td>
+<td>0.037509</td>
+<td>729785</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">96</td>
+<td>13.951655</td>
+<td>2026-02-18 22:51:28.994182</td>
+<td>2026-02-18 22:51:29.196738</td>
+<td>0 days 00:00:00.202556</td>
+<td>0.069219</td>
+<td>0.039378</td>
+<td>751978</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">94</td>
+<td>14.716783</td>
+<td>2026-02-18 22:51:28.972369</td>
+<td>2026-02-18 22:51:29.172664</td>
+<td>0 days 00:00:00.200295</td>
+<td>0.070577</td>
+<td>0.037004</td>
+<td>644183</td>
 <td>COMPLETE</td>
 </tr>
 </tbody>
@@ -1069,14 +1071,14 @@ window.Quarto = {
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-10-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-10-output-1.png" width="663" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-10-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-10-output-2.png" width="596" height="454" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1107,7 +1109,7 @@ window.Quarto = {
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-11-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-11-output-1.png" width="599" height="432" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1184,10 +1186,10 @@ window.Quarto = {
 <span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>display(posterior_pars.head())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>============================================================
-Effective Sample Size (ESS) = 3.3 out of 100
+Effective Sample Size (ESS) = 4.4 out of 100
 WARNING: ESS is below 30, consider increasing N
 ============================================================
-Resampling K = 5 samples from the weighted ensemble of N = 100 samples</code></pre>
+Resampling K = 7 samples from the weighted ensemble of N = 100 samples</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -1208,29 +1210,29 @@ Resampling K = 5 samples from the weighted ensemble of N = 100 samples</code></p
 </thead>
 <tbody>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">125163</td>
-<td>0.038818</td>
-<td>0.018583</td>
+<td data-quarto-table-cell-role="th">156521</td>
+<td>0.028183</td>
+<td>0.026289</td>
 </tr>
 <tr class="even">
-<td data-quarto-table-cell-role="th">285394</td>
-<td>0.020521</td>
-<td>0.022068</td>
+<td data-quarto-table-cell-role="th">1583</td>
+<td>0.052122</td>
+<td>0.030392</td>
 </tr>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">95034</td>
-<td>0.047554</td>
-<td>0.031171</td>
+<td data-quarto-table-cell-role="th">265050</td>
+<td>0.023189</td>
+<td>0.009722</td>
 </tr>
 <tr class="even">
-<td data-quarto-table-cell-role="th">95034</td>
-<td>0.047554</td>
-<td>0.031171</td>
+<td data-quarto-table-cell-role="th">1583</td>
+<td>0.052122</td>
+<td>0.030392</td>
 </tr>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">521971</td>
-<td>0.034000</td>
-<td>0.035225</td>
+<td data-quarto-table-cell-role="th">313895</td>
+<td>0.039450</td>
+<td>0.020455</td>
 </tr>
 </tbody>
 </table>
@@ -1275,7 +1277,7 @@ Resampling K = 5 samples from the weighted ensemble of N = 100 samples</code></p
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-15-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-15-output-1.png" width="803" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1340,7 +1342,7 @@ Resampling K = 5 samples from the weighted ensemble of N = 100 samples</code></p
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-16-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-16-output-1.png" width="854" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1370,7 +1372,7 @@ Resampling K = 5 samples from the weighted ensemble of N = 100 samples</code></p
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-17-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-17-output-1.png" width="854" height="470" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1961,7 +1963,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

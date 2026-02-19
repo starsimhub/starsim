@@ -539,11 +539,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Make random network</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>random <span class="op">=</span> ss.RandomNet()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Make random network</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>random <span class="op">=</span> ss.RandomNet()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The network we just made stores two very important things: the list of contacts (found in <code>random.edges</code>) and the parameters (<code>random.pars</code>).</p>
 <p>If we just make a network on its own like this, it’s not very interesting. Like all components of Starsim, it needs to be initialized within a <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> before the database of contacts gets populated:</p>
@@ -683,7 +684,7 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t5_networks_files/figure-html/cell-6-output-4.png" class="img-fluid figure-img"></p>
+<p><img src="t5_networks_files/figure-html/cell-6-output-4.png" width="540" height="408" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -732,25 +733,25 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000.01.01 ( 0/121) (0.00 s)  ———————————————————— 1%
-  Running 2000.11.01 (10/121) (0.25 s)  •——————————————————— 9%
-  Running 2001.09.01 (20/121) (0.36 s)  •••————————————————— 17%
-  Running 2002.07.02 (30/121) (0.49 s)  •••••——————————————— 26%
-  Running 2003.05.03 (40/121) (0.62 s)  ••••••—————————————— 34%
-  Running 2004.03.02 (50/121) (0.73 s)  ••••••••———————————— 42%
-  Running 2005.01.01 (60/121) (0.84 s)  ••••••••••—————————— 50%
-  Running 2005.11.01 (70/121) (0.95 s)  •••••••••••————————— 59%
-  Running 2006.09.01 (80/121) (1.06 s)  •••••••••••••——————— 67%
-  Running 2007.07.02 (90/121) (1.17 s)  •••••••••••••••————— 75%
-  Running 2008.05.02 (100/121) (1.28 s)  ••••••••••••••••———— 83%
-  Running 2009.03.03 (110/121) (1.39 s)  ••••••••••••••••••—— 92%
-  Running 2010.01.01 (120/121) (1.50 s)  •••••••••••••••••••• 100%
+  Running 2000.11.01 (10/121) (0.26 s)  •——————————————————— 9%
+  Running 2001.09.01 (20/121) (0.39 s)  •••————————————————— 17%
+  Running 2002.07.02 (30/121) (0.51 s)  •••••——————————————— 26%
+  Running 2003.05.03 (40/121) (0.63 s)  ••••••—————————————— 34%
+  Running 2004.03.02 (50/121) (0.75 s)  ••••••••———————————— 42%
+  Running 2005.01.01 (60/121) (0.86 s)  ••••••••••—————————— 50%
+  Running 2005.11.01 (70/121) (0.99 s)  •••••••••••————————— 59%
+  Running 2006.09.01 (80/121) (1.12 s)  •••••••••••••——————— 67%
+  Running 2007.07.02 (90/121) (1.24 s)  •••••••••••••••————— 75%
+  Running 2008.05.02 (100/121) (1.36 s)  ••••••••••••••••———— 83%
+  Running 2009.03.03 (110/121) (1.48 s)  ••••••••••••••••••—— 92%
+  Running 2010.01.01 (120/121) (1.59 s)  •••••••••••••••••••• 100%
 
 Figure(1152x864)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t5_networks_files/figure-html/cell-8-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="t5_networks_files/figure-html/cell-8-output-2.png" width="1160" height="854" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -790,7 +791,7 @@ Figure(1152x864)</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t5_networks_files/figure-html/cell-10-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="t5_networks_files/figure-html/cell-10-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1394,7 +1395,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

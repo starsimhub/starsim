@@ -586,7 +586,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="b91f5bee" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>d.disp()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;starsim.time.date at 0x7e28af4fabd0&gt;
+<pre><code>&lt;starsim.time.date at 0x7c5ab41c6dd0&gt;
 [&lt;class 'starsim.time.date'&gt;, &lt;class 'pandas.Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.timestamps._Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.base.ABCTimestamp'&gt;, &lt;class 'datetime.datetime'&gt;, &lt;class 'datetime.date'&gt;]
 ————————————————————————————————————————————————————————————————————————
 Methods:
@@ -636,9 +636,9 @@ Properties:
      daysinmonth: 31
             fold: 0
  fromisocalendar: &lt;built-in method fromisocalendar of type object at
-                  0x5b1fbd3db97 [...]
+                  0x60877629572 [...]
    fromisoformat: &lt;built-in method fromisoformat of type object at
-                  0x5b1fbd3db970&gt;
+                  0x608776295720&gt;
             hour: 0
     is_leap_year: False
     is_month_end: False
@@ -824,21 +824,21 @@ DateArray([datedur(0), datedur(days=1), datedur(days=2), datedur(days=3),
 <span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>plt.axvline(start, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Intervention'</span>)</span>
 <span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 1" with 5000 agentsInitializing sim "Sim 0" with 5000 agents
-
+<pre><code>Initializing sim "Sim 0" with 5000 agents
+Initializing sim "Sim 1" with 5000 agents
   Running "Sim 0": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running "Sim 1": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "Sim 0": 2010.01.01 (10/51) (0.18 s)  ••••———————————————— 22%
-  Running "Sim 1": 2010.01.01 (10/51) (0.18 s)  ••••———————————————— 22%
-  Running "Sim 0": 2020.01.01 (20/51) (0.20 s)  ••••••••———————————— 41%
-  Running "Sim 1": 2020.01.01 (20/51) (0.21 s)  ••••••••———————————— 41%
-  Running "Sim 0": 2030.01.01 (30/51) (0.23 s)  ••••••••••••———————— 61%
-  Running "Sim 1": 2030.01.01 (30/51) (0.23 s)  ••••••••••••———————— 61%
-  Running "Sim 0": 2040.01.01 (40/51) (0.26 s)  ••••••••••••••••———— 80%
-  Running "Sim 1": 2040.01.01 (40/51) (0.26 s)  ••••••••••••••••———— 80%
-  Running "Sim 0": 2050.01.01 (50/51) (0.28 s)  •••••••••••••••••••• 100%
+  Running "Sim 0": 2010.01.01 (10/51) (0.17 s)  ••••———————————————— 22%
+  Running "Sim 1": 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
+  Running "Sim 0": 2020.01.01 (20/51) (0.19 s)  ••••••••———————————— 41%
+  Running "Sim 1": 2020.01.01 (20/51) (0.19 s)  ••••••••———————————— 41%
+  Running "Sim 0": 2030.01.01 (30/51) (0.21 s)  ••••••••••••———————— 61%
+  Running "Sim 1": 2030.01.01 (30/51) (0.21 s)  ••••••••••••———————— 61%
+  Running "Sim 0": 2040.01.01 (40/51) (0.23 s)  ••••••••••••••••———— 80%
+  Running "Sim 1": 2040.01.01 (40/51) (0.24 s)  ••••••••••••••••———— 80%
+  Running "Sim 0": 2050.01.01 (50/51) (0.25 s)  •••••••••••••••••••• 100%
 
-  Running "Sim 1": 2050.01.01 (50/51) (0.29 s)  •••••••••••••••••••• 100%
+  Running "Sim 1": 2050.01.01 (50/51) (0.26 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1649,7 +1649,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

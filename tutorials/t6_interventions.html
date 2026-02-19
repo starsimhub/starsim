@@ -539,21 +539,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>To create an example, let’s first create the parameters that we want to use for the simulation:</p>
 <div id="d609380d" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    n_agents <span class="op">=</span> <span class="dv">5_000</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    birth_rate <span class="op">=</span> ss.peryear(<span class="dv">20</span>),</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    death_rate <span class="op">=</span> <span class="dv">15</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">type</span> <span class="op">=</span> <span class="st">'randomnet'</span>, <span class="co"># Or 'random'</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        n_contacts <span class="op">=</span> <span class="dv">4</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">type</span> <span class="op">=</span> <span class="st">'sir'</span>,</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        dur_inf <span class="op">=</span> <span class="dv">10</span>,</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        beta <span class="op">=</span> <span class="fl">0.1</span>,</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    n_agents <span class="op">=</span> <span class="dv">5_000</span>,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    birth_rate <span class="op">=</span> ss.peryear(<span class="dv">20</span>),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    death_rate <span class="op">=</span> <span class="dv">15</span>,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">type</span> <span class="op">=</span> <span class="st">'randomnet'</span>, <span class="co"># Or 'random'</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        n_contacts <span class="op">=</span> <span class="dv">4</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">type</span> <span class="op">=</span> <span class="st">'sir'</span>,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        dur_inf <span class="op">=</span> <span class="dv">10</span>,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        beta <span class="op">=</span> <span class="fl">0.1</span>,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Now we’ll create a vaccine product and a vaccination intervention:</p>
 <div id="33d18540" class="cell" data-execution_count="3">
@@ -575,19 +576,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.19 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.21 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.24 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.27 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.17 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.20 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.22 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.25 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.28 s)  •••••••••••••••••••• 100%
 
 Initializing sim with 5000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.06 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.09 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.12 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.15 s)  •••••••••••••••••••• 100%
+  Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.08 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.11 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.14 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="3">
@@ -611,7 +612,7 @@ Initializing sim with 5000 agents
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t6_interventions_files/figure-html/cell-5-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="t6_interventions_files/figure-html/cell-5-output-1.png" width="571" height="431" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -647,15 +648,15 @@ Initializing sim with 5000 agents
   Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.06 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.09 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.12 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.15 s)  •••••••••••••••••••• 100%
+  Running 2040.01.01 (40/51) (0.11 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.14 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t6_interventions_files/figure-html/cell-6-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="t6_interventions_files/figure-html/cell-6-output-2.png" width="758" height="566" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1251,7 +1252,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

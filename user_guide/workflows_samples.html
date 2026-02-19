@@ -558,11 +558,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 <div id="3" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <section id="obtaining-simulation-output" class="level2">
 <h2 class="anchored" data-anchor-id="obtaining-simulation-output">Obtaining simulation output</h2>
@@ -576,7 +577,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.17 s)  ••••———————————————— 22%
   Running 2020.01.01 (20/51) (0.19 s)  ••••••••———————————— 41%
   Running 2030.01.01 (30/51) (0.21 s)  ••••••••••••———————— 61%
   Running 2040.01.01 (40/51) (0.23 s)  ••••••••••••••••———— 80%
@@ -2590,7 +2591,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-13-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-13-output-2.png" width="606" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -2605,7 +2606,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-14-output-1.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-14-output-1.png" width="590" height="411" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -2975,8 +2976,10 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Total infections'</span>)</span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Probability density'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/software/conda/lib/python3.13/site-packages/numpy/lib/_histograms_impl.py:897: RuntimeWarning: invalid value encountered in divide
-  return n / db / n.sum(), bin_edges</code></pre>
+<pre><code>/software/conda/lib/python3.13/site-packages/numpy/lib/_histograms_impl.py:897: RuntimeWarning:
+
+invalid value encountered in divide
+</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="22">
 <pre><code>Text(0, 0.5, 'Probability density')</code></pre>
@@ -2984,7 +2987,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-23-output-3.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-23-output-3.png" width="608" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -3036,8 +3039,8 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x75163c733880&gt; mode='r'&gt;
-&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x75163c733880&gt; mode='r'&gt;</code></pre>
+<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7cc181dfd440&gt; mode='r'&gt;
+&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7cc181dfd440&gt; mode='r'&gt;</code></pre>
 </div>
 </div>
 <div id="57" class="cell" data-execution_count="25">
@@ -3070,7 +3073,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 19.9 ms</code></pre>
+<pre><code>Elapsed time: 18.3 ms</code></pre>
 </div>
 </div>
 <div id="64" class="cell" data-execution_count="29">
@@ -3078,7 +3081,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 2.62 ms</code></pre>
+<pre><code>Elapsed time: 2.51 ms</code></pre>
 </div>
 </div>
 <p>The <code>preload</code> option populates the entire cache in advance. This makes creating the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.</p>
@@ -3086,7 +3089,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <div class="sourceCode cell-code" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>    res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, preload<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 19.5 ms</code></pre>
+<pre><code>Elapsed time: 18.3 ms</code></pre>
 </div>
 </div>
 <div id="67" class="cell" data-execution_count="31">
@@ -3094,7 +3097,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 2.57 ms</code></pre>
+<pre><code>Elapsed time: 2.76 ms</code></pre>
 </div>
 </div>
 <div id="68" class="cell" data-execution_count="32">
@@ -3102,7 +3105,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 2.79 ms</code></pre>
+<pre><code>Elapsed time: 2.34 ms</code></pre>
 </div>
 </div>
 <p>Together, these options provide some flexibility in terms of memory and time demands to suit analyses at various different scales.</p>
@@ -3276,7 +3279,7 @@ Zip file saved to "/home/cliffk/idm/starsim/docs/user_guide/results/0.75-3.zip"<
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-47-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-47-output-2.png" width="753" height="429" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -3318,7 +3321,7 @@ Zip file saved to "/home/cliffk/idm/starsim/docs/user_guide/results/0.75-3.zip"<
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-50-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-50-output-2.png" width="608" height="449" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -3332,15 +3335,17 @@ Zip file saved to "/home/cliffk/idm/starsim/docs/user_guide/results/0.75-3.zip"<
 <span id="cb88-6"><a href="#cb88-6" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'New deaths'</span>)</span>
 <span id="cb88-7"><a href="#cb88-7" aria-hidden="true" tabindex="-1"></a>sc.dateformatter()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/software/conda/lib/python3.13/site-packages/matplotlib/axis.py:1282: RuntimeWarning: Axes data not recognizable as dates: Matplotlib converted them to days starting in 1970, which seems wrong. Please convert to actual dates first, using e.g. sc.date().
+<pre><code>/software/conda/lib/python3.13/site-packages/matplotlib/axis.py:1282: RuntimeWarning:
+
+Axes data not recognizable as dates: Matplotlib converted them to days starting in 1970, which seems wrong. Please convert to actual dates first, using e.g. sc.date().
 Raw values: [0.00000000e+00 2.31481481e-11 4.62962963e-11 6.94444444e-11
  9.25925926e-11 1.15740741e-10]
-  major_labels = self.major.formatter.format_ticks(major_locs)</code></pre>
+</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-51-output-2.png" class="img-fluid figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-51-output-2.png" width="593" height="449" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -3931,7 +3936,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

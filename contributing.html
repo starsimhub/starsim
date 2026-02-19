@@ -453,7 +453,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#contributing" id="toc-contributing" class="nav-link active" data-scroll-target="#contributing">Contributing</a></li>
+  <li><a href="#contributing" id="toc-contributing" class="nav-link active" data-scroll-target="#contributing">Contributing</a>
+  <ul class="collapse">
+  <li><a href="#release-procedure" id="toc-release-procedure" class="nav-link" data-scroll-target="#release-procedure">Release procedure</a></li>
+  </ul></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -473,8 +476,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Pull requests should be made against <code>main</code>. In addition to following the <a href="https://github.com/starsimhub/styleguide">style guide</a>, please make sure the tests pass (<code>run_tests</code> in the <code>tests</code> folder; they also run via GitHub actions).</li>
 </ul>
 <p>If you have any other questions, please reach out to us: <a href="mailto:info@starsim.org" class="email">info@starsim.org</a>. Thank you!</p>
+<section id="release-procedure" class="level2">
+<h2 class="anchored" data-anchor-id="release-procedure">Release procedure</h2>
+<p>This assumes you’re about to release version <code>3.1.1</code>. 1. Merge all PRs into the release candidate branch (<code>rc3.1.1</code>) 2. Update the version in <code>version.py</code> from <code>3.1.1.dev0</code> to <code>3.1.1</code>, and update the date 3. Mark the PR ready 4. If tests pass, merge 5. On the <code>Starsim</code> repository page, click ‘Releases’ to go to the <a href="https://github.com/starsimhub/starsim/releases">Releases</a> page 6. Click ‘Draft a new release’ on the top right 7. In the tag dropdown, enter <code>v3.1.1</code> as a new tag. Leave the target as <code>main</code> 8. Set the Release title to <code>v3.1.1</code> 9. Generate release notes automatically, and then edit further as required 10. Click ‘Publish release’ to deploy, which will update PyPI and build/upload the latest documentation 11. Create a new release candidate branch (e.g.&nbsp;<code>rc3.1.2</code>), and make a draft PR</p>
 
 
+</section>
 </section>
 
 </main> <!-- /main -->
@@ -1055,7 +1062,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.1.0 (2026-02-12).<br>© 2023–2025, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.1.1 (2026-02-18).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
