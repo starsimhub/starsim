@@ -453,7 +453,7 @@ def mock_sim(n_agents=100, **kwargs):
         results = sc.objdict(),
         networks = sc.objdict(), # Needed for infections
         analyzers = sc.objdict(), # Needed for infection log
-        has_diagnostics = False,
+        diagnostics = None,
     )
     return sim
 

@@ -34,7 +34,8 @@ def test_profile():
 @sc.timer()
 def test_diagnostics_rvs():
     sc.heading('Testing sim diagnostics for random numbers')
-    sim = ss.Sim(**debug_pars, diagnostics='rvs')
+    sim = ss.Sim(**debug_pars)
+    sim.set_diagnostics(states=False)
     sim.run()
 
     rvs = sim.diagnostics.rvs
