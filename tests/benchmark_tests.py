@@ -5,6 +5,7 @@ Benchmark test times and save to YAML.
 For best results (avoiding thread locking), run from a terminal:
     ./benchmark_tests.py # compares by default
     ./benchmark_tests.py save # saves instead
+    ./benchmark_tests.py cpus=10 # run on 10 cores instead of a single core
 """
 import re
 import sys
@@ -14,17 +15,19 @@ sc.options(interactive=False)
 
 filename = sc.thisdir(__file__, 'benchmark_tests.yaml')
 
-def run_pytest():
+def run_pytest(cpus=None):
     """ Run  all the tests via pytest """
     ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
     r1 = sc.benchmark(which='numpy')
 
     # Get files and construct the pytest command
     files = sc.getfilelist('.', 'test_*.py', aspath=False)
-    args = ['-n', 'auto', '--durations=0'] + files
+    if cpus is None:
+        cpus = sc.cpu_count()//2 # To avoid overloading/multithreading
+    args = ['-n', f'{cpus}', '--durations=0'] + files
 
     # Run the tests and capture the oupttus
-    print(f'Benchmarking {len(files)} files:\n{sc.newlinejoin(files)}\n')
+    print(f'Benchmarking {len(files)} files on {cpus} cores:\n{sc.newlinejoin(files)}\n')
     print('Please be patient ... (capturing output, though you may see some stderr output)')
     with sc.timer():
         with sc.capture() as txt:
@@ -99,9 +102,11 @@ def compare_pytest(df1):
     return df
 
 
-def benchmark_tests(save=False, compare=True):
+def benchmark_tests(save=False, compare=True, cpus=None):
     """ Run the test suite and save the results to YAML. """
-    txt, perf_ratio = run_pytest() # Run the tests
+    if save and cpus is None: # For saving, most accurate results running on one CPU
+        cpus = 1
+    txt, perf_ratio = run_pytest(cpus=cpus) # Run the tests
     out = parse_pytest(txt, perf_ratio) # Parse output
     df = sc.dataframe(name=out.tests.keys(), dur=out.tests.values())
 
@@ -116,12 +121,8 @@ def benchmark_tests(save=False, compare=True):
 
 
 if __name__ == '__main__':
-    save = False
-    compare = True
-    if 'save' in sys.argv:
-        save = True
-        if 'compare' in sys.argv:
-            compare = True
-        else:
-            compare = False
-    df = benchmark_tests(save=save, compare=compare)
+    args = sc.argparse(save=None, compare=True, cpus=1)
+    if args.save not in ['save', 'True', None]:
+        errormsg = f'Invalid value for save: {args.save}, should just be "save" or "True"; False by default'
+        raise ValueError(errormsg)
+    df = benchmark_tests(save=args.save, compare=args.compare, cpus=args.cpus)

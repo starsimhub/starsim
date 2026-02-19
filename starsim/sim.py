@@ -19,7 +19,7 @@ class Sim(ss.Base):
     Args:
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
         label (str): the human-readable name of the simulation
-        people (People): if provided, use this ss.People object
+        people (People): if provided, use this `ss.People` object
         modules (Module/list): if provided, use these modules (and divide among demographics, diseases, etc. based on type)
         demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
         connectors (str/Connector/list): as above, for connectors
@@ -60,6 +60,7 @@ class Sim(ss.Base):
         self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
+        self.diagnostics = None # Store diagnostics results
         return
 
     def __getitem__(self, key):
@@ -177,6 +178,8 @@ class Sim(ss.Base):
         self.initialized = True
         if timer:
             self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
+        if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
+            self.diagnostics.store_states(key='init')
         return self
 
     def init_time(self):
@@ -287,8 +290,7 @@ class Sim(ss.Base):
         return
 
     def init_results(self):
-        """
-        Create initial results that are present in all simulations
+        """ Create initial results that are present in all simulations
 
         This method initializes results by calling `People.init_results()` to let
         People handle its own result initialization (including automatic BoolState results).
@@ -301,6 +303,48 @@ class Sim(ss.Base):
         """ Initialize or add data to the sim """
         data = data if data is not None else self.data
         self.data = ss.validate_sim_data(data)
+        return
+
+    def set_diagnostics(self, rvs=True, states=True, detailed=False):
+        """ Store detailed diagnostics information in the sim
+
+        Stores every random number produced during a sim run (by `ss.Dist` objects)
+        and/or every state of every agent, at every timestep. This allows e.g.
+        understanding exactly where two runs that should have been identical diverged.
+        Results can be exported (in JSON format) and analyzed externally.
+
+        Although the states export could be used for analysis, users are encouraged
+        to write an `ss.Analyzer` instead, as enabling diagnostics significantly degrades
+        sim run time and memory usage.
+
+        Args:
+            rvs (bool): whether to enable diagnostics for random numbers/variates (default True)
+            states (bool): as above, for people states (default True)
+            detailed (bool): if true, store literally every random number and agent state (otherwise, use summary stats) (default False)
+
+        *Examples:*
+
+            # General settings -- use a small sim and few timesteps if possible
+            kw = dict(n_agents=100, start=0, stop=10, networks='random', diseases='sis')
+
+            # Simplest usage: store info and print states
+            sim = ss.Sim(**kw)
+            sim.set_diagnostics()
+            sim.run()
+            print(sim.diagnostics.states)
+
+            # Configure separately, with custom file export and saving all detail
+            sim = ss.Sim(**kw)
+            sim.set_diagnostics(rvs='diagnostics_rvs.json', states='diagnostics_states.json', detailed=True)
+            sim.run()
+            sim.diagnostics.export()
+        """
+        if rvs or states:
+            print('Enabling sim diagnostics ...') # Always print regardless of verbosity
+            self.diagnostics = ss.Diagnostics(sim=self, rvs=rvs, states=states, detailed=detailed)
+        else:
+            errormsg = 'sim.set_diagnostics() was invoked, but nothing is being tracked'
+            raise ValueError(errormsg)
         return
 
     def start_step(self):
@@ -326,6 +370,8 @@ class Sim(ss.Base):
 
     def finish_step(self):
         """ Finish the simulation timestep """
+        if self.diagnostics and self.diagnostics.states:
+            self.diagnostics.store_states()
         self.t.ti += 1
         return
 
@@ -882,7 +928,6 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         full (bool): whether to print out all values (not just those that differ)
         output (bool): whether to return the output as a string (otherwise print)
         die (bool): whether to raise an exception if the sims don't match
-        require_run (bool): require that the simulations have been run
 
     **Example**:
 

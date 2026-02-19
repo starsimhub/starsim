@@ -24,20 +24,15 @@ authors = [
 classifiers = [
   "Intended Audience :: Science/Research",
   "Operating System :: OS Independent",
-  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Development Status :: 5 - Production/Stable",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14"
 ]
 
 dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
-    "sciris>=3.2.4",
+    "sciris>=3.2.6",
     "numba>=0.57.0",
     "scipy",
     "networkx",
@@ -47,7 +42,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fastmath = ["intel-cmplr-lib-rt"]
+fastmath = [
+  "mkl",
+  "intel-cmplr-lib-rt"
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov",
@@ -55,7 +53,9 @@ dev = [
     "pytest-xdist",
     "quartodoc",
     "jupyter",
-    "jupyter-cache"
+    "jupyter-cache",
+    "dask",
+    "distributed"
 ]
 
 optuna = ["scikit-learn"]
