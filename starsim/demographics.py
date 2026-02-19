@@ -38,7 +38,7 @@ class Births(Demographics):
         metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
-        
+
         super().__init__()
         self.define_pars(
             birth_rate = ss.peryear(20),
@@ -177,7 +177,7 @@ class Deaths(Demographics):
 
         metadata: data about the data contained within the data input.
             "data_cols" is is a dictionary mapping standard keys, like "year" to the
-            corresponding column name in data. Similar for "sex_keys". 
+            corresponding column name in data. Similar for "sex_keys".
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
         super().__init__()
@@ -580,7 +580,9 @@ class Pregnancy(Demographics):
 
         # Burn-in
         if self.ti == 0 and self.pars.burnin:  # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
+            dist = self.pars.dur_pregnancy
+            max_time = dist.a.value.max() if isinstance(dist, ss.choice) else dist.rvs(1000).max() # Calculate the maximum duration of pregnancy
+            dtis = np.arange(np.ceil(-max_time), 0, 1).astype(int) # e.g. -9, -8 ... -1
             for dti in dtis:
                 self.t.ti = dti
                 self.step()
