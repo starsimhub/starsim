@@ -581,7 +581,7 @@ class Pregnancy(Demographics):
         # Burn-in
         if self.ti == 0 and self.pars.burnin:  # TODO: refactor
             dist = self.pars.dur_pregnancy
-            max_time = dist.a.value.max() if isinstance(dist, ss.choice) else dist.rvs(1000).max() # Calculate the maximum duration of pregnancy
+            max_time = dist.rvs(1000).max() # Calculate the maximum duration of pregnancy
             dtis = np.arange(np.ceil(-max_time), 0, 1).astype(int) # e.g. -9, -8 ... -1
             for dti in dtis:
                 self.t.ti = dti
