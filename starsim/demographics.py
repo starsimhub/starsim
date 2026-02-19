@@ -292,7 +292,7 @@ class Deaths(Demographics):
         units = self.pars.rate_units*self.sim.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
-        deaths = np.divide(self.results.new, n_alive, where=n_alive>0)
+        deaths = sc.safedivide(self.results.new, n_alive, default=0)
         self.results.cmr[:] = deaths/units
         return
 
@@ -1003,8 +1003,8 @@ class Pregnancy(Demographics):
         units = self.pars.rate_units*self.sim.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
-        births = np.divide(self.results['births'], n_alive, where=n_alive>0)
-        self.results['cbr'][:] = births/units
+        births = sc.safedivide(self.results.births, n_alive, default=0)
+        self.results.cbr[:] = births/units
 
         # Aggregate the ASFR results, taking rolling annual sums
         n_bins = len(self.asfr_bins) - 1
