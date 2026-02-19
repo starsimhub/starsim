@@ -1007,10 +1007,13 @@ class Pregnancy(Demographics):
         self.results['cbr'][:] = births/units
 
         # Aggregate the ASFR results, taking rolling annual sums
+        n_bins = len(self.asfr_bins) - 1
+        tdim = min(int(1 / self.t.dt_year), self.t.npts) # Handle sims shorter than 1 year
+        cs = np.cumsum(self.asfr, axis=1)
+        asfr = np.zeros((n_bins, self.t.npts))
+        asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((n_bins, 1)), cs[:, :-tdim]])
         asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
         tdim = int(1/self.t.dt_year)
-        for i in range(len(self.asfr_bins)-1):
-            asfr[i, (tdim-1):] = np.convolve(self.asfr[i, :], np.ones(tdim), mode='valid')
+        tdim = min(tdim, self.t.npts)
         self.asfr = asfr
-
         return
