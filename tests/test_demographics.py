@@ -278,7 +278,7 @@ def test_pregnancy_short_sim():
         ],
         dur=ss.days(250),
         rand_seed=1,
-        dt=ss.days(1),
+        dt=ss.days(10),
         networks=ss.PrenatalNet(),
     )
     sim.run()  # Should not raise ValueError in finalize()
