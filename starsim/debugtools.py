@@ -11,8 +11,8 @@ import sciris as sc
 import matplotlib as mpl
 import starsim as ss
 
-__all__ = ['Profile', 'Debugger', 'check_version', 'check_requires', 'metadata',
-           'mock_time', 'mock_sim', 'mock_people', 'mock_module']
+__all__ = ['Profile', 'Debugger', 'Diagnostics', 'check_requires', 'check_version',
+           'metadata', 'mock_time', 'mock_sim', 'mock_people', 'mock_module']
 
 
 class Profile(sc.profile):
@@ -281,6 +281,72 @@ class Debugger(sc.prettyobj):
         return
 
 
+class Diagnostics(sc.quickobj):
+    """ Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
+
+    See also ss.Debugger() for a user API for debugging multiple sims.
+    """
+    def __init__(self, sim, rvs=True, states=True, detailed=False):
+        self.sim = sim
+        self.rvs = None
+        self.states = None
+        self.detailed = detailed
+        if rvs:
+            self.rvs = sc.objdict()
+            self.rvs_file = rvs if isinstance(rvs, str) else 'debug_rvs.json'
+        if states:
+            self.states = sc.objdict()
+            self.states_file = states if isinstance(states, str) else 'debug_states.json'
+        return
+
+    @staticmethod
+    def compute_stats(v):
+        """ Compute length, mean, min, max, and unique hash """
+        stats = sc.objdict(
+            n = len(v),
+            mean = v.mean(),
+            min = v.min(),
+            max = v.max(),
+            hash = sc.sha(v).hexdigest()[:16],
+        )
+        return stats
+
+    @property
+    def ti_key(self):
+        return f'ti{self.sim.ti}'
+
+    def store_rvs(self, dist, rvs):
+        """ Store random numbers (random variates) """
+        entry = self.rvs.setdefault(self.ti_key, sc.objdict())
+
+        if self.detailed:
+            entry[dist.trace] = rvs
+        else:
+            entry[dist.trace] = self.compute_stats(rvs)
+        return
+
+    def store_states(self, key=None):
+        """ Store all states from people """
+        key = sc.ifelse(key, self.ti_key)
+        entry = sc.objdict()
+        for key, state in self.sim.people.states.items():
+            if self.detailed:
+                entry[key] = state.values
+            else:
+                entry[key] = self.compute_stats(state)
+
+        self.states[key] = entry
+        return
+
+    def export(self):
+        """ Export saved data to file(s); filenames must be set when the object is created """
+        if self.rvs:
+            sc.savejson(filename=self.rvs_file, obj=self.rvs)
+        if self.states:
+            sc.savejson(filename=self.states_file, obj=self.states)
+        return
+
+
 def check_requires(sim, requires, *args):
     """ Check that the module's requirements (of other modules) are met """
     errs = sc.autolist()
@@ -387,6 +453,7 @@ def mock_sim(n_agents=100, **kwargs):
         results = sc.objdict(),
         networks = sc.objdict(), # Needed for infections
         analyzers = sc.objdict(), # Needed for infection log
+        diagnostics = None,
     )
     return sim
 
