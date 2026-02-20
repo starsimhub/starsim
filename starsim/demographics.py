@@ -1012,8 +1012,5 @@ class Pregnancy(Demographics):
         cs = np.cumsum(self.asfr, axis=1)
         asfr = np.zeros((n_bins, self.t.npts))
         asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((n_bins, 1)), cs[:, :-tdim]])
-        asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
-        tdim = int(1/self.t.dt_year)
-        tdim = min(tdim, self.t.npts)
         self.asfr = asfr
         return
