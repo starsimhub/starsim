@@ -230,30 +230,47 @@ def test_datearray_operations():
 
 
 @sc.timer()
-def test_no_double_step():
-    """A disease with dt='month' should step exactly once per timestep when the sim also runs monthly."""
+def test_step_count():
+    """
+    A disease with dt='month' should step exactly once per timestep, even when
+    the sim's dt is ss.years(1/12) (type mismatch: years vs months).
+
+    When the disease sets dt='month' via its pars (propagated to self.t via
+    update_pars), and the sim uses dt=ss.years(1/12), the Timeline type check
+    (years != months) prevents tvec sharing. Both build tvecs independently,
+    introducing floating-point differences (~2e-13) that cause the loop planner
+    to create duplicate plan entries — the disease steps twice on some timesteps.
+    """
     sc.heading('Test no double-stepping')
 
-    counter = dict(n=0)
-    orig_step_state = ss.SIS.step_state
-    def counting_step_state(self):
-        counter['n'] += 1
-        return orig_step_state(self)
+    # Pars class that sets dt='month' — mimics how stisim's BaseSTIPars works
+    class MonthlyPars(ss.Pars):
+        def __init__(self):
+            super().__init__()
+            self.dt = 'month'
 
-    ss.SIS.step_state = counting_step_state
-    try:
-        for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (1/12, '1/12')]:
-            counter['n'] = 0
-            sim = ss.Sim(
-                diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
-                networks='random', n_agents=100, dur=1, dt=sim_dt,
-            )
-            sim.run()
-            expected = len(sim.t.tvec)
-            assert counter['n'] == expected, \
-                f"With sim dt={label}: step_state called {counter['n']}x, expected {expected}"
-    finally:
-        ss.SIS.step_state = orig_step_state
+    # Disease that gets dt='month' via define_pars → update_pars → self.t.dt
+    class MonthlySIS(ss.SIS):
+        def __init__(self, pars=None, **kwargs):
+            super().__init__()
+            self.define_pars(**MonthlyPars())
+            self.update_pars(pars, **kwargs)
+
+    for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (ss.years(1/12), 'ss.years(1/12)')]:
+        sim = ss.Sim(
+            diseases=MonthlySIS(beta=ss.peryear(0.5), dur_inf=ss.years(2)),
+            networks='random', n_agents=100, dur=1, dt=sim_dt,
+        )
+        sim.init()
+        plan = sim.loop.plan
+        disease_steps = plan[plan.label.str.contains('monthlysis.step_state')]
+        counts_per_ti = disease_steps.groupby('ti').size()
+        max_calls = counts_per_ti.max()
+        assert max_calls == 1, \
+            f"With sim dt={label}: step_state scheduled {max_calls}x on a single timestep (should be 1)"
+        print(f'  dt={label}: OK (max 1 step_state per timestep)')
+
+    return sim
 
 
 # Run as a script
@@ -265,6 +282,6 @@ if __name__ == '__main__':
     o3 = test_callable_dists()
     o4 = test_syntax()
     o5 = test_datearray_operations()
-    o6 = test_no_double_step()
+    o6 = test_step_count()
 
     T.toc()
