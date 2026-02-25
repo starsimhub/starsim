@@ -243,27 +243,14 @@ def test_step_count():
     """
     sc.heading('Test no double-stepping')
 
-    # Pars class that sets dt='month' — mimics how stisim's BaseSTIPars works
-    class MonthlyPars(ss.Pars):
-        def __init__(self):
-            super().__init__()
-            self.dt = 'month'
-
-    # Disease that gets dt='month' via define_pars → update_pars → self.t.dt
-    class MonthlySIS(ss.SIS):
-        def __init__(self, pars=None, **kwargs):
-            super().__init__()
-            self.define_pars(**MonthlyPars())
-            self.update_pars(pars, **kwargs)
-
     for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (ss.years(1/12), 'ss.years(1/12)')]:
         sim = ss.Sim(
-            diseases=MonthlySIS(beta=ss.peryear(0.5), dur_inf=ss.years(2)),
+            diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
             networks='random', n_agents=100, dur=1, dt=sim_dt,
         )
         sim.init()
         plan = sim.loop.plan
-        disease_steps = plan[plan.label.str.contains('monthlysis.step_state')]
+        disease_steps = plan[plan.label.str.contains('sis.step_state')]
         counts_per_ti = disease_steps.groupby('ti').size()
         max_calls = counts_per_ti.max()
         assert max_calls == 1, \
