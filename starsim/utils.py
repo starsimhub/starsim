@@ -601,11 +601,6 @@ def format_axes(ax, res, n_ticks=None, show_module=None):
     # Set y axis -- commas
     sc.commaticks(ax)
 
-    # Set x axis -- date formatting
-    if res.has_dates:
-        locator = mpl.dates.AutoDateLocator(minticks=n_ticks[0], maxticks=n_ticks[1]) # Fewer ticks since lots of plots
-        sc.dateformatter(ax, locator=locator)
-
     # Set the axes title
     label = ss.utils.get_result_plot_label(res, show_module)
     ax.set_title(label)
