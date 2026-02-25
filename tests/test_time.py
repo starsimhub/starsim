@@ -229,6 +229,33 @@ def test_datearray_operations():
     return
 
 
+@sc.timer()
+def test_no_double_step():
+    """A disease with dt='month' should step exactly once per timestep when the sim also runs monthly."""
+    sc.heading('Test no double-stepping')
+
+    counter = dict(n=0)
+    orig_step_state = ss.SIS.step_state
+    def counting_step_state(self):
+        counter['n'] += 1
+        return orig_step_state(self)
+
+    ss.SIS.step_state = counting_step_state
+    try:
+        for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (1/12, '1/12')]:
+            counter['n'] = 0
+            sim = ss.Sim(
+                diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
+                networks='random', n_agents=100, dur=1, dt=sim_dt,
+            )
+            sim.run()
+            expected = len(sim.t.tvec)
+            assert counter['n'] == expected, \
+                f"With sim dt={label}: step_state called {counter['n']}x, expected {expected}"
+    finally:
+        ss.SIS.step_state = orig_step_state
+
+
 # Run as a script
 if __name__ == '__main__':
     T = sc.timer('\nTotal time')
@@ -238,5 +265,6 @@ if __name__ == '__main__':
     o3 = test_callable_dists()
     o4 = test_syntax()
     o5 = test_datearray_operations()
+    o6 = test_no_double_step()
 
     T.toc()
