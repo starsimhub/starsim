@@ -923,7 +923,7 @@ class Sim(ss.Base):
                 # Plot data
                 if df is not None:
                     mod = res.module
-                    if mod not in self.module_dict and mod in self.label_to_name: # res.module stores the label; resolve to the name
+                    if mod in self.label_to_name: # res.module stores the label; resolve to the name
                         mod = self.label_to_name[mod]
                     name = res.name
                     found = False
