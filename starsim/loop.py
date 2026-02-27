@@ -117,7 +117,7 @@ class Loop:
 
         # Collect the start_steps
         self += sim.start_step # Note special __iadd__() method above, which appends these to the funcs list
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self += mod.start_step
 
         # Update any nonspecific modules
@@ -157,7 +157,7 @@ class Loop:
 
         # Update results
         self += sim.people.update_results
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self += mod.update_results
 
         # Apply analyzers
@@ -165,7 +165,7 @@ class Loop:
             self += ana.step
 
         # Clean up dead agents, increment the time index, and perform other housekeeping tasks
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self += mod.finish_step
         self += sim.people.finish_step
         self += sim.finish_step
@@ -182,7 +182,7 @@ class Loop:
             self.abs_tvecs[key] = sim.t.tvec
 
         # Handle all other modules
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self.abs_tvecs[mod.name] = mod.t.tvec
 
         return self.abs_tvecs
