@@ -1,6 +1,7 @@
 """
 Define core Sim classes
 """
+import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -123,9 +124,11 @@ class Sim(ss.Base):
         return products
 
     @property
-    def module_list(self):
-        """ Return a list of all Module instances (stored in standard places) in the Sim; see `sim.module_dict` for the dict version """
-        out = sc.mergelists(
+    def modules(self):
+        """
+        Return an interator over all Module instances (stored in standard places) in the Sim
+        """
+        for module in itertools.chain(
             self.custom(),
             self.demographics(),
             self.connectors(),
@@ -134,18 +137,13 @@ class Sim(ss.Base):
             self.products(),
             self.diseases(),
             self.analyzers(),
-        )
-        return out
-
-    @property
-    def module_dict(self):
-        """ Return a dictionary of all Module instances; see `sim.module_list` for the list version """
-        return ss.utils.nlist_to_dict(self.module_list)
+            ):
+            yield module
 
     @property
     def label_to_name(self):
         """ Return a mapping from module labels to module names, e.g. {'HIV': 'hiv', 'Pregnancy': 'pregnancy'} """
-        return {mod.label: mod.name for mod in self.module_list}
+        return {mod.label: mod.name for mod in self.modules}
 
     def init(self, force=False, timer=False, **kwargs):
         """
@@ -225,7 +223,7 @@ class Sim(ss.Base):
         matches = []
 
         if self.initialized:
-            modules = self.module_list
+            modules = self.modules
         else:
             modules = sc.search(self.pars, type=ss.Module).values()
 
@@ -321,7 +319,7 @@ class Sim(ss.Base):
 
     def init_modules_pre(self):
         """ Initialize all the modules with the sim """
-        for mod in self.module_list:
+        for mod in self.modules:
             mod.init_pre(self)
         return
 
@@ -331,7 +329,7 @@ class Sim(ss.Base):
         self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
 
         # Copy relevant dists to each module
-        for mod in self.module_list:
+        for mod in self.modules:
             self.dists.copy_to_module(mod)
         return
 
@@ -342,13 +340,13 @@ class Sim(ss.Base):
 
     def init_modules_post(self):
         """ Initialize values in other modules, including networks and time parameters, and do any other post-processing """
-        for mod in self.module_list:
+        for mod in self.modules:
             mod.init_post()
         return
 
     def reset_time_pars(self, force=True):
         """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
-        for mod in self.module_list:
+        for mod in self.modules:
             mod.init_time_pars(force=force)
         return
 
@@ -499,7 +497,7 @@ class Sim(ss.Base):
         self.finalize_results()
 
         # Finalize each module, including the results
-        for module in self.module_list:
+        for module in self.modules:
             module.finalize()
 
         # Resets verbose if needed
@@ -616,14 +614,14 @@ class Sim(ss.Base):
                     dist.shrink()
 
             # Finally, shrink the modules
-            for mod in sim.module_list:
+            for mod in sim.modules:
                 with sc.tryexcept(die=die):
                     mod.shrink()
 
             # Check that the module successfully shrunk
             if size_limit:
                 max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
-                for mod in sim.module_list:
+                for mod in sim.modules:
                     size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
                     if size > max_size:
                         errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
@@ -674,7 +672,7 @@ class Sim(ss.Base):
                 sc.pp(self._call_required)
 
             missing = []
-            for mod in self.module_list:
+            for mod in self.modules:
                 modmissing = mod.check_method_calls()
                 if modmissing:
                     missing.append([type(mod), modmissing])

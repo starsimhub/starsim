@@ -995,7 +995,7 @@ class BreastfeedingNet(PostnatalNet):
 
     def init_post(self, *args, **kwargs):
         # Connect the pregnancy module to this network
-        for module in self.sim.module_list:
+        for module in self.sim.modules:
             if isinstance(module, ss.Pregnancy):
                 self.pregnancy = module
                 break
