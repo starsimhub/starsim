@@ -86,7 +86,7 @@ def find_modules(key=None, flat=False, verbose=False):
     # Initialize dict
     for modkey in modmap.keys():
         modules[modkey] = sc.objdict()
-    modules['modules'] = sc.objdict() # Catch-all for modules that ship with Starsim but that do not match a standard type
+    modules['modules'] = sc.objdict() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
 
     # Loop over all attributes
     for pymodule,attrs in attr_lists:
