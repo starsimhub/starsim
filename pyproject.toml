@@ -32,7 +32,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
-    "sciris>=3.2.4",
+    "sciris>=3.2.6",
     "numba>=0.57.0",
     "scipy",
     "networkx",
@@ -42,7 +42,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fastmath = ["intel-cmplr-lib-rt"]
+fastmath = [
+  "mkl",
+  "intel-cmplr-lib-rt"
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov",

@@ -38,7 +38,7 @@ class Births(Demographics):
         metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, rate_units=_, metadata=None, **kwargs):
-        
+
         super().__init__()
         self.define_pars(
             birth_rate = ss.peryear(20),
@@ -177,7 +177,7 @@ class Deaths(Demographics):
 
         metadata: data about the data contained within the data input.
             "data_cols" is is a dictionary mapping standard keys, like "year" to the
-            corresponding column name in data. Similar for "sex_keys". 
+            corresponding column name in data. Similar for "sex_keys".
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, **kwargs):
         super().__init__()
@@ -292,7 +292,7 @@ class Deaths(Demographics):
         units = self.pars.rate_units*self.sim.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
-        deaths = np.divide(self.results.new, n_alive, where=n_alive>0)
+        deaths = sc.safedivide(self.results.new, n_alive, default=0)
         self.results.cmr[:] = deaths/units
         return
 
@@ -580,7 +580,9 @@ class Pregnancy(Demographics):
 
         # Burn-in
         if self.ti == 0 and self.pars.burnin:  # TODO: refactor
-            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy.rvs()), 0, 1).astype(int)
+            dist = self.pars.dur_pregnancy
+            max_time = dist.rvs(1000).max() # Calculate the maximum duration of pregnancy
+            dtis = np.arange(np.ceil(-max_time), 0, 1).astype(int) # e.g. -9, -8 ... -1
             for dti in dtis:
                 self.t.ti = dti
                 self.step()
@@ -1001,14 +1003,14 @@ class Pregnancy(Demographics):
         units = self.pars.rate_units*self.sim.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
-        births = np.divide(self.results['births'], n_alive, where=n_alive>0)
-        self.results['cbr'][:] = births/units
+        births = sc.safedivide(self.results.births, n_alive, default=0)
+        self.results.cbr[:] = births/units
 
         # Aggregate the ASFR results, taking rolling annual sums
-        asfr = np.zeros((len(self.asfr_bins)-1, self.t.npts))
-        tdim = int(1/self.t.dt_year)
-        for i in range(len(self.asfr_bins)-1):
-            asfr[i, (tdim-1):] = np.convolve(self.asfr[i, :], np.ones(tdim), mode='valid')
+        n_bins = len(self.asfr_bins) - 1
+        tdim = min(int(1 / self.t.dt_year), self.t.npts) # Handle sims shorter than 1 year
+        cs = np.cumsum(self.asfr, axis=1)
+        asfr = np.zeros((n_bins, self.t.npts))
+        asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((n_bins, 1)), cs[:, :-tdim]])
         self.asfr = asfr
-
         return

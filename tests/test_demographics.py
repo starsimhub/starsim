@@ -194,7 +194,7 @@ def test_pregnancy():
     sim = ss.Sim(
         n_agents=10e3,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
+            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=True),
             ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
         ],
         dur=ss.years(10),
@@ -263,6 +263,27 @@ def test_pregnancy():
 
     sc.printgreen('✓ Gestational age at birth by maternal age tests passed')
 
+    return sim
+
+
+def test_pregnancy_short_sim():
+    """ Test that Pregnancy.finalize() works for sims shorter than 1 year """
+    sc.heading('Testing pregnancy with short sim duration')
+
+    sim = ss.Sim(
+        n_agents=1e3,
+        demographics=[
+            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ],
+        dur=ss.days(250),
+        rand_seed=1,
+        dt=ss.days(10),
+        networks=ss.PrenatalNet(),
+    )
+    sim.run()  # Should not raise ValueError in finalize()
+
+    sc.printgreen('✓ Short sim pregnancy finalize test passed')
     return sim
 
 

@@ -5,7 +5,7 @@ Benchmark test times and save to YAML.
 For best results (avoiding thread locking), run from a terminal:
     ./benchmark_tests.py # compares by default
     ./benchmark_tests.py save # saves instead
-    ./benchmark_tests.py singlecore # run on a single core instead of parallel
+    ./benchmark_tests.py cpus=10 # run on 10 cores instead of a single core
 """
 import re
 import sys
@@ -121,13 +121,8 @@ def benchmark_tests(save=False, compare=True, cpus=None):
 
 
 if __name__ == '__main__':
-    save = False
-    compare = True
-    if 'save' in sys.argv:
-        save = True
-        if 'compare' in sys.argv:
-            compare = True
-        else:
-            compare = False
-    cpus = 1 if 'singlecore' in sys.argv else None
-    df = benchmark_tests(save=save, compare=compare, cpus=cpus)
+    args = sc.argparse(save=None, compare=True, cpus=1)
+    if args.save not in ['save', 'True', None]:
+        errormsg = f'Invalid value for save: {args.save}, should just be "save" or "True"; False by default'
+        raise ValueError(errormsg)
+    df = benchmark_tests(save=args.save, compare=args.compare, cpus=args.cpus)
