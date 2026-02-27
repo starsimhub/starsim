@@ -185,7 +185,7 @@ class Sim(ss.Base):
             self.diagnostics.store_states(key='init')
         return self
 
-    def get_module(self, query):
+    def get_module(self, query, die=True, match_case=False):
         """
         Retrieve a single module
 
@@ -193,18 +193,28 @@ class Sim(ss.Base):
         where this is expected to retrieve a specific module from the `Sim` (and retrieving no modules or
         multiple modules would be unexpected). Use `Sim.get_modules()` to retrieve all matching modules.
 
-        :param query: Query input supported by `get_modules` (either a `Type` e.g., `ss.SIR`) or a string that will match module names.
-        :return: An ss.Module instance
+        Args:
+            query (type/str): Query input supported by `get_modules` (either a `Type` e.g., `ss.SIR`) or a string that will match module names.
+            die (bool): if True (default), raises an exception unless exactly 1 module is found; else return None if no modules found
+            match_case (bool): if `query` is a string, whether to match case (default False)
+
+        Returns:
+            An ss.Module instance
         """
-        matches = self.get_modules(query)
+        matches = self.get_modules(query, match_case=match_case)
         if len(matches) > 1:
-            raise Exception('Multiple matching modules were found (to retrieve all of them, use `Sim.get_modules()` instead)')
+            errormsg = f'Multiple matching modules found for {query}; to retrieve all of them, use `Sim.get_modules()` instead'
+            raise Exception(errormsg)
         elif not matches:
-            raise KeyError('No matching module was found')
+            if die:
+                errormsg = f'No matching module found for {query}; set die=False to return None instead'
+                raise KeyError(errormsg)
+            else:
+                return None
         else:
             return matches[0]
 
-    def get_modules(self, query):
+    def get_modules(self, query=None, match_case=False):
         """
         Retrieve modules from the Sim
 
@@ -213,13 +223,17 @@ class Sim(ss.Base):
         module names. The string can contain a `'*'` at the start or end.
 
         If the `Sim` is not initialized, this will search over any `ss.Module` instances contained in
-        `Sim.pars`. Note that initialization might result in the creation of modules, therefore some modules
-        may be retrieved after initialization but not before.
+        `Sim.pars`. Note that sim initialization might result in the creation of modules, therefore some modules
+        may be retrieved after initialization but not before (e.g. `diseases='sir'` will not be registered
+        as the module `ss.SIR()` until after initialization).
 
-        :param query: A `Type` or a string
-        :return: A list of `ss.Module` instances. The list will be empty if no modules were found
+        Args:
+            query (type/str): The module type (e.g. `ss.SIR`) or a case-insensitive string (e.g. `'sir'`); if None, return all modules
+            match_case (bool): if `query` is a string, whether to match case (default False)
+
+        Returns:
+            A list of `ss.Module` instances. The list will be empty if no modules were found
         """
-
         matches = []
 
         if self.initialized:
@@ -227,18 +241,27 @@ class Sim(ss.Base):
         else:
             modules = sc.search(self.pars, type=ss.Module).values()
 
-        for module in modules:
-            if isinstance(query, type) and isinstance(module, query):
-                matches.append(module)
+        # Return all modules if no query
+        if query is None:
+            return list(modules)
+
+        # Loop over all modules, looking for matches
+        for mod in modules:
+            if isinstance(query, type) and isinstance(mod, query):
+                matches.append(mod)
             elif isinstance(query, str):
-                if query.startswith('*') and query.endswith('*') and query[1:-1] in module.name:
-                    matches.append(module)
-                elif query.startswith('*') and module.name.endswith(query[1:]):
-                    matches.append(module)
-                elif query.endswith('*') and module.name.startswith(query[:-1]):
-                    matches.append(module)
-                elif module.name == query:
-                    matches.append(module)
+                name = mod.name
+                if not match_case:
+                    query = query.lower()
+                    name = name.lower()
+                if query.startswith('*') and query.endswith('*') and query[1:-1] in name:
+                    matches.append(mod)
+                elif query.startswith('*') and name.endswith(query[1:]):
+                    matches.append(mod)
+                elif query.endswith('*') and name.startswith(query[:-1]):
+                    matches.append(mod)
+                elif name == query:
+                    matches.append(mod)
         return matches
 
     def init_time(self):
@@ -497,8 +520,8 @@ class Sim(ss.Base):
         self.finalize_results()
 
         # Finalize each module, including the results
-        for module in self.modules:
-            module.finalize()
+        for mod in self.modules:
+            mod.finalize()
 
         # Resets verbose if needed
         if hasattr(self, '_orig_verbose'):
