@@ -182,6 +182,62 @@ class Sim(ss.Base):
             self.diagnostics.store_states(key='init')
         return self
 
+    def get_module(self, query):
+        """
+        Retrieve a single module
+
+        This method is guaranteed to return a single module if it succeeds, so can be relied on in places
+        where this is expected to retrieve a specific module from the `Sim` (and retrieving no modules or
+        multiple modules would be unexpected). Use `Sim.get_modules()` to retrieve all matching modules.
+
+        :param query: Query input supported by `get_modules` (either a `Type` e.g., `ss.SIR`) or a string that will match module names.
+        :return: An ss.Module instance
+        """
+        matches = self.get_modules(query)
+        if len(matches) > 1:
+            raise Exception('Multiple matching modules were found (to retrieve all of them, use `Sim.get_modules()` instead)')
+        elif not matches:
+            raise KeyError('No matching module was found')
+        else:
+            return matches[0]
+
+    def get_modules(self, query):
+        """
+        Retrieve modules from the Sim
+
+        Retrieve a module by name or by type. The query term can be the type of module to match
+        e.g., `ss.SIR`, `ss.Disease`, `ss.Intervention`, or a string which is tested against
+        module names. The string can contain a `'*'` at the start or end.
+
+        If the `Sim` is not initialized, this will search over any `ss.Module` instances contained in
+        `Sim.pars`. Note that initialization might result in the creation of modules, therefore some modules
+        may be retrieved after initialization but not before.
+
+        :param query: A `Type` or a string
+        :return: A list of `ss.Module` instances. The list will be empty if no modules were found
+        """
+
+        matches = []
+
+        if self.initialized:
+            modules = self.module_list
+        else:
+            modules = sc.search(self.pars, type=ss.Module).values()
+
+        for module in modules:
+            if isinstance(query, type) and isinstance(module, query):
+                matches.append(module)
+            elif isinstance(query, str):
+                if query.startswith('*') and query.endswith('*') and query[1:-1] in module.name:
+                    matches.append(module)
+                elif query.startswith('*') and module.name.endswith(query[1:]):
+                    matches.append(module)
+                elif query.endswith('*') and module.name.startswith(query[:-1]):
+                    matches.append(module)
+                elif module.name == query:
+                    matches.append(module)
+        return matches
+
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
         self.t = ss.Timeline(name='sim')
