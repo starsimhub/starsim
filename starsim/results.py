@@ -260,12 +260,11 @@ class Result(ss.BaseArr):
                     out[i] = arr[inverse == i][-1]
                 return out
 
-        # Build the new result (avoid deep-copying the timevec)
-        new_timevec = ss.DateArray([ss.date(f'{y}-07-01') for y in unique_years]) if has_dates else unique_years.astype(float) + 0.5
+        # Build the new result
         new_res = Result(
             name=self.name, label=self.label, dtype=self.dtype, scale=self.scale,
             auto_plot=self.auto_plot, module=self.module, summarize_by=self.summarize_by,
-            timevec=new_timevec,
+            timevec=ss.DateArray(unique_years.astype(float) + 0.5, unit=ss.years) ,
             values=_aggregate(self.values),
             low=_aggregate(self.low),
             high=_aggregate(self.high),
