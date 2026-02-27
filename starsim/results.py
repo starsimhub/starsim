@@ -236,11 +236,7 @@ class Result(ss.BaseArr):
         method = self.summarize_by if self.summarize_by else self.summary_method()
 
         # Group by integer year
-        has_dates = self.has_dates
-        if has_dates:
-            yearvec = self.timevec.years
-        else:
-            yearvec = np.asarray(self.timevec, dtype=float)
+        yearvec = self.timevec.years
         year_labels = np.floor(yearvec).astype(int)
         unique_years, inverse = np.unique(year_labels, return_inverse=True)
         n_groups = len(unique_years)
