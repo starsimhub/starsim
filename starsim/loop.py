@@ -28,7 +28,7 @@ class Loop:
 
         1. sim:               start_step()     # Initialize the sim, including plotting progress
         2. all modules:       start_step()     # Initialize the modules, including the random number distribution
-        3. sim.modules:       step()           # Run any custom modules
+        3. sim.custom:        step()           # Run any custom modules
         4. sim.demographics:  step()           # Update the demographics, including adding new agents
         5. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
         6. sim.connectors:    step()           # Run the connectors
@@ -121,7 +121,7 @@ class Loop:
             self += mod.start_step
 
         # Update any nonspecific modules
-        for mod in sim.modules():
+        for mod in sim.custom():
             self += mod.step
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)

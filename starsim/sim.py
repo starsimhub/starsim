@@ -126,7 +126,7 @@ class Sim(ss.Base):
     def module_list(self):
         """ Return a list of all Module instances (stored in standard places) in the Sim; see `sim.module_dict` for the dict version """
         out = sc.mergelists(
-            self.modules(),
+            self.custom(),
             self.demographics(),
             self.connectors(),
             self.networks(),
@@ -242,6 +242,8 @@ class Sim(ss.Base):
     def init_module_attrs(self, force=False):
         """ Move initialized modules to the sim """
         module_types = ss.modules.module_types()
+        module_types.append('custom') # Support extra catch-all module category
+
         for attr in module_types:
             orig = getattr(self, attr, None)
             if not force and orig is not None:
