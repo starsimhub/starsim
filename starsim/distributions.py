@@ -66,6 +66,14 @@ class Dists(sc.prettyobj):
         self.sim = sim
         self.initialized = False
         return
+    
+    def keys(self):
+        """ Return the keys of the Dist objects """
+        if self.dists is None:
+            errormsg = 'Dists object is not initialized'
+            raise ValueError(errormsg)
+        else:
+            return self.dists.keys()
 
     def init(self, obj=None, base_seed=None, sim=None, force=False):
         """
