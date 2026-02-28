@@ -177,7 +177,7 @@ class Timeline:
         if not isinstance(key, str):
             errormsg = f'Key must be a string, not {key}'
             raise TypeError(errormsg)
-        key = key.removesuffix('vec') + 'vec' # Allow either e.g. 'yearvec' or 'year'
+        key = key.removesuffix('vec') + 'vec' # Allow either e.g. 'yearvec' or 'year', converting to former
 
         # Get the right keyvec
         if key in self._time_vecs:
