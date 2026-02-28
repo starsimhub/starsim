@@ -157,6 +157,10 @@ class People:
         age_std = self.age.std()
         out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
         return out if output else print(out)
+    
+    def keys(self):
+        """ Return keys of the states stored in the People object """
+        return self.states.keys()
 
     @staticmethod
     def get_age_dist(age_data):
