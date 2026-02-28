@@ -16,9 +16,13 @@ custom_modules = []  # Allow the user to register custom modules
 
 
 def module_map(key=None):
-    """ Define the mapping between module names and types; this is the source of truth about module types and ordering """
+    """
+    Map modules to standard types
+
+    This is the source of truth about module types and ordering. Modules with types that do not
+    map to anything in the module_map are treated as custom modules.
+    """
     module_map = sc.objdict(
-        modules       = None, # Handled separately since otherwise isinstance(module, modtype) will match all
         demographics  = ss.Demographics,
         connectors    = ss.Connector,
         networks      = ss.Route, # NB, not ss.Network!
@@ -82,6 +86,7 @@ def find_modules(key=None, flat=False, verbose=False):
     # Initialize dict
     for modkey in modmap.keys():
         modules[modkey] = sc.objdict()
+    modules['modules'] = sc.objdict() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
 
     # Loop over all attributes
     for pymodule,attrs in attr_lists:

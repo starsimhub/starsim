@@ -28,7 +28,7 @@ class Loop:
 
         1. sim:               start_step()     # Initialize the sim, including plotting progress
         2. all modules:       start_step()     # Initialize the modules, including the random number distribution
-        3. sim.modules:       step()           # Run any custom modules
+        3. sim.custom:        step()           # Run any custom modules
         4. sim.demographics:  step()           # Update the demographics, including adding new agents
         5. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
         6. sim.connectors:    step()           # Run the connectors
@@ -117,11 +117,11 @@ class Loop:
 
         # Collect the start_steps
         self += sim.start_step # Note special __iadd__() method above, which appends these to the funcs list
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self += mod.start_step
 
         # Update any nonspecific modules
-        for mod in sim.modules():
+        for mod in sim.custom():
             self += mod.step
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
@@ -157,7 +157,7 @@ class Loop:
 
         # Update results
         self += sim.people.update_results
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self += mod.update_results
 
         # Apply analyzers
@@ -165,7 +165,7 @@ class Loop:
             self += ana.step
 
         # Clean up dead agents, increment the time index, and perform other housekeeping tasks
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self += mod.finish_step
         self += sim.people.finish_step
         self += sim.finish_step
@@ -182,7 +182,7 @@ class Loop:
             self.abs_tvecs[key] = sim.t.tvec
 
         # Handle all other modules
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self.abs_tvecs[mod.name] = mod.t.tvec
 
         return self.abs_tvecs

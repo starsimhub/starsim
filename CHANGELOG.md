@@ -2,8 +2,13 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.1.1 (2026-02-XX)
+## Version 3.1.2 (2026-XX-XX)
 - Provide methods to annualize results for plotting
+- Changed `sim.modules` to `sim.custom` for storage of custom modules that do not match standard types (e.g., diseases, interventions). Passing modules in via a `modules` argument is still supported, such modules will automatically be moved to the appropriate attribute upon initialization. 
+- Add `sim.get_modules()` to search for modules, and `sim.get_module()` to retrieve exactly one module.
+- Updated `sim.modules` to now return an iterator over all modules
+- Removed `sim.module_list` which can be replaced with `list(sim.modules)` if an exact replacement is required. In many cases, `sim.module_list` was used only to iterate over the modules, in which case it can be directly replaced with `sim.modules`.
+- Removed `sim.module_dict` which can be replaced with `ss.utils.nlist_to_dict(sim.modules)` if required. `sim.module_dict` was removed as an attribute to help avoid ambiguity as to where modules are stored in the `Sim`. In cases where the `module_dict` was used to retrieve modules by name, `sim.get_module` can be used instead. 
 
 
 ## Version 3.1.1 (2026-02-18)
