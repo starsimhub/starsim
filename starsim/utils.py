@@ -5,7 +5,6 @@ import warnings
 import numpy as np
 import pandas as pd
 import sciris as sc
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import starsim as ss
 
