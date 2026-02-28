@@ -1,12 +1,11 @@
 """
-Test Starsim features not covered by other test files
+Test the People object
 """
 import numpy as np
 import sciris as sc
 import starsim as ss
 import starsim_examples as sse
 import matplotlib.pyplot as plt
-import pytest
 
 sc.options.interactive = False # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
