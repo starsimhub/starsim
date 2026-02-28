@@ -18,7 +18,7 @@ def make_sim_pars(beta=0.1, **kwargs):
         n_agents = n_agents,
         demographics = True,
         networks = 'random',
-        diseases = ss.SIS(beta=beta), # To allow for modification later
+        diseases = ss.objdict(type='sis', beta=beta), # To allow for modification later
         **kwargs,
     )
     return pars
@@ -65,7 +65,7 @@ def test_multisim():
 
     # Export results
     res_df = msim.results.to_df(resample='2YE')
-    assert res_df.sir_n_susceptible_low.loc['2030-12-31'] == msim.results.sir_n_susceptible.low[29:31].mean()
+    assert res_df.sis_n_susceptible_low.loc['2030-12-31'] == msim.results.sis_n_susceptible.low[29:31].mean()
 
     # Reduce and plot median
     msim.median()
@@ -137,10 +137,10 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    #s1, s2 = test_parallel()
-    #msim = test_multisim()
+    s1, s2 = test_parallel()
+    msim = test_multisim()
     msim2 = test_multisim_construction(do_plot)
-    #s3,s4 = test_other()
+    s3,s4 = test_other()
 
     T.toc()
 
