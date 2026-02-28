@@ -726,14 +726,14 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
-    def profile(self, line=True, do_run=True, plot=True, follow=None, **kwargs):
+    def profile(self, follow=None, do_run=True, plot=True, **kwargs):
         """
         Profile the performance of the simulation using a line profiler (`sc.profile()`)
 
         Args:
+            follow (func/list): a list of functions/methods to follow in detail
             do_run (bool): whether to immediately run the sim
             plot (bool): whether to plot time spent per module step
-            follow (func/list): a list of functions/methods to follow in detail
             **kwargs (dict): passed to `sc.profile()`
 
         **Example**:
