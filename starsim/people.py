@@ -697,6 +697,8 @@ class Filter(sc.prettyobj):
         return self.states[key]
 
     def __getattr__(self, key):
+        if key.startswith('__'):
+            raise AttributeError(key)
         return self.states[key]
 
     def __setitem__(self, key, value):
