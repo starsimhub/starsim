@@ -32,8 +32,16 @@ def test_timeline_lengths():
 def test_timeline_combinations():
     sc.heading('Test additional combinations of inputs for ss.Timeline')
 
-    tl1 = ss.Timeline(start=2000, stop=2020, dt='week')
-    tl2 = ss.Timeline(start=2000, stop=2005, dt='day')
+    # Compare day and week dt vs. float-year and date representations 
+    tl1 = ss.Timeline(start=2000, stop=2005, dt='day')
+    tl2 = ss.Timeline(start='2000-01-01', stop='2005-01-01', dt='day')
+    tl3 = ss.Timeline(start=2000, stop=2020, dt='week')
+    tl4 = ss.Timeline(start='2000-01-01', stop='2020-01-01', dt='week')
+    
+    assert len(tl1) == len(sc.daterange('2000-01-01', '2005-01-01')) - 2 # Leap years not counted
+    assert len(tl2) == len(sc.daterange('2000-01-01', '2005-01-01')) # Leap years are counted if using dates
+    assert len(tl3) == np.floor(20*365/7) + 1 # 365/7 is Starsim's approximation of the number of weeks in a year, +1 for inclusive range
+    assert len(tl4) == len(sc.daterange('2000-01-01', '2020-01-01', interval='week'))
 
     return tl1
 
