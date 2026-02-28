@@ -18,7 +18,7 @@ def make_sim_pars(beta=0.1, **kwargs):
         n_agents = n_agents,
         demographics = True,
         networks = 'random',
-        diseases = ss.objdict(type='sis', beta=beta), # To allow for modification later
+        diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
         **kwargs,
     )
     return pars
