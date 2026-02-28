@@ -1,5 +1,5 @@
 """
-Test run
+Test run, including ss.MultiSim and ss.parallel()
 """
 
 # %% Imports and settings
@@ -13,12 +13,13 @@ do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
 
-def make_sim_pars():
+def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.objdict(
         n_agents = n_agents,
         demographics = True,
         networks = 'random',
-        diseases = sc.objdict(type='sir', beta=0.1), # To allow for modification later
+        diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
+        **kwargs,
     )
     return pars
 
@@ -64,7 +65,7 @@ def test_multisim():
 
     # Export results
     res_df = msim.results.to_df(resample='2YE')
-    assert res_df.sir_n_susceptible_low.loc['2030-12-31'] == msim.results.sir_n_susceptible.low[29:31].mean()
+    assert res_df.sis_n_susceptible_low.loc['2030-12-31'] == msim.results.sis_n_susceptible.low[29:31].mean()
 
     # Reduce and plot median
     msim.median()
@@ -76,6 +77,34 @@ def test_multisim():
     msim.reset()
 
     return msim
+
+
+@sc.timer()
+def test_multisim_construction(do_plot=False):
+    """ Test other MultiSim construction methods """
+    sc.heading('Testing MultiSim construction')
+    
+    # Make sims
+    def make_sims(n=2):
+        sims = sc.autolist()
+        for beta in 0.1*np.random.rand(n):
+            pars = make_sim_pars(beta=beta, dur=20, rand_seed=np.random.randint(999))
+            sims += ss.Sim(pars=pars, label=f'{beta=}')
+        return sims
+    
+    # Construction options
+    m1 = ss.MultiSim(make_sims(), label='list') # As list
+    m2 = ss.MultiSim(tuple(make_sims()), label='tuple') # As tuple
+    m3 = ss.MultiSim(m1.copy(), label='msim') # As MultiSim
+    m4 = ss.MultiSim([m1.copy(), m2.copy()], label='multi-msim') # As list of MultiSims
+    
+    # Check that run works
+    for msim in [m1, m2, m3, m4]:
+        msim.run()
+        if do_plot:
+            msim.plot()
+    
+    return m4
 
 
 @sc.timer()
@@ -110,6 +139,7 @@ if __name__ == '__main__':
 
     s1, s2 = test_parallel()
     msim = test_multisim()
+    msim2 = test_multisim_construction(do_plot)
     s3,s4 = test_other()
 
     T.toc()

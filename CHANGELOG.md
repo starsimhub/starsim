@@ -15,7 +15,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Provided methods to annualize results for plotting
 - Fixed a bug introduced in v3.1.0 that prevented `People.filter()` from working.
 - Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`.
-
+- Added option for `ss.MultiSim` to be constructed from other MultiSims and from tuples of sims (previously, only lists of sims were supported).
 - *GitHub info*: PR [1186](https://github.com/starsimhub/starsim/pull/1186)
 
 
