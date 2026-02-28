@@ -682,7 +682,14 @@ class Filter(sc.prettyobj):
 
         for mod in self._linked_modules:
             setattr(self, mod, sc.dictobj())
-            for state in getattr(people, mod).state_list:
+            if isinstance(people, People):
+                states = getattr(people, mod).state_list
+            elif isinstance(people, Filter):
+                states = getattr(people, mod).values()
+            else:
+                errormsg = f'Expecting People or Filter object, not {people}'
+                raise TypeError(errormsg)
+            for state in states:
                 getattr(self, mod)[state.name] = self.states[f'{mod}.{state.name}']
         return
 

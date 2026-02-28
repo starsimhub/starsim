@@ -1,8 +1,8 @@
 """
 Test Starsim features not covered by other test files
 """
-import sciris as sc
 import numpy as np
+import sciris as sc
 import starsim as ss
 import starsim_examples as sse
 import matplotlib.pyplot as plt
@@ -37,6 +37,31 @@ def test_people():
     ppl.add_module(sse.HIV())
 
     return ppl
+
+
+@sc.timer()
+def test_filtering():
+    """ Test people filtering """
+    sim = ss.Sim(n_agents=medium, dur=10, networks='random', diseases='sir', verbose=0)
+    sim.run()
+    ppl = sim.people
+
+    # Traditional filtering
+    with sc.timer('Array filtering'):
+        f1 = ppl.female == True
+        f2 = f1 * (ppl.age>5)
+        f3 = f2 * (~ppl.sir.infected)
+        af_res = f3.uids.to_numpy()
+
+    # Equivalent using filter
+    with sc.timer('Custom filtering'):
+        f1 = ppl.filter('female')
+        f2 = f1('age')>5
+        f3 = ~f2('sir.infected')
+        cf_res = f3.uids.to_numpy()
+
+    assert np.array_equal(af_res, cf_res), 'Filtered arrays do not match'
+    return f3
 
 
 @sc.timer()
@@ -221,7 +246,7 @@ def test_results():
     # Make a sim with 2 SIS models with varying units and dt
     d1 = ss.SIS(dt=ss.years(1/12), name='sis1')
     d2 = ss.SIS(dt=ss.years(0.5), name='sis2')
-    sim = ss.Sim(diseases=[d1, d2], networks='random')
+    sim = ss.Sim(n_agents=medium, diseases=[d1, d2], networks='random')
 
     # Run sim and pull out disease results
     sim.run()
@@ -347,7 +372,8 @@ if __name__ == '__main__':
 
     # Run tests
     ppl   = test_people()
-    sim1  = test_microsim(False)
+    filt  = test_filtering()
+    sim1  = test_microsim(do_plot)
     sim2  = test_ppl_construction(do_plot)
     sims  = test_arrs()
     sims2 = test_deepcopy()
