@@ -10,10 +10,13 @@ __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
 
 class MultiSim:
     """
-    Class for running multiple copies of a simulation.
+    Class for running multiple copies of a simulation in parallel.
+    
+    This is the most common way for running multiple simulation: for example, to
+    do scenario analysis or to collect statistics
 
     Args:
-        sims (Sim/list): a single sim or a list of sims
+        sims (Sim/list): a single sim, a list/tuple of sims, or another MultiSim
         base_sim (Sim): the sim used for shared properties; if not supplied, the first of the sims provided
         label (str): the name of the multisim
         n_runs (int): if a single sim is provided, the number of replicates (default 4)
@@ -21,6 +24,24 @@ class MultiSim:
         inplace (bool): whether to modify the sims in-place (default True); else return new sims
         debug (bool): if True, run in serial
         kwargs (dict): stored in run_args and passed to run()
+    
+    **Example**:
+        
+        import starsim as ss
+        
+        s1 = ss.Sim(networks='random', diseases=ss.SIS(beta=0.02), label='Low transmission')
+        s2 = ss.Sim(networks='random', diseases=ss.SIS(beta=0.05), label='Medium transmission')
+        s3 = ss.Sim(networks='random', diseases=ss.SIS(beta=0.10), label='High transmission')
+        
+        msim = ss.MultiSim(sims=[s1, s2, s3])
+        msim.run()
+
+        # Plot individual sims
+        msim.plot()
+        
+        # Calculate mean results across sims and plot
+        msim.mean()
+        msim.plot()
     """
     def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False,
                  inplace=True, debug=False, **kwargs):
@@ -34,10 +55,16 @@ class MultiSim:
                     errormsg = 'You must supply at least one sim to create a MultiSim'
                     raise ValueError(errormsg)
                 base_sim = sims[0]
+            elif isinstance(sims, MultiSim):
+                base_sim = sims.base_sim                
             else:
                 errormsg = 'If base_sim is not supplied, sims must be either a single sim '
-                errormsg += '(treated as base_sim) or a list of sims, not {type(sims)}'
+                errormsg += f'(treated as base_sim) or a list/tuple of sims, not {type(sims)}'
                 raise TypeError(errormsg)
+        
+        # Handle MultiSim input
+        if isinstance(sims, MultiSim):
+            sims = sims.sims # Extract actual sims
 
         # Set properties
         self.sims = sims
@@ -187,6 +214,15 @@ class MultiSim:
                 self.base_sim = self.orig_base_sim
             delattr(self, 'orig_base_sim')
         return
+    
+    def copy(self, die=True):
+        """ Perform a deep copy of the MultiSim (including sims contained within)
+
+        Args:
+            die (bool): whether to raise an exception if copy fails (else, try a shallow copy)
+        """
+        out = sc.dcp(self, die=die)
+        return out
 
     def shrink(self, **kwargs):
         """
@@ -559,13 +595,13 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         iterkwargs.update(iterpars)
         kwargs = dict(sim=sim, reseed=reseed, verbose=verbose, shrink=shrink,
                       sim_args=sim_args, run_args=run_args, do_run=do_run)
-    elif isinstance(sim, list):  # List of sims
+    elif isinstance(sim, (list, tuple)):  # List of sims
         if reseed is None: reseed = False
         iterkwargs = dict(sim=sim, ind=np.arange(len(sim)))
         kwargs = dict(reseed=reseed, verbose=verbose, shrink=shrink, sim_args=sim_args, run_args=run_args,
                       do_run=do_run)
     else:
-        errormsg = f'Must be Sim object or list, not {type(sim)}'
+        errormsg = f'Must be Sim object or list/tuple, not {type(sim)}'
         raise TypeError(errormsg)
 
     # Actually run

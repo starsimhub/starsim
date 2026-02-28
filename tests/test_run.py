@@ -13,12 +13,12 @@ do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
 
-def make_sim_pars():
+def make_sim_pars(beta=0.1):
     pars = sc.objdict(
         n_agents = n_agents,
         demographics = True,
         networks = 'random',
-        diseases = sc.objdict(type='sir', beta=0.1), # To allow for modification later
+        diseases = ss.SIR(beta=beta), # To allow for modification later
     )
     return pars
 
@@ -79,6 +79,31 @@ def test_multisim():
 
 
 @sc.timer()
+def test_multisim_construction():
+    """ Test other MultiSim construction methods """
+    sc.heading('Testing MultiSim construction')
+    
+    # Make sims
+    def make_sims():
+        sims = sc.autolist()
+        for beta in [0.01, 0.05, 0.10]:
+            sims += ss.Sim(pars=make_sim_pars(beta=beta))
+        return sims
+    
+    # Construction options
+    m1 = ss.MultiSim(make_sims()) # As list
+    m2 = ss.MultiSim(tuple(make_sims())) # As tuple
+    m3 = ss.MultiSim(m1.copy()) # As MultiSim
+    m4 = ss.MultiSim([m1.copy(), m2.copy()]) # As list of MultiSims
+    
+    # Check that initialization works
+    for msim in [m1, m2, m3, m4]:
+        msim.run()
+    
+    return m4
+
+
+@sc.timer()
 def test_other():
     """ Check other run options """
     sc.heading('Testing other run options')
@@ -108,9 +133,10 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    s1, s2 = test_parallel()
-    msim = test_multisim()
-    s3,s4 = test_other()
+    #s1, s2 = test_parallel()
+    #msim = test_multisim()
+    msim2 = test_multisim_construction()
+    #s3,s4 = test_other()
 
     T.toc()
 
