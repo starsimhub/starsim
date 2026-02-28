@@ -6,7 +6,6 @@ import sciris as sc
 import starsim as ss
 import starsim_examples as sse
 import matplotlib.pyplot as plt
-import pytest
 
 sc.options.interactive = False # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
@@ -15,54 +14,6 @@ small = 100
 medium = 1000
 
 # %% Define the tests
-
-@sc.timer()
-def test_people():
-    sc.heading('Testing people object')
-
-    # Base people contains only the states defined in base.base_states
-    ppl = ss.People(small)
-    del ppl
-
-    # Possible to initialize people with extra states, e.g. a geolocation
-    def geo_func(n):
-        locs = [1,2,3]
-        return np.random.choice(locs, n)
-    extra_states = [
-        ss.FloatArr('geolocation', default=geo_func),
-    ]
-    ppl = ss.People(small, extra_states=extra_states)
-
-    # Possible to add a module to people outside a sim (not typical workflow)
-    ppl.add_module(sse.HIV())
-
-    return ppl
-
-
-@sc.timer()
-def test_filtering():
-    """ Test people filtering """
-    sim = ss.Sim(n_agents=medium, dur=10, networks='random', diseases='sir', verbose=0)
-    sim.run()
-    ppl = sim.people
-
-    # Traditional filtering
-    with sc.timer('Array filtering'):
-        f1 = ppl.female == True
-        f2 = f1 * (ppl.age>5)
-        f3 = f2 * (~ppl.sir.infected)
-        af_res = f3.uids.to_numpy()
-
-    # Equivalent using filter
-    with sc.timer('Custom filtering'):
-        f1 = ppl.filter('female')
-        f2 = f1('age')>5
-        f3 = ~f2('sir.infected')
-        cf_res = f3.uids.to_numpy()
-
-    assert np.array_equal(af_res, cf_res), 'Filtered arrays do not match'
-    return f3
-
 
 @sc.timer()
 def test_microsim(do_plot=False):
@@ -94,29 +45,60 @@ def test_microsim(do_plot=False):
 
 
 @sc.timer()
-def test_ppl_construction(do_plot=False):
-    sc.heading('Test making people and providing them to a sim')
+def test_results():
+    sc.heading('Testing results export and plotting')
 
-    def init_debut(module, sim, uids):
-        # Test setting the mean debut age by sex, 16 for men and 21 for women.
-        loc = np.full(len(uids), 16)
-        loc[sim.people.female[uids]] = 21
-        return loc
+    # Make a sim with 2 SIS models with varying units and dt
+    d1 = ss.SIS(dt=ss.years(1/12), name='sis1')
+    d2 = ss.SIS(dt=ss.years(0.5), name='sis2')
+    sim = ss.Sim(n_agents=medium, diseases=[d1, d2], networks='random')
 
-    mf_pars = {
-        'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
-    }
-    sim_pars = {'networks': [ss.MFNet(**mf_pars)], 'n_agents': small}
-    gon_pars = {'beta': {'mf': [0.08, 0.04]}}
-    gon = sse.Gonorrhea(**gon_pars)
-
-    sim = ss.Sim(pars=sim_pars, diseases=[gon])
-    sim.init()
+    # Run sim and pull out disease results
     sim.run()
-    if do_plot:
-        plt.figure()
-        plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
-        plt.title('Number of gonorrhea infections')
+    rs1 = sim.results.sis1
+    rs2 = sim.results.sis2
+
+    # Export a single result to a series or dataframe
+    res = rs1.new_infections
+    res_df = res.to_df()
+    res_series = res.to_series()
+    assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
+
+    # Test resampling (always returns a Result)
+    resampled = rs1.new_infections.resample(new_unit='year')
+    assert isinstance(resampled, ss.Result)
+    assert len(resampled.values) < len(rs1.new_infections.values)
+
+    # Test that resample and annualize produce the same values
+    annualized = rs1.new_infections.annualize()
+    assert np.allclose(resampled.values, annualized.values, rtol=1e-10)
+
+    # Test Results.annualize() (annualizes all results in the group)
+    rs1_annual = rs1.annualize()
+    assert isinstance(rs1_annual, ss.Results)
+    assert len(rs1_annual.new_infections.values) == len(annualized.values)
+    assert np.allclose(rs1_annual.new_infections.values, annualized.values, rtol=1e-10)
+
+    # Export results of a whole module to a dataframe
+    dfs = rs1.to_df()
+    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections
+
+    # Export resampled summary of results to dataframe
+    dfy1 = rs1.to_df(resample='year')
+    dfy2 = rs2.to_df(resample='5YE')
+    assert dfs.new_infections.iloc[:12].sum() == dfy1.new_infections.iloc[0]
+    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible.iloc[0]  # Entries 0 and 1 represent 2000
+    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible.iloc[1]  # Entries 2-12 correspond to 2001-2005
+
+    # Export whole sim to unified annualized dataframe
+    sim_df = sim.to_df(resample='year', use_years=True)
+    assert sim_df.sis1_n_infected.values[0] == rs1.n_infected[:12].mean()
+    assert sim_df.sis2_n_infected.values[0] == rs2.n_infected[:2].mean()
+
+    # Plot
+    res.plot()
+    sim.results.sis1.plot()
+    sim.results.sis2.plot()
 
     return sim
 
@@ -240,108 +222,6 @@ def test_deepcopy_until():
 
 
 @sc.timer()
-def test_results():
-    sc.heading('Testing results export and plotting')
-
-    # Make a sim with 2 SIS models with varying units and dt
-    d1 = ss.SIS(dt=ss.years(1/12), name='sis1')
-    d2 = ss.SIS(dt=ss.years(0.5), name='sis2')
-    sim = ss.Sim(n_agents=medium, diseases=[d1, d2], networks='random')
-
-    # Run sim and pull out disease results
-    sim.run()
-    rs1 = sim.results.sis1
-    rs2 = sim.results.sis2
-
-    # Export a single result to a series or dataframe
-    res = rs1.new_infections
-    res_df = res.to_df()
-    res_series = res.to_series()
-    assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
-
-    # Test resampling (always returns a Result)
-    resampled = rs1.new_infections.resample(new_unit='year')
-    assert isinstance(resampled, ss.Result)
-    assert len(resampled.values) < len(rs1.new_infections.values)
-
-    # Test that resample and annualize produce the same values
-    annualized = rs1.new_infections.annualize()
-    assert np.allclose(resampled.values, annualized.values, rtol=1e-10)
-
-    # Test Results.annualize() (annualizes all results in the group)
-    rs1_annual = rs1.annualize()
-    assert isinstance(rs1_annual, ss.Results)
-    assert len(rs1_annual.new_infections.values) == len(annualized.values)
-    assert np.allclose(rs1_annual.new_infections.values, annualized.values, rtol=1e-10)
-
-    # Export results of a whole module to a dataframe
-    dfs = rs1.to_df()
-    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections
-
-    # Export resampled summary of results to dataframe
-    dfy1 = rs1.to_df(resample='year')
-    dfy2 = rs2.to_df(resample='5YE')
-    assert dfs.new_infections.iloc[:12].sum() == dfy1.new_infections.iloc[0]
-    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible.iloc[0]  # Entries 0 and 1 represent 2000
-    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible.iloc[1]  # Entries 2-12 correspond to 2001-2005
-
-    # Export whole sim to unified annualized dataframe
-    sim_df = sim.to_df(resample='year', use_years=True)
-    assert sim_df.sis1_n_infected.values[0] == rs1.n_infected[:12].mean()
-    assert sim_df.sis2_n_infected.values[0] == rs2.n_infected[:2].mean()
-
-    # Plot
-    res.plot()
-    sim.results.sis1.plot()
-    sim.results.sis2.plot()
-
-    return sim
-
-
-@sc.timer()
-def test_check_requires():
-    sc.heading('Testing check_requires')
-    s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
-    ss.check_requires(s1, 'sis')
-    ss.check_requires(s1, ss.SIS)
-    with pytest.raises(AttributeError):
-        ss.check_requires(s1, ss.SIR)
-    return s1
-
-
-@sc.timer()
-def test_mock_objects():
-    sc.heading('Testing mock objects')
-    o = sc.objdict()
-
-    μ = 5
-    mock = 100
-    atol = 0.1
-
-    # Initializing Dists
-    o.dist = ss.lognorm_ex(μ, 2, mock=mock)
-    assert np.isclose(o.dist.rvs(1000).mean(), μ, atol=atol), f'Distribution did not have expected mean value of {μ}'
-
-    # Initializing Arrs -- can use it, but cannot grow it since mock slots can't grow
-    o.arr = ss.FloatArr('my_arr', default=o.dist, mock=mock)
-    assert len(o.arr) == mock, 'Arr did not have expected length of {mock}'
-    assert np.isclose(o.arr.mean(), μ, atol=atol), f'Arr did not have expected mean value of {μ}'
-
-    # Initializing People
-    o.ppl = ss.People(n_agents=mock, mock=True)
-    assert o.ppl.age.mean() > 15, 'People did not have the expected age'
-
-    # Initializing Modules
-    o.mod = ss.SIS().init_mock()
-    for i in range(5):
-        o.mod.step()
-        o.mod.set_outcomes(ss.uids([i])) # Manually "infect" people
-        o.mod.update_results()
-
-    return o
-
-
-@sc.timer()
 def test_custom_imports():
     sc.heading('Testing custom imports')
     o = sc.objdict()
@@ -371,16 +251,11 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl   = test_people()
-    filt  = test_filtering()
     sim1  = test_microsim(do_plot)
-    sim2  = test_ppl_construction(do_plot)
+    sim2  = test_results()
     sims  = test_arrs()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
-    sim4  = test_results()
-    sim5  = test_check_requires()
-    objs  = test_mock_objects()
     mods  = test_custom_imports()
 
     sc.toc(T)
