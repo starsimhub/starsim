@@ -29,7 +29,7 @@ class MultiSim:
             if isinstance(sims, ss.Sim):
                 base_sim = sims
                 sims = None
-            elif isinstance(sims, list):
+            elif isinstance(sims, (list, tuple)):
                 if not sims:
                     errormsg = 'You must supply at least one sim to create a MultiSim'
                     raise ValueError(errormsg)
