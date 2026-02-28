@@ -442,6 +442,12 @@ class Timeline:
                 errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
+        # Ensure datevec is derived from the canonical tvec/yearvec for dur-based inputs;
+        # datevec was computed above via date.arange which uses calendar-accurate stepping,
+        # but when start is a dur, tvec/yearvec (from float arithmetic) are canonical and
+        # may have a different length due to calendar vs. float-year discrepancies.
+        if isinstance(self.start, ss.dur):
+            self.datevec = ss.date.from_array(self.yearvec, allow_zero=True)
 
         # Finalize timevecs
         self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray

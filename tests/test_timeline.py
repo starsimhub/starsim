@@ -29,6 +29,16 @@ def test_timeline_lengths():
 
 
 @sc.timer()
+def test_timeline_combinations():
+    sc.heading('Test additional combinations of inputs for ss.Timeline')
+
+    tl1 = ss.Timeline(start=2000, stop=2020, dt='week')
+    tl2 = ss.Timeline(start=2000, stop=2005, dt='day')
+
+    return tl1
+
+
+@sc.timer()
 def test_timeline():
     sc.heading('Test different instances of ss.Timeline')
 
@@ -320,10 +330,11 @@ if __name__ == '__main__':
     T = sc.timer('\nTotal time')
 
     o1 = test_timeline_lengths()
-    o2 = test_timeline()
-    o3 = test_timeline_syntax()
-    o4 = test_multi_timestep(do_plot)
-    o5 = test_mixed_timesteps()
-    o6 = test_units(do_plot)
+    o2 = test_timeline_combinations()
+    o3 = test_timeline()
+    o4 = test_timeline_syntax()
+    o5 = test_multi_timestep(do_plot)
+    o6 = test_mixed_timesteps()
+    o7 = test_units(do_plot)
 
     T.toc()
