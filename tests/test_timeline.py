@@ -43,6 +43,17 @@ def test_timeline_combinations():
     assert len(tl3) == np.floor(20*365/7) + 1 # 365/7 is Starsim's approximation of the number of weeks in a year, +1 for inclusive range
     assert len(tl4) == len(sc.daterange('2000-01-01', '2020-01-01', interval='week'))
 
+    # Corner cases: mixed dur types, datedur dt, long ranges, leap years
+    tl5 = ss.Timeline(start=ss.days(0), stop=ss.days(365), dt='week') # Days start/stop, week dt (type mismatch)
+    tl6 = ss.Timeline(start=ss.years(2000), stop=ss.years(2010), dt=ss.datedur(months=1))  # datedur dt with dur start
+    tl7 = ss.Timeline(start=2000, stop=2100, dt='week') # Long range amplifies float discrepancy
+    tl8 = ss.Timeline(start=2000, stop=2001, dt='day') # Leap year (2000) with day dt
+
+    assert len(tl5) == 53   # 365 days / 7 days per week + 1 inclusive
+    assert len(tl6) == 121  # 10 years * 12 months + 1 inclusive
+    assert len(tl7) == int(np.floor(100*365/7)) + 1
+    assert len(tl8) == 366  # 2000 is a leap year: 366 days, but float-year path uses 365.25
+
     return tl1
 
 
