@@ -5,7 +5,6 @@ import warnings
 import numpy as np
 import pandas as pd
 import sciris as sc
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import starsim as ss
 
@@ -31,7 +30,6 @@ class ndict(sc.objdict):
         networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
         networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
     """
-
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
         super().__init__()
         self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
@@ -96,6 +94,48 @@ class ndict(sc.objdict):
                 errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
         return
+
+    def get(self, key, default=None, match_case=False):
+        """ Get an entry from this ndict
+
+        See also `sim.get_module()`. Note: if a type is supplied that matches more
+        than one entry, this function only returns the first match. Use `Sim.get_modules()`
+        to handle multiple matches.
+
+        Args:
+            key (str/type): the object to get, either a type (e.g. `ss.SIR`) or a string (e.g. `'sir'`)
+            default (obj): what to return if not found (default None)
+            match_case (bool): if False (default), ignore case with string matching
+
+        **Example**:
+            sim = ss.Sim(diseases=ss.SIR(name='MySIR'), networks='random')
+            sim.run()
+
+            # All return sim.diseases.MySIR
+            sim.diseases.get('MySIR')
+            sim.diseases.get('mysir')
+            sim.diseases.get(ss.SIR)
+        """
+        # Handle strings
+        if isinstance(key, str):
+            if key in self: # Shortcut if a string provided and matches an entry in the dict
+                return self[key]
+            elif not match_case:
+                key = key.lower()
+                return next((v for k, v in self.items() if k.lower() == key), default)
+            else:
+                return default
+
+        # Handle types
+        elif isinstance(key, type):
+            return next((v for v in self.values() if isinstance(v, key)), default)
+
+        # Handle exceptions
+        else:
+            errormsg = f'Key must be a str or type, not {key}'
+            raise TypeError(errormsg)
+
+        return # Unreachable
 
     def extend(self, *args, **kwargs):
         """ Add new items to the ndict, by item, list, or dict """

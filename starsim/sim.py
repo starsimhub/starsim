@@ -214,7 +214,7 @@ class Sim(ss.Base):
         else:
             return matches[0]
 
-    def get_modules(self, query=None, match_case=False):
+    def get_modules(self, query=None, match_case=False, as_dict=False):
         """
         Retrieve modules from the Sim
 
@@ -230,6 +230,7 @@ class Sim(ss.Base):
         Args:
             query (type/str): The module type (e.g. `ss.SIR`) or a case-insensitive string (e.g. `'sir'`); if None, return all modules
             match_case (bool): if `query` is a string, whether to match case (default False)
+            as_dict (bool): only used if query=None, in which case return a dict rather than list of modules
 
         Returns:
             A list of `ss.Module` instances. The list will be empty if no modules were found
@@ -243,7 +244,10 @@ class Sim(ss.Base):
 
         # Return all modules if no query
         if query is None:
-            return list(modules)
+            if as_dict:
+                return ss.utils.nlist_as_dict(modules)
+            else:
+                return list(modules)
 
         # Loop over all modules, looking for matches
         for mod in modules:
