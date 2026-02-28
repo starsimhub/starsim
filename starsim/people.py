@@ -45,8 +45,8 @@ class People:
         self.initialized = False
         self.n_agents_init = n_agents
 
-        # Handle the three fundamental arrays: UIDs for tracking agents, slots for
-        # tracking random numbers, and AUIDs for tracking alive agents
+        # Handle the four fundamental arrays: UIDs for tracking agents, slots for
+        # tracking random numbers, AUIDs for tracking alive agents, and agents' parents
         n = int(n_agents)
         uids = ss.uids(np.arange(n))
         self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
@@ -57,7 +57,7 @@ class People:
         self.slot.grow(new_vals=uids)
         self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
         for state in [self.uid, self.slot, self.parent]:
-            state.people = self # Manually link to people since we don't want to link to states
+            state.people = self # Manually link to people since we need to set these up before using state.link_people()
 
         # Handle additional states
         extra_states = sc.promotetolist(extra_states)
@@ -82,15 +82,61 @@ class People:
 
         return
 
-    def brief(self, output=False):
-        n = self.n_agents_init
-        alive = len(self)
-        alive_str = f'{alive=:n}; ' if alive != n else ''
-        age_mean = self.age.mean()
-        age_std = self.age.std()
-        out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
-        return out if output else print(out)
+    def _link_state(self, state, die=True):
+        """
+        Link a state with the People instance for dynamic resizing; usually called by
+        `state.link_people()`
 
+        All states should be registered by this function for the purpose of connecting them to the
+        People's UIDs and to have them be automatically resized when the number of agents changes.
+        This operation is normally triggered as part of initializing the state (via `Arr.init()`)
+        """
+        if id(state) not in self._states:
+            self._states[id(state)] = state
+        elif die:
+            errormsg = f'Cannot add state {state} since already added'
+            raise ValueError(errormsg)
+        return
+
+    def __getitem__(self, key):
+        """
+        Allow people['attr'] instead of getattr(people, 'attr')
+        If the key is an integer, alias `people.person()` to return a `Person` instance
+        """
+        if isinstance(key, int):
+            return self.person(key)
+        else:
+            return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        """ Ditto """
+        return setattr(self, key, value)
+
+    def __iter__(self):
+        """ Iterate over people """
+        for i in range(len(self)):
+            yield self[i]
+
+    def __setstate__(self, state):
+        """
+        Set the state upon unpickling/deepcopying
+
+        If a People instance is copied (by any mechanism) then the keys in the `_states`
+        registry will no longer match the memory addresses of the new copied states. Therefore,
+        after copying, we need to re-create the states registry with the new object IDs
+        """
+        state['_states'] =  {id(v):v for v in state['_states'].values()}
+        self.__dict__ = state
+        return
+    
+    def __bool__(self):
+        """ Ensure that zero-length people are still truthy """
+        return True
+
+    def __len__(self):
+        """ Length of people """
+        return len(self.auids)
+    
     def __repr__(self):
         return self.brief(output=True)
 
@@ -102,6 +148,15 @@ class People:
     def disp(self):
         """ Full object information """
         return sc.pr(self)
+
+    def brief(self, output=False):
+        n = self.n_agents_init
+        alive = len(self)
+        alive_str = f'{alive=:n}; ' if alive != n else ''
+        age_mean = self.age.mean()
+        age_std = self.age.std()
+        out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
+        return out if output else print(out)
 
     @staticmethod
     def get_age_dist(age_data):
@@ -256,14 +311,6 @@ class People:
         self.init_vals()
         return
 
-    def __bool__(self):
-        """ Ensure that zero-length people are still truthy """
-        return True
-
-    def __len__(self):
-        """ Length of people """
-        return len(self.auids)
-
     @property
     def n_agents(self):
         """ Alias for len(people) """
@@ -271,23 +318,18 @@ class People:
 
     @property
     def n_uids(self):
+        """ Number of UIDs used in People """
         return self.uid.len_used
+    
+    @property
+    def dead(self):
+        """ Dead boolean. Also includes removed agents """
+        return ~self.alive
 
-    def _link_state(self, state, die=True):
-        """
-        Link a state with the People instance for dynamic resizing; usually called by
-        `state.link_people()`
-
-        All states should be registered by this function for the purpose of connecting them to the
-        People's UIDs and to have them be automatically resized when the number of agents changes.
-        This operation is normally triggered as part of initializing the state (via `Arr.init()`)
-        """
-        if id(state) not in self._states:
-            self._states[id(state)] = state
-        elif die:
-            errormsg = f'Cannot add state {state} since already added'
-            raise ValueError(errormsg)
-        return
+    @property
+    def male(self):
+        """ Male boolean  (female is a state) """
+        return ~self.female
 
     def grow(self, n=None, new_slots=None):
         """
@@ -325,37 +367,6 @@ class People:
         # Finally, update the alive indices
         self.auids = self.auids.concat(new_uids)
         return new_uids
-
-    def __getitem__(self, key):
-        """
-        Allow people['attr'] instead of getattr(people, 'attr')
-        If the key is an integer, alias `people.person()` to return a `Person` instance
-        """
-        if isinstance(key, int):
-            return self.person(key)
-        else:
-            return getattr(self, key)
-
-    def __setitem__(self, key, value):
-        """ Ditto """
-        return setattr(self, key, value)
-
-    def __iter__(self):
-        """ Iterate over people """
-        for i in range(len(self)):
-            yield self[i]
-
-    def __setstate__(self, state):
-        """
-        Set the state upon unpickling/deepcopying
-
-        If a People instance is copied (by any mechanism) then the keys in the `_states`
-        registry will no longer match the memory addresses of the new copied states. Therefore,
-        after copying, we need to re-create the states registry with the new object IDs
-        """
-        state['_states'] =  {id(v):v for v in state['_states'].values()}
-        self.__dict__ = state
-        return
 
     def filter(self, criteria=None, uids=None, split=False):
         """
@@ -476,16 +487,6 @@ class People:
         self.remove_dead()
         self.update_post()
         return
-
-    @property
-    def dead(self):
-        """ Dead boolean. Also includes removed agents """
-        return ~self.alive
-
-    @property
-    def male(self):
-        """ Male boolean """
-        return ~self.female
 
     def to_df(self):
         """ Export to dataframe """
