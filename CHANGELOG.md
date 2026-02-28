@@ -9,6 +9,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Removed `sim.module_list` which can be replaced with `list(sim.modules)` if an exact replacement is required. In many cases, `sim.module_list` was used only to iterate over the modules, in which case it can be directly replaced with `sim.modules`.
 - Removed `sim.module_dict` which can be replaced with `sim.get_modules(as_dict=True)` if required. `sim.module_dict` was removed as an attribute to help avoid ambiguity as to where modules are stored in the `Sim`. In cases where the `module_dict` was used to retrieve modules by name, `sim.get_module` can be used instead. 
 - Added `sim.get_modules()` to search for modules, and `sim.get_module()` to retrieve exactly one module. Also added `ndict.get()` (e.g. `sim.diseases.get()`) with similar functionality.
+- Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`.
 
 
 ## Version 3.1.1 (2026-02-18)
