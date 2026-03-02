@@ -2283,7 +2283,14 @@ class FloatYearFormatter(sc.ScirisDateFormatter):
         return super().format_data_short(matplotlib.dates.date2num(ss.date(value)))
 
     def format_ticks(self, values, *args, **kwargs):
-        return super().format_ticks(values, min_year=-np.inf, max_year=np.inf)
+        values = np.asarray(values)
+        valid = values >= 1  # Year 0 doesn't exist in Python's datetime
+        if valid.all():
+            return super().format_ticks(values, min_year=-np.inf, max_year=np.inf)
+        else:
+            safe_values = np.where(valid, values, 1)  # Replace invalid years to avoid crash
+            labels = super().format_ticks(safe_values, min_year=-np.inf, max_year=np.inf)
+            return ['' if not v else l for v, l in zip(valid, labels)]
 
 
 class DateConverter(matplotlib.units.ConversionInterface):
