@@ -32,7 +32,7 @@ if options.license:
 
 # Double-check key requirements -- should match pyproject.toml
 t('reqs')
-sc.require(reqs=['sciris>=3.2.6', 'pandas>=2.0.0'], die=False,
+sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
     message = f'\n\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\nYou can update with: pip install <MISSING> --upgrade\n'
 )
 

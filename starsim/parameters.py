@@ -250,18 +250,24 @@ class SimPars(Pars):
         self.death_rate = None
         self.use_aging  = None # True if demographics, false otherwise
 
-        # Modules: demographics, diseases, networks, analyzers, and interventions
+        # Modules
         self.people = None
+        self._reset_modules()
+
+        # Update with any supplied parameter values and generate things that need to be generated
+        self.update(pars, create=create, **kwargs)
+        return
+
+    def _reset_modules(self):
+        # Initialize ndicts for module storage
         self.modules       = ss.ndict()
+        self.custom        = ss.ndict()
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
         self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
         self.analyzers     = ss.ndict()
-
-        # Update with any supplied parameter values and generate things that need to be generated
-        self.update(pars, create=create, **kwargs)
         return
 
     def is_default(self, key):
@@ -339,19 +345,15 @@ class SimPars(Pars):
                 self[modkey] = sc.tolist(self[modkey])
 
         # Convert any modules that are not already Module objects
-        self.convert_modules()
-
-        # Convert from lists to ndicts
-        for modkey,modclass in modmap.items():
-            self[modkey] = ss.ndict(self[modkey], type=modclass)
-
-        # Find any modules that belong to other types and move them -- e.g. ss.Sim(modules=[ss.SIS(), ss.RandomNet()])
-        for modkey,modclass in modmap.items():
-            if modkey != 'modules': # Skip
-                for mod in self.modules():
-                    if isinstance(mod, modclass):
-                        self[modkey].append(mod) # Add to the correct list
-                        self.modules.pop(mod.name) # Remove from the modules list
+        modules = self.convert_modules()
+        self._reset_modules()
+        for mod in modules:
+            for modkey, modclass in modmap.items():
+                if isinstance(mod, modclass):
+                    self[modkey].append(mod) # Add to the correct list
+                    break
+            else:
+                self['custom'].append(mod)
 
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
@@ -398,69 +400,91 @@ class SimPars(Pars):
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
         a Sim object
-        """
-        modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
-        modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
 
-        for modkey,ssmoddict in modules.items():
+        Returns a flat list of ss.Module instances
+        """
+
+        out = []
+        modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
+        modmap['modules'] = ss.Module # Enable passing in modules of any type via `Pars(modules=[...])`
+        modmap['custom'] = ss.Module # Enable passing in modules of any type via `Pars(custom=[...])`
+        supported_modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
+        supported_modules['modules'] = sc.objdict({k:v for vv in supported_modules.values() for k,v in vv.items()})
+        supported_modules['custom'] = supported_modules['modules']
+
+        for modkey, ssmoddict in supported_modules.items():
+
             moddictkeys = ssmoddict.keys()
             moddictvals = ssmoddict.values()
             expected_cls = modmap[modkey]
-            modlist = self[modkey]
-            if isinstance(modlist, list): # Skip over ones that are already ndict format, assume they're already initialized
-                for i,mod in enumerate(modlist):
 
-                    # Convert first from a string to a dict
-                    if isinstance(mod, str):
-                        mod = dict(type=mod)
+            if isinstance(self[modkey], list):
+                modlist = self[modkey]
+            elif isinstance(self[modkey], ss.ndict):
+                # If it is an ndict, then assume the keys specify names the values represent modules
+                # They may already be module instances, in which case we will simply verify that the type
+                # matches the expected type
+                modlist = list(self[modkey].values())
+            else:
+                # If it is a dict with a single entry, then we wrap this in a list assuming that it is a dict
+                # representation of a single module (as opposed to a dict containing modules)
+                modlist = sc.promotetolist(self[modkey])
 
-                    # Convert from class to class instance (used for interventions and analyzers only)
-                    if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
-                        mod = mod() # Call it to create a class instance
+            for i,mod in enumerate(modlist):
 
-                    # Now convert from a dict to a module
-                    if isinstance(mod, dict):
+                # Convert first from a string to a dict
+                if isinstance(mod, str):
+                    mod = dict(type=mod)
 
-                        # Get the module type as a string
-                        if 'type' in mod:
-                            modtype = mod.pop('type')
+                # Convert from class to class instance (used for interventions and analyzers only)
+                if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
+                    mod = mod() # Call it to create a class instance
+
+                # Now convert from a dict to a module
+                if isinstance(mod, dict):
+
+                    # Get the module type as a string
+                    if 'type' in mod:
+                        modtype = mod.pop('type')
+                    else:
+                        errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
+                        raise ValueError(errormsg)
+
+                    # Get the module type as a class
+                    if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
+                        modtype = modtype.lower() # Because our map is in lowercase
+                        if modtype in moddictkeys:
+                            modcls = ssmoddict[modtype]
                         else:
-                            errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
-                            raise ValueError(errormsg)
+                            errormsg = f'Invalid module name "{modtype}" for "{modkey}"; must be one of {moddictkeys}'
+                            raise TypeError(errormsg)
+                    else: # Allow supplying directly as a class, e.g. dict(type=ss.SIR, dur_inf=6)
+                        if modtype in moddictvals:
+                            modcls = modtype
+                        else:
+                            errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {moddictvals}'
+                            raise TypeError(errormsg)
 
-                        # Get the module type as a class
-                        if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
-                            modtype = modtype.lower() # Because our map is in lowercase
-                            if modtype in moddictkeys:
-                                modcls = ssmoddict[modtype]
-                            else:
-                                errormsg = f'Invalid module name "{modtype}" for "{modkey}"; must be one of {moddictkeys}'
-                                raise TypeError(errormsg)
-                        else: # Allow supplying directly as a class, e.g. dict(type=ss.SIR, dur_inf=6)
-                            if modtype in moddictvals:
-                                modcls = modtype
-                            else:
-                                errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {moddictvals}'
-                                raise TypeError(errormsg)
+                    # Create the module and store it in the list
+                    mod = modcls(**mod)
 
-                        # Create the module and store it in the list
-                        mod = modcls(**mod)
+                # Special handling for interventions and analyzers: convert class and function to class instance
+                if modkey in ['interventions', 'analyzers']:
+                    if isinstance(mod, type) and issubclass(mod, expected_cls):
+                        mod = mod()  # Convert from a class to an instance of a class
+                    elif not isinstance(mod, ss.Module) and callable(mod):
+                        mod = expected_cls.from_func(mod)
 
-                    # Special handling for interventions and analyzers: convert class and function to class instance
-                    if modkey in ['interventions', 'analyzers']:
-                        if isinstance(mod, type) and issubclass(mod, expected_cls):
-                            mod = mod()  # Convert from a class to an instance of a class
-                        elif not isinstance(mod, ss.Module) and callable(mod):
-                            mod = expected_cls.from_func(mod)
+                # Convert plain modules from functions to actual modules
+                if modkey == 'modules':
+                    if not isinstance(mod, ss.Module) and callable(mod):
+                        mod = ss.Module.from_func(mod)
 
-                    # Convert plain modules from functions to actual modules
-                    if modkey == 'modules':
-                        if not isinstance(mod, ss.Module) and callable(mod):
-                            mod = ss.Module.from_func(mod)
+                # Do final check
+                if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
+                    errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
+                    raise TypeError(errormsg)
 
-                    # Do final check
-                    if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
-                        raise TypeError(errormsg)
-                    modlist[i] = mod
-        return
+                out.append(mod)
+
+        return out
