@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 __all__ = ['Loop']
 
 
-
 #%% Loop class
 
 class Loop:
@@ -216,6 +215,15 @@ class Loop:
                 ti += 1
             ti_vals.append(ti)
         self.plan.loc[:, 'ti'] = ti_vals
+
+        # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
+        eps = 1e-9
+        diffs = np.float64(np.diff(self.plan.time)) # May be date, so convert to float
+        small_diffs = diffs[(diffs > 0) & (diffs < eps)]
+        if len(small_diffs):
+            warnmsg = f'{len(small_diffs)} integration loop entries have near-identical times, indicating a floating-point issue:\n{small_diffs}\nCheck your time units across the sim and modules!'
+            ss.warn(warnmsg)
+
         return
 
     def store_time(self):
