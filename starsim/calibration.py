@@ -29,8 +29,11 @@ class Calibration(sc.prettyobj):
         n_workers    (int)   : the number of parallel workers (if None, will use all available CPUs)
         total_trials (int)   : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
         reseed       (bool)  : whether to generate new random seeds for each trial
-        build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a modified sim
-        build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is `self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)`, where sim is a copy of the base simulation to be modified with calib_pars
+        build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a sim corresponding to a single calibration trial
+        build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is `self.build_fn(sim, calib_pars, **self.build_kw)`,
+                               where sim is a copy of the base simulation to be modified with calib_pars. The `calib_pars` passed to the `build_fn` is a dictionary with the same keys as the `calib_pars`
+                               argument to `Calibration`, but containing a single sampled value for each parameter corresponding to the current trial, rather than a specification of the sampling
+                               range/distribution.
         components    (list) : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
         prune_fn  (callable) : Function that takes a dictionary of parameters and returns True if the trial should be pruned
         eval_fn   (callable) : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
@@ -92,7 +95,7 @@ class Calibration(sc.prettyobj):
         sim = sc.dcp(self.sim)
         if label: sim.label = label
 
-        sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
+        sim = self.build_fn(sim, calib_pars, **self.build_kw)
 
         try:
             sim.run() # Run the simulation (or MultiSim)
