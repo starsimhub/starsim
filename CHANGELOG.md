@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.2.0 (2026-XX-XX)
+## Version 3.2.0 (2026-03-02)
 
 ### Sim module changes
 - Changed `sim.modules` to `sim.custom` for storage of custom modules that do not match standard types (e.g., diseases, interventions). Passing modules in via a `modules` argument is still supported, such modules will automatically be moved to the appropriate attribute upon initialization. 
@@ -13,6 +13,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ### Other changes
 - Fixed a bug in `ss.Timeline()` that led to array length mismatches for certain combination of `start`, `stop`, and `dt`
+- Changed the default start to be the year 2000 regardless of other input (previously, if e.g. `dt='month'`, the start would change to being zero-based)
 - Fixed a bug introduced in v3.1.0 that prevented `People.filter()` from working
 - Provided methods to annualize results for plotting (e.g. `sim.results.sir.prevalence.annualize()`)
 - Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`
