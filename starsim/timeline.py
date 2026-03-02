@@ -423,13 +423,13 @@ class Timeline:
                 start = self.start
                 stop = self.stop
                 dt = self.dt
-                eps = 1e-6 # Avoid rounding errors
+                eps = min(1e-6, self.dt/2) # Avoid rounding errors
+                decimals = 9 # Avoid floating-point discrepancies between modules with different dur types (e.g. ss.years vs ss.months)
                 if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
                     self.tvec = sc.inclusiverange(start.value, stop.value+eps, dt.value)
-                    self.tvec = self.default_type(self.tvec)
-                    self.yearvec = self.tvec.years
+                    self.tvec = self.default_type(np.round(self.tvec, decimals=decimals))
+                    self.yearvec = np.round(self.tvec.years, decimals=decimals)
                 else: # They don't match: convert to years, then create the tvec
-                    decimals = 12 # Also for avoiding rounding errors
                     start = self.start.years
                     stop = self.stop.years
                     dt = self.dt.years
