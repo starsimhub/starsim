@@ -12,10 +12,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added `sim.get_modules()` to search for modules, and `sim.get_module()` to retrieve exactly one module. Also added `ndict.get()` (e.g. `sim.diseases.get()`) with similar functionality.
 
 ### Other changes
-- Provided methods to annualize results for plotting
-- Fixed a bug introduced in v3.1.0 that prevented `People.filter()` from working.
-- Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`.
-- Added option for `ss.MultiSim` to be constructed from other MultiSims and from tuples of sims (previously, only lists of sims were supported).
+- Fixed a bug in `ss.Timeline()` that led to array length mismatches for certain combination of `start`, `stop`, and `dt`
+- Fixed a bug introduced in v3.1.0 that prevented `People.filter()` from working
+- Provided methods to annualize results for plotting (e.g. `sim.results.sir.prevalence.annualize()`)
+- Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`
+- Added option for `ss.MultiSim` to be constructed from other MultiSims and from tuples of sims (previously, only lists of sims were supported)
 - *GitHub info*: PR [1186](https://github.com/starsimhub/starsim/pull/1186)
 
 

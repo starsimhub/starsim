@@ -177,7 +177,7 @@ class Timeline:
         if not isinstance(key, str):
             errormsg = f'Key must be a string, not {key}'
             raise TypeError(errormsg)
-        key = key.removesuffix('vec') + 'vec' # Allow either e.g. 'yearvec' or 'year'
+        key = key.removesuffix('vec') + 'vec' # Allow either e.g. 'yearvec' or 'year', converting to former
 
         # Get the right keyvec
         if key in self._time_vecs:
@@ -423,13 +423,13 @@ class Timeline:
                 start = self.start
                 stop = self.stop
                 dt = self.dt
-                eps = 1e-6 # Avoid rounding errors
+                eps = min(1e-6, self.dt/2) # Avoid rounding errors
+                decimals = 9 # Avoid floating-point discrepancies between modules with different dur types (e.g. ss.years vs ss.months)
                 if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
                     self.tvec = sc.inclusiverange(start.value, stop.value+eps, dt.value)
-                    self.tvec = self.default_type(self.tvec)
-                    self.yearvec = self.tvec.years
+                    self.tvec = self.default_type(np.round(self.tvec, decimals=decimals))
+                    self.yearvec = np.round(self.tvec.years, decimals=decimals)
                 else: # They don't match: convert to years, then create the tvec
-                    decimals = 12 # Also for avoiding rounding errors
                     start = self.start.years
                     stop = self.stop.years
                     dt = self.dt.years
@@ -442,6 +442,12 @@ class Timeline:
                 errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
+        # Ensure datevec is derived from the canonical tvec/yearvec for dur-based inputs;
+        # datevec was computed above via date.arange which uses calendar-accurate stepping,
+        # but when start is a dur, tvec/yearvec (from float arithmetic) are canonical and
+        # may have a different length due to calendar vs. float-year discrepancies.
+        if isinstance(self.start, ss.dur):
+            self.datevec = ss.date.from_array(self.yearvec, allow_zero=True)
 
         # Finalize timevecs
         self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray

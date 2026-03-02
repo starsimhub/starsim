@@ -29,6 +29,35 @@ def test_timeline_lengths():
 
 
 @sc.timer()
+def test_timeline_combinations():
+    sc.heading('Test additional combinations of inputs for ss.Timeline')
+
+    # Compare day and week dt vs. float-year and date representations 
+    tl1 = ss.Timeline(start=2000, stop=2005, dt='day')
+    tl2 = ss.Timeline(start='2000-01-01', stop='2005-01-01', dt='day')
+    tl3 = ss.Timeline(start=2000, stop=2020, dt='week')
+    tl4 = ss.Timeline(start='2000-01-01', stop='2020-01-01', dt='week')
+    
+    assert len(tl1) == len(sc.daterange('2000-01-01', '2005-01-01')) - 2 # Leap years not counted
+    assert len(tl2) == len(sc.daterange('2000-01-01', '2005-01-01')) # Leap years are counted if using dates
+    assert len(tl3) == np.floor(20*365/7) + 1 # 365/7 is Starsim's approximation of the number of weeks in a year, +1 for inclusive range
+    assert len(tl4) == len(sc.daterange('2000-01-01', '2020-01-01', interval='week'))
+
+    # Corner cases: mixed dur types, datedur dt, long ranges, leap years
+    tl5 = ss.Timeline(start=ss.days(0), stop=ss.days(365), dt='week') # Days start/stop, week dt (type mismatch)
+    tl6 = ss.Timeline(start=ss.years(2000), stop=ss.years(2010), dt=ss.datedur(months=1))  # datedur dt with dur start
+    tl7 = ss.Timeline(start=2000, stop=2100, dt='week') # Long range amplifies float discrepancy
+    tl8 = ss.Timeline(start=2000, stop=2001, dt='day') # Leap year (2000) with day dt
+
+    assert len(tl5) == 53   # 365 days / 7 days per week + 1 inclusive
+    assert len(tl6) == 121  # 10 years * 12 months + 1 inclusive
+    assert len(tl7) == int(np.floor(100*365/7)) + 1
+    assert len(tl8) == 366  # 2000 is a leap year: 366 days, but float-year path uses 365.25
+
+    return tl1
+
+
+@sc.timer()
 def test_timeline():
     sc.heading('Test different instances of ss.Timeline')
 
@@ -312,6 +341,36 @@ def test_units(do_plot=False):
     return sims
 
 
+@sc.timer()
+def test_step_count():
+    """
+    A disease with dt='month' should step exactly once per timestep, even when
+    the sim's dt is ss.years(1/12) (type mismatch: years vs months).
+
+    When the disease sets dt='month' via its pars (propagated to self.t via
+    update_pars), and the sim uses dt=ss.years(1/12), the Timeline type check
+    (years != months) prevents tvec sharing. Both build tvecs independently,
+    introducing floating-point differences (~2e-13) that cause the loop planner
+    to create duplicate plan entries — the disease steps twice on some timesteps.
+    """
+    sc.heading('Test no double-stepping')
+
+    for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (ss.years(1/12), 'ss.years(1/12)')]:
+        sim = ss.Sim(
+            diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
+            networks='random', n_agents=100, dur=1, dt=sim_dt,
+        )
+        sim.init()
+        plan = sim.loop.plan
+        disease_steps = plan[plan.label.str.contains('sis.step_state')]
+        counts_per_ti = disease_steps.groupby('ti').size()
+        max_calls = counts_per_ti.max()
+        assert max_calls == 1, f"With sim dt={label}: step_state scheduled {max_calls}x on a single timestep (should be 1)"
+        print(f'  dt={label}: OK (max 1 step_state per timestep)')
+
+    return sim
+
+
 # Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -320,10 +379,12 @@ if __name__ == '__main__':
     T = sc.timer('\nTotal time')
 
     o1 = test_timeline_lengths()
-    o2 = test_timeline()
-    o3 = test_timeline_syntax()
-    o4 = test_multi_timestep(do_plot)
-    o5 = test_mixed_timesteps()
-    o6 = test_units(do_plot)
+    o2 = test_timeline_combinations()
+    o3 = test_timeline()
+    o4 = test_timeline_syntax()
+    o5 = test_multi_timestep(do_plot)
+    o6 = test_mixed_timesteps()
+    o7 = test_units(do_plot)
+    o8 = test_step_count()
 
     T.toc()
