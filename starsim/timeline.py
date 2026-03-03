@@ -86,9 +86,10 @@ class Timeline:
 
     def __repr__(self):
         def fmt(v):
-            try:    return f'{float(v):.4f}'.rstrip('0').rstrip('.')
-            except: return str(v)
-            
+            """ If a float (year), ensure not too many decimal places """
+            if isinstance(v, float): return f'{v:.4f}'.rstrip('0').rstrip('.')
+            else: return str(v)
+
         if self.initialized:
             return f'Timeline({fmt(self.start)}-{fmt(self.stop)}; dt={self.dt!r}; now={fmt(self.tvec[self.ti])}; ti={self.ti}/{len(self)-1})'
         else:
