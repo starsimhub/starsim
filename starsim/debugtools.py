@@ -350,8 +350,8 @@ class Diagnostics(sc.quickobj):
 def check_requires(sim, requires, *args):
     """ Check that the module's requirements (of other modules) are met """
     errs = sc.autolist()
-    all_classes = [m.__class__ for m in sim.module_list]
-    all_names = [m.name for m in sim.module_list]
+    all_classes = [m.__class__ for m in sim.modules]
+    all_names = [m.name for m in sim.modules]
     for req in sc.mergelists(requires, *args):
         if req not in all_classes + all_names:
             errs += req
