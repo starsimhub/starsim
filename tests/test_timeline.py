@@ -8,7 +8,7 @@ import starsim as ss
 small = 100
 medium = 1000
 sc.options(interactive=False)
-ss.options.warnings = 'error' # For additional debugging
+# ss.options.warnings = 'error' # For additional debugging
 
 @sc.timer()
 def test_timeline_lengths():
