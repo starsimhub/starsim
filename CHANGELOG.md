@@ -2,22 +2,22 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.2.0 (2026-03-02)
+## Version 3.2.0 (2026-03-03)
 
 ### Sim module changes
 - Changed `sim.modules` to `sim.custom` for storage of custom modules that do not match standard types (e.g., diseases, interventions). Passing modules in via a `modules` argument is still supported, such modules will automatically be moved to the appropriate attribute upon initialization. 
-- Updated `sim.modules` to now return an iterator over all modules
+- Updated `sim.modules` to now return an iterator over all modules.
 - Removed `sim.module_list` which can be replaced with `list(sim.modules)` if an exact replacement is required. In many cases, `sim.module_list` was used only to iterate over the modules, in which case it can be directly replaced with `sim.modules`.
 - Removed `sim.module_dict` which can be replaced with `sim.get_modules(as_dict=True)` if required. `sim.module_dict` was removed as an attribute to help avoid ambiguity as to where modules are stored in the `Sim`. In cases where the `module_dict` was used to retrieve modules by name, `sim.get_module` can be used instead. 
 - Added `sim.get_modules()` to search for modules, and `sim.get_module()` to retrieve exactly one module. Also added `ndict.get()` (e.g. `sim.diseases.get()`) with similar functionality.
 
 ### Other changes
-- Fixed a bug in `ss.Timeline()` that led to array length mismatches for certain combination of `start`, `stop`, and `dt`
-- Changed the default start to be the year 2000 regardless of other input (previously, if e.g. `dt='month'`, the start would change to being zero-based)
-- Fixed a bug introduced in v3.1.0 that prevented `People.filter()` from working
-- Provided methods to annualize results for plotting (e.g. `sim.results.sir.prevalence.annualize()`)
-- Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`
-- Added option for `ss.MultiSim` to be constructed from other MultiSims and from tuples of sims (previously, only lists of sims were supported)
+- Fixed a bug in `ss.Timeline()` that led to array length mismatches for certain combination of `start`, `stop`, and `dt`.
+- Changed the default start to be the year 2000 regardless of other input (previously, if e.g. `dt='month'`, the start would change to being zero-based); now, only if `start=0` is a timepoint-based (non-calendar-based) timeline assumed.
+- Fixed a bug introduced in v3.1.0 that prevented `People.filter()` from working.
+- Provided methods to annualize results for plotting (e.g. `sim.results.sir.prevalence.annualize()`).
+- Added `sim.people.keys()` as an alias for `sim.people.states.keys()`, and `sim.dists.keys()` as an alias for `sim.dists.dists.keys()`.
+- Added option for `ss.MultiSim` to be constructed from other MultiSims and from tuples of sims (previously, only lists of sims were supported).
 - *GitHub info*: PR [1186](https://github.com/starsimhub/starsim/pull/1186)
 
 
