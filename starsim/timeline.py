@@ -85,10 +85,14 @@ class Timeline:
         return
 
     def __repr__(self):
+        def fmt(v):
+            try:    return f'{float(v):.4f}'.rstrip('0').rstrip('.')
+            except: return str(v)
+            
         if self.initialized:
-            return f'Timeline({self.start}-{self.stop}; dt={self.dt}; now={self.tvec[self.ti]}; ti={self.ti}/{len(self)-1})'
+            return f'Timeline({fmt(self.start)}-{fmt(self.stop)}; dt={self.dt!r}; now={fmt(self.tvec[self.ti])}; ti={self.ti}/{len(self)-1})'
         else:
-            return 'Timeline(uninitialized)>'
+            return 'Timeline(uninitialized)'
 
     def disp(self):
         return sc.pr(self)
@@ -274,7 +278,7 @@ class Timeline:
         for key,arg in args.items():
             if isinstance(arg, (ss.date, ss.datedur)):
                 cal_year_like = True
-                use_dates = True
+                use_dates = True if self.start != 0 else False # Cannot use dates with start=0
                 break # Dates take precedence, so stop the loop here
             elif key == 'start' and arg is not None and not ss.time.assume_cal_year(arg): # Explicitly non-year-like start (e.g. start=0, start=ss.days(5))
                 cal_year_like = False

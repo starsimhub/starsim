@@ -8,6 +8,7 @@ import starsim as ss
 small = 100
 medium = 1000
 sc.options(interactive=False)
+ss.options.warnings = 'error' # For additional debugging
 
 @sc.timer()
 def test_timeline_lengths():
@@ -104,19 +105,19 @@ def test_timeline():
 
     print('Testing durations 2')
     s4 = sim(start=0, stop=ss.datedur(months=10), dt=ss.datedur(months=1))
-    assert s4.t.datevec[0] == ss.dur(0)
+    assert s4.t.datevec[0] == ss.months(0)
     assert s4.t.datevec[-1] == ss.datedur(months=10)
     assert len(s4.t) == 11
 
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
-    assert s5.t.datevec[0] == ss.dur(0)
+    assert s5.t.datevec[0] == ss.years(0)
     assert s5.t.datevec[-1] == ss.datedur(years=30)
     assert len(s5.t) == 31
 
     print('Testing numeric 2')
-    s6 = sim(start=2, stop=None, dt=None)  # Will default to start=dur(2), dur=ss.dur(50), end=start+dur
-    assert s6.t.tvec[0] == ss.dur(2)
+    s6 = sim(start=2, stop=None, dt=None)  # Will default to start=ss.years(2), dur=ss.years(50), end=start+dur
+    assert s6.t.tvec[0] == ss.years(2)
     assert s6.t.tvec[-1] == ss.datedur(years=52).years
     assert len(s6.t) == 51
 
@@ -357,7 +358,7 @@ def test_step_count():
     for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (ss.years(1/12), 'ss.years(1/12)')]:
         sim = ss.Sim(
             diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
-            networks='random', n_agents=100, dur=1, dt=sim_dt,
+            networks='random', n_agents=100, dur=ss.years(1), dt=sim_dt,
         )
         sim.init()
         plan = sim.loop.plan
