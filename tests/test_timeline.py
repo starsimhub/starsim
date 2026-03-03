@@ -162,14 +162,14 @@ def test_timeline_syntax():
     kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)                    , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
     kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None)          , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
     kw.c3 = [dict(start=None, stop=None, dur=ss.datedur(months=24), dt=None) , dict(start=ss.date(2000), stop=ss.date(2002), dur=ss.datedur(months=24), dt=ss.years(1))]
-    kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
+    kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.years(2000), stop=ss.years(2000)+ss.days(50), dur=ss.days(50), dt=ss.days(1))]
     kw.c5 = [dict(start=None, stop=None, dur='1990.1.1', dt=None)            , 'exception']
 
     # Test dt
     kw.d1 = [dict(start=None, stop=None, dur=None, dt=1)                    , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.d2 = [dict(start=None, stop=None, dur=None, dt=ss.years(1))          , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
-    kw.d3 = [dict(start=None, stop=None, dur=None, dt=ss.days(1))           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
-    kw.d4 = [dict(start=None, stop=None, dur=None, dt='month')              , dict(start=ss.months(0), stop=ss.months(50), dur=ss.months(50), dt=ss.months(1))]
+    kw.d3 = [dict(start=None, stop=None, dur=None, dt=ss.days(1))           , dict(start=ss.years(2000), stop=ss.years(2000)+ss.days(50), dur=ss.days(50), dt=ss.days(1))]
+    kw.d4 = [dict(start=None, stop=None, dur=None, dt='month')              , dict(start=ss.years(2000), stop=ss.years(2000)+ss.months(50), dur=ss.months(50), dt=ss.months(1))]
     kw.d5 = [dict(start=None, stop=None, dur=None, dt=ss.datedur(months=1)) , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.datedur(months=1))]
 
     # Test start and stop
@@ -195,7 +195,7 @@ def test_timeline_syntax():
     # Test multiple
     kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.months(1))]
     kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=dd20, dt=ss.datedur(months=1))]
-    kw.h3 = [dict(start=1990, dur=40, dt='month')                                 , dict(start=ss.years(1990), stop=ss.years(2030), dur=ss.years(40), dt=ss.months(1))]
+    kw.h3 = [dict(start=1990, dur=40, dt='month')                                 , dict(start=ss.years(1990), stop=ss.years(1990)+ss.months(40), dur=ss.months(40), dt=ss.months(1))]
 
 
     mismatches = []

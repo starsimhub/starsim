@@ -261,18 +261,27 @@ class Timeline:
                 self.default_type = type(arg)
                 break # Stop at the first one
 
+        # Save the dur/dt type before potentially restoring default_type to ss.years;
+        # dur_type is used for interpreting dur and dt values, while default_type is
+        # used for tvec construction (must be ss.years when year-based to avoid
+        # floating-point misalignment between modules)
+        dur_type = self.default_type
+
         # Decide if the time provided is "datelike" (actual dates or a date-like starting year)
         args = dict(start=self.start, stop=self.stop, dur=self.dur, dt=self.dt) # These are modified from the above
-        cal_year_like = (self.start != 0) # Simulations are always assumed to use years unless they start at 0
+        cal_year_like = True # Default to year-based (start=2000) unless start is explicitly non-year-like (e.g. start=0)
         use_dates = False
         for key,arg in args.items():
             if isinstance(arg, (ss.date, ss.datedur)):
                 cal_year_like = True
                 use_dates = True
                 break # Dates take precedence, so stop the loop here
-            elif key == 'start' and ss.time.assume_cal_year(arg): # Only start for "yearishness", since start=0, stop=3000 is not intended as years
-                cal_year_like = True # Use 2000 as the start, but do not convert to dates
-                self.default_type = ss.years # Restore years as the default type (e.g. if dt has a different unit)
+            elif key == 'start' and arg is not None and not ss.time.assume_cal_year(arg): # Explicitly non-year-like start (e.g. start=0, start=ss.days(5))
+                cal_year_like = False
+
+        # Restore default_type to ss.years for year-based tvec construction
+        if cal_year_like and not use_dates:
+            self.default_type = ss.years
 
         # Set the default start based on whether we have datelike inputs
         self.default_start = self.default_year_start if cal_year_like else self.default_rel_start # Sets to the start to 2000 or 0
@@ -280,30 +289,34 @@ class Timeline:
         # Check to see if all inputs are numeric
         self.is_numeric = all(arg is None or sc.isnumber(arg) for arg in args) # All inputs are either None or a number # Note: not currently used, although could be for setting timevec defaults
 
-        # Ensure dur is valid
-        self.default_dur = self.default_type(self.default_dur) # TODO: should this be ss.datedur() if use_dates = True? If so can move to the if block below
+        # Ensure dur is valid; use dur_type (from dt) so e.g. dt='month', dur=50 → 50 months
+        self.default_dur = dur_type(self.default_dur)
         if sc.isnumber(self.dur):
-            self.dur = self.default_type(self.dur)
+            self.dur = dur_type(self.dur)
         if not (self.dur is None or isinstance(self.dur, ss.dur)):
             errormsg = f'Timeline.dur must be a number, a dur object or None, not {self.dur}'
             raise TypeError(errormsg)
 
-        # Ensure dt is valid
+        # Ensure dt is valid; use dur_type so e.g. dur=ss.days(50), dt=1.0 → ss.days(1)
         if not isinstance(self.dt, ss.dur):
             if self.dt is None: # Very fancy code to set self.dt to 1
                 self.dt = self.default_dt
-            if sc.isnumber(self.dt): # We have the right default type by now, so use that to set the appropriate dt
-                self.dt = self.default_type(self.dt) # Defaults to 1.0 if not
+            if sc.isnumber(self.dt):
+                self.dt = dur_type(self.dt)
 
         # Convert start and stop from numbers to either durations or dates
         if use_dates:
             if self.start is not None: self.start = ss.date(self.start)  # Convert numbers, durations, etc. to dates
             if self.stop  is not None: self.stop  = ss.date(self.stop)
             self.default_start = ss.date(self.default_start) # e.g. ss.date('2000.01.01')
+        elif cal_year_like:
+            if sc.isnumber(self.start): self.start = ss.years(self.start) # Year-based: wrap in ss.years regardless of dt type
+            if sc.isnumber(self.stop):  self.stop  = ss.years(self.stop)
+            self.default_start = ss.years(self.default_start) # e.g. ss.years(2000)
         else:
-            if sc.isnumber(self.start): self.start = self.default_type(self.start) # Only convert numbers to durations
+            if sc.isnumber(self.start): self.start = self.default_type(self.start) # Duration-based: wrap in dt's type
             if sc.isnumber(self.stop):  self.stop  = self.default_type(self.stop)
-            self.default_start = self.start or self.default_type(self.default_start) # e.g. ss.years(2000)
+            self.default_start = self.start or self.default_type(self.default_start) # e.g. ss.years(0)
 
         # Validate durations: dt and dur
         for attr,val in dict(dt=self.dt, dur=self.dur).items():
