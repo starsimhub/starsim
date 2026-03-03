@@ -73,7 +73,6 @@ def test_timeline():
     s1 = sim(start=2000, stop=2002, dt=0.1)
     t1 = ss.Timeline(start='2001-01-01', stop='2001-06-30', dt=ss.days(2))
     t1.init(sim=s1)
-    # assert np.array_equal(s1.t.timevec, s1.t.yearvec)
     assert len(s1.t.timevec) == 21
     assert t1.npts == sc.daydiff('2001-01-01', '2001-06-30')//2 + 1
     assert isinstance(s1.t.start, ss.years)

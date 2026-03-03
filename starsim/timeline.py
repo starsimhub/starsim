@@ -263,7 +263,7 @@ class Timeline:
 
         # Decide if the time provided is "datelike" (actual dates or a date-like starting year)
         args = dict(start=self.start, stop=self.stop, dur=self.dur, dt=self.dt) # These are modified from the above
-        cal_year_like = self.default_type.base == 'years' # The default default_type is ss.years(), so this is True
+        cal_year_like = (self.start != 0) # Simulations are always assumed to use years unless they start at 0
         use_dates = False
         for key,arg in args.items():
             if isinstance(arg, (ss.date, ss.datedur)):
