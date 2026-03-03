@@ -8,6 +8,7 @@ import starsim as ss
 small = 100
 medium = 1000
 sc.options(interactive=False)
+# ss.options.warnings = 'error' # For additional debugging
 
 @sc.timer()
 def test_timeline_lengths():
@@ -73,7 +74,6 @@ def test_timeline():
     s1 = sim(start=2000, stop=2002, dt=0.1)
     t1 = ss.Timeline(start='2001-01-01', stop='2001-06-30', dt=ss.days(2))
     t1.init(sim=s1)
-    # assert np.array_equal(s1.t.timevec, s1.t.yearvec)
     assert len(s1.t.timevec) == 21
     assert t1.npts == sc.daydiff('2001-01-01', '2001-06-30')//2 + 1
     assert isinstance(s1.t.start, ss.years)
@@ -105,19 +105,19 @@ def test_timeline():
 
     print('Testing durations 2')
     s4 = sim(start=0, stop=ss.datedur(months=10), dt=ss.datedur(months=1))
-    assert s4.t.datevec[0] == ss.dur(0)
+    assert s4.t.datevec[0] == ss.months(0)
     assert s4.t.datevec[-1] == ss.datedur(months=10)
     assert len(s4.t) == 11
 
     print('Testing numeric 1')
     s5 = sim(start=None, stop=30, dt=None)
-    assert s5.t.datevec[0] == ss.dur(0)
+    assert s5.t.datevec[0] == ss.years(0)
     assert s5.t.datevec[-1] == ss.datedur(years=30)
     assert len(s5.t) == 31
 
     print('Testing numeric 2')
-    s6 = sim(start=2, stop=None, dt=None)  # Will default to start=dur(2), dur=ss.dur(50), end=start+dur
-    assert s6.t.tvec[0] == ss.dur(2)
+    s6 = sim(start=2, stop=None, dt=None)  # Will default to start=ss.years(2), dur=ss.years(50), end=start+dur
+    assert s6.t.tvec[0] == ss.years(2)
     assert s6.t.tvec[-1] == ss.datedur(years=52).years
     assert len(s6.t) == 51
 
@@ -163,14 +163,14 @@ def test_timeline_syntax():
     kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)                    , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
     kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None)          , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
     kw.c3 = [dict(start=None, stop=None, dur=ss.datedur(months=24), dt=None) , dict(start=ss.date(2000), stop=ss.date(2002), dur=ss.datedur(months=24), dt=ss.years(1))]
-    kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
+    kw.c4 = [dict(start=None, stop=None, dur=ss.days(50), dt=None)           , dict(start=ss.years(2000), stop=ss.years(2000)+ss.days(50), dur=ss.days(50), dt=ss.days(1))]
     kw.c5 = [dict(start=None, stop=None, dur='1990.1.1', dt=None)            , 'exception']
 
     # Test dt
     kw.d1 = [dict(start=None, stop=None, dur=None, dt=1)                    , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.d2 = [dict(start=None, stop=None, dur=None, dt=ss.years(1))          , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
-    kw.d3 = [dict(start=None, stop=None, dur=None, dt=ss.days(1))           , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))]
-    kw.d4 = [dict(start=None, stop=None, dur=None, dt='month')              , dict(start=ss.months(0), stop=ss.months(50), dur=ss.months(50), dt=ss.months(1))]
+    kw.d3 = [dict(start=None, stop=None, dur=None, dt=ss.days(1))           , dict(start=ss.years(2000), stop=ss.years(2000)+ss.days(50), dur=ss.days(50), dt=ss.days(1))]
+    kw.d4 = [dict(start=None, stop=None, dur=None, dt='month')              , dict(start=ss.years(2000), stop=ss.years(2000)+ss.months(50), dur=ss.months(50), dt=ss.months(1))]
     kw.d5 = [dict(start=None, stop=None, dur=None, dt=ss.datedur(months=1)) , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.datedur(months=1))]
 
     # Test start and stop
@@ -196,7 +196,7 @@ def test_timeline_syntax():
     # Test multiple
     kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.months(1))]
     kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=dd20, dt=ss.datedur(months=1))]
-    kw.h3 = [dict(start=1990, dur=40, dt='month')                                 , dict(start=ss.years(1990), stop=ss.years(2030), dur=ss.years(40), dt=ss.months(1))]
+    kw.h3 = [dict(start=1990, dur=40, dt='month')                                 , dict(start=ss.years(1990), stop=ss.years(1990)+ss.months(40), dur=ss.months(40), dt=ss.months(1))]
 
 
     mismatches = []
@@ -358,7 +358,7 @@ def test_step_count():
     for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (ss.years(1/12), 'ss.years(1/12)')]:
         sim = ss.Sim(
             diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
-            networks='random', n_agents=100, dur=1, dt=sim_dt,
+            networks='random', n_agents=100, dur=ss.years(1), dt=sim_dt,
         )
         sim.init()
         plan = sim.loop.plan
