@@ -23,6 +23,8 @@ class Calibration(sc.prettyobj):
     A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
     optimization library (optuna.org).
 
+    Optuna calibrations are recorded in a database (either a file on disk, or in a database server)
+    that also enables communication across multiple workers. These can be controlled in
     Args:
         sim          (Sim)   : the base simulation to calibrate
         calib_pars   (dict)  : a dictionary of the parameters to calibrate of the format `dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...)`, where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
@@ -40,10 +42,15 @@ class Calibration(sc.prettyobj):
         eval_kw       (dict) : Additional keyword arguments to pass to the eval_fn
         label        (str)   : a label for this calibration object
         study_name   (str)   : name of the optuna study
-        db_name      (str)   : the name of the database file (default: 'starsim_calibration.db')
         continue_db  (bool)  : whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)
         keep_db      (bool)  : whether to keep the database after calibration (default: false, the database will be deleted)
-        storage      (str)   : the location of the database (default: sqlite)
+        check_fit    (bool)  : whether to automatically run before/after simulations (default: true)
+        storage      (str)   : where to store the Optuna study. Accepts:
+                               - ``None`` (default): JournalFile backend, file named ``{study_name}.log``
+                               - A filename (str or Path) ending in ``.db``: SQLite backend
+                               - Any other filename (str or Path): JournalFile backend
+                               - A connection string (containing ``://``), e.g. ``"mysql://user:pw@host/db"``: external DB
+                               - An already-instantiated Optuna storage object: used directly
         sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
         die          (bool)  : whether to stop if an exception is encountered (default: false)
         debug        (bool)  : if True, do not run in parallel
@@ -51,17 +58,18 @@ class Calibration(sc.prettyobj):
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
                  build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,
-                 label=None, study_name=None, db_name=None, keep_db=None, continue_db=None, storage=None,
+                 label=None, study_name=None, keep_db=None, continue_db=None, check_fit=None, storage=None,
                  sampler=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
         if total_trials is None: total_trials   = 100
         if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
         if study_name   is None: study_name     = 'starsim_calibration'
-        if db_name      is None: db_name        = f'{study_name}.db'
         if continue_db  is None: continue_db    = False
         if keep_db      is None: keep_db        = False
-        if storage      is None: storage        = f'sqlite:///{db_name}'
+        if check_fit    is None: check_fit      = True
+
+        self._parse_storage(study_name, storage) # Process storage arguments to select storage backend and file names
 
         self.build_fn       = build_fn
         self.build_kw       = build_kw or dict()
@@ -72,7 +80,7 @@ class Calibration(sc.prettyobj):
 
         n_trials = int(np.ceil(total_trials/n_workers))
         kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
-                  db_name=db_name, continue_db=continue_db, keep_db=keep_db, storage=storage, sampler=sampler)
+                  continue_db=continue_db, keep_db=keep_db, check_fit=check_fit, sampler=sampler)
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
@@ -188,7 +196,7 @@ class Calibration(sc.prettyobj):
             op.logging.set_verbosity(op.logging.DEBUG)
         else:
             op.logging.set_verbosity(op.logging.ERROR)
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+        study = op.load_study(storage=self._get_storage(), study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         output = study.optimize(self.run_trial, n_trials=self.run_args.n_trials, callbacks=None)
         return output
 
@@ -200,40 +208,116 @@ class Calibration(sc.prettyobj):
             output = [self.worker()]
         return output
 
+    def _parse_storage(self, study_name, storage):
+        """
+        Parse the ``storage`` argument
+
+        This function processes the study name and storage to determine the storage type,
+        connection string, and file name if required. This needs to be done separately to `_get_storage`
+        so that if the db needs to be deleted, the file can be deleted on disk before
+        creating the storage object. This results in the creation of three internal variables:
+
+        - ``_storage_type``: one of ``'journal'``, ``'sqlite'``, ``'connection'``, ``'object'``
+        - ``_db_path``      : filesystem path to delete for file-based backends, else ``None``
+        - ``_storage_spec`` : value passed to optuna (URL string or storage object), else ``None``
+
+        After this point, `self._get_storage()` will use these variables to create the Optuna
+        storage object, while `self.remove_db` will use these variables to decide how to
+        delete the study/database depending on what the inputs were.
+        """
+
+        if storage is None:
+            storage = f'{study_name}.log'
+        elif isinstance(storage, os.PathLike):
+            storage = os.fspath(storage)  # convert Path (or any PathLike) to str
+
+        if not isinstance(storage, str):
+            # Treat this as a usable Optuna storage backend - db_path not required
+            self._storage_type = 'object'
+            self._db_path      = None
+            self._storage_spec = storage
+        elif '://' in storage:
+            # Connection string: sqlite:///..., mysql://...,  - db_path not required
+            self._storage_type = 'connection'
+            self._db_path      = None
+            self._storage_spec = storage
+        elif storage.endswith('.db'): # Assign both the db_path and an sqlite connection string
+            self._storage_type = 'sqlite'
+            self._db_path      = storage
+            self._storage_spec = f'sqlite:///{storage}'
+        else: # Otherwise, treat storage as the filename for journal storage - connection string not required
+            self._storage_type = 'journal'
+            self._db_path      = storage
+            self._storage_spec = None
+
+    def _get_storage(self):
+        """
+        Return Optuna storage object for this calibration
+
+        Users can specify `storage` for the calibration in a number of different ways. This function
+        resolves them and returns a corresponding Optuna storage object that can subsequently be used
+        directly with Optuna. This function is called directly by Optuna workers so that file locks are
+        correctly handled when using multiple workers
+        """
+        if self._storage_type == 'journal':
+            lock_obj = op.storages.journal.JournalFileOpenLock(self._db_path)  # needed on Windows
+            backend  = op.storages.journal.JournalFileBackend(self._db_path, lock_obj=lock_obj)
+            if self.verbose: print(f"Using Journal-based storage at {self._db_path}")
+            return op.storages.JournalStorage(backend)
+        elif self._storage_type in ('sqlite', 'connection'):
+            if self.verbose: print(f"Using database storage at {self._db_path}")
+            return op.storages.RDBStorage(self._storage_spec)
+        else:
+            if self.verbose: print(f"Using explicitly provided Optuna storage at {self._storage_spec}")
+            return self._storage_spec # Assume it is already a BaseStorage instance
+
     def remove_db(self):
-        """ Remove the database file if keep_db is false and the path exists """
+        """
+        Clear the database
+
+        This clears the database in one of two ways
+        - If a connection string or optuna Storage object were provided, the study will be deleted from the storage
+        - If a filename was provided, the file will be deleted on-disk clearing all content
+        """
         try:
-            if 'sqlite' in self.run_args.storage:
-                # Delete the file from disk
-                if os.path.exists(self.run_args.db_name):
-                    os.remove(self.run_args.db_name)
-                if self.verbose: print(f'Removed existing calibration file {self.run_args.db_name}')
+            if self._storage_type in ('journal', 'sqlite'):
+                if self._db_path and os.path.exists(self._db_path):
+                    os.remove(self._db_path)
+                    if self.verbose: print(f'Removed calibration file {self._db_path}')
             else:
-                # Delete the study from the database e.g., mysql
-                op.delete_study(study_name=self.run_args.study_name, storage=self.run_args.storage)
-                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self.run_args.storage}')
+                op.delete_study(study_name=self.run_args.study_name, storage=self._storage_spec)
+                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self._storage_spec}')
         except Exception as E:
             if self.verbose:
                 print('Could not delete study, skipping...')
                 print(str(E))
         return
 
-    def make_study(self):
-        """ Make a study, deleting if it already exists and user does not want to continue_db """
+    def create_study(self):
+        """
+        Create a study for this calibration
+
+        This method creates a study, clearing the backend storage if requested. Note that
+        the study does not get returned to avoid file locks on the `storage` persisting.
+        Once the study has been created, workers calling `load_study()` will create their own
+        Optuna storage objects to interface with the storage, so this method is solely responsible
+        for creating the study.
+        """
+
         if not self.run_args.continue_db:
             self.remove_db()
-        if self.verbose: print(self.run_args.storage)
+        storage = self._get_storage()
         try:
-            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize')
+            study = op.create_study(storage=storage, study_name=self.run_args.study_name, direction='minimize')
         except op.exceptions.DuplicatedStudyError:
-            ss.warn(f'Study named {self.run_args.study_name} already exists in storage {self.run_args.storage}, loading...')
-            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
+            ss.warn(f'Study named {self.run_args.study_name} already exists in storage {storage}, loading...')
+            study = op.create_study(storage=storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
             try:
                 self.best_pars = sc.objdict(study.best_params)
             except Exception as E:
                 print(f'Could not get best parameters: {str(E)}')
                 self.best_pars = None
-        return study
+        return None
 
     def calibrate(self, calib_pars=None, **kwargs):
         """
@@ -250,9 +334,9 @@ class Calibration(sc.prettyobj):
 
         # Run the optimization
         t0 = sc.tic()
-        self.study = self.make_study()
+        self.create_study() # Create the study so that it can subsequently be loaded by workers
         self.run_workers()
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+        study = op.load_study(storage=self._get_storage(), study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
@@ -263,25 +347,16 @@ class Calibration(sc.prettyobj):
 
         # Tidy up
         self.calibrated = True
+
+        if self.run_args.check_fit:
+            self.check_fit(do_plot=False, study=study)
+
         if not self.run_args.keep_db:
             self.remove_db()
 
         return self
 
-    def to_df(self, top_k=None):
-        """ Return the top K results as a dataframe, sorted by value """
-        if self.study is None:
-            raise ValueError('Please run calibrate() before saving results')
-
-        df = sc.dataframe(self.study.trials_dataframe())
-        df = df.sort_values(by='value').set_index('number')
-
-        if top_k is not None:
-            df = df.head(top_k)
-
-        return df
-
-    def check_fit(self, do_plot=True):
+    def check_fit(self, do_plot=True, study=None):
         """ Run before and after simulations to validate the fit """
         if self.verbose: sc.printcyan('\nChecking fit...')
 
@@ -292,7 +367,8 @@ class Calibration(sc.prettyobj):
         # Load in case calibration was interrupted
         if self.best_pars is None:
             try:
-                study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+                if study is None:
+                    study = op.load_study(storage=self._get_storage(), study_name=self.run_args.study_name, sampler=self.run_args.sampler)
                 self.best_pars = sc.objdict(study.best_params)
             except:
                 raise ValueError('Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
@@ -366,6 +442,11 @@ class Calibration(sc.prettyobj):
         self.study_data = data
         self.df = sc.dataframe.from_dict(data)
         self.df = self.df.sort_values(by=['mismatch']) # Sort
+
+        # Also capture the Optuna trial dataframe
+        self.trials_df = sc.dataframe(study.trials_dataframe())
+        self.trials_df = self.trials_df.sort_values(by='value').set_index('number')
+
         return
 
     def to_json(self, filename=None, indent=2, **kwargs):

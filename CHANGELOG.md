@@ -2,6 +2,16 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
+## Version 3.2.1 (2026-03-04)
+
+### Calibration changes
+- Calibration now uses Optuna's Journal file storage backend by default, which is more robust for disk-based multiprocessing. 
+- Removed the `db_name` argument from `Calibration`. The `storage` argument now serves as the single entrypoint for specifying where Optuna stores the study. 
+- **Backwards-compatibility notes**: Replace `db_name='myfile'` with `storage='myfile'`. If you previously passed both `db_name` and `storage`, only `storage` is needed. To maintain previous functionality with SQLite storage, instead of an SQLite connection string, simply pass the filename ending in `.db` as the `storage` argument. However, it is recommended to use the default Journal-based storage instead. 
+- The `storage` argument now accepts: `None` (default JournalFile named `{study_name}.log`), a filename ending in `.log` (JournalFile), a filename ending in `.db` (SQLite), a connection string containing `://` (external DB), or an already-instantiated Optuna storage object.
+- Added `check_fit` as an option when creating the `Calibration` so that it can be automatically run at the end of calibration.
+- Removed `Calibration.to_df()` which returned the Optuna trials dataframe from the study. This is now captured automatially as `Calibration.trials_df` so that it is more robust with regard to `keep_db=False`.
+
 ## Version 3.2.0 (2026-03-03)
 
 ### Sim module changes
