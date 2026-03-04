@@ -262,6 +262,6 @@ class EvolvingHouseholdDHSNet(HouseholdDHSNet):
             self.household_ids[partners] = new_cids
 
         # Only consider move out once per pregnancy
-        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_postpartum[
+        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_delivery[
             potential_movers]  # Update the time index for checking when to move out
         return
