@@ -11,6 +11,9 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - The `storage` argument now accepts: `None` (default JournalFile named `{study_name}.log`), a filename ending in `.log` (JournalFile), a filename ending in `.db` (SQLite), a connection string containing `://` (external DB), or an already-instantiated Optuna storage object.
 - Added `check_fit` as an option when creating the `Calibration` so that it can be automatically run at the end of calibration.
 - Removed `Calibration.to_df()` which returned the Optuna trials dataframe from the study. This is now captured automatially as `Calibration.trials_df` so that it is more robust with regard to `keep_db=False`.
+- Calibration `build_fn` now takes in a dictionary of `calib_pars` where the values have been pre-extracted. It can therefore expect to recieve parameter values in the same way they would be specified directly to Starsim, rather than being wrapped in Optuna's structure and carrying full information about the sampling range. **Backwards-compatibility notes** Where the `build_fn` may have previously used `calib_pars[par_name]['value']` it can now use `calib_pars[par_name]`.
+- 
+
 
 ## Version 3.2.0 (2026-03-03)
 
