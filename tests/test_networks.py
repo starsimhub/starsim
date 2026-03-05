@@ -265,8 +265,8 @@ def test_household():
     sc.heading('Testing HouseholdNet...')
     dhs_data = make_dhs_data()
 
-    # Test ss.HouseholdNet
-    household = ss.HouseholdNet(dhs_data=dhs_data)
+    # Test ss.HouseholdNet (static)
+    household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=False)
     sim = ss.Sim(n_agents=small, diseases='sis', networks=household)
     sim.run()
 
@@ -275,7 +275,7 @@ def test_household():
 
     # Test with sexes provided
     dhs_data_sex = make_dhs_data(include_sexes=True)
-    household2 = ss.HouseholdNet(dhs_data=dhs_data_sex)
+    household2 = ss.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
     sim2 = ss.Sim(n_agents=small, diseases='sis', networks=household2)
     sim2.run()
 
@@ -283,11 +283,11 @@ def test_household():
 
 
 @sc.timer()
-def test_evolving_household():
-    sc.heading('Testing EvolvingHouseholdNet...')
+def test_dynamic_household():
+    sc.heading('Testing dynamic HouseholdNet...')
     dhs_data = make_dhs_data()
 
-    household = ss.EvolvingHouseholdNet(dhs_data=dhs_data)
+    household = ss.HouseholdNet(dhs_data=dhs_data)
     preg = ss.Pregnancy()
     sim = ss.Sim(n_agents=small, diseases='sis', networks=household, demographics=preg)
     sim.run()
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     disk = test_disk()
     null = test_null()
     hh   = test_household()
-    ehh  = test_evolving_household()
+    ehh  = test_dynamic_household()
     oth  = test_other()
 
     T.toc()

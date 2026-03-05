@@ -458,7 +458,7 @@ class SexualNetwork(DynamicNetwork):
 # %% Specific instances of networks
 __all__ += ['StaticNet', 'RandomNet', 'RandomSafeNet', 'MFNet', 'MSMNet',
             'MaternalNet', 'PrenatalNet', 'PostnatalNet', 'BreastfeedingNet',
-            'HouseholdNet', 'EvolvingHouseholdNet']
+            'HouseholdNet']
 
 
 class StaticNet(Network):
@@ -1024,15 +1024,11 @@ class BreastfeedingNet(PostnatalNet):
 
 class HouseholdNet(Network):
     """
-    A network of static households. There's no formation of new households. When
-    initialized, this network overrides the age (and optionally sex) of all agents
-    in the sim and assigns each agent a household ID. Use with caution if other
-    modules depend upon or alter age and sex.
+    A household contact network built from DHS-style survey data.
 
-    Because this network is static, it can have unexpected side effects such as
-    growing or shrinking household sizes when used with aging enabled or with
-    other demographics modules like Pregnancy. See ``EvolvingHouseholdNet`` for
-    a network that adapts to demographic changes.
+    When initialized, this network overrides the age (and optionally sex) of
+    all agents in the sim and assigns each agent a household ID. Use with
+    caution if other modules depend upon or alter age and sex.
 
     Households are created by selecting a random household from the provided data
     and setting the age and sex of agents to match, repeating until all agents
@@ -1049,15 +1045,25 @@ class HouseholdNet(Network):
             ``sexes`` is included, it should contain comma-separated values
             using DHS convention (1 = male, 2 = female) with the same number
             of entries as ``ages``.
+        dynamic (bool): If ``True`` (default), households evolve over time:
+            one female is assigned as head of each household, pregnant non-head
+            females may move out to form new households, and births are added to
+            the mother's household. Requires the ``Pregnancy`` module. If
+            ``False``, the network is static and ``step()`` is a no-op.
+        prob_move_out (float): Probability a non-head female moves out to start
+            her own household, evaluated once at the start of each pregnancy.
+            Default 0.7. Only used when ``dynamic=True``.
+        update_freq (int): How often (in timesteps) to update the network.
+            Default 1. Only used when ``dynamic=True``.
 
     The expected dataframe format is::
 
-            hh_id                ages     sexes
-        0       0          72, 17, 30     1, 1, 2
-        1       1                  37     2
-        2       2          13, 55, 36     2, 1, 2
+            hh_id                ages          sexes
+        0       0          72, 17, 30        1, 1, 2
+        1       1                  37              2
+        2       2          13, 55, 36        2, 1, 2
         3       3  52, 13, 12, 64, 53     1, 2, 1, 2
-        4       4              30, 66     1, 1
+        4       4              30, 66           1, 1
 
     Data in this format can be obtained from the `DHS Program
     <https://dhsprogram.com>`_. To prepare a DHS household dataset:
@@ -1091,14 +1097,23 @@ class HouseholdNet(Network):
         sim.run()
         sim.plot()
     """
-    def __init__(self, pars=None, dhs_data=None, **kwargs):
+    def __init__(self, pars=None, dhs_data=None, dynamic=True, prob_move_out=_, update_freq=_, **kwargs):
         super().__init__(**kwargs)
-        self.define_pars()
+        self.define_pars(
+            prob_move_out = ss.bernoulli(p=0.7),
+            update_freq = 1,
+        )
         self.update_pars(pars, **kwargs)
         self.dhs_data = dhs_data
-        self.define_states(
-            ss.FloatArr('household_ids'),
-        )
+        self.dynamic = dynamic
+
+        states = [ss.FloatArr('household_ids')]
+        if self.dynamic:
+            states += [
+                ss.BoolArr('fhoh', default='False'),
+                ss.FloatArr('ti_move_out_check', default='-inf'),
+            ]
+        self.define_states(*states)
         self.p_fractional_age = ss.uniform()
         return
 
@@ -1106,6 +1121,8 @@ class HouseholdNet(Network):
         super().init_pre(sim)
         if self.dhs_data is None:
             raise ValueError("Please provide household data via the dhs_data argument.")
+        if self.dynamic:
+            ss.check_requires(self.sim, ['pregnancy'])
         return
 
     def init_post(self, add_pairs=True):
@@ -1159,112 +1176,22 @@ class HouseholdNet(Network):
 
         beta = np.ones(len(p1), dtype=ss_float)
         self.append(p1=p1, p2=p2, beta=beta)
+
+        if self.dynamic:
+            # Find a female head of household between ages 15 and 50
+            for cid in range(int(self.household_ids[-1])):
+                cluster_uids = ss.uids(self.household_ids == cid)
+                female_uids = cluster_uids[
+                    ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
+                if len(female_uids) > 0:
+                    fhoh = np.random.choice(a=female_uids)
+                    self.fhoh[ss.uids(fhoh)] = True
         return
 
     def step(self):
-        return
+        if not self.dynamic:
+            return
 
-    @staticmethod
-    def load_dhs(path):
-        """
-        Load a DHS Household Recode (HR) Stata file and return a dataframe
-        suitable for use with ``HouseholdNet`` and ``EvolvingHouseholdNet``.
-
-        Reads the wide-format HR file, extracts per-member age (``HV105``)
-        and sex (``HV104``) columns, filters to valid entries (age <= 95 and
-        sex in [1, 2]), and returns a dataframe with columns ``hh_id``,
-        ``ages``, and ``sexes``.
-
-        Args:
-            path (str/Path): Path to a DHS Household Recode Stata file
-                (e.g. ``XXHR7xFL.DTA``).
-
-        Returns:
-            sc.dataframe: A dataframe with columns ``hh_id``, ``ages``, and
-            ``sexes`` ready for use with ``HouseholdNet(dhs_data=...)``.
-
-        **Example**::
-
-            import starsim as ss
-            dhs_data = ss.HouseholdNet.load_dhs('ZZHR62FL.DTA')
-            sim = ss.Sim(networks=ss.HouseholdNet(dhs_data=dhs_data))
-            sim.run()
-        """
-        import pandas as pd
-        hr = pd.read_stata(str(path), convert_categoricals=False)
-
-        rows = []
-        for _, hh in hr.iterrows():
-            n_members = int(hh['hv009'])
-            ages, sexes = [], []
-            for i in range(1, n_members + 1):
-                idx = f'{i:02d}'
-                age = hh.get(f'hv105_{idx}', np.nan)
-                sex = hh.get(f'hv104_{idx}', np.nan)
-                if not np.isnan(age) and age <= 95 and sex in [1, 2]:
-                    ages.append(int(age))
-                    sexes.append(int(sex))
-            if ages:
-                rows.append(dict(hh_id=hh['hhid'].strip(), ages=sc.strjoin(ages), sexes=sc.strjoin(sexes)))
-
-        return sc.dataframe(rows)
-
-
-class EvolvingHouseholdNet(HouseholdNet):
-    """
-    Extends ``HouseholdNet`` by:
-
-    1. Assigning one random female as head of each household
-    2. Allowing females who are not heads of household to move out and start
-       their own household with a random male partner when they become pregnant
-    3. Adding new births into the household of the mother
-
-    Requires the ``Pregnancy`` module.
-
-    Args:
-        dhs_data (DataFrame): A pandas or Sciris dataframe with columns ``hh_id``
-            and ``ages`` (see ``HouseholdNet`` for format details).
-        prob_move_out (float): Probability a non-head female moves out to start
-            her own household, evaluated once at the start of each pregnancy.
-            Default 0.7.
-        update_freq (int): How often (in timesteps) to update the network.
-            Default 1.
-    """
-    def __init__(self, pars=None, dhs_data=None, prob_move_out=_, update_freq=_, **kwargs):
-        super().__init__(**kwargs)
-        self.define_pars(
-            prob_move_out = ss.bernoulli(p=0.7),
-            update_freq = 1,
-        )
-        self.update_pars(pars, **kwargs)
-        self.dhs_data = dhs_data
-
-        self.define_states(
-            ss.BoolArr('fhoh', default='False'),
-            ss.FloatArr('ti_move_out_check', default='-inf'),
-        )
-        return
-
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        ss.check_requires(self.sim, ['pregnancy'])
-        return
-
-    def add_pairs(self):
-        super().add_pairs()
-
-        ppl = self.sim.people
-
-        # Find a female head of household between ages 15 and 50
-        for cluster_id in range(int(self.household_ids[-1])):
-            cluster_uids = ss.uids(self.household_ids == cluster_id)
-            female_uids = cluster_uids[
-                ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
-            if len(female_uids) > 0:
-                fhoh = np.random.choice(a=female_uids)
-                self.fhoh[ss.uids(fhoh)] = True
-
-    def step(self):
         if np.mod(self.ti, self.pars.update_freq):
             return
 
@@ -1325,6 +1252,51 @@ class EvolvingHouseholdNet(HouseholdNet):
 
         self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_delivery[potential_movers]
         return
+
+    @staticmethod
+    def load_dhs(path):
+        """
+        Load a DHS Household Recode (HR) Stata file and return a dataframe
+        suitable for use with ``HouseholdNet``.
+
+        Reads the wide-format HR file, extracts per-member age (``HV105``)
+        and sex (``HV104``) columns, filters to valid entries (age <= 95 and
+        sex in [1, 2]), and returns a dataframe with columns ``hh_id``,
+        ``ages``, and ``sexes``.
+
+        Args:
+            path (str/Path): Path to a DHS Household Recode Stata file
+                (e.g. ``XXHR7xFL.DTA``).
+
+        Returns:
+            sc.dataframe: A dataframe with columns ``hh_id``, ``ages``, and
+            ``sexes`` ready for use with ``HouseholdNet(dhs_data=...)``.
+
+        **Example**::
+
+            import starsim as ss
+            dhs_data = ss.HouseholdNet.load_dhs('ZZHR62FL.DTA')
+            sim = ss.Sim(networks=ss.HouseholdNet(dhs_data=dhs_data))
+            sim.run()
+        """
+        import pandas as pd
+        hr = pd.read_stata(str(path), convert_categoricals=False)
+
+        rows = []
+        for _, hh in hr.iterrows():
+            n_members = int(hh['hv009'])
+            ages, sexes = [], []
+            for i in range(1, n_members + 1):
+                idx = f'{i:02d}'
+                age = hh.get(f'hv105_{idx}', np.nan)
+                sex = hh.get(f'hv104_{idx}', np.nan)
+                if not np.isnan(age) and age <= 95 and sex in [1, 2]:
+                    ages.append(int(age))
+                    sexes.append(int(sex))
+            if ages:
+                rows.append(dict(hh_id=hh['hhid'].strip(), ages=sc.strjoin(ages), sexes=sc.strjoin(sexes)))
+
+        return sc.dataframe(rows)
 
 
 #%% Mixing pools
