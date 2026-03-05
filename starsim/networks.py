@@ -457,7 +457,8 @@ class SexualNetwork(DynamicNetwork):
 
 # %% Specific instances of networks
 __all__ += ['StaticNet', 'RandomNet', 'RandomSafeNet', 'MFNet', 'MSMNet',
-            'MaternalNet', 'PrenatalNet', 'PostnatalNet', 'BreastfeedingNet']
+            'MaternalNet', 'PrenatalNet', 'PostnatalNet', 'BreastfeedingNet',
+            'HouseholdNet', 'EvolvingHouseholdNet']
 
 
 class StaticNet(Network):
@@ -1018,6 +1019,313 @@ class BreastfeedingNet(PostnatalNet):
         for k in self.meta_keys():
             self.edges[k] = self.edges[k][active]
         return np.count_nonzero(active)
+
+# %% Household networks
+
+class HouseholdNet(Network):
+    """
+    A network of static households. There's no formation of new households. When
+    initialized, this network overrides the age (and optionally sex) of all agents
+    in the sim and assigns each agent a household ID. Use with caution if other
+    modules depend upon or alter age and sex.
+
+    Because this network is static, it can have unexpected side effects such as
+    growing or shrinking household sizes when used with aging enabled or with
+    other demographics modules like Pregnancy. See ``EvolvingHouseholdNet`` for
+    a network that adapts to demographic changes.
+
+    Households are created by selecting a random household from the provided data
+    and setting the age and sex of agents to match, repeating until all agents
+    have been assigned to a household. Ages in the data are typically in integer
+    years; a random fractional year is added so agents don't share exact ages.
+
+    This network assumes only one mother per household. Births are automatically
+    added to their mother's household network.
+
+    Args:
+        dhs_data (DataFrame): A pandas or Sciris dataframe with columns ``hh_id``
+            and ``ages``. Optionally also ``sexes``. The ``ages`` column should
+            contain comma-separated age strings (e.g. ``"72, 17, 30"``). If
+            ``sexes`` is included, it should contain comma-separated values
+            using DHS convention (1 = male, 2 = female) with the same number
+            of entries as ``ages``.
+
+    The expected dataframe format is::
+
+            hh_id                ages     sexes
+        0       0          72, 17, 30     1, 1, 2
+        1       1                  37     2
+        2       2          13, 55, 36     2, 1, 2
+        3       3  52, 13, 12, 64, 53     1, 2, 1, 2
+        4       4              30, 66     1, 1
+
+    Data in this format can be obtained from the `DHS Program
+    <https://dhsprogram.com>`_. To prepare a DHS household dataset:
+
+    1. Register and request access at https://dhsprogram.com
+    2. Download a Household Recode (HR) dataset in Stata format
+       (e.g. ``XXHR7xDT.zip``)
+    3. Use ``HouseholdNet.load_dhs()`` to extract the data::
+
+        import starsim as ss
+        dhs_data = ss.HouseholdNet.load_dhs('XXHR7xDT/XXHR7xFL.DTA')
+        sim = ss.Sim(networks=ss.HouseholdNet(dhs_data=dhs_data))
+        sim.run()
+
+    If real data are not available, synthetic data can be constructed::
+
+        import numpy as np
+        import sciris as sc
+        import starsim as ss
+
+        n = 1000
+        age_strings = []
+        for i in range(n):
+            household_size = np.random.randint(1, 6)
+            ages = np.random.randint(0, 80, household_size)
+            age_strings.append(sc.strjoin(ages))
+        dhs_data = sc.dataframe(hh_id=np.arange(n), ages=age_strings)
+
+        household = ss.HouseholdNet(dhs_data=dhs_data)
+        sim = ss.Sim(diseases='sis', networks=household)
+        sim.run()
+        sim.plot()
+    """
+    def __init__(self, pars=None, dhs_data=None, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars()
+        self.update_pars(pars, **kwargs)
+        self.dhs_data = dhs_data
+        self.define_states(
+            ss.FloatArr('household_ids'),
+        )
+        self.p_fractional_age = ss.uniform()
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        if self.dhs_data is None:
+            raise ValueError("Please provide household data via the dhs_data argument.")
+        return
+
+    def init_post(self, add_pairs=True):
+        super().init_post(add_pairs)
+        # DHS age data is in integer years; add a random fractional age for realism
+        self.sim.people.age[:] = self.sim.people.age + self.p_fractional_age.rvs(self.sim.people.auids)
+        return
+
+    def add_pairs(self):
+        """ Generate contacts by assigning agents to households from the data """
+        ppl = self.sim.people
+        pop_size = len(ppl)
+        dhs = self.dhs_data
+
+        n_remaining = len(ppl)
+        cluster_id = -1
+        p1 = []
+        p2 = []
+        while n_remaining > 0:
+            cluster_id += 1
+
+            # Sample a household from the data
+            rand_row = np.random.choice(len(dhs))
+            household_data = dhs.iloc[rand_row]
+            age_data = household_data['ages']
+            sex_data = None
+            if 'sexes' in household_data.keys():
+                sex_data = household_data['sexes']
+
+            age_data = np.array([float(x) for x in age_data.split(', ')], dtype=float)
+            cluster_size = len(age_data)
+
+            if cluster_size > n_remaining:
+                cluster_size = n_remaining
+
+            cluster_uids = ss.uids((pop_size - n_remaining) + np.arange(cluster_size))
+
+            ppl.age[cluster_uids] = age_data[0:cluster_size]
+            if sex_data is not None:
+                sex_data = np.array([int(x) for x in sex_data.split(', ')])
+                ppl.female[cluster_uids] = (sex_data[0:cluster_size] == 2)
+            self.household_ids[cluster_uids] = cluster_id
+
+            # Add symmetric pairwise contacts in each cluster
+            for i in cluster_uids:
+                for j in cluster_uids:
+                    if j > i:
+                        p1.append(i)
+                        p2.append(j)
+            n_remaining -= cluster_size
+
+        beta = np.ones(len(p1), dtype=ss_float)
+        self.append(p1=p1, p2=p2, beta=beta)
+        return
+
+    def step(self):
+        return
+
+    @staticmethod
+    def load_dhs(path):
+        """
+        Load a DHS Household Recode (HR) Stata file and return a dataframe
+        suitable for use with ``HouseholdNet`` and ``EvolvingHouseholdNet``.
+
+        Reads the wide-format HR file, extracts per-member age (``HV105``)
+        and sex (``HV104``) columns, filters to valid entries (age <= 95 and
+        sex in [1, 2]), and returns a dataframe with columns ``hh_id``,
+        ``ages``, and ``sexes``.
+
+        Args:
+            path (str/Path): Path to a DHS Household Recode Stata file
+                (e.g. ``XXHR7xFL.DTA``).
+
+        Returns:
+            sc.dataframe: A dataframe with columns ``hh_id``, ``ages``, and
+            ``sexes`` ready for use with ``HouseholdNet(dhs_data=...)``.
+
+        **Example**::
+
+            import starsim as ss
+            dhs_data = ss.HouseholdNet.load_dhs('ZZHR62FL.DTA')
+            sim = ss.Sim(networks=ss.HouseholdNet(dhs_data=dhs_data))
+            sim.run()
+        """
+        import pandas as pd
+        hr = pd.read_stata(str(path), convert_categoricals=False)
+
+        rows = []
+        for _, hh in hr.iterrows():
+            n_members = int(hh['hv009'])
+            ages, sexes = [], []
+            for i in range(1, n_members + 1):
+                idx = f'{i:02d}'
+                age = hh.get(f'hv105_{idx}', np.nan)
+                sex = hh.get(f'hv104_{idx}', np.nan)
+                if not np.isnan(age) and age <= 95 and sex in [1, 2]:
+                    ages.append(int(age))
+                    sexes.append(int(sex))
+            if ages:
+                rows.append(dict(hh_id=hh['hhid'].strip(), ages=sc.strjoin(ages), sexes=sc.strjoin(sexes)))
+
+        return sc.dataframe(rows)
+
+
+class EvolvingHouseholdNet(HouseholdNet):
+    """
+    Extends ``HouseholdNet`` by:
+
+    1. Assigning one random female as head of each household
+    2. Allowing females who are not heads of household to move out and start
+       their own household with a random male partner when they become pregnant
+    3. Adding new births into the household of the mother
+
+    Requires the ``Pregnancy`` module.
+
+    Args:
+        dhs_data (DataFrame): A pandas or Sciris dataframe with columns ``hh_id``
+            and ``ages`` (see ``HouseholdNet`` for format details).
+        prob_move_out (float): Probability a non-head female moves out to start
+            her own household, evaluated once at the start of each pregnancy.
+            Default 0.7.
+        update_freq (int): How often (in timesteps) to update the network.
+            Default 1.
+    """
+    def __init__(self, pars=None, dhs_data=None, prob_move_out=_, update_freq=_, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(
+            prob_move_out = ss.bernoulli(p=0.7),
+            update_freq = 1,
+        )
+        self.update_pars(pars, **kwargs)
+        self.dhs_data = dhs_data
+
+        self.define_states(
+            ss.BoolArr('fhoh', default='False'),
+            ss.FloatArr('ti_move_out_check', default='-inf'),
+        )
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        ss.check_requires(self.sim, ['pregnancy'])
+        return
+
+    def add_pairs(self):
+        super().add_pairs()
+
+        ppl = self.sim.people
+
+        # Find a female head of household between ages 15 and 50
+        for cluster_id in range(int(self.household_ids[-1])):
+            cluster_uids = ss.uids(self.household_ids == cluster_id)
+            female_uids = cluster_uids[
+                ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
+            if len(female_uids) > 0:
+                fhoh = np.random.choice(a=female_uids)
+                self.fhoh[ss.uids(fhoh)] = True
+
+    def step(self):
+        if np.mod(self.ti, self.pars.update_freq):
+            return
+
+        self.add_births()
+        self.create_new_households()
+        return
+
+    def add_births(self):
+        sim = self.sim
+        birth_uids = ss.uids((sim.people.age >= 0) & (sim.people.age < self.pars.update_freq * self.sim.t.dt_year))
+        if len(birth_uids) == 0:
+            return 0
+
+        mat_uids = sim.people.parent[birth_uids]
+        keep = mat_uids != sim.people.parent.nan
+        birth_uids = birth_uids[keep]
+        mat_uids = mat_uids[keep]
+        if len(birth_uids) == 0:
+            return 0
+
+        p1 = []
+        p2 = []
+        for new_uid, mat_uid in zip(birth_uids, mat_uids):
+            hh_contacts = ss.uids(self.household_ids == self.household_ids[mat_uid])
+            p1.append(hh_contacts)
+            p2.append([new_uid] * len(hh_contacts))
+
+        p1 = ss.uids.cat(p1)
+        p2 = ss.uids.cat(p2)
+
+        beta = np.ones(len(p1), dtype=ss.dtypes.float)
+        self.append(p1=p1, p2=p2, beta=beta)
+
+        self.household_ids[birth_uids] = self.household_ids[mat_uids]
+        return len(birth_uids)
+
+    def create_new_households(self):
+        """
+        Find females that are pregnant and not a head of household.
+        Move them and a randomly sampled male partner to a new household.
+        """
+        ppl = self.sim.people
+        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.pregnant & (self.ti_move_out_check <= self.sim.ti))
+        moving_out = self.pars['prob_move_out'].filter(potential_movers)
+        if len(moving_out) > 0:
+            self.fhoh[moving_out] = True
+            potential_partners = ss.uids(ppl.male & (ppl.age > 15) & (ppl.age < 50))
+            partner_inds = np.random.permutation(len(potential_partners))[:len(moving_out)]
+            partners = potential_partners[partner_inds]
+            to_remove = ss.uids.cat([moving_out, partners])
+            self.remove_uids(to_remove)
+            beta = np.ones(len(moving_out), dtype=ss.dtypes.float)
+            self.append(p1=moving_out, p2=partners, beta=beta)
+
+            new_cids = np.nanmax(self.household_ids) + 1 + np.arange(len(moving_out))
+            self.household_ids[moving_out] = new_cids
+            self.household_ids[partners] = new_cids
+
+        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_delivery[potential_movers]
+        return
+
 
 #%% Mixing pools
 

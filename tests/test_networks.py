@@ -244,22 +244,57 @@ def test_null():
     return sim
 
 
-@sc.timer()
-def test_dhs():
-    sc.heading('Testing DHS networks...')
-    # Construct DHS data
-    n = 100
+def make_dhs_data(n=100, include_sexes=False):
+    """ Helper to construct synthetic household data """
     age_strings = []
+    sex_strings = []
     for i in range(n):
-        household_size = np.random.randint(1,6)
+        household_size = np.random.randint(1, 6)
         ages = np.random.randint(0, 80, household_size)
         age_strings.append(sc.strjoin(ages))
-    dhs_data = sc.dataframe(hh_id=np.arange(n), ages=age_strings)
+        if include_sexes:
+            sexes = np.random.choice([1, 2], household_size)  # DHS convention: 1=male, 2=female
+            sex_strings.append(sc.strjoin(sexes))
+    if include_sexes:
+        return sc.dataframe(hh_id=np.arange(n), ages=age_strings, sexes=sex_strings)
+    return sc.dataframe(hh_id=np.arange(n), ages=age_strings)
 
-    # Create the network and run
-    household_dhs = sse.HouseholdDHSNet(dhs_data=dhs_data)
-    sim = ss.Sim(n_agents=small, diseases='sis', networks=household_dhs)
+
+@sc.timer()
+def test_household():
+    sc.heading('Testing HouseholdNet...')
+    dhs_data = make_dhs_data()
+
+    # Test ss.HouseholdNet
+    household = ss.HouseholdNet(dhs_data=dhs_data)
+    sim = ss.Sim(n_agents=small, diseases='sis', networks=household)
     sim.run()
+
+    # Check that household_ids are assigned
+    assert np.all(np.isfinite(household.household_ids[:]))
+
+    # Test with sexes provided
+    dhs_data_sex = make_dhs_data(include_sexes=True)
+    household2 = ss.HouseholdNet(dhs_data=dhs_data_sex)
+    sim2 = ss.Sim(n_agents=small, diseases='sis', networks=household2)
+    sim2.run()
+
+    return sim
+
+
+@sc.timer()
+def test_evolving_household():
+    sc.heading('Testing EvolvingHouseholdNet...')
+    dhs_data = make_dhs_data()
+
+    household = ss.EvolvingHouseholdNet(dhs_data=dhs_data)
+    preg = ss.Pregnancy()
+    sim = ss.Sim(n_agents=small, diseases='sis', networks=household, demographics=preg)
+    sim.run()
+
+    # Check that household_ids are assigned
+    assert np.all(np.isfinite(household.household_ids[:]))
+
     return sim
 
 
@@ -298,7 +333,8 @@ if __name__ == '__main__':
     erdo = test_erdosrenyi()
     disk = test_disk()
     null = test_null()
-    dhs  = test_dhs()
+    hh   = test_household()
+    ehh  = test_evolving_household()
     oth  = test_other()
 
     T.toc()
