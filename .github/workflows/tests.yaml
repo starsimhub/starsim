@@ -1,5 +1,7 @@
 name: Starsim CI tests
 on:
+  workflow_call:
+  workflow_dispatch:
   push:
     branches:
       - main

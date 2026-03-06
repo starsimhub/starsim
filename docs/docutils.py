@@ -133,12 +133,15 @@ def execute_notebooks(*args, folders=None):
             notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.ipynb')]
 
     # Wrapper to chdir before execution
-    def execute_with_chdir(path):
+    def execute_with_chdir(i, path, pause=1.0):
+        delay = i*pause
+        sc.timedsleep(delay) # For some reason the interval argument to parallelize() wasn't working
         os.chdir(path.parent)
         return execute_notebook(path.name)
 
     sc.heading(f'Running {len(notebooks)} notebooks...')
-    out = sc.parallelize(execute_with_chdir, notebooks, maxcpu=0.9, interval=0.3, lbkwargs=dict(verbose=False))
+    notebook_list = list(enumerate(notebooks))
+    out = sc.parallelize(execute_with_chdir, notebook_list, maxcpu=0.9, interval=1.0, lbkwargs=dict(verbose=False))
     string += sc.strjoin(out, sep=f'\n\n\n{"—"*90}\n')
     for nb, res in zip(notebooks, out):
         results[str(nb)] = res

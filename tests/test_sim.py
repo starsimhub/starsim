@@ -288,7 +288,7 @@ def test_creation_syntax():
     # Test 2: check that the order is intuited when not specified
     sim2 = ss.Sim(
         pars = pars,
-        modules = [mod1, mod2, dem, net, dis]
+        modules = [dis, mod1, net, mod2, dem]
     )
     sim2.init()
     sim2.run()
