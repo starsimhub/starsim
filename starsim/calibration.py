@@ -2,6 +2,7 @@
 Define the calibration class
 """
 import os
+import tempfile
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -37,7 +38,7 @@ class Calibration(sc.prettyobj):
         eval_kw       (dict) : Additional keyword arguments to pass to the eval_fn
         label        (str)   : a label for this calibration object
         study_name   (str)   : name of the optuna study
-        db_name      (str)   : the name of the database file (default: 'starsim_calibration.db')
+        db_name      (str)   : the name of the database file (default: temporary file)
         continue_db  (bool)  : whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)
         keep_db      (bool)  : whether to keep the database after calibration (default: false, the database will be deleted)
         storage      (str)   : the location of the database (default: sqlite)
@@ -52,10 +53,11 @@ class Calibration(sc.prettyobj):
                  sampler=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
+        use_defaults = study_name is None and db_name is None
         if total_trials is None: total_trials   = 100
         if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
         if study_name   is None: study_name     = 'starsim_calibration'
-        if db_name      is None: db_name        = f'{study_name}.db'
+        if db_name      is None: db_name        = sc.path(tempfile.mkdtemp()) / f'{study_name}.db' if use_defaults else f'{study_name}.db'
         if continue_db  is None: continue_db    = False
         if keep_db      is None: keep_db        = False
         if storage      is None: storage        = f'sqlite:///{db_name}'
