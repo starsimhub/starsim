@@ -347,13 +347,18 @@ class SimPars(Pars):
         # Convert any modules that are not already Module objects
         modules = self.convert_modules()
         self._reset_modules()
-        for mod in modules:
-            for modkey, modclass in modmap.items():
-                if isinstance(mod, modclass):
-                    self[modkey].append(mod) # Add to the correct list
-                    break
+        for source, mod in modules:
+            if source == 'modules':
+                # Modules from 'modules=' get sorted by type
+                for modkey, modclass in modmap.items():
+                    if isinstance(mod, modclass):
+                        self[modkey].append(mod)
+                        break
+                else:
+                    self['custom'].append(mod)
             else:
-                self['custom'].append(mod)
+                # Modules from specific containers stay where the user put them
+                self[source].append(mod)
 
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
@@ -401,7 +406,7 @@ class SimPars(Pars):
         standardized object representation that can be parsed and used by
         a Sim object
 
-        Returns a flat list of ss.Module instances
+        Returns a flat list of (source_key, ss.Module) tuples
         """
 
         out = []
@@ -485,6 +490,6 @@ class SimPars(Pars):
                     errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
                     raise TypeError(errormsg)
 
-                out.append(mod)
+                out.append((modkey, mod))
 
         return out
