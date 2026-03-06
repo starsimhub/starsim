@@ -12,7 +12,14 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added `check_fit` as an option when creating the `Calibration` so that it can be automatically run at the end of calibration.
 - Removed `Calibration.to_df()` which returned the Optuna trials dataframe from the study. This is now captured automatially as `Calibration.trials_df` so that it is more robust with regard to `keep_db=False`.
 - Calibration `build_fn` now takes in a dictionary of `calib_pars` where the values have been pre-extracted. It can therefore expect to recieve parameter values in the same way they would be specified directly to Starsim, rather than being wrapped in Optuna's structure and carrying full information about the sampling range. **Backwards-compatibility notes** Where the `build_fn` may have previously used `calib_pars[par_name]['value']` it can now use `calib_pars[par_name]`.
-- 
+- Calibration now uses sequential seeds for each simulation performed, rather than randomly sampling them which increased the parameter space for Optuna to search even though the seed should not have any correlation with the objective value. 
+- Added `n_reps` argument to `Calibration()` to facilitate running multiple seeds per Optuna trial. If `n_reps` is specified, the `build_fn` should return a `Sim` rather than a `MultiSim` and the objective function will be averaged over seeds. 
+- Replaced `n_workers` with `n_cpus` in `Calibration()`. The `Calibration` will now automatically calculate the number of Optuna workers and CPUs per worker based on the requested total number of CPUs, total trials, and `n_reps`
+- Calibration `total_trials` are now exactly matched and preserved across distributed workers. This is particularly useful when secondary workers are started separately e.g., on another machine, to contribute to an existing optimization.
+- Initial guesses for the parameters provided as part of `calib_pars` are now guaranteed to be used exactly in the first Optuna trial (previously they were not used)
+- Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
+
+
 
 
 ## Version 3.2.0 (2026-03-03)
