@@ -21,13 +21,14 @@ class Sim(ss.Base):
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
-        modules (Module/list): if provided, use these modules (and divide among demographics, diseases, etc. based on type)
         demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
         connectors (str/Connector/list): as above, for connectors
         networks (str/Network/list): as above, for networks
         interventions (str/Intervention/list): as above, for interventions
         diseases (str/Disease/list): as above, for diseases
         analyzers (str/Analyzer/list): as above, for analyzers
+        custom (Module/list): as above, for any custom user-created modules not matching one of the above types
+        modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
@@ -37,12 +38,15 @@ class Sim(ss.Base):
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
+        sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
     """
-    def __init__(self, pars=None, label=None, people=None, modules=None, demographics=None, diseases=None, networks=None,
-                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, connectors=None, 
+                 networks=None, diseases=None, interventions=None, analyzers=None, custom=None, 
+                 modules=None, copy_inputs=True, data=None, **kwargs):
         self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
-        args = dict(label=label, people=people, modules=modules, demographics=demographics, connectors=connectors,
-                    networks=networks, interventions=interventions, diseases=diseases, analyzers=analyzers)
+        args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
+                    networks=networks, interventions=interventions, diseases=diseases, 
+                    analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
         self.pars.update(input_pars)  # Update the parameters

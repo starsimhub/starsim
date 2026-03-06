@@ -19,15 +19,15 @@ def module_map(key=None):
     """
     Map modules to standard types
 
-    This is the source of truth about module types and ordering. Modules with types that do not
+    This is the source of truth about module types. Modules with types that do not
     map to anything in the module_map are treated as custom modules.
     """
     module_map = sc.objdict(
         demographics  = ss.Demographics,
-        connectors    = ss.Connector,
         networks      = ss.Route, # NB, not ss.Network!
-        interventions = ss.Intervention,
         diseases      = ss.Disease,
+        connectors    = ss.Connector,
+        interventions = ss.Intervention,
         analyzers     = ss.Analyzer,
     )
     return module_map if key is None else module_map[key]
