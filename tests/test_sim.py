@@ -264,7 +264,7 @@ def test_creation_syntax():
     net = ss.RandomNet()
     dis = ss.SIS()
     
-    # # Test 1: check that order is respected when specified
+    # Test 1: check that order is respected when specified
     pars = dict(n_agents=100, dur=10)
     sim = ss.Sim(
         pars = pars,
@@ -285,7 +285,7 @@ def test_creation_syntax():
     assert isinstance(sim.diseases[0], ss.Network)
     assert isinstance(sim.analyzers[0], ss.Infection)
     
-    # Test 1: check that the order is intuited when not specified
+    # Test 2: check that the order is intuited when not specified
     sim2 = ss.Sim(
         pars = pars,
         modules = [mod1, mod2, dem, net, dis]
