@@ -105,8 +105,11 @@ class People:
         """
         if isinstance(key, int):
             return self.person(key)
-        else:
+        elif isinstance(key, str):
             return getattr(self, key)
+        else:
+            errormsg = f"Cannot handle {key} ({type(key)}: must be str to access an attribute, e.g. people['age'], or int to access a person, e.g. people[14]"
+            raise TypeError(errormsg)
 
     def __setitem__(self, key, value):
         """ Ditto """

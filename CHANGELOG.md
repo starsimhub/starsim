@@ -3,6 +3,9 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 ## Version 3.2.1 (2026-XX-XX)
+- Fixed a bug introduced in v3.2.0 that changed how modules were parsed.
+- Moved `HouseholdNet` from `starsim_examples` into `starsim` and merged it with `EvolvingHouseholdNet`. By default, the network is dynamic. To use the static network, use `ss.HouseholdNet(dynamic=False)`.
+- *GitHub info*: PR [1200](https://github.com/starsimhub/starsim/pull/1200)
 
 
 ## Version 3.2.0 (2026-03-03)
