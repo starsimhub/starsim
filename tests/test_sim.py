@@ -2,7 +2,6 @@
 Test Sim API
 """
 
-# %% Imports and settings
 import starsim as ss
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -246,6 +245,64 @@ def test_components(do_plot=do_plot):
 
 
 @sc.timer()
+def test_creation_syntax():
+    """ Demonstrate different ways of creating a sim """
+    sc.heading('Testing sim creation syntax...')
+    
+    class FirstClass(ss.Module):
+        def step(self):
+            self.sim.first = True
+    
+    class SecondClass(ss.Module):
+        def step(self):
+            assert self.sim.first # Will error if FirstClass is not run first
+    
+    # Create different modules
+    mod1 = FirstClass()
+    mod2 = SecondClass()
+    dem = ss.Births()
+    net = ss.RandomNet()
+    dis = ss.SIS()
+    
+    # # Test 1: check that order is respected when specified
+    pars = dict(n_agents=100, dur=10)
+    sim = ss.Sim(
+        pars = pars,
+        custom = [mod1, dem],
+        demographics = 'deaths',
+        connectors = mod2,
+        diseases = net,
+        analyzers = dis,
+        copy_inputs = True,
+    )
+    sim.init()
+    sim.run()
+    
+    assert isinstance(sim.custom[0], FirstClass)
+    assert isinstance(sim.custom[1], ss.Demographics)
+    assert isinstance(sim.demographics[0], ss.Demographics)
+    assert isinstance(sim.connectors[0], SecondClass)
+    assert isinstance(sim.diseases[0], ss.Network)
+    assert isinstance(sim.analyzers[0], ss.Infection)
+    
+    # Test 1: check that the order is intuited when not specified
+    sim2 = ss.Sim(
+        pars = pars,
+        modules = [mod1, mod2, dem, net, dis]
+    )
+    sim2.init()
+    sim2.run()
+    
+    assert isinstance(sim2.custom[0], FirstClass)
+    assert isinstance(sim2.custom[1], SecondClass)
+    assert isinstance(sim2.demographics[0], ss.Demographics)
+    assert isinstance(sim2.networks[0], ss.Network)
+    assert isinstance(sim2.diseases[0], ss.Infection)
+    
+    return sim2
+
+
+@sc.timer()
 def test_save():
     """ Test save and export """
     sc.heading('Testing save and export...')
@@ -279,15 +336,16 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    sim0 = test_demo(do_plot=do_plot)
-    sim1 = test_default(do_plot=do_plot)
-    sim2 = test_simple(do_plot=do_plot)
-    sim3 = test_api()
-    sim4 = test_complex_api()
-    sim5b, sim5i = test_simple_vax(do_plot=do_plot)
-    sim6 = test_shared_product(do_plot=do_plot)
-    sim7 = test_components(do_plot=do_plot)
-    sim8 = test_save()
+    # sim0 = test_demo(do_plot=do_plot)
+    # sim1 = test_default(do_plot=do_plot)
+    # sim2 = test_simple(do_plot=do_plot)
+    # sim3 = test_api()
+    # sim4 = test_complex_api()
+    # sim5b, sim5i = test_simple_vax(do_plot=do_plot)
+    # sim6 = test_shared_product(do_plot=do_plot)
+    # sim7 = test_components(do_plot=do_plot)
+    sim8 = test_creation_syntax()
+    # sim9 = test_save()
 
     T.toc()
 
