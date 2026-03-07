@@ -59,9 +59,9 @@ class Pars(sc.objdict):
 
                 elif isinstance(old, Pars): # It's a Pars object: update recursively
                     old.update(new, create=create)
-                elif isinstance(old, ss.ndict): # Update module containers
+                elif isinstance(old, ss.ndict): # Update module containers -- main use case
                     self._update_ndict(key, old, new)
-                elif isinstance(old, ss.Module):  # Update modules
+                elif isinstance(old, ss.Module): # Update modules -- rare
                     self._update_module(key, old, new)
                 elif isinstance(old, ss.TimePar):
                     self._update_timepar(key, old, new)
@@ -259,15 +259,15 @@ class SimPars(Pars):
         return
 
     def _reset_modules(self):
-        # Initialize ndicts for module storage
-        self.modules       = ss.ndict()
+        """ Initialize ndicts for module storage """
         self.custom        = ss.ndict()
-        self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
-        self.diseases      = ss.ndict()
         self.connectors    = ss.ndict()
+        self.networks      = ss.ndict()
         self.interventions = ss.ndict()
+        self.diseases      = ss.ndict()
         self.analyzers     = ss.ndict()
+        self.modules       = ss.ndict()
         return
 
     def is_default(self, key):
@@ -347,13 +347,18 @@ class SimPars(Pars):
         # Convert any modules that are not already Module objects
         modules = self.convert_modules()
         self._reset_modules()
-        for mod in modules:
-            for modkey, modclass in modmap.items():
-                if isinstance(mod, modclass):
-                    self[modkey].append(mod) # Add to the correct list
-                    break
+        for source, mod in modules:
+            if source == 'modules':
+                # Modules from 'modules=' get sorted by type
+                for modkey, modclass in modmap.items():
+                    if isinstance(mod, modclass):
+                        self[modkey].append(mod)
+                        break
+                else:
+                    self['custom'].append(mod)
             else:
-                self['custom'].append(mod)
+                # Modules from specific containers stay where the user put them
+                self[source].append(mod)
 
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
@@ -401,7 +406,7 @@ class SimPars(Pars):
         standardized object representation that can be parsed and used by
         a Sim object
 
-        Returns a flat list of ss.Module instances
+        Returns a flat list of (source_key, ss.Module) tuples
         """
 
         out = []
@@ -485,6 +490,6 @@ class SimPars(Pars):
                     errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
                     raise TypeError(errormsg)
 
-                out.append(mod)
+                out.append((modkey, mod))
 
         return out

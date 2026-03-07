@@ -54,8 +54,7 @@ dev = [
     "quartodoc",
     "jupyter",
     "jupyter-cache",
-    "dask",
-    "distributed"
+    "dask[complete]",
 ]
 
 optuna = ["scikit-learn"]

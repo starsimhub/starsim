@@ -218,10 +218,14 @@ class Loop:
 
         # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
         eps = 1e-9
-        diffs = np.float64(np.diff(self.plan.time)) # May be date, so convert to float
-        small_diffs = diffs[(diffs > 0) & (diffs < eps)]
-        if len(small_diffs):
-            warnmsg = f'{len(small_diffs)} integration loop entries have near-identical times, indicating a floating-point issue:\n{small_diffs}\nCheck your time units across the sim and modules!'
+        try:
+            diffs = np.diff(np.float64(self.plan.time)) # May be date, so convert to float
+            small_diffs = diffs[(diffs > 0) & (diffs < eps)]
+            if len(small_diffs):
+                warnmsg = f'{len(small_diffs)} integration loop entries have near-identical times, indicating a floating-point issue:\n{small_diffs}\nCheck your time units across the sim and modules!'
+                ss.warn(warnmsg)
+        except Exception as E:
+            warnmsg = f'Unable to calculate time deltas in integration plan; check that all types are compatible (e.g. float or ss.date): {E}'
             ss.warn(warnmsg)
 
         return
