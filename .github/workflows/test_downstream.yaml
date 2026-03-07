@@ -1,5 +1,8 @@
 # Run downstream tests on Starsim models.
 #
+# Note: this test only runs on pushes/merges
+# to main, not on all PRs.
+#
 # Current supported models are:
 #   1. STIsim
 #   2. FPsim
