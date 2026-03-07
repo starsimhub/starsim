@@ -1,16 +1,19 @@
-# Run downstream tests on Starsim spokes.
+# Run downstream tests on Starsim models.
 #
-# Current supported spokes are:
+# Note: this test only runs on pushes/merges
+# to main, not on all PRs.
+#
+# Current supported models are:
 #   1. STIsim
 #   2. FPsim
 #
-# Coming soon:
-# - HPVsim
-# - TBsim
-# - Typhoidsim
-# - Rotasim
+# TBC:
+# - HPVsim (not in the Starsim framework)
+# - TBsim (still in beta)
+# - Typhoidsim (still in beta)
+# - Rotasim (still in beta)
 
-name: Starsim downstream model tests
+name: Downstream
 on:
   workflow_call:
   workflow_dispatch:
@@ -88,7 +91,7 @@ jobs:
       - name: Install Starsim
         run: pip install -e .
 
-      - name: Check out HPVsim
+      - name: Check out FPsim
         uses: actions/checkout@v6
         with:
           repository: 'fpsim/fpsim'
@@ -100,7 +103,7 @@ jobs:
 
       - name: Install FPsim tests
         working-directory: ./fpsim/tests
-        run: pip install -r requirements.txt
+        run: pip install -r requirements_test.txt
 
       - name: Run FPsim tests
         working-directory: ./fpsim/tests
