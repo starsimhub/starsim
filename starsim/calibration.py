@@ -35,6 +35,7 @@ def _run_sim(calib_pars, seed=None):
         sim.pars.rand_seed = seed
     try:
         sim.run()
+        print(calib_pars, sim.pars.rand_seed)
         return d['eval_fn'](sim, **d['eval_kw'])
     except Exception as E:
         if d['die']:
@@ -481,12 +482,15 @@ class Calibration(sc.prettyobj):
         best_pars = self.best_pars.copy()
         best_seeds = best_pars.pop('seeds')
         initial_pars = self.initial_pars.copy()
-        best_seeds = initial_pars.pop('seeds')
+        initial_seeds = initial_pars.pop('seeds')
 
-        self.before_msim = self.build_fn(sc.dcp(self.sim), calib_pars=initial_pars, **self.build_kw)
-        self.after_msim = self.build_fn(sc.dcp(self.sim), calib_pars=best_pars, **self.build_kw)
+        initial_sim = self.build_fn(sc.dcp(self.sim), calib_pars=initial_pars, **self.build_kw)
+        best_sim = self.build_fn(sc.dcp(self.sim), calib_pars=best_pars, **self.build_kw)
 
-        # TODO - set seeds
+        self.before_msim = ss.MultiSim(initial_sim, iterpars={'rand_seed': initial_seeds}, reseed=False)
+        self.after_msim = ss.MultiSim(best_sim, iterpars={'rand_seed': best_seeds}, reseed=False)
+        self.before_msim.init_sims(parallel=False)
+        self.after_msim.init_sims(parallel=False)
         msim = ss.MultiSim([self.before_msim, self.after_msim])
         msim.run()
 
@@ -718,7 +722,7 @@ class CalibComponent(sc.prettyobj):
 
             If 'incident', it means data in expected & actual dataframes represent the accumulation
             of system states over a period of time, flows like the incidence of new infections. In
-            this case, teh data in 'simulated' or 'actual' will be interpolated at the start ('t')
+            this case, the data in 'simulated' or 'actual' will be interpolated at the start ('t')
             and the end ('t1') of the period of interest in 'expected'. The difference between these
             two interpolated values will be used for comparison.
 
