@@ -1097,7 +1097,7 @@ class HouseholdNet(Network):
         sim.run()
         sim.plot()
     """
-    def __init__(self, pars=None, dhs_data=None, dynamic=True, prob_move_out=_, update_freq=_, **kwargs):
+    def __init__(self, pars=None, dhs_data=None, dynamic=True, **kwargs):
         super().__init__(**kwargs)
         self.define_pars(
             prob_move_out = ss.bernoulli(p=0.7),
