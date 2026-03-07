@@ -256,8 +256,11 @@ class Calibration(sc.prettyobj):
 
         try:
             study = self.load_study()
-            callback = op.study.MaxTrialsCallback(self.run_args.total_trials)
-            output = study.optimize(lambda trial: self.run_trial(trial, pool=pool), callbacks=[callback])
+            callbacks = [
+                op.study.MaxTrialsCallback(self.run_args.total_trials, states=(op.trial.TrialState.COMPLETE,)),
+                op.study.MaxTrialsCallback(self.run_args.total_trials, states=(op.trial.TrialState.FAIL,)),
+            ]
+            output = study.optimize(lambda trial: self.run_trial(trial, pool=pool), callbacks=callbacks)
             return output
         finally:
             if pool is not None:
@@ -272,7 +275,7 @@ class Calibration(sc.prettyobj):
         """
 
         # Check if the calibration is already complete (which is possible if continue_db=True)
-        done_states = (op.trial.TrialState.COMPLETE, op.trial.TrialState.PRUNED)
+        done_states = (op.trial.TrialState.COMPLETE,)
         n_done = len(self.load_study().get_trials(deepcopy=False, states=done_states))
         remaining = max(0, self.run_args.total_trials - n_done)
         if remaining == 0:
