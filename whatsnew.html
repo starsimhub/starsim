@@ -623,6 +623,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul class="collapse">
+  <li><a href="#version-3.2.1-2026-03-06" id="toc-version-3.2.1-2026-03-06" class="nav-link" data-scroll-target="#version-3.2.1-2026-03-06">Version 3.2.1 (2026-03-06)</a></li>
   <li><a href="#version-3.2.0-2026-03-03" id="toc-version-3.2.0-2026-03-03" class="nav-link" data-scroll-target="#version-3.2.0-2026-03-03">Version 3.2.0 (2026-03-03)</a>
   <ul class="collapse">
   <li><a href="#sim-module-changes" id="toc-sim-module-changes" class="nav-link" data-scroll-target="#sim-module-changes">Sim module changes</a></li>
@@ -743,6 +744,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms “Migration” or “Regression”.</p>
+<section id="version-3.2.1-2026-03-06" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.2.1-2026-03-06">Version 3.2.1 (2026-03-06)</h2>
+<ul>
+<li>Fixed a bug introduced in v3.2.0 that changed how modules were parsed. Also introduced a <code>custom</code> argument to <a href="./api/sim.html#starsim.sim.Sim" title="0"><code>ss.Sim()</code></a>, to specify custom modules.</li>
+<li>Moved <a href="./api/networks.html#starsim.networks.HouseholdNet" title="0"><code>HouseholdNet</code></a> from <code>starsim_examples</code> into <code>starsim</code> and merged it with <code>EvolvingHouseholdNet</code>. By default, the network is dynamic. To use the static network, use <code>ss.HouseholdNet(dynamic=False)</code>.</li>
+<li>The calibration database is now created by default in a temporary folder, to avoid collisions with multiple calibrations running simultaneously; to restore previous behavior, set either <code>study_name</code> or <code>db_name</code>, e.g.&nbsp;<code>db_name='starsim.db'</code>.</li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1200">1200</a></li>
+</ul>
+</section>
 <section id="version-3.2.0-2026-03-03" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.2.0-2026-03-03">Version 3.2.0 (2026-03-03)</h2>
 <section id="sim-module-changes" class="level3">
@@ -2166,7 +2176,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.0 (2026-03-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.2.1 (2026-03-06).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

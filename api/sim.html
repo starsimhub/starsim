@@ -622,17 +622,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    pars<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    label<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    people<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    modules<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    demographics<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    diseases<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    demographics<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    connectors<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    networks<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    diseases<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    interventions<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    analyzers<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    connectors<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    copy_inputs<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    custom<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    modules<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    copy_inputs<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The Sim object</p>
 <p>All Starsim simulations run via the Sim class. It is responsible for initializing and running all modules and generating results.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
@@ -666,60 +667,66 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
-<td>modules</td>
-<td><a href="../api/modules.html#starsim.modules.Module">Module</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
-<td>if provided, use these modules (and divide among demographics, diseases, etc. based on type)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
-</tr>
-<tr class="odd">
 <td>demographics</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="../api/demographics.html#starsim.demographics.Demographics">Demographics</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>a string naming the demographics module to use, the module itself, or a list</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>connectors</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="../api/connectors.html#starsim.connectors.Connector">Connector</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>as above, for connectors</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>networks</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="../api/networks.html#starsim.networks.Network">Network</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>as above, for networks</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>interventions</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="../api/interventions.html#starsim.interventions.Intervention">Intervention</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>as above, for interventions</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>diseases</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="../api/diseases.html#starsim.diseases.Disease">Disease</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>as above, for diseases</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>analyzers</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="../api/analyzers.html#starsim.analyzers.Analyzer">Analyzer</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
 <td>as above, for analyzers</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
+<tr class="even">
+<td>custom</td>
+<td><a href="../api/modules.html#starsim.modules.Module">Module</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td>as above, for any custom user-created modules not matching one of the above types</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
 <tr class="odd">
+<td>modules</td>
+<td><a href="../api/modules.html#starsim.modules.Module">Module</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td>alternatively, supply all modules together and divide among demographics, diseases, etc. based on type</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+<tr class="even">
 <td>copy_inputs</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>if True, copy modules as they’re inserted into the sim (allowing reuse in other sims, but meaning they won’t be updated)</td>
 <td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>data</td>
 <td><code>df</code></td>
 <td>a dataframe (or dict) of data, with a column “time” plus data of the form “module.result”, e.g.&nbsp;“hiv.new_infections” (used for plotting only)</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>merged with pars; see ss.SimPars for all parameter values</td>
@@ -730,7 +737,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p><strong>Examples</strong>:</p>
 <pre><code>sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
 sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
-sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types</code></pre>
+sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
+sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument</code></pre>
 </section>
 <section id="attributes" class="level4">
 <h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
@@ -2435,7 +2443,7 @@ ss.diff_sims(s1, s2)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.0 (2026-03-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.2.1 (2026-03-06).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
