@@ -72,8 +72,10 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ To handle all numpy operations, e.g. arr1*arr2 """
+
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
         inputs = [self._arr(x) for x in inputs]
+
         # 'out' is a tuple of output arrays (e.g. from in-place ops like -=), so unwrap it element-wise;
         # keep the originals so we can return them directly for in-place ops (avoiding reassignment via __setattr__)
         out_orig = kwargs.get('out')
@@ -81,11 +83,13 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         for x in itertools.chain(inputs, kwargs.values()):
             if isinstance(x, ss.TimePar):
                 return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
+
+        # Apply the ufunc. If the operation is in-place, then `result` will be a reference to the existing raw array. If the operation
+        # is not in-place, the ufunc will create a new output array, which is what gets returned here.
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
-        # For in-place operations ('out' was specified), return the original BaseArr objects so that
-        # Python's augmented assignment (e.g. -=) reassigns the same object rather than a new one.
-        # This avoids triggering __setattr__ guards that prevent replacing locked attributes.
+        # For in-place operations the values have been written to the original arrays above, so
+        # return the original 'out' arrays without making a copy (which occurs via `self.convert()` otherwise)
         if out_orig is not None:
             if isinstance(result, tuple):
                 return tuple(o if isinstance(o, BaseArr) else self.convert(r) for r, o in zip(result, out_orig))
