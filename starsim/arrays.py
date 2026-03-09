@@ -74,7 +74,8 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         """ To handle all numpy operations, e.g. arr1*arr2 """
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
         inputs = [self._arr(x) for x in inputs]
-        kwargs = {k:self._arr(v) for k,v in kwargs.items()}
+        # 'out' is a tuple of output arrays (e.g. from in-place ops like -=), so unwrap it element-wise
+        kwargs = {k: (tuple(self._arr(x) for x in v) if k == 'out' else self._arr(v)) for k, v in kwargs.items()}
         for x in itertools.chain(inputs, kwargs.values()):
             if isinstance(x, ss.TimePar):
                 return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
