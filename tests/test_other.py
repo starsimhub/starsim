@@ -183,6 +183,35 @@ def test_arrs():
 
 
 @sc.timer()
+def test_arr_inplace():
+    # Note that the test function above focusses on BoolArr specifially which has its own version of some of the operators
+    sc.heading('Testing Arr in-place vs non-in-place arithmetic operators')
+
+    # Create two synthetic FloatArrs without needing a full sim
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', default=2.0, mock=10)
+
+    # --- In-place: += must update values without replacing the Arr or .raw array ---
+    original_id     = id(a)
+    original_id_raw = id(a.raw)
+    expected        = a.raw.copy() + b.raw.copy()
+    a += b
+    assert np.allclose(a.raw, expected),       'In-place += must produce correct values'
+    assert id(a)     == original_id,           'In-place += must not replace the Arr object'
+    assert id(a.raw) == original_id_raw,       'In-place += must not replace the .raw array'
+
+    # --- Non-in-place: + must return an independent copy without modifying the original ---
+    original_raw = a.raw.copy()
+    c = a + b
+    assert id(c)     != id(a),                 'Non-in-place + must return a new Arr object'
+    assert id(c.raw) != id(a.raw),             'Non-in-place + must use a new .raw array'
+    assert np.allclose(a.raw, original_raw),   'Non-in-place + must not modify the original Arr'
+    assert np.allclose(c.raw, original_raw + b.raw), 'Non-in-place + must produce correct values'
+
+    return a, b, c
+
+
+@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
@@ -254,6 +283,7 @@ if __name__ == '__main__':
     sim1  = test_microsim(do_plot)
     sim2  = test_results()
     sims  = test_arrs()
+    arrs  = test_arr_inplace()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     mods  = test_custom_imports()
