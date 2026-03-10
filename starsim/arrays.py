@@ -72,31 +72,13 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ To handle all numpy operations, e.g. arr1*arr2 """
-
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
         inputs = [self._arr(x) for x in inputs]
-
-        # 'out' is a tuple of output arrays (e.g. from in-place ops like -=), so unwrap it element-wise;
-        # keep the originals so we can return them directly for in-place ops (avoiding reassignment via __setattr__)
-        out_orig = kwargs.get('out')
-        kwargs = {k: (tuple(self._arr(x) for x in v) if k == 'out' else self._arr(v)) for k, v in kwargs.items()}
+        kwargs = {k:self._arr(v) for k,v in kwargs.items()}
         for x in itertools.chain(inputs, kwargs.values()):
             if isinstance(x, ss.TimePar):
                 return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
-
-        # Apply the ufunc. If the operation is in-place, then `result` will be a reference to the existing raw array. If the operation
-        # is not in-place, the ufunc will create a new output array, which is what gets returned here.
         result = getattr(ufunc, method)(*inputs, **kwargs)
-
-        # For in-place operations the values have been written to the original arrays above, so
-        # return the original 'out' arrays without making a copy (which occurs via `self.convert()` otherwise)
-        if out_orig is not None:
-            if isinstance(result, tuple):
-                return tuple(o if isinstance(o, BaseArr) else self.convert(r) for r, o in zip(result, out_orig))
-            # Single result: return the first BaseArr from out, or fall through to convert
-            for o in out_orig:
-                if isinstance(o, BaseArr):
-                    return o
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
         if isinstance(result, tuple):
@@ -387,6 +369,68 @@ class Arr(BaseArr):
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
+
+    def _math(self, op, other=None, inplace=False, reverse=False):
+        """Helper function for numeric operations on active agents only."""
+        if isinstance(other, ss.TimePar):
+            return NotImplemented
+
+        inds = self.auids
+        a = self._index(self.raw, inds)
+
+        if isinstance(other, Arr):
+            b = other._index(other.raw, inds)
+        elif isinstance(other, BaseArr):
+            b = other.values
+        elif isinstance(other, ss.date):
+            b = other.years
+        else:
+            b = other
+
+        if reverse:
+            a,b = b,a
+
+        if op   == '+': c = a + b
+        elif op == '-': c = a - b
+        elif op == '*': c = a * b
+        elif op == '/': c = a / b
+        elif op == '//': c = a // b
+        elif op == '**': c = a ** b
+        elif op == '%': c = a % b
+        else:
+            errormsg = f'Unrecognized operator "{op}"'
+            raise ValueError(errormsg)
+
+        if inplace:
+            self.raw[inds] = c
+            return self
+        else:
+            result_raw = self.raw.copy()
+            result_raw[inds] = c
+            return self.asnew(result_raw, copy=False)
+
+    def __add__(self, other): return self._math('+', other)
+    def __radd__(self, other): return self._math('+', other, reverse=True)
+    def __sub__(self, other): return self._math('-', other)
+    def __rsub__(self, other): return self._math('-', other, reverse=True)
+    def __mul__(self, other): return self._math('*', other)
+    def __rmul__(self, other): return self._math('*', other, reverse=True)
+    def __truediv__(self, other): return self._math('/', other)
+    def __rtruediv__(self, other): return self._math('/', other, reverse=True)
+    def __floordiv__(self, other): return self._math('//', other)
+    def __rfloordiv__(self, other): return self._math('//', other, reverse=True)
+    def __pow__(self, other): return self._math('**', other)
+    def __rpow__(self, other): return self._math('**', other, reverse=True)
+    def __mod__(self, other): return self._math('%', other)
+    def __rmod__(self, other): return self._math('%', other, reverse=True)
+
+    def __iadd__(self, other): return self._math('+', other, inplace=True)
+    def __isub__(self, other): return self._math('-', other, inplace=True)
+    def __imul__(self, other): return self._math('*', other, inplace=True)
+    def __itruediv__(self, other): return self._math('/', other, inplace=True)
+    def __ifloordiv__(self, other): return self._math('//', other, inplace=True)
+    def __ipow__(self, other): return self._math('**', other, inplace=True)
+    def __imod__(self, other): return self._math('%', other, inplace=True)
 
     @property
     def auids(self):
