@@ -208,20 +208,14 @@ def test_arr_inplace():
     assert np.allclose(a.raw, original_raw),   'Non-in-place + must not modify the original Arr'
     assert np.allclose(c.raw, original_raw + b.raw), 'Non-in-place + must produce correct values'
 
-    return a, b, c
-
-
-@sc.timer()
-def test_arr_inplace_masked():
-    sc.heading('Testing Arr in-place arithmetic operators with masked UIDs')
-
-    a = ss.FloatArr('a', default=3.0, mock=10)
-    b = ss.FloatArr('b', default=2.0, mock=10)
-
     masked_auids = ss.uids(np.array([0, 1, 2, 4, 5, 6, 7, 8, 9], dtype=int))
     inactive_uid = 3
+
+    # --- In-place masked Arr += Arr ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
     a.people.auids = masked_auids
-    b.people = a.people
+    b.people.auids = masked_auids
 
     original_id = id(a)
     original_id_raw = id(a.raw)
@@ -233,6 +227,74 @@ def test_arr_inplace_masked():
     assert a.raw[inactive_uid] == 3.0,   'In-place += must not modify inactive UIDs'
     assert id(a) == original_id,         'In-place += must not replace the Arr object'
     assert id(a.raw) == original_id_raw, 'In-place += must not replace the .raw array'
+
+    # --- In-place masked Arr -= Arr ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    a.people.auids = masked_auids
+    b.people.auids = masked_auids
+    expected = a.raw.copy()
+    expected[masked_auids] -= b.raw[masked_auids]
+    a -= b
+    assert np.allclose(a.raw, expected), 'In-place -= must update raw values for active UIDs only'
+    assert a.raw[inactive_uid] == 3.0,   'In-place -= must not modify inactive UIDs'
+
+    # --- In-place masked Arr +/- scalar ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    a.people.auids = masked_auids
+    expected = a.raw.copy()
+    expected[masked_auids] += 2
+    a += 2
+    assert np.allclose(a.raw, expected), 'In-place += scalar must update active UIDs only'
+    expected[masked_auids] -= 1
+    a -= 1
+    assert np.allclose(a.raw, expected), 'In-place -= scalar must update active UIDs only'
+    assert a.raw[inactive_uid] == 3.0,   'Scalar in-place arithmetic must not modify inactive UIDs'
+
+    # --- In-place masked Arr += ndarray aligned to active UIDs ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    a.people.auids = masked_auids
+    rhs = np.arange(len(masked_auids), dtype=float)
+    expected = a.raw.copy()
+    expected[masked_auids] += rhs
+    a += rhs
+    assert np.allclose(a.raw, expected), 'In-place += ndarray must treat the ndarray as aligned to active UIDs'
+
+    # --- In-place masked Arr += ndarray with mismatched length ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    a.people.auids = masked_auids
+    try:
+        a += np.arange(len(masked_auids) + 1, dtype=float)
+        raise AssertionError('In-place += with a mismatched ndarray length must raise an error')
+    except ValueError:
+        pass
+
+    # --- In-place masked Arr += Arr with different active masks ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    other_masked_auids = ss.uids(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8], dtype=int))
+    a.people.auids = masked_auids
+    b.people.auids = other_masked_auids
+    expected = a.raw.copy()
+    expected[masked_auids] += b.raw[masked_auids]
+    a += b
+    assert np.allclose(a.raw, expected), 'Arr-to-Arr arithmetic must read RHS values from other.raw[self.auids]'
+    assert a.raw[inactive_uid] == 3.0,   'Mismatched RHS masks must not modify inactive UIDs'
+
+    # --- Non-in-place masked Arr + Arr ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    a.people.auids = masked_auids
+    b.people.auids = masked_auids
+    original_raw = a.raw.copy()
+    c = a + b
+    expected = original_raw.copy()
+    expected[masked_auids] += b.raw[masked_auids]
+    assert id(c) != id(a),               'Masked non-in-place + must return a new Arr object'
+    assert id(c.raw) != id(a.raw),       'Masked non-in-place + must use a new .raw array'
+    assert np.allclose(a.raw, original_raw), 'Masked non-in-place + must not modify the original Arr'
+    assert np.allclose(c.raw, expected), 'Masked non-in-place + must preserve inactive raw values and update active UIDs'
+    assert c.raw[inactive_uid] == original_raw[inactive_uid], 'Masked non-in-place + must preserve inactive raw values'
 
     return a, b
 
