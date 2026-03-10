@@ -212,6 +212,32 @@ def test_arr_inplace():
 
 
 @sc.timer()
+def test_arr_inplace_masked():
+    sc.heading('Testing Arr in-place arithmetic operators with masked UIDs')
+
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', default=2.0, mock=10)
+
+    masked_auids = ss.uids(np.array([0, 1, 2, 4, 5, 6, 7, 8, 9], dtype=int))
+    inactive_uid = 3
+    a.people.auids = masked_auids
+    b.people = a.people
+
+    original_id = id(a)
+    original_id_raw = id(a.raw)
+    expected = a.raw.copy()
+    expected[masked_auids] += b.raw[masked_auids]
+
+    a += b
+    assert np.allclose(a.raw, expected), 'In-place += must update raw values for active UIDs only'
+    assert a.raw[inactive_uid] == 3.0,   'In-place += must not modify inactive UIDs'
+    assert id(a) == original_id,         'In-place += must not replace the Arr object'
+    assert id(a.raw) == original_id_raw, 'In-place += must not replace the .raw array'
+
+    return a, b
+
+
+@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
