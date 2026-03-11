@@ -371,19 +371,22 @@ class Arr(BaseArr):
     def __invert__(self):     raise BooleanOperationError(self)
 
     def _math(self, op, other=None, inplace=False, reverse=False):
-        """Helper function for numeric operations on active agents only."""
-        if isinstance(other, ss.TimePar):
+        """
+        Helper function for numeric operations
+
+        The main purpose of this function is to handle in-place operations where the
+        result of the operation needs to be applied to active agents only.
+
+
+        """
+        if isinstance(other, (ss.TimePar, ss.date)):
             return NotImplemented
 
         inds = self.auids
-        a = self._index(self.raw, inds)
+        a = self.values
 
         if isinstance(other, Arr):
-            b = other._index(other.raw, inds)
-        elif isinstance(other, BaseArr):
             b = other.values
-        elif isinstance(other, ss.date):
-            b = other.years
         else:
             b = other
 

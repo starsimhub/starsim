@@ -2,6 +2,7 @@
 Test Starsim features not covered by other test files
 """
 import numpy as np
+import pytest
 import sciris as sc
 import starsim as ss
 import starsim_examples as sse
@@ -300,6 +301,50 @@ def test_arr_inplace():
 
 
 @sc.timer()
+def test_arr_type_conversion():
+    sc.heading('Testing Arr type conversion and mixed bool/float arithmetic')
+
+    a = np.array([True, False], dtype=bool)
+    b = np.array([3, 4], dtype=float)
+    c = ss.BoolArr('c', raw=np.array([True, False], dtype=bool), mock=2)
+    d = ss.FloatArr('d', raw=np.array([3, 4], dtype=float), mock=2)
+
+    ab = a * b
+    ba = b * a
+    assert ab.dtype == float
+    assert ba.dtype == float
+    assert np.array_equal(ab, np.array([3.0, 0.0]))
+    assert np.array_equal(ba, np.array([3.0, 0.0]))
+
+    with pytest.raises(TypeError):
+        a_copy = a.copy()
+        a_copy *= b
+
+    b_copy = b.copy()
+    b_copy *= a
+    assert b_copy.dtype == float
+    assert np.array_equal(b_copy, np.array([3.0, 0.0]))
+
+    cd = c * d
+    dc = d * c
+    assert cd.raw.dtype == float
+    assert dc.raw.dtype == float
+    assert np.array_equal(cd.raw, np.array([3.0, 0.0]))
+    assert np.array_equal(dc.raw, np.array([3.0, 0.0]))
+
+    with pytest.raises(TypeError):
+        c_copy = ss.BoolArr('c_copy', raw=np.array([True, False], dtype=bool), mock=2)
+        c_copy *= d
+
+    d_copy = ss.FloatArr('d_copy', raw=np.array([3, 4], dtype=float), mock=2)
+    d_copy *= c
+    assert d_copy.raw.dtype == float
+    assert np.array_equal(d_copy.raw, np.array([3.0, 0.0]))
+
+    return dict(ab=ab, ba=ba, cd=cd, dc=dc)
+
+
+@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
@@ -372,6 +417,7 @@ if __name__ == '__main__':
     sim2  = test_results()
     sims  = test_arrs()
     arrs  = test_arr_inplace()
+    vals  = test_arr_type_conversion()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     mods  = test_custom_imports()
