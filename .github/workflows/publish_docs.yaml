@@ -1,3 +1,6 @@
+# Note: this test only runs manually or on pushes to
+# tagged versions.
+
 name: Publish Starsim docs
 
 on:
@@ -19,7 +22,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
-        python-version: "3.14"
+        python-version: "3.13"
 
     - name: Install Starsim
       run: pip install -e .[dev]
@@ -36,6 +39,5 @@ jobs:
       run: |
         git config --global user.name "github-actions"
         git config --global user.email "github-actions@users.noreply.github.com"
-        pip install dask["complete"]
         ./publish
 

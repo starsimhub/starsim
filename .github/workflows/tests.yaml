@@ -1,5 +1,7 @@
-name: Starsim CI tests
+name: Starsim CI
 on:
+  workflow_call:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -15,7 +17,7 @@ jobs:
         os: ['ubuntu-latest']
         python-version: ['3.10', '3.14']
     runs-on: ${{ matrix.os }}
-    name: Install and test
+    name: Tests
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6

@@ -2,6 +2,7 @@
 Test Starsim features not covered by other test files
 """
 import numpy as np
+import pytest
 import sciris as sc
 import starsim as ss
 import starsim_examples as sse
@@ -183,6 +184,169 @@ def test_arrs():
 
 
 @sc.timer()
+def test_arr_inplace():
+    # Note that the test function above focusses on BoolArr specifially which has its own version of some of the operators
+    sc.heading('Testing Arr in-place vs non-in-place arithmetic operators')
+
+    # Create two synthetic FloatArrs without needing a full sim
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', default=2.0, mock=10)
+
+    # --- In-place: += must update values without replacing the Arr or .raw array ---
+    original_id     = id(a)
+    original_id_raw = id(a.raw)
+    expected        = a.raw.copy() + b.raw.copy()
+    a += b
+    assert np.allclose(a.raw, expected),       'In-place += must produce correct values'
+    assert id(a)     == original_id,           'In-place += must not replace the Arr object'
+    assert id(a.raw) == original_id_raw,       'In-place += must not replace the .raw array'
+
+    # --- Non-in-place: + must return an independent copy without modifying the original ---
+    original_raw = a.raw.copy()
+    c = a + b
+    assert id(c)     != id(a),                 'Non-in-place + must return a new Arr object'
+    assert id(c.raw) != id(a.raw),             'Non-in-place + must use a new .raw array'
+    assert np.allclose(a.raw, original_raw),   'Non-in-place + must not modify the original Arr'
+    assert np.allclose(c.raw, original_raw + b.raw), 'Non-in-place + must produce correct values'
+
+    masked_auids = ss.uids(np.array([0, 1, 2, 4, 5, 6, 7, 8, 9], dtype=int))
+    inactive_uid = 3
+
+    # --- In-place masked Arr += Arr ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    a.people.auids = masked_auids
+    b.people.auids = masked_auids
+
+    original_id = id(a)
+    original_id_raw = id(a.raw)
+    expected = a.raw.copy()
+    expected[masked_auids] += b.raw[masked_auids]
+
+    a += b
+    assert np.allclose(a.raw, expected), 'In-place += must update raw values for active UIDs only'
+    assert a.raw[inactive_uid] == 3.0,   'In-place += must not modify inactive UIDs'
+    assert id(a) == original_id,         'In-place += must not replace the Arr object'
+    assert id(a.raw) == original_id_raw, 'In-place += must not replace the .raw array'
+
+    # --- In-place masked Arr -= Arr ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    a.people.auids = masked_auids
+    b.people.auids = masked_auids
+    expected = a.raw.copy()
+    expected[masked_auids] -= b.raw[masked_auids]
+    a -= b
+    assert np.allclose(a.raw, expected), 'In-place -= must update raw values for active UIDs only'
+    assert a.raw[inactive_uid] == 3.0,   'In-place -= must not modify inactive UIDs'
+
+    # --- In-place masked Arr +/- scalar ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    a.people.auids = masked_auids
+    expected = a.raw.copy()
+    expected[masked_auids] += 2
+    a += 2
+    assert np.allclose(a.raw, expected), 'In-place += scalar must update active UIDs only'
+    expected[masked_auids] -= 1
+    a -= 1
+    assert np.allclose(a.raw, expected), 'In-place -= scalar must update active UIDs only'
+    assert a.raw[inactive_uid] == 3.0,   'Scalar in-place arithmetic must not modify inactive UIDs'
+
+    # --- In-place masked Arr += ndarray aligned to active UIDs ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    a.people.auids = masked_auids
+    rhs = np.arange(len(masked_auids), dtype=float)
+    expected = a.raw.copy()
+    expected[masked_auids] += rhs
+    a += rhs
+    assert np.allclose(a.raw, expected), 'In-place += ndarray must treat the ndarray as aligned to active UIDs'
+
+    # --- In-place masked Arr += ndarray with mismatched length ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    a.people.auids = masked_auids
+    try:
+        a += np.arange(len(masked_auids) + 1, dtype=float)
+        raise AssertionError('In-place += with a mismatched ndarray length must raise an error')
+    except ValueError:
+        pass
+
+    # --- In-place masked Arr += Arr with different active masks ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    other_masked_auids = ss.uids(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8], dtype=int))
+    a.people.auids = masked_auids
+    b.people.auids = other_masked_auids
+    expected = a.raw.copy()
+    expected[masked_auids] += b.raw[masked_auids]
+    a += b
+    assert np.allclose(a.raw, expected), 'Arr-to-Arr arithmetic must read RHS values from other.raw[self.auids]'
+    assert a.raw[inactive_uid] == 3.0,   'Mismatched RHS masks must not modify inactive UIDs'
+
+    # --- Non-in-place masked Arr + Arr ---
+    a = ss.FloatArr('a', default=3.0, mock=10)
+    b = ss.FloatArr('b', raw=np.arange(10, dtype=float), mock=10)
+    a.people.auids = masked_auids
+    b.people.auids = masked_auids
+    original_raw = a.raw.copy()
+    c = a + b
+    expected = original_raw.copy()
+    expected[masked_auids] += b.raw[masked_auids]
+    assert id(c) != id(a),               'Masked non-in-place + must return a new Arr object'
+    assert id(c.raw) != id(a.raw),       'Masked non-in-place + must use a new .raw array'
+    assert np.allclose(a.raw, original_raw), 'Masked non-in-place + must not modify the original Arr'
+    assert np.allclose(c.raw, expected), 'Masked non-in-place + must preserve inactive raw values and update active UIDs'
+    assert c.raw[inactive_uid] == original_raw[inactive_uid], 'Masked non-in-place + must preserve inactive raw values'
+
+    return a, b
+
+
+@sc.timer()
+def test_arr_type_conversion():
+    sc.heading('Testing Arr type conversion and mixed bool/float arithmetic')
+
+    a = np.array([True, False], dtype=bool)
+    b = np.array([3, 4], dtype=float)
+    c = ss.BoolArr('c', raw=np.array([True, False], dtype=bool), mock=2)
+    d = ss.FloatArr('d', raw=np.array([3, 4], dtype=float), mock=2)
+
+    ab = a * b
+    ba = b * a
+    assert ab.dtype == float
+    assert ba.dtype == float
+    assert np.array_equal(ab, np.array([3.0, 0.0]))
+    assert np.array_equal(ba, np.array([3.0, 0.0]))
+
+    with pytest.raises(TypeError):
+        a_copy = a.copy()
+        a_copy *= b
+
+    b_copy = b.copy()
+    b_copy *= a
+    assert b_copy.dtype == float
+    assert np.array_equal(b_copy, np.array([3.0, 0.0]))
+
+    cd = c * d
+    dc = d * c
+    assert isinstance(cd, ss.FloatArr)
+    assert isinstance(dc, ss.FloatArr)
+    assert cd.raw.dtype == float
+    assert dc.raw.dtype == float
+    assert np.array_equal(cd.raw, np.array([3.0, 0.0]))
+    assert np.array_equal(dc.raw, np.array([3.0, 0.0]))
+
+    with pytest.raises(TypeError):
+        c_copy = ss.BoolArr('c_copy', raw=np.array([True, False], dtype=bool), mock=2)
+        c_copy *= d
+
+    d_copy = ss.FloatArr('d_copy', raw=np.array([3, 4], dtype=float), mock=2)
+    d_copy *= c
+    assert d_copy.raw.dtype == float
+    assert np.array_equal(d_copy.raw, np.array([3.0, 0.0]))
+
+    return dict(ab=ab, ba=ba, cd=cd, dc=dc)
+
+
+@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
@@ -254,6 +418,8 @@ if __name__ == '__main__':
     sim1  = test_microsim(do_plot)
     sim2  = test_results()
     sims  = test_arrs()
+    arrs  = test_arr_inplace()
+    vals  = test_arr_type_conversion()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     mods  = test_custom_imports()

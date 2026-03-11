@@ -1,5 +1,6 @@
-name: Starsim cron tests
+name: Scheduled Starsim tests
 on:
+  workflow_call:
   workflow_dispatch:
   schedule:
     - cron: "0 0 * * *" # Run every day at midnight UTC
@@ -8,4 +9,4 @@ jobs:
   ci-tests:
     uses: ./.github/workflows/tests.yaml
   downstream-tests:
-    uses: ./.github/workflows/test_models.yaml
+    uses: ./.github/workflows/test_downstream.yaml

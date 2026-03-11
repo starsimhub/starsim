@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.2.1 (2026-03-04)
+## Version 3.2.2 (2026-XX-XX)
 
 ### Calibration changes
 - Calibration now uses Optuna's Journal file storage backend by default, which is more robust for disk-based multiprocessing. 
@@ -20,6 +20,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
 
 
+## Version 3.2.1 (2026-03-06)
+- Fixed a bug introduced in v3.2.0 that changed how modules were parsed. Also introduced a `custom` argument to `ss.Sim()`, to specify custom modules.
+- Moved `HouseholdNet` from `starsim_examples` into `starsim` and merged it with `EvolvingHouseholdNet`. By default, the network is dynamic. To use the static network, use `ss.HouseholdNet(dynamic=False)`.
+- The calibration database is now created by default in a temporary folder, to avoid collisions with multiple calibrations running simultaneously; to restore previous behavior, set either `study_name` or `db_name`, e.g. `db_name='starsim.db'`.
+- *GitHub info*: PR [1200](https://github.com/starsimhub/starsim/pull/1200)
 
 
 ## Version 3.2.0 (2026-03-03)
