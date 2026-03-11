@@ -3,9 +3,14 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.2.3 (2026-03-XX)
+- TBC
+- *GitHub info*: PR [XX](https://github.com/starsimhub/starsim/pull/XX)
+
+
 ## Version 3.2.2 (2026-03-11)
 - Added `people.born`, which tracks agents that are alive (`sim.people.alive`) and born (`sim.people.age >= 0`).
-- Fixed a bug that prevented `ss.Arr` objects from being modified in-place by functions involving other `ss.Arr` object.
+- Fixed a bug that prevented `ss.Arr` objects from being modified in-place by functions involving other `ss.Arr` objects.
 - Fixed an initialization bug in `ss.HouseholdNet`.
 - *GitHub info*: PR [1227](https://github.com/starsimhub/starsim/pull/1227)
 
