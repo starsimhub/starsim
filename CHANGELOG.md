@@ -4,7 +4,9 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.2.2 (2026-03-11)
+- Added `people.born`, which tracks agents that are alive (`sim.people.alive`) and born (`sim.people.age >= 0`).
 - Fixed a bug that prevented `ss.Arr` objects from being modified in-place by functions involving other `ss.Arr` object.
+- Fixed an initialization bug in `ss.HouseholdNet`.
 - *GitHub info*: PR [1227](https://github.com/starsimhub/starsim/pull/1227)
 
 
