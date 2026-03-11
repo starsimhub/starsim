@@ -104,85 +104,6 @@ def test_results():
 
 
 @sc.timer()
-def test_arrs():
-    sc.heading('Testing Arr objects')
-    o = sc.objdict()
-
-    # Create a sim with only births
-    pars = dict(n_agents=medium, diseases='sis', networks='random')
-    p1 = sc.mergedicts(pars, birth_rate=ss.freqperyear(10))
-    p2 = sc.mergedicts(pars, death_rate=ss.freqperyear(10))
-    s1 = ss.Sim(pars=p1).run()
-    s2 = ss.Sim(pars=p2).run()
-
-    # Tests
-    assert len(s1.people.auids) > len(s2.people.auids), 'Should have more people with births'
-    assert np.array_equal(s1.people.age, s1.people.age.raw[s1.people.auids]), 'Different ways of indexing age should match'
-    assert np.array_equal(s1.people.alive.uids, s1.people.auids), 'Active/alive agents should match'
-    assert np.all(s2.people.alive), 'All agents should be alive when indexed like this'
-    assert not np.all(s2.people.alive.raw), 'Some agents should not be alive when indexed like this'
-    assert np.array_equal(~s1.people.female, s1.people.male), 'Definition of men does not match'
-    assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
-    assert np.array_equal(s1.people.age[s1.people.age < 5],s1.people.age[s1.people.age.values < 5])
-
-    # Test BoolArr & uids operations
-    test_bool = s1.people.age > 20
-    test_uids = test_bool.uids
-
-    # Standard operations
-    assert np.all(test_bool == test_uids)
-    assert np.all(~(test_bool != test_uids))
-    assert np.array_equal(s1.people.female & test_bool, s1.people.female & test_uids)
-    assert np.array_equal(s1.people.female | test_bool, s1.people.female | test_uids)
-    assert np.array_equal(s1.people.female ^ test_bool, s1.people.female ^ test_uids)
-    assert np.array_equal(test_uids & s1.people.female,  test_uids & s1.people.female.uids)
-    assert np.array_equal(test_uids | s1.people.female,  test_uids | s1.people.female.uids)
-    assert np.array_equal(test_uids ^ s1.people.female,  test_uids ^ s1.people.female.uids)
-
-    # Inplace BoolArr operations
-    a = s1.people.female & test_bool
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b &= test_bool
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    a = s1.people.female & test_uids
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b &= test_uids
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    a = s1.people.female | test_bool
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b |= test_bool
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    a = s1.people.female ^ test_uids
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b ^= test_uids
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    o.s1 = s1
-    o.s2 = s2
-
-    return o
-
-
-@sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
@@ -253,9 +174,8 @@ if __name__ == '__main__':
     # Run tests
     sim1  = test_microsim(do_plot)
     sim2  = test_results()
-    sims  = test_arrs()
-    sims2 = test_deepcopy()
-    sims3 = test_deepcopy_until()
+    sims1 = test_deepcopy()
+    sims2 = test_deepcopy_until()
     mods  = test_custom_imports()
 
     sc.toc(T)

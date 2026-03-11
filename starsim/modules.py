@@ -266,7 +266,7 @@ class Module(Base):
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
-        self._locked_attrs = ['pars', 't', 'sim', 'dists'] # Define key attributes that shouldn't be overwritten; note, 'results' would be included but self.results += result calls __setattr__
+        self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
         self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters
@@ -298,6 +298,8 @@ class Module(Base):
     def __setattr__(self, attr, value):
         """ Don't allow locked attributes to be overwritten """
         if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
+            if value is getattr(self, attr, None): # Allow assigning the same object back - this happens automatically with some in-place operators (e.g., +=)
+                return
             errormsg = f'Cannot modify attribute "{attr}"; locked attributes are {sc.strjoin(self._locked_attrs)}.\n'
             errormsg += 'If you really mean to do this, use module.setattribute() or set module._lock_attrs = False'
             try:

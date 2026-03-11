@@ -2,8 +2,11 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.2.2 (2026-03-XX)
-- TBC
+
+## Version 3.2.2 (2026-03-11)
+- Fixed a bug that prevented `ss.Arr` objects from being modified in-place by functions involving other `ss.Arr` object.
+- *GitHub info*: PR [1227](https://github.com/starsimhub/starsim/pull/1227)
+
 
 ## Version 3.2.1 (2026-03-06)
 - Fixed a bug introduced in v3.2.0 that changed how modules were parsed. Also introduced a `custom` argument to `ss.Sim()`, to specify custom modules.

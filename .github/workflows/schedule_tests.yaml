@@ -9,4 +9,4 @@ jobs:
   ci-tests:
     uses: ./.github/workflows/tests.yaml
   downstream-tests:
-    uses: ./.github/workflows/test_models.yaml
+    uses: ./.github/workflows/test_downstream.yaml
