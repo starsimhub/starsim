@@ -188,6 +188,10 @@ class Calibration(sc.prettyobj):
         else:
             pars = None
 
+        # Prune if the prune_fn returns True
+        if self.prune_fn is not None and self.prune_fn(pars):
+            raise op.exceptions.TrialPruned()
+
         n_reps = self.run_args.n_reps
 
         # Generate seeds for this trial (deterministic, outside Optuna's parameter space to reduce optimization dimensions)
@@ -199,10 +203,6 @@ class Calibration(sc.prettyobj):
                 raise ValueError('n_reps>1 requires reseed=True')
             else:
                 seeds = [None]
-
-        # Prune if the prune_fn returns True
-        if self.prune_fn is not None and self.prune_fn(pars):
-            raise op.exceptions.TrialPruned()
 
         # Extract parameter values for build_fn
         calib_pars = {k: v['value'] for k, v in pars.items()} if pars else {}
