@@ -188,8 +188,11 @@ class Calibration(sc.prettyobj):
         else:
             pars = None
 
+        # Extract parameter values for build_fn
+        calib_pars = {k: v['value'] for k, v in pars.items()} if pars else {}
+
         # Prune if the prune_fn returns True
-        if self.prune_fn is not None and self.prune_fn(pars):
+        if self.prune_fn is not None and self.prune_fn(calib_pars):
             raise op.exceptions.TrialPruned()
 
         n_reps = self.run_args.n_reps
@@ -203,9 +206,6 @@ class Calibration(sc.prettyobj):
                 raise ValueError('n_reps>1 requires reseed=True')
             else:
                 seeds = [None]
-
-        # Extract parameter values for build_fn
-        calib_pars = {k: v['value'] for k, v in pars.items()} if pars else {}
 
         # Run n_reps simulations and aggregate
         if pool is not None:
