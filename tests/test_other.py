@@ -327,6 +327,8 @@ def test_arr_type_conversion():
 
     cd = c * d
     dc = d * c
+    assert isinstance(cd, ss.FloatArr)
+    assert isinstance(dc, ss.FloatArr)
     assert cd.raw.dtype == float
     assert dc.raw.dtype == float
     assert np.array_equal(cd.raw, np.array([3.0, 0.0]))

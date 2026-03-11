@@ -376,41 +376,72 @@ class Arr(BaseArr):
 
         The main purpose of this function is to handle in-place operations where the
         result of the operation needs to be applied to active agents only.
-
-
         """
+
         if isinstance(other, (ss.TimePar, ss.date)):
-            return NotImplemented
+            return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
 
         inds = self.auids
-        a = self.values
+        a = self._index(self.raw, inds)
 
         if isinstance(other, Arr):
+            b = other._index(other.raw, inds)
+        elif isinstance(other, BaseArr):
             b = other.values
         else:
             b = other
 
         if reverse:
-            a,b = b,a
+            a, b = b, a
 
-        if op   == '+': c = a + b
-        elif op == '-': c = a - b
-        elif op == '*': c = a * b
-        elif op == '/': c = a / b
-        elif op == '//': c = a // b
-        elif op == '**': c = a ** b
-        elif op == '%': c = a % b
+        if op == '+': ufunc = np.add
+        elif op == '-': ufunc = np.subtract
+        elif op == '*': ufunc = np.multiply
+        elif op == '/': ufunc = np.divide
+        elif op == '//': ufunc = np.floor_divide
+        elif op == '**': ufunc = np.power
+        elif op == '%': ufunc = np.mod
         else:
             errormsg = f'Unrecognized operator "{op}"'
             raise ValueError(errormsg)
 
         if inplace:
-            self.raw[inds] = c
+            out = np.empty(a.shape, dtype=self.raw.dtype) # In-place operations cannot change the dtype
+            ufunc(a, b, out=out) # Calling the ufunc this way ensures in-place operations will raise the same error for Arr as for np.array
+            self.raw[inds] = out # Write the values back to the existing raw array in-place
             return self
         else:
-            result_raw = self.raw.copy()
-            result_raw[inds] = c
-            return self.asnew(result_raw, copy=False)
+            c = ufunc(a, b) # Evaluate the ufunc. Unlike the in-place operation above, the dtype is now allowed to change
+            result_dtype = np.asarray(c).dtype # The resulting dtype will dictate the return class e.g., BoolArr * FloatArr = FloatArr, with np.bool * np.float = np.float
+            result_raw = self.raw.astype(result_dtype, copy=True) # Cast the existing values to the new dtype
+            result_raw[inds] = c # Write the new values into the raw array (with the updated dtype)
+            result_cls, result_nan = self._math_result_type(result_dtype) # Work out which Arr class the new dtype corresponds to
+            result = self.asnew(result_raw, cls=result_cls, copy=False) # Wrap the new result array in an Arr subclass of the appropriate type e.g., a raw `float` array gets wrapped in FloatArr
+            result.nan = result_nan # Since asnew() does not set the .nan or .nan_eq attributes because it does not call __init__, set them now
+            result.nan_eq = (result.nan == result.nan)
+            return result
+
+    @staticmethod
+    def _math_result_type(dtype):
+        """
+        Choose the Arr subclass and nan sentinel for a numeric result dtype.
+
+        The NaN sentinel value is required because the NaN value is set in the constructor, which
+        does not get called when the new instance is created via `asnew()`. Therefore it is necessary
+        to explicitly set it. Because the default value is only defined as a function default value or
+        otherwise accessible only after creating an instance, we have to explicitly re-declare the NaN
+        values here. This could be avoided in the future if the NaN value were stored as a class variable
+        """
+        dtype = np.dtype(dtype)
+        if np.issubdtype(dtype, np.bool_):
+            return BoolArr, False
+        elif np.issubdtype(dtype, np.integer):
+            return IntArr, int_nan
+        elif np.issubdtype(dtype, np.floating):
+            return FloatArr, np.nan
+        else:
+            errormsg = f'Unsupported arithmetic result dtype {dtype}'
+            raise TypeError(errormsg)
 
     def __add__(self, other): return self._math('+', other)
     def __radd__(self, other): return self._math('+', other, reverse=True)
