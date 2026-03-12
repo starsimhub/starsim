@@ -334,6 +334,11 @@ class People:
         return ~self.alive
 
     @property
+    def born(self):
+        """ Born boolean """
+        return self.age >= 0
+
+    @property
     def male(self):
         """ Male boolean  (female is a state) """
         return ~self.female

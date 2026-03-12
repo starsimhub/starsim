@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.2.2 (2026-XX-XX)
+## Version 3.2.3 (2026-XX-XX)
 
 ### Calibration changes
 - Calibration now uses Optuna's Journal file storage backend by default, which is more robust for disk-based multiprocessing. 
@@ -18,6 +18,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Calibration `total_trials` are now exactly matched and preserved across distributed workers. This is particularly useful when secondary workers are started separately e.g., on another machine, to contribute to an existing optimization.
 - Initial guesses for the parameters provided as part of `calib_pars` are now guaranteed to be used exactly in the first Optuna trial (previously they were not used)
 - Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
+
+
+## Version 3.2.2 (2026-03-11)
+- Added `people.born`, which tracks agents that are alive (`sim.people.alive`) and born (`sim.people.age >= 0`).
+- Fixed a bug that prevented `ss.Arr` objects from being modified in-place by functions involving other `ss.Arr` object.
+- Fixed an initialization bug in `ss.HouseholdNet`.
+- *GitHub info*: PR [1227](https://github.com/starsimhub/starsim/pull/1227)
 
 
 ## Version 3.2.1 (2026-03-06)
