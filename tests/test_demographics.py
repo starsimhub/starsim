@@ -287,6 +287,214 @@ def test_pregnancy_short_sim():
     return sim
 
 
+def test_fetal_health(do_plot=False):
+    """
+    Test the FetalHealth module across three scenarios:
+      1. Baseline: no disease — birth weights ~3400g at term
+      2. Disease: SIR infection worsens fetal outcomes via a connector
+      3. Treatment: treating infected pregnant women partially reverses damage
+    """
+    sc.heading('Testing fetal health module')
+
+    # -- Helper classes --
+
+    class tx(ss.Intervention):
+        """ Treat infected pregnant women each timestep """
+        def __init__(self, disease='sir', **kwargs):
+            super().__init__(**kwargs)
+            self.disease_name = disease
+            self.define_pars(
+                p_treat=ss.bernoulli(p=0.9),
+            )
+            self.define_states(
+                ss.FloatArr('ti_treated', label='Time of treatment'),
+            )
+            return
+
+        def step(self):
+            preg = self.sim.people.pregnancy
+            disease = self.sim.diseases[self.disease_name]
+            eligible = preg.pregnant & disease.infected
+            treated = self.pars.p_treat.filter(eligible)
+            if len(treated):
+                disease.infected[treated] = False
+                disease.recovered[treated] = True
+                self.ti_treated[treated] = self.ti
+            return
+
+    class fetal_tx(ss.Connector):
+        """ Connector: infection damages fetal health, treatment partially reverses it """
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(
+                timing_shift=ss.lognorm_ex(mean=3.0, std=1.0),
+                growth_penalty=0.15,
+                tx_growth_reversal=0.7,
+                tx_timing_reversal=0.7,
+            )
+            return
+
+        def init_pre(self, sim):
+            super().init_pre(sim)
+            fh = sim.custom['fetal_health']
+            fh.add_conception_callback(self._on_conception)
+            return
+
+        def _on_conception(self, uids):
+            infected = self.sim.diseases.sir.infected[uids]
+            infected_uids = uids[infected]
+            if len(infected_uids):
+                self._apply_damage(infected_uids)
+            return
+
+        def _apply_damage(self, uids):
+            fh = self.sim.custom['fetal_health']
+            shifts = self.pars.timing_shift.rvs(uids)
+            fh.apply_timing_shift(uids, shifts)
+            fh.apply_growth_restriction(uids, self.pars.growth_penalty)
+            return
+
+        def _apply_treatment_reversal(self, uids):
+            fh = self.sim.custom['fetal_health']
+            reversible = self.pars.growth_penalty * self.pars.tx_growth_reversal
+            fh.reverse_growth_restriction(uids, reversible)
+            fh.reverse_timing_shift(uids, self.pars.tx_timing_reversal)
+            return
+
+        def step(self):
+            sim = self.sim
+            preg = sim.people.pregnancy
+            if not preg.pregnant.any():
+                return
+
+            pregnant_uids = preg.pregnant.uids
+
+            # New infections in pregnant women
+            newly_infected = sim.diseases.sir.ti_infected == self.ti
+            affected = pregnant_uids[newly_infected[pregnant_uids]]
+            if len(affected):
+                self._apply_damage(affected)
+
+            # Newly treated pregnant women
+            if 'tx' in sim.interventions:
+                intv = sim.interventions['tx']
+                just_treated = intv.ti_treated == self.ti
+                treated_pregnant = pregnant_uids[just_treated[pregnant_uids]]
+                if len(treated_pregnant):
+                    self._apply_treatment_reversal(treated_pregnant)
+            return
+
+    # -- Shared sim parameters --
+
+    sim_kw = dict(
+        n_agents=5_000,
+        dur=ss.years(5),
+        dt=ss.years(1/12),
+        rand_seed=1,
+    )
+    demo = lambda: [
+        ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
+        ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+    ]
+    sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.dur(6), std=ss.dur(1)), beta=0.1, init_prev=0.1)
+
+    def mean_bw(sim):
+        bw = sim.results.fetal_health.mean_birth_weight
+        return bw[bw > 0].mean()
+
+    # -- 1. Baseline (no disease) --
+    sim_baseline = ss.Sim(
+        demographics=demo(),
+        modules=ss.FetalHealth(),
+        networks=ss.PrenatalNet(),
+        **sim_kw,
+    )
+    sim_baseline.run()
+
+    # Basic sanity checks
+    total_deliveries = sim_baseline.results.fetal_health.n_deliveries.sum()
+    assert total_deliveries > 0, 'No deliveries recorded'
+    print(f'Total deliveries: {total_deliveries}')
+
+    bw_baseline = mean_bw(sim_baseline)
+    print(f'Mean birth weight (baseline): {bw_baseline:.0f}g')
+    assert 2500 < bw_baseline < 4000, f'Mean birth weight {bw_baseline:.0f}g outside expected range'
+
+    ga = sim_baseline.results.fetal_health.mean_ga_at_birth
+    mean_ga = ga[ga > 0].mean()
+    print(f'Mean GA at birth: {mean_ga:.1f} weeks')
+    assert 36 < mean_ga < 44, f'Mean GA {mean_ga:.1f} weeks outside expected range'
+
+    # -- 2. Disease only (no treatment) --
+    sim_disease = ss.Sim(
+        demographics=demo(),
+        diseases=ss.SIR(**sir_kw),
+        connectors=fetal_tx(),
+        modules=ss.FetalHealth(),
+        networks=[ss.PrenatalNet(), ss.RandomNet()],
+        **sim_kw,
+    )
+    sim_disease.run()
+
+    bw_disease = mean_bw(sim_disease)
+    print(f'Mean birth weight (disease): {bw_disease:.0f}g')
+    assert bw_disease < bw_baseline, f'Disease ({bw_disease:.0f}g) should be lower than baseline ({bw_baseline:.0f}g)'
+
+    ptb_disease = sim_disease.results.fetal_health.n_preterm.sum()
+    ptb_baseline = sim_baseline.results.fetal_health.n_preterm.sum()
+    print(f'Preterm births — baseline: {ptb_baseline}, disease: {ptb_disease}')
+    assert ptb_disease > ptb_baseline, 'Disease scenario should have more preterm births'
+
+    # -- 3. Disease + treatment --
+    sim_treated = ss.Sim(
+        demographics=demo(),
+        diseases=ss.SIR(**sir_kw),
+        connectors=fetal_tx(),
+        interventions=tx(name='tx', disease='sir'),
+        modules=ss.FetalHealth(),
+        networks=[ss.PrenatalNet(), ss.RandomNet()],
+        **sim_kw,
+    )
+    sim_treated.run()
+
+    bw_treated = mean_bw(sim_treated)
+    print(f'Mean birth weight (treated): {bw_treated:.0f}g')
+    assert bw_treated > bw_disease, f'Treated ({bw_treated:.0f}g) should be higher than disease-only ({bw_disease:.0f}g)'
+
+    ptb_treated = sim_treated.results.fetal_health.n_preterm.sum()
+    print(f'Preterm births — disease: {ptb_disease}, treated: {ptb_treated}')
+    assert ptb_treated <= ptb_disease, 'Treatment should not increase preterm births'
+
+    print(f'Summary — baseline: {bw_baseline:.0f}g, disease: {bw_disease:.0f}g, treated: {bw_treated:.0f}g')
+
+    if do_plot:
+        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+        for sim, label in [(sim_baseline, 'Baseline'), (sim_disease, 'Disease'), (sim_treated, 'Treated')]:
+            fh = sim.custom['fetal_health']
+            born = fh.birth_weight > 0
+            axes[0].hist(np.asarray(fh.birth_weight[born]), bins=30, alpha=0.4, label=label, edgecolor='k')
+        axes[0].axvline(2500, color='r', ls='--', label='LBW threshold')
+        axes[0].set_xlabel('Birth weight (g)')
+        axes[0].set_ylabel('Count')
+        axes[0].set_title('Birth weight: baseline vs disease vs treated')
+        axes[0].legend()
+
+        tvec = sim_baseline.timevec
+        axes[1].plot(tvec, sim_baseline.results.fetal_health.preterm_rate, label='Baseline')
+        axes[1].plot(tvec, sim_disease.results.fetal_health.preterm_rate, label='Disease')
+        axes[1].plot(tvec, sim_treated.results.fetal_health.preterm_rate, label='Treated')
+        axes[1].set_xlabel('Year')
+        axes[1].set_ylabel('Preterm rate')
+        axes[1].set_title('Preterm birth rate')
+        axes[1].legend()
+
+        fig.tight_layout()
+
+    sc.printgreen('✓ Fetal health tests passed')
+    return sim_baseline, sim_disease, sim_treated
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -296,5 +504,5 @@ if __name__ == '__main__':
     s4 = test_module_adding()
     s5 = test_aging()
     s6 = test_pregnancy()
+    s7 = test_fetal_health(do_plot=do_plot)
     plt.show()
-
