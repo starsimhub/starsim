@@ -292,8 +292,89 @@ class Infection(Disease):
         self.set_prognoses(uids[~congenital], src_p)
         return
 
-    def set_congenital(self, uids, sources=None):
-        pass
+    def set_congenital(self, target_uids, source_uids=None):
+        """
+        Assign congenital outcomes for in-utero infections.
+
+        Diseases opt in by defining ``birth_outcome_keys`` (list of outcome names)
+        and ``birth_outcomes`` (objdict of ``ss.choice`` distributions, keyed by
+        category or 'default') in their pars. Outcomes are sampled at infection
+        time and scheduled to fire at delivery time.
+
+        For state- or GA-dependent probabilities, override
+        ``_assign_congenital_outcomes`` and provide multiple distributions in
+        ``birth_outcomes``.
+
+        Death outcomes ('miscarriage', 'nnd', 'stillborn') are fired via
+        ``request_death``; non-lethal outcomes set a bool state of the same name.
+        Call ``fire_congenital_outcomes`` from the disease's ``step()`` to process
+        scheduled events.
+        """
+        if not hasattr(self.pars, 'birth_outcomes') or self.pars.birth_outcomes is None:
+            return
+
+        # Prevent repeated MTC transmission each timestep of pregnancy
+        self.susceptible[target_uids] = False
+
+        # Assign outcomes
+        outcomes = self.pars.birth_outcomes
+        if len(outcomes) == 1 and 'default' in outcomes:
+            assigned = outcomes['default'].rvs(target_uids)
+        else:
+            assigned = self._assign_congenital_outcomes(target_uids, source_uids)
+
+        # Store outcome index if the disease tracks it
+        if hasattr(self, 'cs_outcome'):
+            self.cs_outcome[target_uids] = assigned
+
+        # Schedule events at delivery time
+        preg = self.sim.demographics.pregnancy
+        dt_delivery = preg.ti_delivery - self.ti  # Full array, indexed by UID below
+        for oi, key in enumerate(self.pars.birth_outcome_keys):
+            o_uids = target_uids[assigned == oi]
+            s_uids = source_uids[assigned == oi]
+            if len(o_uids):
+                ti_key = f'ti_{key}'
+                if hasattr(self, ti_key):
+                    getattr(self, ti_key)[o_uids] = self.ti + dt_delivery[s_uids]
+        return
+
+    def _assign_congenital_outcomes(self, target_uids, source_uids):
+        """
+        Override point for diseases with state- or GA-dependent outcome probabilities.
+        Must return an integer array of outcome indices (one per target_uid),
+        corresponding to ``self.pars.birth_outcome_keys``.
+        """
+        raise NotImplementedError(
+            'Subclass must implement _assign_congenital_outcomes or use a single '
+            '"default" distribution in birth_outcomes'
+        )
+
+    def fire_congenital_outcomes(self):
+        """
+        Fire scheduled congenital events. Call from the disease's ``step()``
+        or ``step_state()``.
+
+        Death outcomes ('miscarriage', 'nnd', 'stillborn') trigger
+        ``request_death``. Non-lethal outcomes set a bool state of the same
+        name on the agent.
+        """
+        if not hasattr(self.pars, 'birth_outcome_keys'):
+            return
+        death_keys = {'miscarriage', 'nnd', 'stillborn'}
+        for key in self.pars.birth_outcome_keys:
+            ti_key = f'ti_{key}'
+            if not hasattr(self, ti_key):
+                continue
+            vals = getattr(self, ti_key)
+            due = (vals.notnan & (vals <= self.ti)).uids
+            if len(due):
+                if key in death_keys:
+                    self.sim.people.request_death(due)
+                elif hasattr(self, key):
+                    getattr(self, key)[due] = True
+                vals[due] = np.nan  # Clear after firing
+        return
 
     def update_results(self):
         super().update_results()
