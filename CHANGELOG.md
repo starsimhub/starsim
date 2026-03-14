@@ -23,7 +23,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ### FetalHealth improvements
 - Simplified `apply_timing_shift`, `apply_growth_restriction`, `reverse_timing_shift`, `reverse_growth_restriction` — removed redundant pregnancy filtering and type coercions.
-- Added `increment_exposures()` for tracking comorbidity exposure counts.
+- `n_exposures` state tracks disease exposures during pregnancy (connectors increment directly via `fh.n_exposures[uids] += 1`).
 - Added `interp_fn` parameter for customizing birth weight interpolation.
 - Negative growth penalties (growth boost, e.g. GDM macrosomia) are now additive rather than using diminishing returns.
 

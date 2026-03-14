@@ -1186,7 +1186,7 @@ class FetalHealth(ss.Module):
             ss.FloatArr('weight_percentile', label='Fetal weight percentile'),
             ss.FloatArr('growth_restriction', label='Cumulative growth restriction'),
             ss.FloatArr('timing_shift',      label='Accumulated delivery shift (weeks)'),
-            ss.FloatArr('n_exposures',       label='Comorbidity exposures this pregnancy'),
+            ss.FloatArr('n_exposures',       label='Disease exposures during pregnancy'),
 
             # Birth outcomes (stored on newborns at delivery)
             ss.FloatArr('birth_weight', label='Birth weight (grams)'),
@@ -1201,6 +1201,8 @@ class FetalHealth(ss.Module):
     def init_pre(self, sim):
         """ Register callbacks with the Pregnancy module """
         super().init_pre(sim)
+        if not hasattr(sim.demographics, 'pregnancy'):
+            raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
         preg = sim.demographics.pregnancy
         preg.add_conception_callback(self.on_conception)
         preg.add_delivery_callback(self.on_delivery)
@@ -1328,20 +1330,6 @@ class FetalHealth(ss.Module):
         positive = penalty >= 0
         new_val = np.where(positive, current + (1 - current) * penalty, current + penalty)
         self.growth_restriction[uids] = new_val
-        return
-
-    def increment_exposures(self, uids, count=1):
-        """
-        Increment the comorbidity exposure counter for pregnant women.
-
-        Callers (connectors, disease modules) call this when applying damage
-        to track how many distinct insults occurred during a pregnancy.
-
-        Args:
-            uids: UIDs of affected pregnant women
-            count (int/float): number of exposures to add (default 1)
-        """
-        self.n_exposures[uids] += count
         return
 
     def reverse_timing_shift(self, uids, fraction):
