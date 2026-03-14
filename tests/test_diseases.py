@@ -5,6 +5,7 @@ Run tests of disease models
 # %% Imports and settings
 import sciris as sc
 import matplotlib.pyplot as plt
+import numpy as np
 import starsim as ss
 import starsim_examples as sse
 
@@ -209,6 +210,164 @@ def test_mtct():
     return sim
 
 
+@sc.timer()
+def test_fetal_health(do_plot=do_plot):
+    """
+    Test the FetalHealth module across three scenarios:
+      1. Baseline: no disease — birth weights ~3400g at term
+      2. Disease: SIR infection worsens fetal outcomes via a connector
+      3. Treatment: treating infected pregnant women partially reverses damage
+    """
+    sc.heading('Testing fetal health module')
+
+    sim_kw = dict(
+        n_agents=5_000,
+        dur=ss.years(5),
+        dt=ss.years(1/12),
+        rand_seed=1,
+    )
+    def demog():
+        return [
+            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ]
+    sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.dur(6), std=ss.dur(1)), beta=0.1, init_prev=0.1)
+
+    def mean_bw(sim):
+        bw = sim.results.fetal_health.mean_birth_weight
+        return bw[bw > 0].mean()
+
+    # -- 1. Baseline (no disease) --
+    sim_baseline = ss.Sim(
+        demographics=demog(),
+        custom=ss.FetalHealth(),
+        networks=ss.PrenatalNet(),
+        **sim_kw,
+    )
+    sim_baseline.run()
+
+    # Basic sanity checks
+    res_fh = sim_baseline.results.fetal_health
+    total_births = res_fh.n_births.sum()
+    assert total_births > 0, 'No births recorded'
+    print(f'Total births: {total_births}')
+
+    bw_baseline = mean_bw(sim_baseline)
+    print(f'Mean birth weight (baseline): {bw_baseline:.0f}g')
+    assert 2500 < bw_baseline < 4000, f'Mean birth weight {bw_baseline:.0f}g outside expected range'
+
+    ga = res_fh.mean_ga_at_birth
+    mean_ga = ga[ga > 0].mean()
+    print(f'Mean GA at birth: {mean_ga:.1f} weeks')
+    assert 36 < mean_ga < 44, f'Mean GA {mean_ga:.1f} weeks outside expected range'
+
+    # -- 2. Disease only (no treatment) --
+    sim_disease = ss.Sim(
+        demographics=demog(),
+        diseases=ss.SIR(**sir_kw),
+        connectors=sse.fetal_infection(),
+        custom=ss.FetalHealth(),
+        networks=[ss.PrenatalNet(), ss.RandomNet()],
+        **sim_kw,
+    )
+    sim_disease.run()
+
+    bw_disease = mean_bw(sim_disease)
+    print(f'Mean birth weight (disease): {bw_disease:.0f}g')
+    assert bw_disease < bw_baseline, f'Disease ({bw_disease:.0f}g) should be lower than baseline ({bw_baseline:.0f}g)'
+
+    ptb_disease = sim_disease.results.pregnancy.n_preterm.sum()
+    ptb_baseline = sim_baseline.results.pregnancy.n_preterm.sum()
+    print(f'Preterm births — baseline: {ptb_baseline}, disease: {ptb_disease}')
+    assert ptb_disease > ptb_baseline, 'Disease scenario should have more preterm births'
+
+    # -- 3. Disease + treatment --
+    sim_treated = ss.Sim(
+        demographics=demog(),
+        diseases=ss.SIR(**sir_kw),
+        connectors=sse.fetal_infection(),
+        interventions=sse.fetal_treat(disease='sir'),
+        custom=ss.FetalHealth(),
+        networks=[ss.PrenatalNet(), ss.RandomNet()],
+        **sim_kw,
+    )
+    sim_treated.run()
+
+    bw_treated = mean_bw(sim_treated)
+    print(f'Mean birth weight (treated): {bw_treated:.0f}g')
+    rtol = 0.05 # Generous tolerance for stochastic comparison
+    assert bw_treated > bw_disease * (1 - rtol), f'Treated ({bw_treated:.0f}g) should be at least as high as disease-only ({bw_disease:.0f}g)'
+
+    ptb_treated = sim_treated.results.pregnancy.n_preterm.sum()
+    print(f'Preterm births — disease: {ptb_disease}, treated: {ptb_treated}')
+
+    print(f'Summary — baseline: {bw_baseline:.0f}g, disease: {bw_disease:.0f}g, treated: {bw_treated:.0f}g')
+
+    if do_plot:
+        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4))
+
+        for sim, label in [(sim_baseline, 'Baseline'), (sim_disease, 'Disease'), (sim_treated, 'Treated')]:
+            fh = sim.custom['fetal_health']
+            born = fh.birth_weight > 0
+            ax0.hist(np.asarray(fh.birth_weight[born]), bins=30, alpha=0.4, label=label, edgecolor='k')
+        ax0.axvline(2500, color='r', ls='--', label='LBW threshold')
+        ax0.set_xlabel('Birth weight (g)')
+        ax0.set_ylabel('Count')
+        ax0.set_title('Birth weight: baseline vs disease vs treated')
+        ax0.legend()
+
+        tvec = sim_baseline.timevec
+        ax1.plot(tvec, sim_baseline.results.pregnancy.preterm_rate, label='Baseline')
+        ax1.plot(tvec, sim_disease.results.pregnancy.preterm_rate, label='Disease')
+        ax1.plot(tvec, sim_treated.results.pregnancy.preterm_rate, label='Treated')
+        ax1.set_xlabel('Year')
+        ax1.set_ylabel('Preterm rate')
+        ax1.set_title('Preterm birth rate')
+        ax1.legend()
+
+        fig.tight_layout()
+
+    sc.printgreen('✓ Fetal health tests passed')
+    return sim_baseline, sim_disease, sim_treated
+
+
+@sc.timer()
+def test_congenital():
+    """
+    Test the generic congenital outcome framework in the base Infection class.
+    Uses CongenitalDisease example and verifies outcomes are sampled and fired.
+    """
+    sc.heading('Testing congenital framework...')
+
+    sim = ss.Sim(
+        n_agents=5_000,
+        demographics=[
+            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ],
+        diseases=sse.CongenitalDisease(beta=0.2, init_prev=0.2),
+        dur=ss.years(5),
+        dt=ss.years(1/12),
+        rand_seed=1,
+        networks=[ss.PrenatalNet(), ss.RandomNet()],
+    )
+    sim.run()
+
+    preg = sim.demographics.pregnancy
+    sb           = preg.results['stillbirths'].sum()
+    nnds         = preg.results['nnds'].sum()
+    births       = preg.results['births'].sum()
+    n_congenital = sim.diseases[0].congenital.sum()
+    print(f'  Stillbirths: {sb}, NNDs: {nnds}, Births: {births}, Congenital: {n_congenital}')
+
+    assert sb > 0, 'Expected stillbirths from congenital disease outcomes'
+    assert n_congenital > 0, 'Expected some congenital infections'
+    assert births > 0, 'Expected some live births'
+
+    sc.printgreen('✓ Congenital framework tests passed')
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -219,3 +378,5 @@ if __name__ == '__main__':
     gavi  = test_gavi()
     multi = test_multidisease()
     mtct  = test_mtct()
+    fetal = test_fetal_health(do_plot=do_plot)
+    cong  = test_congenital()
