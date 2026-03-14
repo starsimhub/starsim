@@ -1,2 +1,3 @@
-from .diseases import *
-from .networks import *
+from .diseases   import *
+from .networks   import *
+from .mnch import *
