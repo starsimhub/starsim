@@ -286,7 +286,7 @@ def test_fetal_health(do_plot=do_plot):
         demographics=demog(),
         diseases=ss.SIR(**sir_kw),
         connectors=sse.fetal_infection(),
-        interventions=sse.fetal_treat(name='tx', disease='sir'),
+        interventions=sse.fetal_treat(disease='sir'),
         custom=ss.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
