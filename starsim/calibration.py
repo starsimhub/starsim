@@ -80,6 +80,7 @@ class Calibration(sc.prettyobj):
                                  - An already-instantiated Optuna storage object: used directly
         sampler (BaseSampler)  : the sampler used by optuna, like optuna.samplers.TPESampler
         n_reps       (int)     : number of seeds to run per Optuna trial, optimization will use the mean objective value averaged over this many seeds per trial (default: 1)
+        seed_offset  (int)     : offset added to the deterministic seed sequence when reseed=True (default: 0)
         die          (bool)    : whether to stop if an exception is encountered (default: false)
         debug        (bool)    : if True, do not run in parallel
         verbose      (bool)    : whether to print details of the calibration
@@ -87,7 +88,7 @@ class Calibration(sc.prettyobj):
     def __init__(self, sim, calib_pars, n_cpus=None, total_trials=None, reseed=True,
                  build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,
                  label=None, study_name=None, keep_db=None, continue_db=None, check_fit=None, storage=None,
-                 sampler=None, n_reps=None, die=False, debug=False, verbose=True):
+                 sampler=None, n_reps=None, seed_offset=0, die=False, debug=False, verbose=True):
 
         # Handle run arguments
         if total_trials is None: total_trials   = 100
@@ -109,7 +110,7 @@ class Calibration(sc.prettyobj):
 
         kw = dict(total_trials=int(total_trials), n_cpus=int(n_cpus), debug=debug, study_name=study_name,
                   continue_db=continue_db, keep_db=keep_db, check_fit=check_fit, sampler=sampler,
-                  n_reps=n_reps)
+                  n_reps=n_reps, seed_offset=int(seed_offset))
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
@@ -200,7 +201,8 @@ class Calibration(sc.prettyobj):
 
         # Generate seeds for this trial (deterministic, outside Optuna's parameter space to reduce optimization dimensions)
         if self.reseed:
-            seeds = list(range(trial.number * n_reps, (trial.number + 1) * n_reps))
+            seed_offset = self.run_args.seed_offset
+            seeds = list(range(seed_offset + trial.number * n_reps, seed_offset + (trial.number + 1) * n_reps))
             trial.set_user_attr('seeds', seeds)
         else:
             if n_reps > 1:
@@ -625,10 +627,7 @@ class Calibration(sc.prettyobj):
         for method in methods:
             try:
                 if method == 'plot_contour':
-                    # Remove 'rand_seed' if present
                     params = list(self.calib_pars.keys())
-                    if 'rand_seed' in params:
-                        params.remove('rand_seed')
                     fig = vis.plot_contour(study, params=params)
                 else:
                     fig = getattr(vis, method)(study)
