@@ -3,6 +3,7 @@ Define the calibration class
 """
 import os
 import math
+import atexit
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -345,8 +346,14 @@ class Calibration(sc.prettyobj):
             if self.verbose: print(f"Using Journal-based storage at {self._db_path}")
             return op.storages.JournalStorage(backend)
         elif self._storage_type in ('sqlite', 'connection'):
-            if self.verbose: print(f"Using database storage at {self._db_path}")
-            return op.storages.RDBStorage(self._storage_spec)
+            if not hasattr(self, '_rdb_storage_cache') or self._rdb_storage_cache is None:
+                if self.verbose: print(f"Using database storage at {self._db_path}")
+                self._rdb_storage_cache = op.storages.RDBStorage(
+                    self._storage_spec,
+                    engine_kwargs={"pool_size": self.run_args.n_cpus, "max_overflow": 0},
+                )
+                atexit.register(self._rdb_storage_cache.engine.dispose)
+            return self._rdb_storage_cache
         else:
             if self.verbose: print(f"Using explicitly provided Optuna storage at {self._storage_spec}")
             return self._storage_spec # Assume it is already a BaseStorage instance
@@ -371,6 +378,7 @@ class Calibration(sc.prettyobj):
             if self.verbose:
                 print('Could not delete study, skipping...')
                 print(str(E))
+        self._rdb_storage_cache = None
         return
 
 
@@ -497,8 +505,8 @@ class Calibration(sc.prettyobj):
         msim = ss.MultiSim([self.before_msim, self.after_msim])
         msim.run()
 
-        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
-        self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
+        self.before_fits = np.array([self.eval_fn(x, **self.eval_kw) for x in self.before_msim.sims])
+        self.after_fits = np.array([self.eval_fn(x, **self.eval_kw) for x in self.after_msim.sims])
 
         if do_plot:
             self.plot()
