@@ -67,10 +67,28 @@ class SEIR(ss.SIR):
             plt.legend()
         return ss.return_fig(fig)
 
+## Define quarantine as custom intervention
+class Quarantine(ss.Intervention):
+    def __init__(self, decide_to_quarantine, disease_name='seir', **kwargs):
+        super().__init__()
+        self.decide_to_quarantine = decide_to_quarantine
+        self.disease_name = disease_name
+        self.update_pars(**kwargs)
+
+    def step(self):
+        # Create a boolean mask representing quarantine decisions
+        q_mask = np.asarray(self.decide_to_quarantine(self.sim.people), dtype=bool)
+
+        disease = getattr(self.sim.diseases, self.disease_name)
+
+        # Quarantined people cannot transmit this timestep
+        disease.rel_trans[q_mask] = 0.0
+        disease.rel_sus[q_mask] = 0.0
+
 
 #### Define simulation parameters
 # TODO: update based on epigame parameters
-people = ss.People(n_agents=500)
+people = ss.People(n_agents=10000)
 network = ss.RandomNet(n_contacts=20) # TODO: replace with AUIB data-based network
 seir = SEIR(
     init_prev = ss.bernoulli(p=0.01),
@@ -80,13 +98,24 @@ seir = SEIR(
     dur_exp = ss.lognorm_ex(mean=ss.days(0.5), std=ss.days(1.0)),
 )
 
+# TODO: change to use LLM decisions
+def decide_to_quarantine(people):
+    n = len(people)
+    mask = np.random.rand(n) < 0.05
+    return mask
+
+quarantine = Quarantine(decide_to_quarantine)
+
+# Run simulation
 sim = ss.Sim(
     start='2020-01-01', 
     stop='2020-03-01', 
     dt=ss.days(1),          
     diseases=seir, 
     networks=network,
-    people=people)
+    people=people,
+    interventions=quarantine,
+    )
 
 sim.run()
 sim.plot()
