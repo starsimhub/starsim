@@ -30,18 +30,31 @@ def remap_ids(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
     out["p2"] = out["peer_id"].map(id_map).astype("int64")
     return out, len(all_ids)
 
-def add_daily_timeline(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
-    out = df.copy()
-    start_date = out["time"].dt.floor("D").min()
-    stop_date = out["time"].dt.floor("D").max() + pd.Timedelta(days=1)
+def add_subdaily_timeline(
+    df: pd.DataFrame,
+    time_col: str = "time",
+    duration_col: str = "contact_length",
+    tick: pd.Timedelta = pd.Timedelta(milliseconds=1),
+) -> Tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
+    """Convert timestamps to a fixed subdaily simulation timeline.
 
-    out["start_ti"] = (out["time"].dt.floor("D") - start_date).dt.days.astype("int64")
-    out["dur_ti"] = np.ceil(out["contact_length"].fillna(0) / 86400000).astype("int64").clip(lower=1)
+    The default tick is 1 ms (thousandths of a second), which preserves the
+    full resolution in contact timestamps.
+
+    Assumes `duration_col` is stored in milliseconds.
+    """
+    out = df.copy()
+    start_date = out[time_col].min().floor(tick)
+    stop_date = out[time_col].max().ceil(tick) + tick
+
+    out["start_offset_ti"] = ((out[time_col] - start_date) / tick).round().astype("int64")
+    tick_ms = tick / pd.Timedelta(milliseconds=1)
+    out["dur_ti"] = np.ceil(out[duration_col].fillna(0) / tick_ms).astype("int64").clip(lower=1)
 
     return out, start_date, stop_date
 
 class EpigamesNet(ss.DynamicNetwork):
-    def __init__(self, df, start_col='start_ti', dur_col='dur_ti', **kwargs):
+    def __init__(self, df, start_col='start_offset_ti', dur_col='dur_ti', **kwargs):
         super().__init__(**kwargs)
         self.df = df.sort_values(start_col).reset_index(drop=True)
         self.start_col = start_col
@@ -54,9 +67,6 @@ class EpigamesNet(ss.DynamicNetwork):
         return
     
     def add_pairs(self):
-        if self._next < len(self._starts):
-            s = self._starts[self._next]
-            print("CHECK:", s, type(s), self.ti, type(self.ti), s == self.ti)
         added = 0
         while self._next < len(self.df) and self._starts[self._next] == self.ti:
             row = self.df.iloc[self._next]
@@ -75,9 +85,48 @@ def build_network(csv_path: str | Path, label: str = "Epigames"):
     df = read_data(csv_path)
     df = clean_data(df)
     df, n_agents = remap_ids(df)
-    df, start_date, stop_date = add_daily_timeline(df)
+    df, start_date, stop_date = add_subdaily_timeline(df)
     net = EpigamesNet(df, label=label)
     start_date = ss.date(start_date)
     stop_date = ss.date(stop_date)
     return net, n_agents, start_date, stop_date
 
+if __name__ == "__main__":
+    csv_path = "data_ingestion/histories.csv"
+
+    # Load and process data step by step for inspection
+    df = read_data(csv_path)
+    df = clean_data(df)
+    df, n_agents = remap_ids(df)
+    df, start_date, stop_date = add_subdaily_timeline(df)
+
+    print("\n=== BASIC INFO ===")
+    print(f"Number of agents: {n_agents}")
+    print(f"Start date: {start_date}")
+    print(f"Stop date: {stop_date}")
+
+    print("\n=== SAMPLE OF PROCESSED DATA ===")
+    print(df[["time", "start_offset_ti", "dur_ti"]].head(10))
+
+    # Check timestep differences (should reflect ms resolution)
+    diffs = df["start_offset_ti"].sort_values().diff().dropna()
+    print("\n=== TIMESTEP DIFFERENCES ===")
+    print("Min diff (ti units):", diffs.min())
+    print("Max diff (ti units):", diffs.max())
+
+    # Convert a few back to real time to sanity check
+    print("\n=== RECONSTRUCTED TIMES (sanity check) ===")
+    tick = pd.Timedelta(milliseconds=1)
+    for i in range(5):
+        row = df.iloc[i]
+        reconstructed = start_date + row["start_offset_ti"] * tick
+        print(f"Original: {row['time']} | Reconstructed: {reconstructed}")
+
+    # Check duration interpretation
+    print("\n=== DURATION CHECK ===")
+    for i in range(5):
+        row = df.iloc[i]
+        duration_ms = row["dur_ti"]  # since 1 tick = 1 ms
+        print(f"dur_ti: {row['dur_ti']} -> approx duration (ms): {duration_ms}")
+
+    print("\n=== DONE ===")
