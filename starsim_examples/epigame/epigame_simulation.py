@@ -69,26 +69,25 @@ class SEIR(ss.SIR):
 
 
 #### Define simulation parameters
+# TODO: update based on epigame parameters
 people = ss.People(n_agents=500)
 network = ss.RandomNet(n_contacts=20) # TODO: replace with AUIB data-based network
 seir = SEIR(
     init_prev = ss.bernoulli(p=0.01),
-    beta = ss.peryear(0.1),
-    dur_inf = ss.lognorm_ex(mean=6, std=1.0),
+    beta = ss.perday(0.1),
+    dur_inf = ss.lognorm_ex(mean=ss.days(6), std=ss.days(1.0)),
     p_death = ss.bernoulli(p=0.01),
-    dur_exp = ss.lognorm_ex(mean=0.5, std=1.0),
+    dur_exp = ss.lognorm_ex(mean=ss.days(0.5), std=ss.days(1.0)),
 )
-seir.pars.disp()
 
-# sim = ss.Sim(
-#     start='2020-01-01', 
-#     stop='2025-01-01', 
-#     dt=ss.days(1),          
-#     diseases=seir, 
-#     networks=network,
-#     people=people)
+sim = ss.Sim(
+    start='2020-01-01', 
+    stop='2020-03-01', 
+    dt=ss.days(1),          
+    diseases=seir, 
+    networks=network,
+    people=people)
 
-sim = ss.Sim(diseases=seir, networks='random')
 sim.run()
 sim.plot()
 sim.diseases.seir.plot()
