@@ -234,7 +234,7 @@ Starsim v3 comes with several new options, set via `ss.options`:
 
 #### Migration summary
 - An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then `docs/migration/v2_v3/README.md`. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
-- *GitHub info*: PR [1008](https://github.com/starsimhub/starsim/pull/1008)
+- *GitHub info*: PR [927](https://github.com/starsimhub/starsim/pull/927)
 
 
 ## Version 2.3.2 (2025-07-16)
