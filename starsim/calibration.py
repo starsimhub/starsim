@@ -452,6 +452,10 @@ class Calibration(sc.prettyobj):
             n_cpus_per_worker = math.gcd(self.run_args.n_reps, self.run_args.n_cpus)
             n_workers = self.run_args.n_cpus // n_cpus_per_worker
 
+        # Warn if journal storage is used with many workers
+        if self._storage_type == 'journal' and n_workers > 16:
+            ss.warn(f'Journal file storage is being used with {n_workers} workers which may result in poor performance - consider using a database storage backend')
+
         # Run the optimization
         t0 = sc.tic()
         self.create_study() # Create the study so that it can subsequently be loaded by workers
