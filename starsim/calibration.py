@@ -2,7 +2,8 @@
 Define the calibration class
 """
 import os
-import tempfile
+import math
+import atexit
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -10,6 +11,7 @@ import scipy.stats as sps
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+import multiprocess
 
 # Lazy imports (do not import unless actually used, saves 500 ms on load time)
 op = sc.importbyname('optuna', lazy=True)
@@ -19,48 +21,85 @@ vis = sc.importbyname('optuna.visualization.matplotlib', lazy=True)
 __all__ = ['Calibration']
 
 
+_sim_pool_data = {} # This is used to minimize pickling to workers, mainly beneficial on Windows and Mac OS. There will be one local copy on each Optuna worker
+
+def _init_sim_pool(sim, build_fn, build_kw, eval_fn, eval_kw, die):
+    _sim_pool_data.update(dict(sim=sim, build_fn=build_fn, build_kw=build_kw,eval_fn=eval_fn, eval_kw=eval_kw, die=die))
+
+def _run_sim(calib_pars, seed=None):
+    d = _sim_pool_data
+    sim = sc.dcp(d['sim'])
+    sim = d['build_fn'](sim, calib_pars, **d['build_kw'])
+    if seed is not None:
+        if sim.initialized:
+            raise Exception('The build_fn initialized the Sim, but reseeding requires that the sim not yet be initialized')
+        sim.pars.rand_seed = seed
+    try:
+        sim.run()
+        print(calib_pars, sim.pars.rand_seed)
+        return d['eval_fn'](sim, **d['eval_kw'])
+    except Exception as E:
+        if d['die']:
+            raise
+        print(f'Encountered error running sim!\nSeed: {seed}\nTraceback:\n{sc.traceback()}')
+        return None
+
+
 class Calibration(sc.prettyobj):
     """
     A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
     optimization library (optuna.org).
 
+    Optuna calibrations are recorded in a database (either a file on disk, or in a database server)
+    that also enables communication across multiple workers. These can be controlled in
     Args:
-        sim          (Sim)   : the base simulation to calibrate
-        calib_pars   (dict)  : a dictionary of the parameters to calibrate of the format `dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...)`, where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
-        n_workers    (int)   : the number of parallel workers (if None, will use all available CPUs)
-        total_trials (int)   : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
-        reseed       (bool)  : whether to generate new random seeds for each trial
-        build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a modified sim
-        build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is `self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)`, where sim is a copy of the base simulation to be modified with calib_pars
-        components    (list) : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
-        prune_fn  (callable) : Function that takes a dictionary of parameters and returns True if the trial should be pruned
-        eval_fn   (callable) : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
-        eval_kw       (dict) : Additional keyword arguments to pass to the eval_fn
-        label        (str)   : a label for this calibration object
-        study_name   (str)   : name of the optuna study
-        db_name      (str)   : the name of the database file (default: temporary file)
-        continue_db  (bool)  : whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)
-        keep_db      (bool)  : whether to keep the database after calibration (default: false, the database will be deleted)
-        storage      (str)   : the location of the database (default: sqlite)
-        sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
-        die          (bool)  : whether to stop if an exception is encountered (default: false)
-        debug        (bool)  : if True, do not run in parallel
-        verbose      (bool)  : whether to print details of the calibration
+        sim          (Sim)     : the base simulation to calibrate
+        calib_pars   (dict)    : a dictionary of the parameters to calibrate of the format `dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...)`, where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
+        n_workers    (int)     : the number of parallel workers/CPUs to use (if None, will use all available CPUs)
+        total_trials (int)     : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
+        reseed       (bool)    : whether to generate new random seeds for each trial
+        build_fn  (callable)   : function that takes a sim object and calib_pars dictionary and returns a sim corresponding to a single calibration trial
+        build_kw      (dict)   : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is `self.build_fn(sim, calib_pars, **self.build_kw)`,
+                                 where sim is a copy of the base simulation to be modified with calib_pars. The `calib_pars` passed to the `build_fn` is a dictionary with the same keys as the `calib_pars`
+                                 argument to `Calibration`, but containing a single sampled value for each parameter corresponding to the current trial, rather than a specification of the sampling
+                                 range/distribution.
+        components    (list)   : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
+        prune_fn  (callable)   : Function that takes a dictionary of parameters and returns True if the trial should be pruned
+        eval_fn   (callable)   : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
+        eval_kw       (dict)   : Additional keyword arguments to pass to the eval_fn
+        label        (str)     : a label for this calibration object
+        study_name   (str)     : name of the optuna study
+        continue_db  (bool)    : whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)
+        keep_db      (bool)    : whether to keep the database after calibration (default: false, the database will be deleted)
+        check_fit    (bool)    : whether to automatically run before/after simulations (default: true)
+        storage      (str)     : where to store the Optuna study. Accepts:
+                                 - ``None`` (default): JournalFile backend, file named ``{study_name}.log``
+                                 - A filename (str or Path) ending in ``.db``: SQLite backend
+                                 - Any other filename (str or Path): JournalFile backend
+                                 - A connection string (containing ``://``), e.g. ``"mysql://user:pw@host/db"``: external DB
+                                 - An already-instantiated Optuna storage object: used directly
+        sampler (BaseSampler)  : the sampler used by optuna, like optuna.samplers.TPESampler
+        n_reps       (int)     : number of seeds to run per Optuna trial, optimization will use the mean objective value averaged over this many seeds per trial (default: 1)
+        seed_offset  (int)     : offset added to the deterministic seed sequence when reseed=True (default: 0)
+        die          (bool)    : whether to stop if an exception is encountered (default: false)
+        debug        (bool)    : if True, do not run in parallel
+        verbose      (bool)    : whether to print details of the calibration
     """
-    def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
+    def __init__(self, sim, calib_pars, n_cpus=None, total_trials=None, reseed=True,
                  build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,
-                 label=None, study_name=None, db_name=None, keep_db=None, continue_db=None, storage=None,
-                 sampler=None, die=False, debug=False, verbose=True):
+                 label=None, study_name=None, keep_db=None, continue_db=None, check_fit=None, storage=None,
+                 sampler=None, n_reps=None, seed_offset=0, die=False, debug=False, verbose=True):
 
         # Handle run arguments
-        use_defaults = study_name is None and db_name is None
         if total_trials is None: total_trials   = 100
-        if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
+        if n_cpus       is None: n_cpus         = 1 if debug else sc.cpu_count()
         if study_name   is None: study_name     = 'starsim_calibration'
-        if db_name      is None: db_name        = sc.path(tempfile.mkdtemp()) / f'{study_name}.db' if use_defaults else f'{study_name}.db'
         if continue_db  is None: continue_db    = False
         if keep_db      is None: keep_db        = False
-        if storage      is None: storage        = f'sqlite:///{db_name}'
+        if check_fit    is None: check_fit      = True
+        if n_reps is None      : n_reps         = 1
+
+        self._parse_storage(study_name, storage) # Process storage arguments to select storage backend and file names
 
         self.build_fn       = build_fn
         self.build_kw       = build_kw or dict()
@@ -69,43 +108,25 @@ class Calibration(sc.prettyobj):
         self.components     = sc.tolist(components)
         self.prune_fn       = prune_fn
 
-        n_trials = int(np.ceil(total_trials/n_workers))
-        kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
-                  db_name=db_name, continue_db=continue_db, keep_db=keep_db, storage=storage, sampler=sampler)
+        kw = dict(total_trials=int(total_trials), n_cpus=int(n_cpus), debug=debug, study_name=study_name,
+                  continue_db=continue_db, keep_db=keep_db, check_fit=check_fit, sampler=sampler,
+                  n_reps=n_reps, seed_offset=int(seed_offset))
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
-        self.label      = label
-        self.sim        = sim
-        self.calib_pars = calib_pars
-        self.reseed     = reseed
-        self.die        = die
-        self.verbose    = verbose
-        self.calibrated = False
-        self.before_msim = None
-        self.after_msim  = None
-
-        self.study = None
+        self.label        = label
+        self.sim          = sim
+        self.calib_pars   = calib_pars
+        self.reseed       = reseed
+        self.die          = die
+        self.verbose      = verbose
+        self.calibrated   = False
+        self.before_msim  = None
+        self.after_msim   = None
+        self.initial_pars = None
+        self.best_pars    = None
 
         return
-
-    def run_sim(self, calib_pars=None, label=None):
-        """ Create and run a simulation """
-        sim = sc.dcp(self.sim)
-        if label: sim.label = label
-
-        sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
-
-        try:
-            sim.run() # Run the simulation (or MultiSim)
-            return sim
-        except Exception as E:
-            if self.die:
-                raise E
-            else:
-                print(f'Encountered error running sim!\nParameters:\n{calib_pars}\nTraceback:\n{sc.traceback()}')
-                output = None
-                return output
 
     def _sample_from_trial(self, pardict=None, trial=None):
         """
@@ -139,6 +160,8 @@ class Calibration(sc.prettyobj):
             nll += component(sim, **kwargs)
         return nll
 
+
+
     def plot(self, **kwargs):
         """"
         Plot the calibration results. For a component-based likelihood, it only
@@ -160,79 +183,252 @@ class Calibration(sc.prettyobj):
             figs.append(fig)
         return figs
 
-    def run_trial(self, trial):
+    def run_trial(self, trial, pool=None):
         """ Define the objective for Optuna """
         if self.calib_pars is not None:
             pars = self._sample_from_trial(self.calib_pars, trial)
         else:
             pars = None
 
-        if self.reseed:
-            pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
+        # Extract parameter values for build_fn
+        calib_pars = {k: v['value'] for k, v in pars.items()} if pars else {}
 
         # Prune if the prune_fn returns True
-        if self.prune_fn is not None and self.prune_fn(pars):
+        if self.prune_fn is not None and self.prune_fn(calib_pars):
             raise op.exceptions.TrialPruned()
 
-        sim = self.run_sim(pars)
+        n_reps = self.run_args.n_reps
 
-        # Compute fit
-        fit = self.eval_fn(sim, **self.eval_kw)
-        return fit
+        # Generate seeds for this trial (deterministic, outside Optuna's parameter space to reduce optimization dimensions)
+        if self.reseed:
+            seed_offset = self.run_args.seed_offset
+            seeds = list(range(seed_offset + trial.number * n_reps, seed_offset + (trial.number + 1) * n_reps))
+            trial.set_user_attr('seeds', seeds)
+        else:
+            if n_reps > 1:
+                raise ValueError('n_reps>1 requires reseed=True')
+            else:
+                seeds = [None]
 
-    def worker(self):
-        """ Run a single worker """
+        # Run n_reps simulations and aggregate
+        if pool is not None:
+            fits = list(pool.starmap(_run_sim, [(calib_pars, seed) for seed in seeds]))
+        else:
+            fits = [_run_sim(calib_pars, seed) for seed in seeds]
+
+        # Filter failed runs and return mean
+        fits = [f for f in fits if f is not None]
+        if not fits:
+            return None
+        return float(np.mean(fits))
+
+    def worker(self, n_cpus_per_worker=1):
+        """
+        Run a single Optuna worker
+
+        The calculation of the objective function takes place within a process pool inside the worker. This enables
+        parallelization at the `Sim` level when running multiple seeds per Optuna trial. To prevent nested parallel pools,
+        the Optuna workers are threaded. Therefore, a pool is opened even if `n_reps=1`.
+
+        If `debug=True` then `n_cpus_per_worker` will be ignored and the simulations will be run without parallelization.
+
+        n_cpus_per_worker (int): Number of CPUs to allocate to the parallel pool within this worker
+        """
 
         if self.verbose:
             op.logging.set_verbosity(op.logging.DEBUG)
         else:
             op.logging.set_verbosity(op.logging.ERROR)
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
-        output = study.optimize(self.run_trial, n_trials=self.run_args.n_trials, callbacks=None)
-        return output
 
-    def run_workers(self):
-        """ Run multiple workers in parallel """
-        if self.run_args.n_workers > 1 and not self.run_args.debug: # Normal use case: run in parallel
-            output = sc.parallelize(self.worker, iterarg=self.run_args.n_workers)
+        # Initialize pool data for _run_sim (used by both pool and sequential paths)
+        _init_sim_pool(self.sim, self.build_fn, self.build_kw, self.eval_fn, self.eval_kw, self.die)
+
+        # Create inner process pool for running n_reps simulations per trial.
+        # The base sim and callables are sent once via the pool initializer, so per-task
+        # data is just (calib_pars_values, seed) to minimize pickling.
+        # The pool is kept as a local variable (not stored on self) so that it is not
+        # serialized when dill pickles self.eval_fn (a bound method) for the pool workers.
+        if not self.run_args.debug:
+            pool = multiprocess.Pool(
+                processes=n_cpus_per_worker,
+                initializer=_init_sim_pool,
+                initargs=(self.sim, self.build_fn, self.build_kw, self.eval_fn, self.eval_kw, self.die)
+            )
+        else:
+            pool = None
+
+        try:
+            study = self.load_study()
+            callbacks = [
+                op.study.MaxTrialsCallback(self.run_args.total_trials, states=(op.trial.TrialState.COMPLETE,)),
+                op.study.MaxTrialsCallback(self.run_args.total_trials, states=(op.trial.TrialState.FAIL,)),
+            ]
+            output = study.optimize(lambda trial: self.run_trial(trial, pool=pool), callbacks=callbacks)
+            return output
+        finally:
+            if pool is not None:
+                pool.close()
+                pool.join()
+
+    def run_workers(self, n_workers, n_cpus_per_worker):
+        """
+        Run multiple Optuna workers in parallel
+
+        Note that this corresponds to the number of Optuna workers, not CPUs used for the optimization.
+        """
+
+        # Check if the calibration is already complete (which is possible if continue_db=True)
+        done_states = (op.trial.TrialState.COMPLETE,)
+        n_done = len(self.load_study().get_trials(deepcopy=False, states=done_states))
+        remaining = max(0, self.run_args.total_trials - n_done)
+        if remaining == 0:
+            if self.verbose: print("Study already completed, no further trials required")
+            return None
+        elif n_workers > 1 and not self.run_args.debug: # Normal use case: run in parallel
+            output = sc.parallelize(self.worker, iterarg=n_workers, n_cpus_per_worker=n_cpus_per_worker, parallelizer='thread')  # The heavy lifting is done by the process pools opened by the workers, use threading to avoid nesting the process pools
         else: # Special case: just run one
             output = [self.worker()]
+
         return output
 
+    def _parse_storage(self, study_name, storage):
+        """
+        Parse the ``storage`` argument
+
+        This function processes the study name and storage to determine the storage type,
+        connection string, and file name if required. This needs to be done separately to `_get_storage`
+        so that if the db needs to be deleted, the file can be deleted on disk before
+        creating the storage object. This results in the creation of three internal variables:
+
+        - ``_storage_type``: one of ``'journal'``, ``'sqlite'``, ``'connection'``, ``'object'``
+        - ``_db_path``      : filesystem path to delete for file-based backends, else ``None``
+        - ``_storage_spec`` : value passed to optuna (URL string or storage object), else ``None``
+
+        After this point, `self._get_storage()` will use these variables to create the Optuna
+        storage object, while `self.remove_db` will use these variables to decide how to
+        delete the study/database depending on what the inputs were.
+        """
+
+        if storage is None:
+            storage = f'{study_name}.log'
+        elif isinstance(storage, os.PathLike):
+            storage = os.fspath(storage)  # convert Path (or any PathLike) to str
+
+        if not isinstance(storage, str):
+            # Treat this as a usable Optuna storage backend - db_path not required
+            self._storage_type = 'object'
+            self._db_path      = None
+            self._storage_spec = storage
+        elif '://' in storage:
+            # Connection string: sqlite:///..., mysql://...,  - db_path not required
+            self._storage_type = 'connection'
+            self._db_path      = None
+            self._storage_spec = storage
+        elif storage.endswith('.db'): # Assign both the db_path and an sqlite connection string
+            self._storage_type = 'sqlite'
+            self._db_path      = storage
+            self._storage_spec = f'sqlite:///{storage}'
+        else: # Otherwise, treat storage as the filename for journal storage - connection string not required
+            self._storage_type = 'journal'
+            self._db_path      = storage
+            self._storage_spec = None
+
+    def _get_storage(self):
+        """
+        Return Optuna storage object for this calibration
+
+        Users can specify `storage` for the calibration in a number of different ways. This function
+        resolves them and returns a corresponding Optuna storage object that can subsequently be used
+        directly with Optuna. This function is called directly by Optuna workers so that file locks are
+        correctly handled when using multiple workers
+        """
+        if self._storage_type == 'journal':
+            lock_obj = op.storages.journal.JournalFileOpenLock(self._db_path)  # needed on Windows
+            backend  = op.storages.journal.JournalFileBackend(self._db_path, lock_obj=lock_obj)
+            if self.verbose: print(f"Using Journal-based storage at {self._db_path}")
+            return op.storages.JournalStorage(backend)
+        elif self._storage_type in ('sqlite', 'connection'):
+            if not hasattr(self, '_rdb_storage_cache') or self._rdb_storage_cache is None:
+                if self.verbose: print(f"Using database storage at {self._db_path}")
+                self._rdb_storage_cache = op.storages.RDBStorage(
+                    self._storage_spec,
+                    engine_kwargs={"pool_size": self.run_args.n_cpus, "max_overflow": 0},
+                )
+                atexit.register(self._rdb_storage_cache.engine.dispose)
+            return self._rdb_storage_cache
+        else:
+            if self.verbose: print(f"Using explicitly provided Optuna storage at {self._storage_spec}")
+            return self._storage_spec # Assume it is already a BaseStorage instance
+
     def remove_db(self):
-        """ Remove the database file if keep_db is false and the path exists """
+        """
+        Clear the database
+
+        This clears the database in one of two ways
+        - If a connection string or optuna Storage object were provided, the study will be deleted from the storage
+        - If a filename was provided, the file will be deleted on-disk clearing all content
+        """
         try:
-            if 'sqlite' in self.run_args.storage:
-                # Delete the file from disk
-                if os.path.exists(self.run_args.db_name):
-                    os.remove(self.run_args.db_name)
-                if self.verbose: print(f'Removed existing calibration file {self.run_args.db_name}')
+            if self._storage_type in ('journal', 'sqlite'):
+                if self._db_path and os.path.exists(self._db_path):
+                    os.remove(self._db_path)
+                    if self.verbose: print(f'Removed calibration file {self._db_path}')
             else:
-                # Delete the study from the database e.g., mysql
-                op.delete_study(study_name=self.run_args.study_name, storage=self.run_args.storage)
-                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self.run_args.storage}')
+                op.delete_study(study_name=self.run_args.study_name, storage=self._storage_spec)
+                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self._storage_spec}')
         except Exception as E:
             if self.verbose:
                 print('Could not delete study, skipping...')
                 print(str(E))
+        self._rdb_storage_cache = None
         return
 
-    def make_study(self):
-        """ Make a study, deleting if it already exists and user does not want to continue_db """
+
+    def create_study(self):
+        """
+        Create a study for this calibration
+
+        This method creates a study, clearing the backend storage if requested. Note that
+        the study does not get returned to avoid file locks on the `storage` persisting.
+        Once the study has been created, workers calling `load_study()` will create their own
+        Optuna storage objects to interface with the storage, so this method is solely responsible
+        for creating the study.
+        """
+
         if not self.run_args.continue_db:
             self.remove_db()
-        if self.verbose: print(self.run_args.storage)
+        storage = self._get_storage()
         try:
-            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize')
+            study = op.create_study(storage=storage, study_name=self.run_args.study_name, direction='minimize')
+            # Pre-populate the first Optuna trial with the user's initial guess, if provided (otherwise, initial guesses will be sampled)
+            # Thus Trial 0 can be treated as the 'before calibration' parameters, and this also ensures that Optuna has tested the initial guess exactly
+            if self.calib_pars is not None:
+                guess_params = {name: spec['guess'] for name, spec in self.calib_pars.items() if 'guess' in spec}
+                if guess_params:
+                    study.enqueue_trial(guess_params)
         except op.exceptions.DuplicatedStudyError:
-            ss.warn(f'Study named {self.run_args.study_name} already exists in storage {self.run_args.storage}, loading...')
-            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
-            try:
-                self.best_pars = sc.objdict(study.best_params)
-            except Exception as E:
-                print(f'Could not get best parameters: {str(E)}')
-                self.best_pars = None
-        return study
+            ss.warn(f'Study named {self.run_args.study_name} already exists in storage {storage}, loading...')
+            study = op.create_study(storage=storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
+        return None
+
+    def load_study(self):
+        """
+        Load the Optuna study associated with this calibration
+
+        :return: An Optuna study object
+        """
+        return op.load_study(storage=self._get_storage(), study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+
+    def _get_calibrated_pars(self, study):
+        best_trial = study.best_trial
+        best_pars = sc.objdict(best_trial.params)
+        best_pars['seeds'] = best_trial.user_attrs['seeds']
+
+        initial_trial = study.trials[0]
+        initial_pars = sc.objdict(initial_trial.params)
+        initial_pars['seeds'] = initial_trial.user_attrs['seeds']
+
+        return best_pars, initial_pars
 
     def calibrate(self, calib_pars=None, **kwargs):
         """
@@ -247,76 +443,76 @@ class Calibration(sc.prettyobj):
             self.calib_pars = calib_pars
         self.run_args.update(kwargs) # Update optuna settings
 
+        # Calculate the number of CPUs per worker to minimize idle time. To achieve this,
+        # `n_cpus_per_worker` must divide `n_reps` evenly as well as dividing `n_cpus` evenly.
+        if self.run_args.debug:
+            n_workers = 1
+            n_cpus_per_worker = 1
+        else:
+            n_cpus_per_worker = math.gcd(self.run_args.n_reps, self.run_args.n_cpus)
+            n_workers = self.run_args.n_cpus // n_cpus_per_worker
+
+        # Warn if journal storage is used with many workers
+        if self._storage_type == 'journal' and n_workers > 16:
+            ss.warn(f'Journal file storage is being used with {n_workers} workers which may result in poor performance - consider using a database storage backend')
+
         # Run the optimization
         t0 = sc.tic()
-        self.study = self.make_study()
-        self.run_workers()
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+        self.create_study() # Create the study so that it can subsequently be loaded by workers
+        if self.verbose: print(f'Starting execution with {n_workers} workers and {n_cpus_per_worker} CPUs per worker')
+        self.run_workers(n_workers, n_cpus_per_worker)
+        study = self.load_study()
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
-        # Parse the study into a data frame, self.df while also storing the best parameters
-        self.parse_study(study)
+        # Parse the study into a data frame, self.df
+        self.df = self._parse_study(study)
+
+        # Record the calibrated parameters
+        self.best_pars, self.initial_pars = self._get_calibrated_pars(study)
 
         if self.verbose: print('Best pars:', self.best_pars)
 
         # Tidy up
         self.calibrated = True
+
+        if self.run_args.check_fit:
+            self.check_fit(do_plot=False)
+
         if not self.run_args.keep_db:
             self.remove_db()
 
         return self
 
-    def to_df(self, top_k=None):
-        """ Return the top K results as a dataframe, sorted by value """
-        if self.study is None:
-            raise ValueError('Please run calibrate() before saving results')
-
-        df = sc.dataframe(self.study.trials_dataframe())
-        df = df.sort_values(by='value').set_index('number')
-
-        if top_k is not None:
-            df = df.head(top_k)
-
-        return df
-
     def check_fit(self, do_plot=True):
         """ Run before and after simulations to validate the fit """
         if self.verbose: sc.printcyan('\nChecking fit...')
 
-        before_pars = sc.dcp(self.calib_pars)
-        for spec in before_pars.values():
-            spec['value'] = spec['guess'] # Use guess values
-
         # Load in case calibration was interrupted
         if self.best_pars is None:
             try:
-                study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
-                self.best_pars = sc.objdict(study.best_params)
+                study = self.load_study()
+                self.best_pars, self.initial_pars = self._get_calibrated_pars(study)
             except:
                 raise ValueError('Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
 
-        after_pars = sc.dcp(self.calib_pars)
-        for parname, spec in after_pars.items():
-            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
+        best_pars = self.best_pars.copy()
+        best_seeds = best_pars.pop('seeds')
+        initial_pars = self.initial_pars.copy()
+        initial_seeds = initial_pars.pop('seeds')
 
-        self.before_msim = self.build_fn(sc.dcp(self.sim), calib_pars=before_pars, **self.build_kw)
-        self.after_msim = self.build_fn(sc.dcp(self.sim), calib_pars=after_pars, **self.build_kw)
+        initial_sim = self.build_fn(sc.dcp(self.sim), calib_pars=initial_pars, **self.build_kw)
+        best_sim = self.build_fn(sc.dcp(self.sim), calib_pars=best_pars, **self.build_kw)
 
-        fix_before = isinstance(self.before_msim, ss.Sim)
-        fix_after = isinstance(self.after_msim, ss.Sim)
-        if fix_after or fix_after:
-            if fix_before:
-                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False, n_runs=1)
-
-            if fix_after:
-                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False, n_runs=1)
-
-        msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
+        self.before_msim = ss.MultiSim(initial_sim, iterpars={'rand_seed': initial_seeds}, reseed=False)
+        self.after_msim = ss.MultiSim(best_sim, iterpars={'rand_seed': best_seeds}, reseed=False)
+        self.before_msim.init_sims(parallel=False)
+        self.after_msim.init_sims(parallel=False)
+        msim = ss.MultiSim([self.before_msim, self.after_msim])
         msim.run()
 
-        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
-        self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
+        self.before_fits = np.array([self.eval_fn(x, **self.eval_kw) for x in self.before_msim.sims])
+        self.after_fits = np.array([self.eval_fn(x, **self.eval_kw) for x in self.after_msim.sims])
 
         if do_plot:
             self.plot()
@@ -334,50 +530,27 @@ class Calibration(sc.prettyobj):
         print(f'✗ Calibration did not improve fit as the objective got worse ({before} --> {after}), but this sometimes happens stochastically and is not necessarily an error')
         return False
 
-    def parse_study(self, study):
+    def _parse_study(self, study):
         """Parse the study into a data frame -- called automatically """
-        best = study.best_params
-        self.best_pars = best
-
-        if self.verbose: print('Making results structure...')
-        results = []
-        n_trials = len(study.trials)
-        failed_trials = []
-        for trial in study.trials:
-            data = {'index':trial.number, 'mismatch': trial.value}
-            for key,val in trial.params.items():
-                data[key] = val
-            if data['mismatch'] is None:
-                failed_trials.append(data['index'])
-            else:
-                results.append(data)
-        if self.verbose: print(f'Processed {n_trials} trials; {len(failed_trials)} failed')
-
-        keys = ['index', 'mismatch'] + list(best.keys())
-        data = sc.objdict().make(keys=keys, vals=[])
-        for i,r in enumerate(results):
-            for key in keys:
-                if key not in r:
-                    warnmsg = f'Key {key} is missing from trial {i}, replacing with default'
-                    print(warnmsg)
-                    r[key] = best[key]
-                data[key].append(r[key])
-        self.study_data = data
-        self.df = sc.dataframe.from_dict(data)
-        self.df = self.df.sort_values(by=['mismatch']) # Sort
-        return
+        df = study.trials_dataframe(multi_index=True)
+        df = df.loc[df.pop('state') == 'COMPLETE']
+        df = df[['number','params','value','user_attrs']]
+        df.insert(1,'seeds', df.pop('user_attrs')['seeds'])
+        df = df.rename({'number':'trial','value':'mismatch'}, axis=1)
+        df = df.set_index('trial')
+        df = df.sort_values('mismatch',ascending=False)
+        return df
 
     def to_json(self, filename=None, indent=2, **kwargs):
         """ Convert the results to JSON """
-        order = np.argsort(self.df['mismatch'])
         json = []
-        for o in order:
-            row = self.df.iloc[o,:].to_dict()
-            rowdict = dict(index=row.pop('index'), mismatch=row.pop('mismatch'), pars={})
-            for key,val in row.items():
-                rowdict['pars'][key] = val
-            json.append(rowdict)
-        self.json = json
+        df = self.df.copy()
+        df.columns = self.df.columns.droplevel(1)
+        df = df.loc[:, df.columns != 'params']
+        for trial, params in zip(df.reset_index().to_dict(orient='records'), self.df['params'].to_dict(orient='records')):
+            trial['pars'] = params
+            json.append(trial)
+
         if filename:
             return sc.savejson(filename, json, indent=indent, **kwargs)
         else:
@@ -430,16 +603,14 @@ class Calibration(sc.prettyobj):
                 'plot_timeline',
             ]
 
+        study = self.load_study()
         for method in methods:
             try:
                 if method == 'plot_contour':
-                    # Remove 'rand_seed' if present
                     params = list(self.calib_pars.keys())
-                    if 'rand_seed' in params:
-                        params.remove('rand_seed')
-                    fig = vis.plot_contour(self.study, params=params)
+                    fig = vis.plot_contour(study, params=params)
                 else:
-                    fig = getattr(vis, method)(self.study)
+                    fig = getattr(vis, method)(study)
                 figs.append(fig)
             except Exception as E:
                 print(f'Could not run {method}: {str(E)}')
@@ -541,7 +712,7 @@ class CalibComponent(sc.prettyobj):
 
             If 'incident', it means data in expected & actual dataframes represent the accumulation
             of system states over a period of time, flows like the incidence of new infections. In
-            this case, teh data in 'simulated' or 'actual' will be interpolated at the start ('t')
+            this case, the data in 'simulated' or 'actual' will be interpolated at the start ('t')
             and the end ('t1') of the period of interest in 'expected'. The difference between these
             two interpolated values will be used for comparison.
 

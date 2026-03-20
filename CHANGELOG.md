@@ -2,6 +2,23 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
+## Version 3.2.3 (2026-XX-XX)
+
+### Calibration changes
+- Calibration now uses Optuna's Journal file storage backend by default, which is more robust for disk-based multiprocessing. 
+- Removed the `db_name` argument from `Calibration`. The `storage` argument now serves as the single entrypoint for specifying where Optuna stores the study. 
+- **Backwards-compatibility notes**: Replace `db_name='myfile'` with `storage='myfile'`. If you previously passed both `db_name` and `storage`, only `storage` is needed. To maintain previous functionality with SQLite storage, instead of an SQLite connection string, simply pass the filename ending in `.db` as the `storage` argument. However, it is recommended to use the default Journal-based storage instead. 
+- The `storage` argument now accepts: `None` (default JournalFile named `{study_name}.log`), a filename ending in `.log` (JournalFile), a filename ending in `.db` (SQLite), a connection string containing `://` (external DB), or an already-instantiated Optuna storage object.
+- Added `check_fit` as an option when creating the `Calibration` so that it can be automatically run at the end of calibration.
+- Removed `Calibration.to_df()` which returned the Optuna trials dataframe from the study. This is now captured automatially as `Calibration.trials_df` so that it is more robust with regard to `keep_db=False`.
+- Calibration `build_fn` now takes in a dictionary of `calib_pars` where the values have been pre-extracted. It can therefore expect to receive parameter values in the same way they would be specified directly to Starsim, rather than being wrapped in Optuna's structure and carrying full information about the sampling range. **Backwards-compatibility notes** Where the `build_fn` may have previously used `calib_pars[par_name]['value']` it can now use `calib_pars[par_name]`.
+- Calibration now uses sequential seeds for each simulation performed, rather than randomly sampling them which increased the parameter space for Optuna to search even though the seed should not have any correlation with the objective value. 
+- Added `n_reps` argument to `Calibration()` to facilitate running multiple seeds per Optuna trial. If `n_reps` is specified, the `build_fn` should return a `Sim` rather than a `MultiSim` and the objective function will be averaged over seeds. 
+- Replaced `n_workers` with `n_cpus` in `Calibration()`. The `Calibration` will now automatically calculate the number of Optuna workers and CPUs per worker based on the requested total number of CPUs, total trials, and `n_reps`
+- Calibration `total_trials` are now exactly matched and preserved across distributed workers. This is particularly useful when secondary workers are started separately e.g., on another machine, to contribute to an existing optimization.
+- Initial guesses for the parameters provided as part of `calib_pars` are now guaranteed to be used exactly in the first Optuna trial (previously they were not used)
+- Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
+
 
 ## Version 3.2.2 (2026-03-11)
 - Added `people.born`, which tracks agents that are alive (`sim.people.alive`) and born (`sim.people.age >= 0`).
