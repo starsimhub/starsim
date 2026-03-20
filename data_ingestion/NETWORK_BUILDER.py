@@ -347,6 +347,11 @@ def agent_prevalence_at_ti(
 if __name__ == "__main__":
     csv_path = "data_ingestion/histories.csv"
 
+    
+    
+    
+    
+    
     # Load and process data step by step for inspection
     df = read_data(csv_path)
     df = clean_data(df)

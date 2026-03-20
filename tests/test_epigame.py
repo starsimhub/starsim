@@ -5,6 +5,9 @@ Run with:
 import os
 import numpy as np
 import starsim as ss
+from data_ingestion.NETWORK_BUILDER import build_network
+
+net, n_agents, start_date, stop_date = build_network("data_ingestion/histories.csv")
 
 # TODO: we can try different models here
 _MODEL = 'nvidia/nemotron-3-super-120b-a12b:free'
@@ -99,7 +102,7 @@ def main():
         # TODO add epigame model here
         diseases      = ss.SIR(init_prev=ss.bernoulli(p=0.2)), 
         # TODO add real network here
-        networks      = 'random', 
+        networks      = 'net', 
         interventions = llmintervention,
         rand_seed     = 42,
     )
