@@ -1179,7 +1179,7 @@ class HouseholdNet(Network):
 
         if self.dynamic:
             # Find a female head of household between ages 15 and 50
-            for cid in range(int(self.household_ids[-1])):
+            for cid in range(cluster_id + 1):
                 cluster_uids = ss.uids(self.household_ids == cid)
                 female_uids = cluster_uids[
                     ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
