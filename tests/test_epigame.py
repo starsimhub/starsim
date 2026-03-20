@@ -4,14 +4,8 @@ Run with:
 """
 import os
 import numpy as np
-import starsim as ss
 import pandas as pd
-import matplotlib.pyplot as plt
-
-
-def read_data(data,):
-    df = pd.read_csv(data, index_col=0)
-    return df 
+import starsim as ss
 
 def clean_data(df: pd.DataFrame, beta: float = 1.0) -> pd.DataFrame:
     df = df[df["type"] == "contact"].copy()
@@ -21,7 +15,7 @@ def clean_data(df: pd.DataFrame, beta: float = 1.0) -> pd.DataFrame:
     df["beta"] = beta
     return df
 
-def remap_ids(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+def remap_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     all_ids = pd.Index(pd.unique(pd.concat([df["user_id"], df["peer_id"]], ignore_index=True)))
     id_map = {old: new for new, old in enumerate(all_ids)}
 
@@ -35,7 +29,7 @@ def add_subdaily_timeline(
     time_col: str = "time",
     duration_col: str = "contact_length",
     tick: pd.Timedelta = pd.Timedelta(milliseconds=1),
-) -> Tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
+) -> tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
     """Convert timestamps to a fixed subdaily simulation timeline.
 
     The default tick is 1 ms (thousandths of a second), which preserves the
@@ -86,12 +80,12 @@ class EpigamesNet(ss.DynamicNetwork):
         return added
     
 
-def build_network(csv_path: str | Path, label: str = "Epigames"):
-    df = read_data(csv_path)
+def build_network(csv_path: str):
+    df = df = pd.read_csv(csv_path, index_col=0)
     df = clean_data(df)
     df, n_agents = remap_ids(df)
     df, start_date, stop_date = add_subdaily_timeline(df)
-    net = EpigamesNet(df, label=label)
+    net = EpigamesNet(df, label="Epigames")
     start_date = ss.date(start_date)
     stop_date = ss.date(stop_date)
     return net, n_agents, start_date, stop_date
@@ -153,16 +147,6 @@ class SEIR(ss.SIR):
         self.ti_recovered[uids[~will_die]] = ti + dur_inf[~will_die]
         self.ti_dead[uids[will_die]] = ti + dur_inf[will_die]
         return
-    
-    def plot(self):
-        """ Update the plot with the exposed compartment """
-        with ss.options.context(show=False): # Don't show yet since we're adding another line
-            fig = super().plot()
-            ax = plt.gca()
-            res = self.results.n_exposed
-            ax.plot(res.timevec, res, label=res.label)
-            plt.legend()
-        return ss.return_fig(fig)
 
 # TODO: we can try different models here
 _MODEL = 'nvidia/nemotron-3-super-120b-a12b:free'
@@ -239,6 +223,9 @@ def main():
     if not api_key:
         raise ValueError('Set OPENROUTER_API_KEY env var before running')
 
+    # TODO: make sure action gets done once a day 9:30
+    # TODO: fix to ensure that we have all info for agents at end of run
+    # TODO: add the ab tests for the different rewards for llm interventions
     llmintervention = ss.LLMIntervention(
         low_reward   = 5,
         high_reward  = 10,
@@ -250,6 +237,7 @@ def main():
         verbose      = True,
     )
 
+    # TODO: ask andres for actual parameters
     seir = SEIR(
         init_prev = ss.bernoulli(p=0.2),
         beta = ss.perday(0.1),
@@ -258,14 +246,13 @@ def main():
         dur_exp = ss.lognorm_ex(mean=ss.days(0.5), std=ss.days(1.0)),
     )
 
-
     sim = ss.Sim(
-        n_agents      = 2,               # small so API calls are fast
-        dur           = 3,               # 3 days
-        dt            = 1,
-        # TODO add epigame model here
+        n_agents      = n_agents,               # small so API calls are fast
+        start         = start_date,
+        stop          = stop_date,
+        # TODO: update resoluton
+        dt            = ss.days(1),
         diseases      = seir, 
-        # TODO add real network here
         networks      = net, 
         interventions = llmintervention,
         rand_seed     = 42,
