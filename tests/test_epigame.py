@@ -43,37 +43,30 @@ def main():
     # change models here: https://openrouter.ai/models
     MODEL = 'nvidia/nemotron-3-super-120b-a12b:free'
     net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
-
-    # A/B group assignment: map original user_ids -> sequential sim uids via id_map.
-    # Replace GROUP_A_USER_IDS / GROUP_B_USER_IDS with real lists from the study when available.
-    # For now: 50/50 split by sequential uid order as a placeholder.
-    all_uids    = list(range(n_agents))
-    mid         = n_agents // 2
-    group_a_uids = all_uids[:mid]       # high_reward = 10
-    group_b_uids = all_uids[mid:]       # high_reward = 15
     # To use real original user_ids instead:
-    #   group_a_uids = [id_map[uid] for uid in GROUP_A_USER_IDS]
-    #   group_b_uids = [id_map[uid] for uid in GROUP_B_USER_IDS]
+    group_a_uids, group_b_uids = ss.group_split("data_ingestion/participants.csv", id_map)
 
-    seir = ss.SEIR(
-        init_prev = ss.bernoulli(p=0.5),
-        beta      = ss.perday(0.0907 * 24),
-        dur_inf   = ss.lognorm_ex(mean=ss.days(77 / 24), std=ss.days(0.5)),
-        p_death   = ss.bernoulli(p=0.6 * 0.25 + 0.4 * 0.7),
-        dur_exp   = ss.lognorm_ex(mean=ss.days(10 / 24), std=ss.days(0.2)),
+    seir = ss.SEIR_AMS(
+        init_prev = ss.bernoulli(p=0.01),
+        beta = ss.perday(0.0907*24),
+        dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
+        dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
+        p_symp = ss.choice(a=3, p=[0.30, 0.42, 0.28]),  # 0=asymptomatic, 1=mild, 2=severe
+        p_death_mild = ss.bernoulli(p=0.25),
+        p_death_severe = ss.bernoulli(p=0.70),
     )
 
     sim = ss.Sim(
-        n_agents      = 4,
-        start         = "01-01-2020",
-        stop          = "01-03-2020",
+        n_agents      = n_agents,
+        start         = start_date,
+        stop          = stop_date,
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = "random",
+        networks      = net,
         interventions = [
-            ss.make_intervention(high_reward=10, agent_uids=[0,1], name='group_a', model=MODEL, api_key=api_key, id_map=id_map),
-            ss.make_intervention(high_reward=15, agent_uids=[2,3], name='group_b', model=MODEL, api_key=api_key, id_map=id_map),
+            ss.make_intervention(high_reward=10, agent_uids=group_a_uids, name='group_a', model=MODEL, api_key=api_key, id_map=id_map),
+            ss.make_intervention(high_reward=15, agent_uids=group_b_uids, name='group_b', model=MODEL, api_key=api_key, id_map=id_map),
         ],
     )
     sim.run()

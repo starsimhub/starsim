@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import starsim as ss
 
-__all__ = ['build_network']
+__all__ = ['build_network', 'group_split']
 
 def clean_data(df: pd.DataFrame, beta: float = 1.0) -> pd.DataFrame:
     df = df[df["type"] == "contact"].copy()
@@ -53,3 +53,17 @@ def build_network(csv_path: str):
     start_date = ss.date(start_date)
     stop_date = ss.date(stop_date)
     return net, n_agents, start_date, stop_date, id_map
+
+def group_split(csv_path: str, user_id_map: dict):
+    df = pd.read_csv(csv_path)
+    df = df.dropna(subset=["group"]).copy()
+
+    df = df.reset_index(drop=True)
+    df["uid"] = df["id"].map(user_id_map)
+    df = df.dropna(subset=["uid"]).copy()
+    df["uid"] = df["uid"].astype(int)
+
+    group_1 = df.loc[df["group"] == "group1", "uid"].tolist()
+    group_2 = df.loc[df["group"] == "group2", "uid"].tolist()
+
+    return group_1, group_2

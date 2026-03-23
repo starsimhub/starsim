@@ -6,6 +6,7 @@ tests/devtests/figs/*
 figs/*
 archive/
 fonts_installed_successfully
+run_outputs/*
 
 # Quarto-generated files
 .jupyter_cache/

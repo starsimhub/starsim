@@ -456,7 +456,15 @@ class LLMIntervention(ss.Intervention):
         # Record per-agent decision for this day
         current_date = str(self.now)
         for uid, did_quarantine in decisions.items():
-            self.decision_log.append(dict(date=current_date, uid=uid, quarantined=did_quarantine))
+            self.decision_log.append(
+                dict(
+                    date=current_date, 
+                    uid=uid, 
+                    quarantined=did_quarantine, 
+                    status=self._agent_status(uid, disease), 
+                    points=self.points[uid]
+                )
+            )
 
         if len(q_list):
             self.quarantined[q_list] = True
