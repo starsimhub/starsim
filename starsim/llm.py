@@ -7,6 +7,8 @@ import json
 import ssl
 import certifi
 import urllib.request
+import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
@@ -60,7 +62,8 @@ class LLMIntervention(ss.Intervention):
         high_reward (float): Points awarded per step for NOT quarantining (if uninfected). Default 10.
         model (str): OpenRouter model identifier. Defaults to a free model.
         api_key (str): OpenRouter API key (or set ``OPENROUTER_API_KEY`` env var).
-        interval (int): Timesteps between decision rounds. Default 1 (every step).
+        interval (int): Timesteps between decision rounds (daily or coarser dt). Default 1.
+        decision_hour (float): Hour of day to make decisions for sub-daily sims (9.5 = 09:30). Default 9.5.
         build_prompt (callable): Optional ``fn(mod, uid, disease) -> str`` that
             builds the per-agent prompt. Defaults to the built-in HBM prompt.
         init_beliefs (callable): Optional ``fn(mod) -> None`` that populates per-agent
@@ -71,8 +74,10 @@ class LLMIntervention(ss.Intervention):
     """
 
     def __init__(self, low_reward=5, high_reward=10,
-                 model=None, api_key=None, interval=1, build_prompt=None,
-                 init_beliefs=None, max_tokens=2000, timeout=30, verbose=False, **kwargs):
+                 model=None, api_key=None, interval=1, decision_hour=9.5,
+                 build_prompt=None, init_beliefs=None,
+                 max_tokens=2000, timeout=30, verbose=False,
+                 agent_uids=None, **kwargs):
         super().__init__(**kwargs)
 
         self.low_reward       = low_reward
@@ -80,23 +85,30 @@ class LLMIntervention(ss.Intervention):
         self.model            = model
         self.api_key          = api_key
         self.interval         = interval
+        self.decision_hour    = decision_hour   # Hour of day to make decisions (9.5 = 09:30)
         self.build_prompt_fn  = build_prompt
         self.init_beliefs_fn  = init_beliefs
         self.max_tokens       = max_tokens
         self.timeout          = timeout
         self.verbose          = verbose
+        self.agent_uids       = np.asarray(agent_uids, dtype=int) if agent_uids is not None else None
+
+        self._last_decision_date = None  # Track last day decisions were made (sub-daily sims)
 
         # Per-agent states
         self.define_states(
-            ss.BoolState('quarantined',   label='Quarantined'),
-            ss.FloatArr('susceptibility', default=3.0, label='HBM perceived susceptibility (1-6)'),
-            ss.FloatArr('severity',       default=3.0, label='HBM perceived severity (1-6)'),
-            ss.FloatArr('self_efficacy',  default=3.0, label='HBM perceived self-efficacy (1-6)'),
-            ss.FloatArr('benefits',       default=3.0, label='HBM perceived benefits (1-6)'),
-            ss.FloatArr('points',         default=0.0, label='Accumulated game points'),
+            ss.BoolState('quarantined',       label='Quarantined'),
+            ss.FloatArr('susceptibility',     default=3.0, label='HBM perceived susceptibility (1-6)'),
+            ss.FloatArr('severity',           default=3.0, label='HBM perceived severity (1-6)'),
+            ss.FloatArr('self_efficacy',      default=3.0, label='HBM perceived self-efficacy (1-6)'),
+            ss.FloatArr('benefits',           default=3.0, label='HBM perceived benefits (1-6)'),
+            ss.FloatArr('points',             default=0.0, label='Accumulated game points'),
+            ss.FloatArr('n_quarantine_steps', default=0.0, label='Number of steps agent quarantined'),
         )
 
-        self.log = []  # Per-step sc.objdict: {t, ti, n_agents, n_quarantined, error}
+        self.log              = []   # Per-step sc.objdict: {t, ti, n_agents, n_quarantined, error}
+        self.decision_log     = []   # Per-agent per-day: {date, uid, quarantined}
+        self.agent_summary    = None  # Populated by finalize()
         return
 
     def init_results(self):
@@ -189,6 +201,31 @@ class LLMIntervention(ss.Intervention):
             disease.rel_trans[q_uids] = 1.0
         return
 
+    def _is_decision_time(self):
+        """
+        Return True if a decision round should run this timestep.
+
+        With daily (or coarser) resolution the ``interval`` parameter governs
+        frequency exactly as before.  With sub-daily resolution the intervention
+        fires exactly once per calendar day, on the first timestep whose
+        wall-clock hour is >= ``self.decision_hour`` (default 9.5 = 09:30).
+        """
+        dt_days = float(self.sim.t.dt)
+        if dt_days >= 1.0:
+            # Daily or coarser: use interval as usual
+            return self.ti % self.interval == 0
+
+        # Sub-daily: fire once per day at decision_hour
+        now  = pd.Timestamp(self.now)
+        hour = now.hour + now.minute / 60.0 + now.second / 3600.0
+        if hour < self.decision_hour:
+            return False
+        today = now.date()
+        if self._last_decision_date == today:
+            return False
+        self._last_decision_date = today
+        return True
+
     # ------------------------------------------------------------------
     # Module lifecycle
     # ------------------------------------------------------------------
@@ -209,14 +246,18 @@ class LLMIntervention(ss.Intervention):
     def step(self):
         """
         For each active agent:
-        1. Ask the LLM whether they quarantine.
+        1. Ask the LLM whether they quarantine (once per day at decision_hour).
         2. Zero transmission for quarantined agents.
         3. Award points.
         """
-        if self.ti % self.interval != 0:
+        if not self._is_decision_time():
             return
 
-        uids    = self.sim.people.auids
+        all_uids = self.sim.people.auids
+        if self.agent_uids is not None:
+            uids = ss.uids(np.intersect1d(all_uids, self.agent_uids))
+        else:
+            uids = all_uids
         disease = self._target_disease()
         entry   = sc.objdict(t=self.ti, ti=self.ti,
                              n_agents=len(uids), n_quarantined=0, error=None)
@@ -243,10 +284,16 @@ class LLMIntervention(ss.Intervention):
         q_list      = ss.uids([uid for uid, q in decisions.items() if     q])
         active_list = ss.uids([uid for uid, q in decisions.items() if not q])
 
+        # Record per-agent decision for this day
+        current_date = str(self.now)
+        for uid, did_quarantine in decisions.items():
+            self.decision_log.append(dict(date=current_date, uid=uid, quarantined=did_quarantine))
+
         if len(q_list):
             self.quarantined[q_list] = True
             self._zero_transmission(q_list, disease)
-            self.points[q_list] += self.low_reward
+            self.points[q_list]             += self.low_reward
+            self.n_quarantine_steps[q_list] += 1
 
         if len(active_list):
             if disease is not None and hasattr(disease, 'infected'):
@@ -285,6 +332,34 @@ class LLMIntervention(ss.Intervention):
             total_q = sum(e.n_quarantined for e in self.log)
             total_a = sum(e.n_agents      for e in self.log)
             rate    = total_q / max(total_a, 1)
-            # Across all decisions made, what fraction were quarantine?
             print(f'[LLMIntervention] {n_calls} steps | overall quarantine rate: {rate:.1%} | {n_errors} errors')
+
+        self._build_agent_summary()
+        self.decision_log = pd.DataFrame(self.decision_log)  # date | uid | quarantined
+        return
+
+    def _build_agent_summary(self):
+        """
+        Build a per-agent summary DataFrame stored as ``self.agent_summary``.
+
+        Columns: uid, status, points, n_quarantine_steps, quarantine_rate,
+                 susceptibility, severity, self_efficacy, benefits.
+        """
+        disease    = self._target_disease()
+        n_decisions = max(len(self.log), 1)
+        rows = []
+        for uid in self.sim.people.auids:
+            uid_int = int(uid)
+            rows.append(dict(
+                uid                = uid_int,
+                status             = self._agent_status(uid, disease),
+                points             = float(self.points[uid]),
+                n_quarantine_steps = int(self.n_quarantine_steps[uid]),
+                quarantine_rate    = float(self.n_quarantine_steps[uid]) / n_decisions,
+                susceptibility     = float(self.susceptibility[uid]),
+                severity           = float(self.severity[uid]),
+                self_efficacy      = float(self.self_efficacy[uid]),
+                benefits           = float(self.benefits[uid]),
+            ))
+        self.agent_summary = pd.DataFrame(rows).set_index('uid')
         return

@@ -19,13 +19,24 @@ and cumulative scoring outcomes across distinct payoff structures?
 2. Results are benchmarked against epigames how are these scores different to what 
 was done in practice?
 
-Run with:
-    OPENROUTER_API_KEY=<your-key> uv run python tests/test_epigame.py
+Usage:
+
+# Run and auto-save
+OPENROUTER_API_KEY=... uv run python tests/test_epigame.py
+
+# Load saved sim without re-running
+uv run python tests/test_epigame.py --load
+
+# Load from a specific file
+uv run python tests/test_epigame.py --load my_run.sim
 """
 import os
+import sys
 import numpy as np
 import pandas as pd
 import starsim as ss
+
+SIM_FILE = 'epigame_sim.sim'  # default save/load path
 
 def clean_data(df: pd.DataFrame, beta: float = 1.0) -> pd.DataFrame:
     df = df[df["type"] == "contact"].copy()
@@ -35,14 +46,14 @@ def clean_data(df: pd.DataFrame, beta: float = 1.0) -> pd.DataFrame:
     df["beta"] = beta
     return df
 
-def remap_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+def remap_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int, dict]:
     all_ids = pd.Index(pd.unique(pd.concat([df["user_id"], df["peer_id"]], ignore_index=True)))
-    id_map = {old: new for new, old in enumerate(all_ids)}
+    id_map = {old: new for new, old in enumerate(all_ids)}  # original user_id -> sequential sim uid
 
     out = df.copy()
     out["p1"] = out["user_id"].map(id_map).astype("int64")
     out["p2"] = out["peer_id"].map(id_map).astype("int64")
-    return out, len(all_ids)
+    return out, len(all_ids), id_map
 
 def add_subdaily_timeline(
     df: pd.DataFrame,
@@ -101,18 +112,18 @@ class EpigamesNet(ss.DynamicNetwork):
     
 
 def build_network(csv_path: str):
-    df = df = pd.read_csv(csv_path, index_col=0)
+    df = pd.read_csv(csv_path, index_col=0)
     df = clean_data(df)
-    df, n_agents = remap_ids(df)
+    df, n_agents, id_map = remap_ids(df)
     df, start_date, stop_date = add_subdaily_timeline(df)
     net = EpigamesNet(df, label="Epigames")
     start_date = ss.date(start_date)
     stop_date = ss.date(stop_date)
-    return net, n_agents, start_date, stop_date
+    return net, n_agents, id_map, start_date, stop_date
 
 
 
-net, n_agents, start_date, stop_date = build_network("data_ingestion/histories.csv")
+net, n_agents, id_map, start_date, stop_date = build_network("data_ingestion/histories.csv")
 
 
 class SEIR(ss.SIR):
@@ -249,56 +260,91 @@ def main():
     if not api_key:
         raise ValueError('Set OPENROUTER_API_KEY env var before running')
 
-    # TODO: make sure action gets done once a day 9:30
-    # TODO: fix to ensure that we have all info for agents at end of run
-    # TODO: add the ab tests for the different rewards for llm interventions
-    llmintervention = ss.LLMIntervention(
-        low_reward   = 5,
-        high_reward  = 10,
-        model        = _MODEL,
-        api_key      = api_key,
-        interval     = 1,   # decide every step
-        build_prompt = default_agent_prompt,
-        init_beliefs = default_init_beliefs,
-        verbose      = True,
-    )
+    # A/B group assignment: map original user_ids -> sequential sim uids via id_map.
+    # Replace GROUP_A_USER_IDS / GROUP_B_USER_IDS with real lists from the study when available.
+    # For now: 50/50 split by sequential uid order as a placeholder.
+    all_uids    = list(range(n_agents))
+    mid         = n_agents // 2
+    group_a_uids = all_uids[:mid]       # high_reward = 10
+    group_b_uids = all_uids[mid:]       # high_reward = 15
+    # To use real original user_ids instead:
+    #   group_a_uids = [id_map[uid] for uid in GROUP_A_USER_IDS]
+    #   group_b_uids = [id_map[uid] for uid in GROUP_B_USER_IDS]
+
+    def make_intervention(high_reward, agent_uids, label):
+        return ss.LLMIntervention(
+            low_reward    = 5,
+            high_reward   = high_reward,
+            agent_uids    = agent_uids,
+            model         = _MODEL,
+            api_key       = api_key,
+            interval      = 1,
+            decision_hour = 9.5,      # 09:30 AM; respected when dt < 1 day
+            build_prompt  = default_agent_prompt,
+            init_beliefs  = default_init_beliefs,
+            verbose       = True,
+            label         = label,
+        )
 
     # TODO: ask andres for actual parameters
     seir = SEIR(
         init_prev = ss.bernoulli(p=0.01),
-        beta = ss.perday(0.0907*24),
-        dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
-        p_death = ss.bernoulli(p=0.6*0.25 + 0.4*0.7),
-        dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
+        beta      = ss.perday(0.0907 * 24),
+        dur_inf   = ss.lognorm_ex(mean=ss.days(77 / 24), std=ss.days(0.5)),
+        p_death   = ss.bernoulli(p=0.6 * 0.25 + 0.4 * 0.7),
+        dur_exp   = ss.lognorm_ex(mean=ss.days(10 / 24), std=ss.days(0.2)),
     )
 
     sim = ss.Sim(
-        n_agents      = n_agents,               # small so API calls are fast
+        n_agents      = n_agents,
         start         = start_date,
         stop          = stop_date,
-        # TODO: update resoluton
+        # TODO: update resolution
         dt            = ss.days(1),
-        diseases      = seir, 
-        networks      = net, 
-        interventions = llmintervention,
+        diseases      = seir,
+        networks      = net,
+        interventions = [
+            make_intervention(high_reward=10, agent_uids=group_a_uids, label='group_a'),
+            make_intervention(high_reward=15, agent_uids=group_b_uids, label='group_b'),
+        ],
         rand_seed     = 42,
     )
-    sim.run()
 
-    mod = sim.interventions['llmintervention']
+    # Run or load from saved file
+    do_load = '--load' in sys.argv
+    idx = sys.argv.index('--load') if do_load else -1
+    sim_path = sys.argv[idx + 1] if do_load and idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith('-') else SIM_FILE
 
-    print('\n--- Decision log ---')
-    for e in mod.log:
-        status = f"{e.n_quarantined}/{e.n_agents} quarantined"
-        err    = f"  ERROR: {e.error}" if e.error else ''
-        print(f"  t={e.t}: {status}{err}")
+    if do_load and os.path.exists(sim_path):
+        print(f'Loading sim from {sim_path} ...')
+        sim = ss.load(sim_path)
+    else:
+        sim.run()
+        saved = sim.save(sim_path)
+        print(f'Sim saved to {saved}')
 
-    print('\n--- Points per agent ---')
-    for uid in sim.people.auids:
-        print(f"  agent {int(uid)}: {mod.points[uid]:.0f} pts")
+    for label in ('group_a', 'group_b'):
+        mod = sim.interventions[label]
+        print(f'\n{"=" * 50}')
+        print(f'Group: {label}  (low=5, high={mod.high_reward}, n_agents={len(mod.agent_uids)})')
+        print('=' * 50)
 
-    print('\n--- Quarantine rate over time ---')
-    print(sim.results['llmintervention'].quarantine_rate)
+        print('\n--- Step log ---')
+        for e in mod.log:
+            status = f"{e.n_quarantined}/{e.n_agents} quarantined"
+            err    = f"  ERROR: {e.error}" if e.error else ''
+            print(f"  t={e.t}: {status}{err}")
+
+        print('\n--- Per-agent quarantine decisions ---')
+        dl = mod.decision_log if not isinstance(mod.decision_log, list) else pd.DataFrame(mod.decision_log)
+        if len(dl):
+            print(dl.to_string(index=False))
+
+        print('\n--- Per-agent summary ---')
+        print(mod.agent_summary.to_string())
+
+        print('\n--- Quarantine rate over time ---')
+        print(sim.results[label].quarantine_rate)
 
 
 if __name__ == '__main__':
