@@ -34,14 +34,35 @@ def default_agent_prompt(mod, uid, disease):
     status         = mod._agent_status(uid, disease)
     local_prev     = mod._local_prevalence(uid, disease)
     return (
-        f"Epidemic game. Time {mod.ti}. Local prevalence {local_prev:.0%}.\n"
-        f"Quarantine={mod.low_reward}pts no-risk. Active={mod.high_reward}pts risk-infection.\n"
-        f"Status: {status} pts={mod.points[uid]:.0f}\n"
-        f"percieved_infection_risk={mod.percieved_infection_risk[uid]:.0f} "
-        f"percieved_health_severity={mod.percieved_health_severity[uid]:.0f} "
-        f"quarantine_self_efficacy={mod.quarantine_self_efficacy[uid]:.0f} "
-        f"quarantine_response_efficacy={mod.quarantine_response_efficacy[uid]:.0f}\n"
-        f"Should you quarantine? Reply with only 'yes' or 'no'."
+        f"You are playing an epidemic decision game where your goal is to maximise your total points.\n"
+        f"\n"
+        f"Game mechanics:\n"
+        f"- A disease spreads through a contact network: interacting with others exposes you to infection risk.\n"
+        f"- Your infection risk increases with local prevalence ({local_prev:.0%}) and your contacts.\n"
+        f"- If infected, you may lose points (reduced rewards, possible large penalties).\n"
+        f"- You move through health states (susceptible → infected → recovered).\n"
+        f"\n"
+        f"Decision each round:\n"
+        f"- Quarantine: {mod.low_reward} pts. No infection risk this round.\n"
+        f"- Stay active: {mod.high_reward} pts. Risk infection from contacts.\n"
+        f"\n"
+        f"This is a trade-off between:\n"
+        f"- Short-term reward (staying active)\n"
+        f"- Long-term risk (infection causing point losses)\n"
+        f"\n"
+        f"Your objective:\n"
+        f"Maximise your total points over time. Consider expected future losses from infection, not just immediate reward.\n"
+        f"\n"
+        f"Your current state:\n"
+        f"- Time: {mod.ti}\n"
+        f"- Status: {status}\n"
+        f"- Points: {mod.points[uid]:.0f}\n"
+        f"- Percieved infection risk={mod.percieved_infection_risk[uid]} "
+        f"- Percieved health severity={mod.percieved_health_severity[uid]} "
+        f"- Quarantine self efficacy={mod.quarantine_self_efficacy[uid]} "
+        f"- Quarantine response efficacy={mod.quarantine_response_efficacy[uid]}\n"
+        f"\n"
+        f"Should you quarantine this round? Reply with only 'yes' or 'no'."
     )
 
 CHOICE_TO_SCORE = {c: i + 1 for i, c in enumerate(["a", "b", "c", "d", "e", "f"])}
@@ -79,7 +100,6 @@ def build_pregame_beliefs(
     answers = pd.read_csv(answers_path)
 
     answers = answers[answers["survey_id"].isin([3, 4])].copy()
-
     answers["score"] = (
         answers["value"]
         .astype(str)
@@ -88,10 +108,8 @@ def build_pregame_beliefs(
         .map(CHOICE_TO_SCORE)
     )
 
-    answers["dimension"] = answers["id"].map(QUESTION_TO_STATE)
-
+    answers["dimension"] = answers["question_id"].map(QUESTION_TO_STATE)
     answers = answers.dropna(subset=["score", "dimension"])
-
     beliefs = (
         answers
         .groupby(["user_id", "dimension"])["score"]
@@ -117,14 +135,11 @@ def build_pregame_beliefs(
     beliefs["uid"] = beliefs["uid"].astype(int)
 
     beliefs_final = beliefs.set_index("uid")[CORE_STATES]
-    beliefs_final.to_csv("beliefs_final")
-
     return beliefs.set_index("uid")[CORE_STATES]
 
 
 def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
     beliefs = build_pregame_beliefs(answers_path, user_id_map)
-
     n = len(mod.sim.people)
 
 
@@ -132,6 +147,7 @@ def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
     for uid, row in beliefs.iterrows():
         if uid >= n:
             continue
+        
         mod.percieved_infection_risk[uid] = float(row["percieved_infection_risk"])
         mod.percieved_health_severity[uid] = float(row["percieved_health_severity"])
         mod.quarantine_self_efficacy[uid] = float(row["quarantine_self_efficacy"])
@@ -293,8 +309,6 @@ class LLMIntervention(ss.Intervention):
         if not contacts:
             return 0.0
         contact_uids = ss.uids(list(contacts))
-        print(contact_uids)
-        print(disease.infected)
         return float(disease.infected[contact_uids].mean())
 
     def _agent_status(self, uid, disease):

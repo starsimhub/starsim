@@ -20,8 +20,6 @@ class EpigamesNet(ss.DynamicNetwork):
         added = 0
         while self._next < len(self.df) and self._starts[self._next] == self.ti:
             row = self.df.iloc[self._next]
-
-
             self.append(
                 p1=np.array([int(row.p1)], dtype=ss.dtypes.int),
                 p2=np.array([int(row.p2)], dtype=ss.dtypes.int),
