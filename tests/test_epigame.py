@@ -57,8 +57,8 @@ def main():
 
     sim = ss.Sim(
         n_agents      = n_agents,
-        start         = "2020-01-01",
-        stop          = "2020-01-03",
+        start         = start_date,
+        stop          = stop_date,
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
