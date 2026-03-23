@@ -1,0 +1,6 @@
+{
+  "timevec": "[<2020.01.01> <2020.01.01 00:00:10> <2020.01.01 00:00:20> ...\n <2020.01.02 23:59:42> <2020.01.02 23:59:52> <2020.01.03 00:00:02>]",
+  "n_quarantined": "Result(group_b.n_quarantined: min=0, mean=0.00011605, max=2)",
+  "quarantine_rate": "Result(group_b.quarantine_rate: min=0, mean=2.90124e-05, max=0.5)",
+  "mean_points": "Result(group_b.mean_points: min=0, mean=2.00519, max=2.5)"
+}
