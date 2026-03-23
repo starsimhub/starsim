@@ -45,33 +45,96 @@ def default_agent_prompt(mod, uid, disease):
     )
 
 # TODO: we can update the beliefs with the data we have from the pre survey.
-def default_init_beliefs(mod):
+def build_pregame_beliefs(
+    answers_path: str,
+    user_id_map: dict,
+    default_value: float = 3.0,
+) -> pd.DataFrame:
     """
-    Default HBM belief initializer for LLMIntervention.
-
-    The Health Belief Model (HBM) is a psychological framework developed in the 
-    1950s by social psychologists at the U.S. Public Health Service to explain and 
-    predict health-related behaviors, particularly why individuals do or do not
-    engage in preventive actions like screenings or vaccinations.
-
-    Assigns each agent four belief scores sampled from a truncated normal
-    distribution (mean=3.5, sd=1.2, clipped to [1, 6]) using the sim's
-    ``rand_seed`` for reproducibility.
-
-    Args:
-        mod (LLMIntervention): The calling module. Populates ``mod.susceptibility``,
-            ``mod.severity``, ``mod.self_efficacy``, and ``mod.benefits`` in-place.
-
-    To supply a custom initializer, write a function with the same signature and
-    pass it as ``init_beliefs=my_fn`` to ``LLMIntervention``.
+    Return a user-indexed dataframe with one column per core belief/state.
     """
-    rng = np.random.default_rng(seed=int(mod.sim.pars.rand_seed))
-    n   = len(mod.sim.people)
-    for state_name in ('susceptibility', 'severity', 'self_efficacy', 'benefits'):
-        raw     = rng.normal(loc=3.5, scale=1.2, size=n)
-        clipped = np.clip(raw, 1.0, 6.0).astype(float)
-        getattr(mod, state_name)[:] = clipped
-    return
+
+    CHOICE_TO_SCORE = {c: i + 1 for i, c in enumerate(["a", "b", "c", "d", "e", "f"])}
+
+    QUESTION_TO_STATE = {
+        35: "percieved_infection_risk",
+        41: "percieved_infection_risk",
+
+        36: "percieved_health_severity",
+
+        37: "quarantine_self_efficacy",
+        43: "quarantine_self_efficacy",
+
+        38: "quarantine_response_efficacy",
+        44: "quarantine_response_efficacy",
+    }
+
+    CORE_STATES = [
+        "percieved_infection_risk",
+        "percieved_health_severity",
+        "quarantine_self_efficacy",
+        "quarantine_response_efficacy",
+]
+    answers = pd.read_csv(answers_path)
+
+    answers = answers[answers["survey_id"].isin([3, 4])].copy()
+
+    answers["score"] = (
+        answers["value"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .map(CHOICE_TO_SCORE)
+    )
+
+    answers["dimension"] = answers["id"].map(QUESTION_TO_STATE)
+
+    answers = answers.dropna(subset=["score", "dimension"])
+
+    beliefs = (
+        answers
+        .groupby(["user_id", "dimension"])["score"]
+        .mean()
+        .unstack()
+    )
+
+    beliefs = beliefs.reindex(columns=CORE_STATES)
+
+    # Fill missing values with the column median, then default_value if needed
+    for col in CORE_STATES:
+        if col in beliefs.columns:
+            beliefs[col] = beliefs[col].fillna(beliefs[col].median())
+        else:
+            beliefs[col] = np.nan
+
+    beliefs = beliefs.fillna(default_value)
+
+    # Remap user_id -> sim uid
+    beliefs = beliefs.reset_index()
+    beliefs["uid"] = beliefs["user_id"].map(user_id_map)
+    beliefs = beliefs.dropna(subset=["uid"]).copy()
+    beliefs["uid"] = beliefs["uid"].astype(int)
+
+    return beliefs.set_index("uid")[CORE_STATES]
+
+
+def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
+    beliefs = build_pregame_beliefs(answers_path, user_id_map)
+
+    n = len(mod.sim.people)
+
+    # Set defaults
+    for state_name in CORE_STATES:
+        getattr(mod, state_name)[:] = 3.0
+
+    # Overwrite with survey-derived beliefs
+    for uid, row in beliefs.iterrows():
+        if uid >= n:
+            continue
+        mod.percieved_infection_risk[uid] = float(row["percieved_infection_risk"])
+        mod.percieved_health_severity[uid] = float(row["percieved_health_severity"])
+        mod.quarantine_self_efficacy[uid] = float(row["quarantine_self_efficacy"])
+        mod.quarantine_response_efficacy[uid] = float(row["quarantine_response_efficacy"])
 
 def make_intervention(high_reward, agent_uids, name, model, api_key):
     return ss.LLMIntervention(
@@ -83,7 +146,11 @@ def make_intervention(high_reward, agent_uids, name, model, api_key):
         interval      = 1,
         decision_hour = 9.5,      # 09:30 AM; respected when dt < 1 day
         build_prompt  = default_agent_prompt,
-        init_beliefs  = default_init_beliefs,
+        init_beliefs  = lambda mod: init_beliefs_from_survey(
+            mod,
+            answers_path="data_ingestion/survey-answers.csv",
+            user_id_map=id_map,
+        ),
         verbose       = True,
         name          = name,
     )
@@ -170,12 +237,12 @@ class LLMIntervention(ss.Intervention):
 
         # Per-agent states
         self.define_states(
-            ss.BoolState('quarantined',       label='Quarantined'),
-            ss.FloatArr('susceptibility',     default=3.0, label='HBM perceived susceptibility (1-6)'),
-            ss.FloatArr('severity',           default=3.0, label='HBM perceived severity (1-6)'),
-            ss.FloatArr('self_efficacy',      default=3.0, label='HBM perceived self-efficacy (1-6)'),
-            ss.FloatArr('benefits',           default=3.0, label='HBM perceived benefits (1-6)'),
-            ss.FloatArr('points',             default=0.0, label='Accumulated game points'),
+            ss.BoolState('quarantined',   label='Quarantined'),
+            ss.FloatArr('percieved_infection_risk', default=3.0, label='HBM perceived susceptibility (1-6)'),
+            ss.FloatArr('percieved_health_severity',       default=3.0, label='HBM perceived severity (1-6)'),
+            ss.FloatArr('quarantine_self_efficacy',  default=3.0, label='HBM perceived self-efficacy (1-6)'),
+            ss.FloatArr('quarantine_response_efficacy',       default=3.0, label='HBM perceived response-efficacy (1-6)'),
+            ss.FloatArr('points',         default=0.0, label='Accumulated game points'),
             ss.FloatArr('n_quarantine_steps', default=0.0, label='Number of steps agent quarantined'),
         )
 

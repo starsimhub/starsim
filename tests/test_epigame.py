@@ -59,8 +59,7 @@ def main():
         n_agents      = n_agents,
         start         = start_date,
         stop          = stop_date,
-        # TODO: update resolution
-        dt            = ss.days(1/1440),
+        dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
         networks      = net,

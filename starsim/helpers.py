@@ -25,7 +25,7 @@ def add_subdaily_timeline(
     df: pd.DataFrame,
     time_col: str = "time",
     duration_col: str = "contact_length",
-    tick: pd.Timedelta = pd.Timedelta(milliseconds=1),
+    tick: pd.Timedelta = pd.Timedelta(seconds=10),
 ) -> tuple[pd.DataFrame, pd.Timestamp, pd.Timestamp]:
     """Convert timestamps to a fixed subdaily simulation timeline.
 
