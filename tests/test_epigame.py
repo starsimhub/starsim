@@ -56,16 +56,16 @@ def main():
     )
 
     sim = ss.Sim(
-        n_agents      = 6,
+        n_agents      = n_agents,
         start         = "2020-01-01",
         stop          = "2020-01-03",
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = 'random',
+        networks      = net,
         interventions = [
-            ss.make_intervention(high_reward=10, agent_uids=[0,1,2], name='group_a', model=MODEL, api_key=api_key, id_map=id_map),
-            ss.make_intervention(high_reward=15, agent_uids=[3,4,5], name='group_b', model=MODEL, api_key=api_key, id_map=id_map),
+            ss.make_intervention(high_reward=10, agent_uids=group_a_uids, name='group_a', model=MODEL, api_key=api_key, id_map=id_map),
+            ss.make_intervention(high_reward=15, agent_uids=group_b_uids, name='group_b', model=MODEL, api_key=api_key, id_map=id_map),
         ],
     )
     sim.run()

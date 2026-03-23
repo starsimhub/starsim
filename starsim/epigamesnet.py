@@ -21,8 +21,6 @@ class EpigamesNet(ss.DynamicNetwork):
         while self._next < len(self.df) and self._starts[self._next] == self.ti:
             row = self.df.iloc[self._next]
 
-            if added < 5:
-                print(f"[ti={self.ti}] adding edge ({row.p1}, {row.p2}) for {row[self.dur_col]} ms")
 
             self.append(
                 p1=np.array([int(row.p1)], dtype=ss.dtypes.int),

@@ -116,6 +116,9 @@ def build_pregame_beliefs(
     beliefs = beliefs.dropna(subset=["uid"]).copy()
     beliefs["uid"] = beliefs["uid"].astype(int)
 
+    beliefs_final = beliefs.set_index("uid")[CORE_STATES]
+    beliefs_final.to_csv("beliefs_final")
+
     return beliefs.set_index("uid")[CORE_STATES]
 
 
@@ -124,9 +127,6 @@ def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
 
     n = len(mod.sim.people)
 
-    # Set defaults
-    for state_name in CORE_STATES:
-        getattr(mod, state_name)[:] = 3.0
 
     # Overwrite with survey-derived beliefs
     for uid, row in beliefs.iterrows():
