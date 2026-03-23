@@ -13,7 +13,80 @@ import sciris as sc
 import starsim as ss
 
 
-__all__ = ['LLMIntervention']
+__all__ = ['LLMIntervention', 'make_intervention']
+
+# TODO: we can create better prompts for info given to the LLM.
+# we need to add game rules to the llm for context
+def default_agent_prompt(mod, uid, disease):
+    """
+    Build the per-agent quarantine prompt for LLMIntervention.
+
+    Args:
+        mod (LLMIntervention): The calling module (gives access to ``ti``,
+            ``low_reward``, ``high_reward``, and HBM belief states).
+        uid (int): Agent UID.
+        disease: The target disease module (used to determine health status).
+
+    Returns:
+        str: Prompt text sent to the LLM. Must end with a question that the
+            LLM answers with only ``'yes'`` or ``'no'``.
+    """
+    status         = mod._agent_status(uid, disease)
+    local_prev     = mod._local_prevalence(uid, disease)
+    return (
+        f"Epidemic game. Time {mod.ti}. Local prevalence {local_prev:.0%}.\n"
+        f"Quarantine={mod.low_reward}pts no-risk. Active={mod.high_reward}pts risk-infection.\n"
+        f"Status: {status} pts={mod.points[uid]:.0f}\n"
+        f"susceptibility={mod.susceptibility[uid]:.0f} "
+        f"severity={mod.severity[uid]:.0f} "
+        f"self_efficacy={mod.self_efficacy[uid]:.0f} "
+        f"benefits={mod.benefits[uid]:.0f}\n"
+        f"Should you quarantine? Reply with only 'yes' or 'no'."
+    )
+
+# TODO: we can update the beliefs with the data we have from the pre survey.
+def default_init_beliefs(mod):
+    """
+    Default HBM belief initializer for LLMIntervention.
+
+    The Health Belief Model (HBM) is a psychological framework developed in the 
+    1950s by social psychologists at the U.S. Public Health Service to explain and 
+    predict health-related behaviors, particularly why individuals do or do not
+    engage in preventive actions like screenings or vaccinations.
+
+    Assigns each agent four belief scores sampled from a truncated normal
+    distribution (mean=3.5, sd=1.2, clipped to [1, 6]) using the sim's
+    ``rand_seed`` for reproducibility.
+
+    Args:
+        mod (LLMIntervention): The calling module. Populates ``mod.susceptibility``,
+            ``mod.severity``, ``mod.self_efficacy``, and ``mod.benefits`` in-place.
+
+    To supply a custom initializer, write a function with the same signature and
+    pass it as ``init_beliefs=my_fn`` to ``LLMIntervention``.
+    """
+    rng = np.random.default_rng(seed=int(mod.sim.pars.rand_seed))
+    n   = len(mod.sim.people)
+    for state_name in ('susceptibility', 'severity', 'self_efficacy', 'benefits'):
+        raw     = rng.normal(loc=3.5, scale=1.2, size=n)
+        clipped = np.clip(raw, 1.0, 6.0).astype(float)
+        getattr(mod, state_name)[:] = clipped
+    return
+
+def make_intervention(high_reward, agent_uids, name, model, api_key):
+    return ss.LLMIntervention(
+        low_reward    = 5,
+        high_reward   = high_reward,
+        agent_uids    = agent_uids,
+        model         = model,
+        api_key       = api_key,
+        interval      = 1,
+        decision_hour = 9.5,      # 09:30 AM; respected when dt < 1 day
+        build_prompt  = default_agent_prompt,
+        init_beliefs  = default_init_beliefs,
+        verbose       = True,
+        name          = name,
+    )
 
 def _call_openrouter(prompt, model, api_key, max_tokens, timeout, seed=None):
     """
@@ -152,6 +225,8 @@ class LLMIntervention(ss.Intervention):
         if not contacts:
             return 0.0
         contact_uids = ss.uids(list(contacts))
+        print(contact_uids)
+        print(disease.infected)
         return float(disease.infected[contact_uids].mean())
 
     def _agent_status(self, uid, disease):

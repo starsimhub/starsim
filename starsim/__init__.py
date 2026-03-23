@@ -60,6 +60,9 @@ t('sim          '); from .sim           import *
 t('run          '); from .run           import *
 t('calibration  '); from .calibration   import * # Lazy import to save 500 ms
 t('samples      '); from .samples       import *
+t('helpers      '); from .helpers       import *
+t('epigamesnet  '); from .epigamesnet   import *
+t('seir         '); from .seir          import *
 
 # Load fonts
 def _load_fonts(debug=debug):
