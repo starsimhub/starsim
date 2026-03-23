@@ -1,4 +1,24 @@
 """
+Epigame LLM intervention study.
+
+This study simulates an epidemic game in which autonomous LLM-driven agents
+decide each day whether to quarantine or remain active. 
+
+Agents interact via real-world proximity contact networks derived 
+from the Epigames dataset and are infected according to a SEIR disease model. 
+
+The LLM intervention uses the Health Belief Model (HBM) to inform each agent's decision, 
+weighting perceived susceptibility, severity, self-efficacy, and benefits. 
+
+Research Questions: 
+
+1. How does LLM-guided quarantine behavior, conditioned on 
+individual health status and reward incentives, alter epidemic curve trajectories 
+and cumulative scoring outcomes across distinct payoff structures?
+
+2. Results are benchmarked against epigames how are these scores different to what 
+was done in practice?
+
 Run with:
     OPENROUTER_API_KEY=<your-key> uv run python tests/test_epigame.py
 """
