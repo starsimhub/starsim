@@ -317,9 +317,13 @@ class LLMIntervention(ss.Intervention):
             return 'unknown'
         if hasattr(disease, 'infected') and disease.infected[uid]:
             return 'infected'
-        if hasattr(disease, 'susceptible') and disease.susceptible[uid]:
-            return 'susceptible'
-        return 'recovered'
+        if hasattr(disease, 'recovered') and disease.recovered[uid]:
+            return 'recovered'
+        if hasattr(disease, 'exposed') and disease.exposed[uid]:
+            return 'exposed'
+        if hasattr(disease, 'dead') and disease.dead[uid]:
+            return 'dead'
+        return 'susceptible'
 
     def _call_llm_agent(self, uid, disease):
         """ Ask the LLM whether this agent should quarantine. Returns bool. """
