@@ -17,7 +17,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ### Generic congenital outcome framework
 - Added `set_congenital()` to the base `Infection` class. Diseases opt in by defining `birth_outcome_keys` and `birth_outcomes` in pars.
-- Added `fire_congenital_outcomes()` helper to process scheduled congenital events at delivery time.
+- Added `step_congenital()` helper to process scheduled congenital events at delivery time.
 - Added `_assign_congenital_outcomes()` override point for state- or GA-dependent outcome probabilities.
 - Death outcomes (`miscarriage`, `nnd`, `stillborn`) trigger `request_death`; non-lethal outcomes set a bool state.
 

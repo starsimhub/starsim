@@ -317,7 +317,7 @@ class Infection(Disease):
         distributions in ``birth_outcomes`` and override
         ``_assign_congenital_outcomes``.
 
-        Call ``fire_congenital_outcomes`` from the disease's ``step_state()`` to
+        Call ``step_congenital`` from the disease's ``step_state()`` to
         execute the scheduled events each timestep.
         """
         if not hasattr(self.pars, 'birth_outcomes') or self.pars.birth_outcomes is None:
@@ -360,7 +360,7 @@ class Infection(Disease):
             '"default" distribution in birth_outcomes'
         )
 
-    def fire_congenital_outcomes(self):
+    def step_congenital(self):
         """
         Execute scheduled congenital events whose ``ti_<key>`` has arrived.
 

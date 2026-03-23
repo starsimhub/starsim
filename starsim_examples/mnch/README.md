@@ -6,7 +6,7 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 ### Maternal infections (`maternal_infections.py`)
 
-- **`CongenitalDisease`**: Simple SIR with congenital outcomes via the generic `set_congenital`/`fire_congenital_outcomes` framework in the base `Infection` class. Infected mothers transmit to unborn via `PrenatalNet`; at transmission, outcomes (stillborn, congenital infection, normal) are sampled and scheduled for delivery.
+- **`CongenitalDisease`**: Simple SIR with congenital outcomes via the generic `set_congenital`/`step_congenital` framework in the base `Infection` class. Infected mothers transmit to unborn via `PrenatalNet`; at transmission, outcomes (stillborn, congenital infection, normal) are sampled and scheduled for delivery.
 
 ### Neonatal sepsis (`neonatal_sepsis.py`)
 

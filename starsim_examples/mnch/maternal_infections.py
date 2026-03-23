@@ -12,7 +12,7 @@ How the congenital framework works:
        an unborn agent (age < 0).
     2. ``set_congenital()`` samples an outcome from ``birth_outcomes`` and
        schedules it at delivery time by setting ``ti_<outcome>``.
-    3. ``fire_congenital_outcomes()`` (called each timestep from ``step_state()``)
+    3. ``step_congenital()`` (called each timestep from ``step_state()``)
        checks whether any scheduled outcomes are due. Death outcomes
        ('stillborn', 'nnd', 'miscarriage') call ``request_death()``;
        non-lethal outcomes set a BoolArr state (e.g. ``congenital = True``).
@@ -22,7 +22,7 @@ To use the framework in your own disease:
     2. Define matching ``ti_<key>`` FloatArr states for each outcome
     3. Define BoolArr states for non-lethal outcomes (same name as the key)
     4. Optionally define ``cs_outcome`` FloatArr to store outcome indices
-    5. Call ``self.fire_congenital_outcomes()`` from ``step_state()``
+    5. Call ``self.step_congenital()`` from ``step_state()``
 
 For diseases with state- or gestational-age-dependent outcome probabilities
 (e.g. syphilis, where outcomes differ by infection stage), override
@@ -59,7 +59,7 @@ class CongenitalDisease(ss.SIR):
 
     Infected mothers transmit to their unborn via PrenatalNet. At transmission,
     the base ``set_congenital()`` samples an outcome (stillborn, congenital,
-    normal) and schedules it for delivery time. ``fire_congenital_outcomes()``
+    normal) and schedules it for delivery time. ``step_congenital()``
     in ``step_state()`` executes those scheduled events.
 
     Pars:
@@ -96,5 +96,5 @@ class CongenitalDisease(ss.SIR):
 
     def step_state(self):
         super().step_state()
-        self.fire_congenital_outcomes()  # Process any outcomes scheduled for this timestep
+        self.step_congenital()  # Process any outcomes scheduled for this timestep
         return
