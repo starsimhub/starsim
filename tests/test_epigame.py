@@ -34,7 +34,7 @@ def main():
 
     # change models here: https://openrouter.ai/models
     MODEL = 'nvidia/nemotron-3-super-120b-a12b:free'
-    net, n_agents, id_map, start_date, stop_date = ss.build_network("data_ingestion/histories.csv")
+    net, n_agents, start_date, stop_date, id_map = ss.build_network("data_ingestion/histories.csv")
 
     # A/B group assignment: map original user_ids -> sequential sim uids via id_map.
     # Replace GROUP_A_USER_IDS / GROUP_B_USER_IDS with real lists from the study when available.
@@ -56,16 +56,16 @@ def main():
     )
 
     sim = ss.Sim(
-        n_agents      = n_agents,
-        start         = start_date,
-        stop          = stop_date,
+        n_agents      = 6,
+        start         = "2020-01-01",
+        stop          = "2020-01-03",
         dt            = ss.days(1/8640),
         rand_seed     = 42,
         diseases      = seir,
-        networks      = net,
+        networks      = 'random',
         interventions = [
-            ss.make_intervention(high_reward=10, agent_uids=[0,1,2], name='group_a', model=MODEL, api_key=api_key),
-            ss.make_intervention(high_reward=15, agent_uids=[3,4,5], name='group_b', model=MODEL, api_key=api_key),
+            ss.make_intervention(high_reward=10, agent_uids=[0,1,2], name='group_a', model=MODEL, api_key=api_key, id_map=id_map),
+            ss.make_intervention(high_reward=15, agent_uids=[3,4,5], name='group_b', model=MODEL, api_key=api_key, id_map=id_map),
         ],
     )
     sim.run()

@@ -14,7 +14,7 @@ def clean_data(df: pd.DataFrame, beta: float = 1.0) -> pd.DataFrame:
 
 def remap_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int, dict]:
     all_ids = pd.Index(pd.unique(pd.concat([df["user_id"], df["peer_id"]], ignore_index=True)))
-    id_map = {old: new for new, old in enumerate(all_ids)}  # original user_id -> sequential sim uid
+    id_map = {old: new for new, old in enumerate(all_ids)}
 
     out = df.copy()
     out["p1"] = out["user_id"].map(id_map).astype("int64")
@@ -52,4 +52,4 @@ def build_network(csv_path: str):
     net = ss.EpigamesNet(df, label="Epigames")
     start_date = ss.date(start_date)
     stop_date = ss.date(stop_date)
-    return net, n_agents, id_map, start_date, stop_date
+    return net, n_agents, start_date, stop_date, id_map

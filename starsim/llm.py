@@ -37,12 +37,34 @@ def default_agent_prompt(mod, uid, disease):
         f"Epidemic game. Time {mod.ti}. Local prevalence {local_prev:.0%}.\n"
         f"Quarantine={mod.low_reward}pts no-risk. Active={mod.high_reward}pts risk-infection.\n"
         f"Status: {status} pts={mod.points[uid]:.0f}\n"
-        f"susceptibility={mod.susceptibility[uid]:.0f} "
-        f"severity={mod.severity[uid]:.0f} "
-        f"self_efficacy={mod.self_efficacy[uid]:.0f} "
-        f"benefits={mod.benefits[uid]:.0f}\n"
+        f"percieved_infection_risk={mod.percieved_infection_risk[uid]:.0f} "
+        f"percieved_health_severity={mod.percieved_health_severity[uid]:.0f} "
+        f"quarantine_self_efficacy={mod.quarantine_self_efficacy[uid]:.0f} "
+        f"quarantine_response_efficacy={mod.quarantine_response_efficacy[uid]:.0f}\n"
         f"Should you quarantine? Reply with only 'yes' or 'no'."
     )
+
+CHOICE_TO_SCORE = {c: i + 1 for i, c in enumerate(["a", "b", "c", "d", "e", "f"])}
+
+QUESTION_TO_STATE = {
+    35: "percieved_infection_risk",
+    41: "percieved_infection_risk",
+
+    36: "percieved_health_severity",
+
+    37: "quarantine_self_efficacy",
+    43: "quarantine_self_efficacy",
+
+    38: "quarantine_response_efficacy",
+    44: "quarantine_response_efficacy",
+}
+
+CORE_STATES = [
+    "percieved_infection_risk",
+    "percieved_health_severity",
+    "quarantine_self_efficacy",
+    "quarantine_response_efficacy",
+]
 
 # TODO: we can update the beliefs with the data we have from the pre survey.
 def build_pregame_beliefs(
@@ -54,27 +76,6 @@ def build_pregame_beliefs(
     Return a user-indexed dataframe with one column per core belief/state.
     """
 
-    CHOICE_TO_SCORE = {c: i + 1 for i, c in enumerate(["a", "b", "c", "d", "e", "f"])}
-
-    QUESTION_TO_STATE = {
-        35: "percieved_infection_risk",
-        41: "percieved_infection_risk",
-
-        36: "percieved_health_severity",
-
-        37: "quarantine_self_efficacy",
-        43: "quarantine_self_efficacy",
-
-        38: "quarantine_response_efficacy",
-        44: "quarantine_response_efficacy",
-    }
-
-    CORE_STATES = [
-        "percieved_infection_risk",
-        "percieved_health_severity",
-        "quarantine_self_efficacy",
-        "quarantine_response_efficacy",
-]
     answers = pd.read_csv(answers_path)
 
     answers = answers[answers["survey_id"].isin([3, 4])].copy()
@@ -136,7 +137,7 @@ def init_beliefs_from_survey(mod, answers_path: str, user_id_map: dict):
         mod.quarantine_self_efficacy[uid] = float(row["quarantine_self_efficacy"])
         mod.quarantine_response_efficacy[uid] = float(row["quarantine_response_efficacy"])
 
-def make_intervention(high_reward, agent_uids, name, model, api_key):
+def make_intervention(high_reward, agent_uids, name, model, api_key, id_map):
     return ss.LLMIntervention(
         low_reward    = 5,
         high_reward   = high_reward,
@@ -498,10 +499,10 @@ class LLMIntervention(ss.Intervention):
                 points             = float(self.points[uid]),
                 n_quarantine_steps = int(self.n_quarantine_steps[uid]),
                 quarantine_rate    = float(self.n_quarantine_steps[uid]) / n_decisions,
-                susceptibility     = float(self.susceptibility[uid]),
-                severity           = float(self.severity[uid]),
-                self_efficacy      = float(self.self_efficacy[uid]),
-                benefits           = float(self.benefits[uid]),
+                susceptibility     = float(self.percieved_infection_risk[uid]),
+                severity           = float(self.percieved_health_severity[uid]),
+                self_efficacy      = float(self.quarantine_self_efficacy[uid]),
+                benefits           = float(self.quarantine_response_efficacy[uid]),
             ))
         self.agent_summary = pd.DataFrame(rows).set_index('uid')
         return
