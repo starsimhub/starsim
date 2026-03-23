@@ -15,8 +15,6 @@ import starsim as ss
 
 __all__ = ['LLMIntervention', 'make_intervention']
 
-# TODO: we can create better prompts for info given to the LLM.
-# we need to add game rules to the llm for context
 def default_agent_prompt(mod, uid, disease):
     """
     Build the per-agent quarantine prompt for LLMIntervention.
@@ -53,16 +51,26 @@ def default_agent_prompt(mod, uid, disease):
         f"Your objective:\n"
         f"Maximise your total points over time. Consider expected future losses from infection, not just immediate reward.\n"
         f"\n"
+        f"Health decision framework (Health Belief Model):\n"
+        f"The Health Belief Model (HBM) is a psychological framework used to understand health-related decisions. "
+        f"It explains behavior based on six main factors:\n"
+        f"Perceived susceptibility: your personal assessment of risk (how likely you are to get infected).\n"
+        f"Perceived severity: how serious infection would be for you (possible point losses, complications).\n"
+        f"Perceived benefits: the advantages of taking preventive action (quarantining protects you).\n"
+        f"Perceived barriers: the costs or downsides of action (losing high reward points by quarantining).\n"
+        f"Self-efficacy: your confidence in successfully performing the preventive action (ability to quarantine effectively).\n"
+        f"Cues to action: triggers from your environment or game that prompt a decision (local prevalence, infected contacts).\n"
+        f"\n"
         f"Your current state:\n"
         f"- Time: {mod.ti}\n"
         f"- Status: {status}\n"
         f"- Points: {mod.points[uid]:.0f}\n"
-        f"- Percieved infection risk={mod.percieved_infection_risk[uid]} "
-        f"- Percieved health severity={mod.percieved_health_severity[uid]} "
-        f"- Quarantine self efficacy={mod.quarantine_self_efficacy[uid]} "
-        f"- Quarantine response efficacy={mod.quarantine_response_efficacy[uid]}\n"
+        f"- Perceived infection risk: {mod.percieved_infection_risk[uid]:.2f}\n"
+        f"- Perceived health severity: {mod.percieved_health_severity[uid]:.2f}\n"
+        f"- Quarantine self-efficacy: {mod.quarantine_self_efficacy[uid]:.2f}\n"
+        f"- Quarantine response efficacy: {mod.quarantine_response_efficacy[uid]:.2f}\n"
         f"\n"
-        f"Should you quarantine this round? Reply with only 'yes' or 'no'."
+        f"Use this framework to guide your decision. Should you quarantine this round? Reply with only 'yes' or 'no'."
     )
 
 CHOICE_TO_SCORE = {c: i + 1 for i, c in enumerate(["a", "b", "c", "d", "e", "f"])}
