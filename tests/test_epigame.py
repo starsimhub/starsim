@@ -172,11 +172,12 @@ def default_agent_prompt(mod, uid, disease):
     return (
         f"Epidemic game. Time {mod.ti}. Local prevalence {local_prev:.0%}.\n"
         f"Quarantine={mod.low_reward}pts no-risk. Active={mod.high_reward}pts risk-infection.\n"
-        f"Agent: {status} pts={mod.points[uid]:.0f} sus={mod.susceptibility[uid]:.0f} "
-        f"sev={mod.severity[uid]:.0f} "
-        f"eff={mod.self_efficacy[uid]:.0f} "
-        f"ben={mod.benefits[uid]:.0f}\n"
-        f"Should this agent quarantine? Reply with only 'yes' or 'no'."
+        f"Agent: {status} pts={mod.points[uid]:.0f}",
+        f"susceptibility={mod.susceptibility[uid]:.0f} "
+        f"severity={mod.severity[uid]:.0f} "
+        f"self_efficacy={mod.self_efficacy[uid]:.0f} "
+        f"benefits={mod.benefits[uid]:.0f}\n"
+        f"Should you quarantine? Reply with only 'yes' or 'no'."
     )
 
 # TODO: we can update the beliefs with the data we have from the pre survey.
