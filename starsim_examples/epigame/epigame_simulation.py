@@ -88,15 +88,15 @@ class Quarantine(ss.Intervention):
 
 #### Define simulation parameters
 # TODO: update based on epigame parameters
-people = ss.People(n_agents=10000)
-network = ss.RandomNet(n_contacts=20) # TODO: replace with AUIB data-based network
+people = ss.People(n_agents=500)
+network = ss.RandomNet(n_contacts=5) # TODO: replace with AUIB data-based network
 seir = SEIR(
-    init_prev = ss.bernoulli(p=0.01),
-    beta = ss.perday(0.1),
-    dur_inf = ss.lognorm_ex(mean=ss.days(6), std=ss.days(1.0)),
-    p_death = ss.bernoulli(p=0.01),
-    dur_exp = ss.lognorm_ex(mean=ss.days(0.5), std=ss.days(1.0)),
-)
+        init_prev = ss.bernoulli(p=0.01),
+        beta = ss.perday(0.0907*24),
+        dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
+        p_death = ss.bernoulli(p=0.6*0.25 + 0.4*0.7),
+        dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
+    )
 
 # TODO: change to use LLM decisions
 def decide_to_quarantine(people):
@@ -109,7 +109,7 @@ quarantine = Quarantine(decide_to_quarantine)
 # Run simulation
 sim = ss.Sim(
     start='2020-01-01', 
-    stop='2020-03-01', 
+    stop='2020-01-15', 
     dt=ss.days(1),          
     diseases=seir, 
     networks=network,

@@ -239,11 +239,11 @@ def main():
 
     # TODO: ask andres for actual parameters
     seir = SEIR(
-        init_prev = ss.bernoulli(p=0.2),
-        beta = ss.perday(0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.days(6), std=ss.days(1.0)),
-        p_death = ss.bernoulli(p=0.01),
-        dur_exp = ss.lognorm_ex(mean=ss.days(0.5), std=ss.days(1.0)),
+        init_prev = ss.bernoulli(p=0.01),
+        beta = ss.perday(0.0907*24),
+        dur_inf = ss.lognorm_ex(mean=ss.days(77/24), std=ss.days(0.5)),
+        p_death = ss.bernoulli(p=0.6*0.25 + 0.4*0.7),
+        dur_exp = ss.lognorm_ex(mean=ss.days(10/24), std=ss.days(0.2)),
     )
 
     sim = ss.Sim(
