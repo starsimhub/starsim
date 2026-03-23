@@ -184,6 +184,11 @@ def default_init_beliefs(mod):
     """
     Default HBM belief initializer for LLMIntervention.
 
+    The Health Belief Model (HBM) is a psychological framework developed in the 
+    1950s by social psychologists at the U.S. Public Health Service to explain and 
+    predict health-related behaviors, particularly why individuals do or do not
+    engage in preventive actions like screenings or vaccinations.
+
     Assigns each agent four belief scores sampled from a truncated normal
     distribution (mean=3.5, sd=1.2, clipped to [1, 6]) using the sim's
     ``rand_seed`` for reproducibility.
