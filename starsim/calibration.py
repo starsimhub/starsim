@@ -544,7 +544,7 @@ class Calibration(sc.prettyobj):
         df.insert(1,'seeds', df.pop('user_attrs')['seeds'])
         df = df.rename({'number':'trial','value':'mismatch'}, axis=1)
         df = df.set_index('trial')
-        df = df.sort_values('mismatch',ascending=False)
+        df = df.sort_values('mismatch',ascending=True)
         return df
 
     def to_json(self, filename=None, indent=2, **kwargs):
