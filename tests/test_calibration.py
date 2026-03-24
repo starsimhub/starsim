@@ -111,7 +111,7 @@ def test_onepar_normal(do_plot=True):
         reseed = False,
         components = [prevalence],
         total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
+        n_cpus = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
         continue_db=False,
@@ -170,7 +170,7 @@ def test_onepar_custom(do_plot=True):
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
         eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
         total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
+        n_cpus = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
     )
@@ -246,7 +246,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         reseed = True,
         components = [num_infectious, incident_cases],
         total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
+        n_cpus = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
     )
@@ -318,7 +318,7 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
         #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
         #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
+        n_cpus = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
     )
