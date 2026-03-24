@@ -100,6 +100,7 @@ class Calibration(sc.prettyobj):
         if n_reps is None      : n_reps         = 1
 
         self._parse_storage(study_name, storage) # Process storage arguments to select storage backend and file names
+        self._rdb_storage_cache = None # Cache database storage to avoid unnecessarily opening extra database connections
 
         self.build_fn       = build_fn
         self.build_kw       = build_kw or dict()
@@ -348,11 +349,16 @@ class Calibration(sc.prettyobj):
             if self.verbose: print(f"Using Journal-based storage at {self._db_path}")
             return op.storages.JournalStorage(backend)
         elif self._storage_type in ('sqlite', 'connection'):
-            if not hasattr(self, '_rdb_storage_cache') or self._rdb_storage_cache is None:
-                if self.verbose: print(f"Using database storage at {self._db_path}")
+            if self._rdb_storage_cache is None:
+                if self.verbose:
+                    if self._storage_type == 'sqlite':
+                        print(f"Using SQLite database storage at {self._db_path}")
+                    else:
+                        print(f"Using database storage at {self._storage_spec}")
                 self._rdb_storage_cache = op.storages.RDBStorage(
                     self._storage_spec,
                     engine_kwargs={"pool_size": self.run_args.n_cpus, "max_overflow": 0},
+                    heartbeat_interval=60,
                 )
                 atexit.register(self._rdb_storage_cache.engine.dispose)
             return self._rdb_storage_cache
@@ -458,7 +464,7 @@ class Calibration(sc.prettyobj):
 
         # Run the optimization
         t0 = sc.tic()
-        self.create_study() # Create the study so that it can subsequently be loaded by workers
+        self.create_study() # Create the study so that it can subsequently be loaded by workers. This will also populate the _rdb_storage_cache if that is being used
         if self.verbose: print(f'Starting execution with {n_workers} workers and {n_cpus_per_worker} CPUs per worker')
         self.run_workers(n_workers, n_cpus_per_worker)
         study = self.load_study()
