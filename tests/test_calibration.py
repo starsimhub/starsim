@@ -41,17 +41,11 @@ def make_sim():
 def build_sim(sim, calib_pars, **kwargs):
     """ Modify the base simulation by applying calib_pars """
 
-    reps = kwargs.get('n_reps', 1)
-
     sir = sim.pars.diseases # There is only one disease in this simulation and it is a SIR
     net = sim.pars.networks # There is only one network in this simulation and it is a RandomNet
 
-    for k, pars in calib_pars.items():
-        if k == 'rand_seed':
-            sim.pars.rand_seed = pars
-            continue
+    for k, v in calib_pars.items():
 
-        v = pars['value']
         if k == 'beta':
             sir.pars.beta = v
         elif k == 'init_prev':
@@ -61,12 +55,8 @@ def build_sim(sim, calib_pars, **kwargs):
         else:
             raise NotImplementedError(f'Parameter {k} not recognized')
 
-    if reps == 1:
-        return sim
+    return sim
 
-    # Ignoring the random seed if provided via the reseed=True option in Calibration
-    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False)
-    return ms
 
 
 #%% Define the tests
@@ -107,8 +97,7 @@ def test_onepar_normal(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
-        build_kw = dict(n_reps=5), # Reps per point
-        reseed = False,
+        n_reps=5,
         components = [prevalence],
         total_trials = total_trials,
         n_cpus = None, # None indicates to use all available CPUs
@@ -165,7 +154,7 @@ def test_onepar_custom(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
-        build_kw = dict(n_reps=2), # Two reps per point
+        n_reps=2,
         reseed = True,
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
         eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
@@ -176,7 +165,7 @@ def test_onepar_custom(do_plot=True):
     )
 
     # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
+    sc.printcyan('\nPerforming calibration...')
     calib.calibrate()
 
     # Check
@@ -242,7 +231,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
-        build_kw = dict(n_reps=3), # 3 reps per point
+        n_reps=3,
         reseed = True,
         components = [num_infectious, incident_cases],
         total_trials = total_trials,
