@@ -4,7 +4,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.2.3 (2026-03-XX)
-- TBC
+- Made scalar time parameters behave more consistently by removing the ability to index them if they are scalars, and also having `np.iterable()` return `False` for such parameters
+- **Backwards-compatibility notes:** This change may cause simulation results to be numerically different, as it will cause distributions to use a more efficient sampling method for affected scalar parameters (in such cases, there is likely to be a performance increase)
 - *GitHub info*: PR [XX](https://github.com/starsimhub/starsim/pull/XX)
 
 
