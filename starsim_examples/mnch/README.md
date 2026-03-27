@@ -15,7 +15,7 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 ### Fetal health (`fetal_health.py`)
 
 - **`fetal_infection`**: Connector that links a disease (default: SIR) to fetal health outcomes. Applies timing shifts (preterm birth) and growth restriction to pregnancies where the mother is infected. Also reverses damage when treatment occurs.
-- **`fetal_treat`**: Intervention that treats infected pregnant women each timestep, curing infection and enabling `fetal_infection` to reverse damage.
+- **`treat_pregnant`**: Intervention that treats infected pregnant women each timestep, curing infection and enabling `fetal_infection` to reverse damage.
 
 ## Usage
 
@@ -34,7 +34,7 @@ sim = ss.Sim(
 sim = ss.Sim(
     diseases=ss.SIR(beta=0.1),
     connectors=sse.fetal_infection(),
-    interventions=sse.fetal_treat(disease='sir'),
+    interventions=sse.treat_pregnant(disease='sir'),
     custom=ss.FetalHealth(),
     demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],

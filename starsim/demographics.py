@@ -626,14 +626,14 @@ class Pregnancy(Demographics):
         results += [
             ss.Result('pregnancies',     **scaling_kw, label='New pregnancies', summarize_by='sum'),
             ss.Result('births',          **scaling_kw, label='New births', summarize_by='sum'),
-            ss.Result('n_preterm',       **scaling_kw, label='Preterm births'),
-            ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births'),
-            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum'),
-            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum'),
-            ss.Result('nnds',            **scaling_kw, label='Neonatal deaths', summarize_by='sum'),
-            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum'),
-            ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate'),
-            ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate'),
+            ss.Result('n_preterm',       **scaling_kw, label='Preterm births', auto_plot=False),
+            ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births', auto_plot=False),
+            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
+            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
+            ss.Result('nnds',            **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate', auto_plot=False),
+            ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate', auto_plot=False),
             ss.Result('cbr',             **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
             ss.Result('tfr',             **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
         ]
@@ -719,8 +719,8 @@ class Pregnancy(Demographics):
         very_preterm = ga_wk < self.pars.very_preterm_threshold.weeks
         self.preterm[newborn_uids]      = preterm
         self.very_preterm[newborn_uids] = very_preterm
-        self._counts.n_preterm      += np.sum(preterm)
-        self._counts.n_very_preterm += np.sum(very_preterm)
+        self._counts.n_preterm      += preterm.sum()
+        self._counts.n_very_preterm += very_preterm.sum()
 
         self.pregnant[mother_uids] = False
         self.ti_delivery[mother_uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
@@ -1027,9 +1027,9 @@ class Pregnancy(Demographics):
             self.n_miscarriages[mother_uids[is_mc]] += 1
             self.n_stillbirths[mother_uids[~is_mc]] += 1
             ti = self.ti
-            if 0 <= ti < self.t.npts:
-                self.results['miscarriages'][ti] += np.sum(is_mc)
-                self.results['stillbirths'][ti]  += np.sum(~is_mc)
+            if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
+                self.results['miscarriages'][ti] += is_mc.sum()
+                self.results['stillbirths'][ti]  += (~is_mc).sum()
 
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
@@ -1047,7 +1047,7 @@ class Pregnancy(Demographics):
         if len(nnd_uids):
             self.neonatal_death[nnd_uids] = True
             ti = self.ti
-            if 0 <= ti < self.t.npts:
+            if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
                 self.results['nnds'][ti] += len(nnd_uids)
         return
 
@@ -1172,11 +1172,11 @@ class FetalHealth(ss.Module):
         super().__init__(name='fetal_health')
         self.define_pars(
             weight_by_ga=self.default_weight_by_ga,
-            interp_fn=np.interp,
+            interp_fn=np.interp,  # Interpolation function for mapping gestational age to reference birth weight
             sga_ratio=0.87,  # SGA if birth_weight < baseline_for_ga * sga_ratio; ~10% baseline rate given percentile_dist=N(1,0.1)
             lbw_threshold=2500,
             vlbw_threshold=1500,
-            min_ga=ss.weeks(24),
+            min_ga=ss.weeks(24),  # Earliest possible delivery GA; timing shifts cannot bring delivery before this
             percentile_dist=ss.normal(loc=1.0, scale=0.1),
         )
         self.update_pars(pars, **kwargs)
@@ -1281,16 +1281,16 @@ class FetalHealth(ss.Module):
         n  = len(newborn_uids)
         ti = self.ti
         self.results['n_births'][ti]          += n
-        self.results['n_lbw'][ti]             += np.sum(lbw)
-        self.results['n_vlbw'][ti]            += np.sum(vlbw)
-        self.results['n_sga'][ti]             += np.sum(sga)
-        self.results['n_svn'][ti]             += np.sum(svn)
-        self.results['mean_birth_weight'][ti]  = np.mean(birth_weights) if n else 0
-        self.results['mean_ga_at_birth'][ti]   = np.mean(ga_wk) if n else 0
-        self.results['mean_exposures'][ti]     = np.mean(self.n_exposures[parents]) if n else 0
-        self.results['lbw_rate'][ti]           = np.mean(lbw) if n else 0
-        self.results['sga_rate'][ti]           = np.mean(sga) if n else 0
-        self.results['svn_rate'][ti]           = np.mean(svn) if n else 0
+        self.results['n_lbw'][ti]             += lbw.sum()
+        self.results['n_vlbw'][ti]            += vlbw.sum()
+        self.results['n_sga'][ti]             += sga.sum()
+        self.results['n_svn'][ti]             += svn.sum()
+        self.results['mean_birth_weight'][ti]  = birth_weights.mean() if n else 0
+        self.results['mean_ga_at_birth'][ti]   = ga_wk.mean() if n else 0
+        self.results['mean_exposures'][ti]     = self.n_exposures[parents].mean() if n else 0
+        self.results['lbw_rate'][ti]           = lbw.mean() if n else 0
+        self.results['sga_rate'][ti]           = sga.mean() if n else 0
+        self.results['svn_rate'][ti]           = svn.mean() if n else 0
         return
 
     def apply_timing_shift(self, uids, shift_weeks):
@@ -1358,7 +1358,7 @@ class FetalHealth(ss.Module):
         recover_weeks = current_shift * fraction
 
         has_shift = recover_weeks > 0
-        if not np.any(has_shift):
+        if not has_shift.any():
             return
 
         recover_uids = uids[has_shift]

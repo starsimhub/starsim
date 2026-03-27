@@ -10,7 +10,7 @@ Architecture:
       and applies fetal damage (preterm risk via timing shifts, low birth weight
       via growth restriction). Damage is applied both at conception (if already
       infected) and during pregnancy (if newly infected).
-    - ``fetal_treat`` (Intervention): treats infected pregnant women within a
+    - ``treat_pregnant`` (Intervention): treats infected pregnant women within a
       specified year range and partially reverses fetal damage.
 
 Both modules require ``ss.FetalHealth()`` in the sim's ``custom`` modules and
@@ -26,7 +26,7 @@ Usage::
         diseases=ss.SIR(beta=0.1),
         demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
         connectors=sse.fetal_infection(),
-        interventions=sse.fetal_treat(disease='sir', start_year=2025),
+        interventions=sse.treat_pregnant(disease='sir', start_year=2025),
         custom=ss.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
@@ -34,16 +34,16 @@ Usage::
 
 To extend for a different disease, subclass ``fetal_infection`` and override
 ``_apply_damage`` with disease-specific logic (e.g. stage-dependent penalties).
-To extend ``fetal_treat``, subclass and override ``step()`` with custom
+To extend ``treat_pregnant``, subclass and override ``step()`` with custom
 eligibility criteria or reversal logic.
 """
 
 import starsim as ss
 
-__all__ = ['fetal_infection', 'fetal_treat']
+__all__ = ['fetal_infection', 'treat_pregnant']
 
 
-class fetal_treat(ss.Intervention):
+class treat_pregnant(ss.Intervention):
     """
     Treat infected pregnant women and partially reverse fetal damage.
 
@@ -69,7 +69,7 @@ class fetal_treat(ss.Intervention):
 
     Example — treatment starting in 2025 with 50% coverage::
 
-        sse.fetal_treat(disease='sir', start_year=2025, p_treat=ss.bernoulli(p=0.5))
+        sse.treat_pregnant(disease='sir', start_year=2025, p_treat=ss.bernoulli(p=0.5))
     """
 
     def __init__(self, disease='sir', start_year=None, end_year=None, **kwargs):
@@ -92,9 +92,9 @@ class fetal_treat(ss.Intervention):
 
         # Validate that the required disease and FetalHealth modules exist
         if self.disease_name not in sim.diseases:
-            raise ValueError(f'fetal_treat requires disease "{self.disease_name}" but it was not found in the sim.')
+            raise ValueError(f'treat_pregnant requires disease "{self.disease_name}" but it was not found in the sim.')
         if 'fetal_health' not in sim.custom:
-            raise ValueError('fetal_treat requires a FetalHealth module. Add ss.FetalHealth() to custom.')
+            raise ValueError('treat_pregnant requires a FetalHealth module. Add ss.FetalHealth() to custom.')
 
         # Default year bounds to the full sim period
         if self.start_year is None: self.start_year = sim.t.start

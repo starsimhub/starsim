@@ -35,7 +35,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
   - `CongenitalDisease`: simple SIR with congenital outcomes via the generic framework.
   - `NeonatalSepsis`: SIR that infects/kills newborns, useful for testing NND detection.
   - `fetal_infection`: connector that damages fetal health when mothers are infected.
-  - `fetal_treat`: intervention that treats infected pregnant women.
+  - `treat_pregnant`: intervention that treats infected pregnant women.
 
 - *GitHub info*: PR [1244](https://github.com/starsimhub/starsim/pull/1244)
 
