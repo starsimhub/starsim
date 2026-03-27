@@ -384,12 +384,12 @@ def test_nnd():
     sim.run()
 
     preg = sim.demographics.pregnancy
-    nnds   = preg.results['nnds'].sum()
+    neonatal_deaths = preg.results['neonatal_deaths'].sum()
     births = preg.results['births'].sum()
-    print(f'  NNDs: {nnds}, Births: {births}')
+    print(f'  Neonatal deaths: {neonatal_deaths}, Births: {births}')
 
-    assert nnds > 0, 'Expected neonatal deaths from neonatal sepsis'
-    assert nnds < births, 'NNDs should be fewer than total births'
+    assert neonatal_deaths > 0, 'Expected neonatal deaths from neonatal sepsis'
+    assert neonatal_deaths < births, 'Neonatal deaths should be fewer than total births'
 
     sc.printgreen('✓ Neonatal death detection tests passed')
     return sim

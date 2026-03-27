@@ -355,10 +355,10 @@ def test_congenital():
 
     preg = sim.demographics.pregnancy
     sb           = preg.results['stillbirths'].sum()
-    nnds         = preg.results['nnds'].sum()
-    births       = preg.results['births'].sum()
-    n_congenital = sim.diseases[0].congenital.sum()
-    print(f'  Stillbirths: {sb}, NNDs: {nnds}, Births: {births}, Congenital: {n_congenital}')
+    neonatal_deaths = preg.results['neonatal_deaths'].sum()
+    births          = preg.results['births'].sum()
+    n_congenital    = sim.diseases[0].congenital.sum()
+    print(f'  Stillbirths: {sb}, Neonatal deaths: {neonatal_deaths}, Births: {births}, Congenital: {n_congenital}')
 
     assert sb > 0, 'Expected stillbirths from congenital disease outcomes'
     assert n_congenital > 0, 'Expected some congenital infections'
