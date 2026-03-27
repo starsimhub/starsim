@@ -311,7 +311,7 @@ class Infection(Disease):
 
         Each outcome name needs a matching ``ti_<name>`` FloatArr state; non-lethal
         outcomes also need a BoolArr of the same name. Death outcomes ('miscarriage',
-        'nnd', 'stillborn') fire via ``request_death``; others set a bool state.
+        'neonatal_deaths', 'stillborn') fire via ``request_death``; others set a bool state.
 
         For state- or GA-dependent probabilities, provide multiple keyed
         distributions in ``birth_outcomes`` and override
@@ -370,7 +370,7 @@ class Infection(Disease):
         """
         if not hasattr(self.pars, 'birth_outcome_keys'):
             return
-        death_keys = {'miscarriage', 'nnd', 'stillborn'}
+        death_keys = {'miscarriage', 'neonatal_deaths', 'stillborn'}
         for key in self.pars.birth_outcome_keys:
             ti_key = f'ti_{key}'
             if not hasattr(self, ti_key):

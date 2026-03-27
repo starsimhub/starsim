@@ -630,7 +630,7 @@ class Pregnancy(Demographics):
             ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births', auto_plot=False),
             ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
             ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
-            ss.Result('nnds',            **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('neonatal_deaths', **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
             ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
             ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate', auto_plot=False),
             ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate', auto_plot=False),
@@ -1048,7 +1048,7 @@ class Pregnancy(Demographics):
             self.neonatal_death[nnd_uids] = True
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                self.results['nnds'][ti] += len(nnd_uids)
+                self.results['neonatal_deaths'][ti] += len(nnd_uids)
         return
 
     def update_results(self):
