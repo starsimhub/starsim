@@ -62,7 +62,7 @@ class Options(sc.objdict):
     **Examples**:
 
         ss.options(verbose=True) # Set more verbosity
-        ss.options(warn='error') # Be more strict about warnings
+        ss.options(warnings='error') # Be more strict about warnings
     """
 
     def __init__(self):

@@ -1,11 +1,13 @@
 """
 Test demographic consistency
 """
-import starsim as ss
-import pandas as pd
-import matplotlib.pyplot as plt
+
 import numpy as np
+import pandas as pd
 import sciris as sc
+import matplotlib.pyplot as plt
+import starsim as ss
+import starsim_examples as sse
 import pytest
 
 sc.options(interactive=False) # Assume not running interactively
@@ -287,14 +289,124 @@ def test_pregnancy_short_sim():
     return sim
 
 
+@sc.timer()
+def test_loss_classification():
+    """
+    Test that prenatal deaths are correctly classified as miscarriage (<20w)
+    or stillbirth (>=20w) based on gestational age.
+    """
+    sc.heading('Testing loss classification...')
+
+    # Use a high loss rate so both early and late losses occur
+    sim = ss.Sim(
+        n_agents=5_000,
+        demographics=[
+            ss.Pregnancy(fertility_rate=ss.freqperyear(30), p_loss=ss.bernoulli(p=0.05), burnin=True),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ],
+        dur=ss.years(5),
+        dt=ss.years(1/12),
+        rand_seed=1,
+        networks=ss.PrenatalNet(),
+    )
+    sim.run()
+
+    preg = sim.demographics.pregnancy
+    mc = preg.results['miscarriages'].sum()
+    sb = preg.results['stillbirths'].sum()
+    births = preg.results['births'].sum()
+    print(f'  Miscarriages: {mc}, Stillbirths: {sb}, Births: {births}')
+
+    assert mc > 0, 'Expected some miscarriages with p_loss=0.05'
+    assert sb > 0, 'Expected some stillbirths with p_loss=0.05'
+    assert mc > sb, 'Expected more miscarriages than stillbirths (pregnancies spend more time at early GA)'
+    assert births > 0, 'Expected some births despite losses'
+
+    sc.printgreen('✓ Loss classification tests passed')
+    return sim
+
+
+@sc.timer()
+def test_background_loss():
+    """
+    Test that background pregnancy loss (p_loss) produces losses and that
+    higher p_loss produces more losses.
+    """
+    sc.heading('Testing background loss...')
+
+    results = dict()
+    for label, p_loss in [('none', 0), ('low', 0.01), ('high', 0.05)]:
+        sim = ss.Sim(
+            n_agents=5_000,
+            demographics=[
+                ss.Pregnancy(fertility_rate=ss.freqperyear(30), p_loss=ss.bernoulli(p=p_loss), burnin=True),
+                ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ],
+            dur=ss.years(5),
+            dt=ss.years(1/12),
+            rand_seed=1,
+            networks=ss.PrenatalNet(),
+        )
+        sim.run()
+        preg = sim.demographics.pregnancy
+        total_losses = preg.results['miscarriages'].sum() + preg.results['stillbirths'].sum()
+        births = preg.results['births'].sum()
+        results[label] = dict(losses=total_losses, births=births)
+        print(f'  p_loss={p_loss}: losses={total_losses}, births={births}')
+
+    assert results['low']['losses'] > results['none']['losses'], 'Expected more losses with p_loss=0.01 than p_loss=0'
+    assert results['high']['losses'] > results['low']['losses'], 'Expected more losses with higher p_loss'
+    assert results['high']['births'] < results['none']['births'], 'Expected fewer births with p_loss > 0'
+
+    sc.printgreen('✓ Background loss tests passed')
+    return sim
+
+
+@sc.timer()
+def test_nnd():
+    """
+    Test passive neonatal death detection using neonatal sepsis disease.
+    Verify deaths of newborns within 28 days are classified as NNDs.
+    """
+    sc.heading('Testing neonatal death detection...')
+
+    sim = ss.Sim(
+        n_agents=5_000,
+        demographics=[
+            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
+            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+        ],
+        diseases=sse.NeonatalSepsis(),
+        dur=ss.years(3),
+        dt=ss.years(1/12),
+        rand_seed=1,
+        networks=ss.PrenatalNet(),
+    )
+    sim.run()
+
+    preg = sim.demographics.pregnancy
+    neonatal_deaths = preg.results['neonatal_deaths'].sum()
+    births = preg.results['births'].sum()
+    print(f'  Neonatal deaths: {neonatal_deaths}, Births: {births}')
+
+    assert neonatal_deaths > 0, 'Expected neonatal deaths from neonatal sepsis'
+    assert neonatal_deaths < births, 'Neonatal deaths should be fewer than total births'
+
+    sc.printgreen('✓ Neonatal death detection tests passed')
+    return sim
+
+
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
-    s1 = test_nigeria(do_plot=do_plot)
-    s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
-    s3 = test_constant_pop(do_plot=do_plot)
+    T = sc.timer()
+
+    s1 = test_nigeria()
+    s2 = test_nigeria(dt=1/12, which='pregnancy')
+    s3 = test_constant_pop()
     s4 = test_module_adding()
     s5 = test_aging()
     s6 = test_pregnancy()
-    plt.show()
+    s7 = test_loss_classification()
+    s8 = test_background_loss()
+    s9 = test_nnd()
 
+    T.toc()
