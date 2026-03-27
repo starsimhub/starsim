@@ -1,12 +1,13 @@
 """
 Test demographic consistency
 """
+
+import numpy as np
+import pandas as pd
+import sciris as sc
+import matplotlib.pyplot as plt
 import starsim as ss
 import starsim_examples as sse
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-import sciris as sc
 import pytest
 
 sc.options(interactive=False) # Assume not running interactively
