@@ -775,16 +775,21 @@ class TimePar:
             super().__setattrr__(self, attr, value)
             return
 
+    def __iter__(self):
+        """ Iteration over array TimePars; raises TypeError for scalars so np.iterable() returns False """
+        if self.is_array:
+            return (self.__class__(v) for v in self.value)
+        else:
+            errormsg = f'{type(self)} is a scalar'
+            raise TypeError(errormsg)
+
     def __getitem__(self, index):
         """ For indexing and slicing, e.g. TimePar[inds] """
         if self.is_array:
             return self.__class__(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
         else:
-            if index == 0:
-                return self
-            else:
-                errormsg = f'{type(self)} is a scalar'
-                raise TypeError(errormsg)
+            errormsg = f'{type(self)} is a scalar'
+            raise TypeError(errormsg)
 
     def __setitem__(self, index, value):
         """ For indexing and slicing, e.g. TimePar[inds] """
@@ -792,12 +797,8 @@ class TimePar:
             self.value[index] = value
             return
         else:
-            if index == 0:
-                self.value = value
-                return
-            else:
-                errormsg = f'{type(self)} is a scalar'
-                raise TypeError(errormsg)
+            errormsg = f'{type(self)} is a scalar'
+            raise TypeError(errormsg)
 
     def __bool__(self):
         return True

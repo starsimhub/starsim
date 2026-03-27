@@ -263,7 +263,7 @@ def make_dhs_data(n=100, include_sexes=False):
 @sc.timer()
 def test_household():
     sc.heading('Testing HouseholdNet...')
-    dhs_data = make_dhs_data()
+    dhs_data = make_dhs_data(n=small)
 
     # Test ss.HouseholdNet (static)
     household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=False)
@@ -285,11 +285,11 @@ def test_household():
 @sc.timer()
 def test_dynamic_household():
     sc.heading('Testing dynamic HouseholdNet...')
-    dhs_data = make_dhs_data()
+    dhs_data = make_dhs_data(n=medium)
 
-    household = ss.HouseholdNet(dhs_data=dhs_data)
+    household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=True)
     preg = ss.Pregnancy()
-    sim = ss.Sim(n_agents=small, diseases='sis', networks=household, demographics=preg)
+    sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
 
     # Check that household_ids are assigned
