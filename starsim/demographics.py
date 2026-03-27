@@ -1173,7 +1173,7 @@ class FetalHealth(ss.Module):
         self.define_pars(
             weight_by_ga=self.default_weight_by_ga,
             interp_fn=np.interp,
-            sga_ratio=0.80,
+            sga_ratio=0.87,  # SGA if birth_weight < baseline_for_ga * sga_ratio; ~10% baseline rate given percentile_dist=N(1,0.1)
             lbw_threshold=2500,
             vlbw_threshold=1500,
             min_ga=ss.weeks(24),
@@ -1193,6 +1193,7 @@ class FetalHealth(ss.Module):
             ss.BoolArr('lbw',  label='Low birth weight'),
             ss.BoolArr('vlbw', label='Very low birth weight'),
             ss.BoolArr('sga',  label='Small for gestational age'),
+            ss.BoolArr('svn',  label='Small vulnerable newborn'),
         )
 
         self._conception_callbacks = []
@@ -1223,11 +1224,13 @@ class FetalHealth(ss.Module):
             ss.Result('n_lbw',             dtype=int, label='Low birth weight'),
             ss.Result('n_vlbw',            dtype=int, label='Very low birth weight'),
             ss.Result('n_sga',             dtype=int, label='Small for gestational age'),
+            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns'),
             ss.Result('mean_birth_weight', scale=False, label='Mean birth weight (g)'),
             ss.Result('mean_ga_at_birth',  scale=False, label='Mean GA at birth (weeks)'),
             ss.Result('mean_exposures',    scale=False, label='Mean exposures per pregnancy'),
             ss.Result('lbw_rate',          scale=False, label='LBW rate'),
             ss.Result('sga_rate',          scale=False, label='SGA rate'),
+            ss.Result('svn_rate',          scale=False, label='SVN rate'),
         )
         return
 
@@ -1269,6 +1272,11 @@ class FetalHealth(ss.Module):
         self.vlbw[newborn_uids] = vlbw
         self.sga[newborn_uids]  = sga
 
+        # SVN: small vulnerable newborn = preterm | lbw | sga
+        preterm = self.sim.demographics.pregnancy.preterm[newborn_uids]
+        svn = preterm | lbw | sga
+        self.svn[newborn_uids] = svn
+
         # Results
         n  = len(newborn_uids)
         ti = self.ti
@@ -1276,11 +1284,13 @@ class FetalHealth(ss.Module):
         self.results['n_lbw'][ti]             += np.sum(lbw)
         self.results['n_vlbw'][ti]            += np.sum(vlbw)
         self.results['n_sga'][ti]             += np.sum(sga)
+        self.results['n_svn'][ti]             += np.sum(svn)
         self.results['mean_birth_weight'][ti]  = np.mean(birth_weights) if n else 0
         self.results['mean_ga_at_birth'][ti]   = np.mean(ga_wk) if n else 0
         self.results['mean_exposures'][ti]     = np.mean(self.n_exposures[parents]) if n else 0
         self.results['lbw_rate'][ti]           = np.mean(lbw) if n else 0
         self.results['sga_rate'][ti]           = np.mean(sga) if n else 0
+        self.results['svn_rate'][ti]           = np.mean(svn) if n else 0
         return
 
     def apply_timing_shift(self, uids, shift_weeks):
