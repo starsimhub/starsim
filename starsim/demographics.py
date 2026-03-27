@@ -697,7 +697,7 @@ class Pregnancy(Demographics):
 
     def update_breastfeeding(self, uids):
         stopping = uids[self.ti >= self.ti_stop_breastfeed[uids]]
-        if np.any(stopping):
+        if stopping.any():
             self.breastfeeding[stopping] = False
         return stopping
 
@@ -834,7 +834,7 @@ class Pregnancy(Demographics):
             return ss.uids()
 
         # Validation
-        if np.any(self.pregnant[conceive_uids]):
+        if self.pregnant[conceive_uids].any():
             which_uids = conceive_uids[self.pregnant[conceive_uids]]
             errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
@@ -930,7 +930,7 @@ class Pregnancy(Demographics):
 
         # Check that all pregnant women have a delivery time set
         missing_delivery = self.pregnant[uids] & np.isnan(self.ti_delivery[uids])
-        if np.any(missing_delivery):
+        if missing_delivery.any():
             which_uids = uids[missing_delivery]
             errormsg = f'Delivery time has NaN values for {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
