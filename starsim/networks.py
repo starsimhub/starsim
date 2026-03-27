@@ -1201,7 +1201,7 @@ class HouseholdNet(Network):
 
     def add_births(self):
         sim = self.sim
-        birth_uids = ss.uids((sim.people.age >= 0) & (sim.people.age < self.pars.update_freq * self.sim.t.dt_year))
+        birth_uids = ss.uids((sim.people.age < self.pars.update_freq * self.sim.t.dt_year))
         if len(birth_uids) == 0:
             return 0
 
