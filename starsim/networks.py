@@ -1115,6 +1115,7 @@ class HouseholdNet(Network):
             ]
         self.define_states(*states)
         self.p_fractional_age = ss.uniform()
+        self.n_households = 0 
         return
 
     def init_pre(self, sim):
@@ -1138,11 +1139,10 @@ class HouseholdNet(Network):
         dhs = self.dhs_data
 
         n_remaining = len(ppl)
-        cluster_id = -1
         p1 = []
         p2 = []
         while n_remaining > 0:
-            cluster_id += 1
+            self.n_households += 1
 
             # Sample a household from the data
             rand_row = np.random.choice(len(dhs))
@@ -1164,7 +1164,7 @@ class HouseholdNet(Network):
             if sex_data is not None:
                 sex_data = np.array([int(x) for x in sex_data.split(', ')])
                 ppl.female[cluster_uids] = (sex_data[0:cluster_size] == 2)
-            self.household_ids[cluster_uids] = cluster_id
+            self.household_ids[cluster_uids] = self.n_households - 1 # Zero based indexing for actual IDs
 
             # Add symmetric pairwise contacts in each cluster
             for i in cluster_uids:
@@ -1179,7 +1179,7 @@ class HouseholdNet(Network):
 
         if self.dynamic:
             # Find a female head of household between ages 15 and 50
-            for cid in range(cluster_id + 1):
+            for cid in range(self.n_households):
                 cluster_uids = ss.uids(self.household_ids == cid)
                 female_uids = cluster_uids[
                     ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
@@ -1246,7 +1246,9 @@ class HouseholdNet(Network):
             beta = np.ones(len(moving_out), dtype=ss.dtypes.float)
             self.append(p1=moving_out, p2=partners, beta=beta)
 
-            new_cids = np.nanmax(self.household_ids) + 1 + np.arange(len(moving_out))
+            n_moving_out = len(moving_out)
+            new_cids = self.n_households + np.arange(n_moving_out)
+            self.n_households += n_moving_out
             self.household_ids[moving_out] = new_cids
             self.household_ids[partners] = new_cids
 
