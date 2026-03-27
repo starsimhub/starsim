@@ -305,43 +305,43 @@ class PregnancyPars(ss.Pars):
         super().__init__()
 
         # Parameters related to probability of getting pregnant
-        self.fertility_rate=ss.peryear(100)  # Can be a number or a Pandas DataFrame
-        self.rel_fertility=1  # Constant to scale all fertility rates, useful if a dataframe is used
-        self.p_infertile=ss.bernoulli(p=0)  # Primary infertility
-        self.min_age=15  # Minimum age to become pregnant
-        self.max_age=50  # Maximum age to become pregnant
-        self.rate_units=1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+        self.fertility_rate = ss.peryear(100)  # Can be a number or a Pandas DataFrame
+        self.rel_fertility = 1  # Constant to scale all fertility rates, useful if a dataframe is used
+        self.p_infertile = ss.bernoulli(p=0)  # Primary infertility
+        self.min_age = 15  # Minimum age to become pregnant
+        self.max_age = 50  # Maximum age to become pregnant
+        self.rate_units = 1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
 
         # Parameters related to pregnancy duration
-        self.dur_pregnancy=ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
+        self.dur_pregnancy = ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
 
         # Parameters related to breastfeeding
-        self.dur_breastfeed=ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))
-        self.p_breastfeed=ss.bernoulli(p=1)
+        self.dur_breastfeed = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))
+        self.p_breastfeed = ss.bernoulli(p=1)
 
         # Parameters related to implantation rate
         self.embryos_per_pregnancy = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0]))  # Embryos per pregnancy
 
         # Pregnancy outcome parameters - PTBs, deaths, losses
-        self.rr_ptb=ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
-        self.rr_ptb_age= np.array([[18, 35, 1000], [1.2, 1, 1.2]]) # Relative risk of pre-term birth by maternal age
-        self.p_maternal_death=ss.bernoulli(0)
-        self.p_survive_maternal_death=ss.bernoulli(0)
-        self.p_loss=ss.bernoulli(p=0)     # Per-timestep probability of spontaneous pregnancy loss (miscarriage or stillbirth)
-        self.loss_threshold=ss.weeks(20)  # GA cutoff: <20w = miscarriage, >=20w = stillbirth
+        self.rr_ptb = ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
+        self.rr_ptb_age = np.array([[18, 35, 1000], [1.2, 1, 1.2]]) # Relative risk of pre-term birth by maternal age
+        self.p_maternal_death = ss.bernoulli(0)
+        self.p_survive_maternal_death = ss.bernoulli(0)
+        self.p_loss = ss.bernoulli(p=0)     # Per-timestep probability of spontaneous pregnancy loss (miscarriage or stillbirth)
+        self.loss_threshold = ss.weeks(20)  # GA cutoff: <20w = miscarriage, >=20w = stillbirth
 
         # Parameters related to newborn agents
-        self.sex_ratio=ss.bernoulli(0.5)  # Ratio of babies born female
-        self.slot_scale=5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
-        self.min_slots=100  # Minimum number of slots, useful if the population size is very small
+        self.sex_ratio = ss.bernoulli(0.5)  # Ratio of babies born female
+        self.slot_scale = 5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+        self.min_slots = 100  # Minimum number of slots, useful if the population size is very small
 
         # Classification thresholds
-        self.preterm_threshold=ss.weeks(37)
-        self.very_preterm_threshold=ss.weeks(32)
+        self.preterm_threshold = ss.weeks(37)
+        self.very_preterm_threshold = ss.weeks(32)
 
         # Settings
-        self.burnin=True # Should we seed pregnancies that would have happened before the start of the simulation?
-        self.trimesters=[ss.weeks(13), ss.weeks(26)]
+        self.burnin = True # Should we seed pregnancies that would have happened before the start of the simulation?
+        self.trimesters = [ss.weeks(13), ss.weeks(26)]
         self.update(kwargs)
         return
 
