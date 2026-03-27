@@ -2,13 +2,16 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.9.36">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
 <title>Samples – Starsim</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -70,19 +73,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-dbc92dda8186f57fa2e333fbb71d6a9d.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-7f96a4abcef3e6124538963b74d78179.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-14901936a922a1bc8a6001461cfd21cd.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -745,12 +747,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim.run()<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
   Running 2010.01.01 (10/51) (0.27 s)  ••••———————————————— 22%
+
   Running 2020.01.01 (20/51) (0.31 s)  ••••••••———————————— 41%
+
   Running 2030.01.01 (30/51) (0.35 s)  ••••••••••••———————— 61%
+
   Running 2040.01.01 (40/51) (0.38 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.41 s)  •••••••••••••••••••• 100%
+
+  Running 2050.01.01 (50/51) (0.42 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 </div>
@@ -3206,8 +3214,8 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f4eddff8f40&gt; mode='r'&gt;
-&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f4eddff8f40&gt; mode='r'&gt;</code></pre>
+<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7fd41286eac0&gt; mode='r'&gt;
+&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7fd41286eac0&gt; mode='r'&gt;</code></pre>
 </div>
 </div>
 <div id="57" class="cell" data-execution_count="25">
@@ -3240,7 +3248,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 30.3 ms</code></pre>
+<pre><code>Elapsed time: 29.7 ms</code></pre>
 </div>
 </div>
 <div id="64" class="cell" data-execution_count="29">
@@ -3248,7 +3256,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 6.12 ms</code></pre>
+<pre><code>Elapsed time: 5.24 ms</code></pre>
 </div>
 </div>
 <p>The <code>preload</code> option populates the entire cache in advance. This makes creating the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.</p>
@@ -3264,7 +3272,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 5.33 ms</code></pre>
+<pre><code>Elapsed time: 5.26 ms</code></pre>
 </div>
 </div>
 <div id="68" class="cell" data-execution_count="32">
@@ -3272,7 +3280,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 5.28 ms</code></pre>
+<pre><code>Elapsed time: 5.25 ms</code></pre>
 </div>
 </div>
 <p>Together, these options provide some flexibility in terms of memory and time demands to suit analyses at various different scales.</p>
@@ -3343,18 +3351,18 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <div id="79" class="cell" data-execution_count="37">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="bu">list</span>(resultsdir.iterdir())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="37">
-<pre><code>[PosixPath('results/0.0-1.zip'),
- PosixPath('results/0.5-2.zip'),
- PosixPath('results/0.0-3.zip'),
+<pre><code>[PosixPath('results/0.75-3.zip'),
+ PosixPath('results/0.5-3.zip'),
  PosixPath('results/0.75-2.zip'),
+ PosixPath('results/0.25-1.zip'),
+ PosixPath('results/0.25-3.zip'),
+ PosixPath('results/0.0-3.zip'),
+ PosixPath('results/0.5-1.zip'),
+ PosixPath('results/0.5-2.zip'),
+ PosixPath('results/0.0-2.zip'),
  PosixPath('results/0.75-1.zip'),
  PosixPath('results/0.25-2.zip'),
- PosixPath('results/0.25-3.zip'),
- PosixPath('results/0.0-2.zip'),
- PosixPath('results/0.5-1.zip'),
- PosixPath('results/0.5-3.zip'),
- PosixPath('results/0.75-3.zip'),
- PosixPath('results/0.25-1.zip')]</code></pre>
+ PosixPath('results/0.0-1.zip')]</code></pre>
 </div>
 </div>
 <div id="80" class="cell" data-execution_count="38">
@@ -3953,7 +3961,7 @@ Raw values: [0.00000000e+00 2.31481481e-11 4.62962963e-11 6.94444444e-11
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.2 (2026-03-11).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -2,13 +2,16 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.9.36">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
 <title>Time – Starsim</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -70,19 +73,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-dbc92dda8186f57fa2e333fbb71d6a9d.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-7f96a4abcef3e6124538963b74d78179.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-14901936a922a1bc8a6001461cfd21cd.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -755,7 +757,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="b91f5bee" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>d.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;starsim.time.date at 0x7fe93f805850&gt;
+<pre><code>&lt;starsim.time.date at 0x7ff81247b8d0&gt;
 [&lt;class 'starsim.time.date'&gt;, &lt;class 'pandas.Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.timestamps._Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.base.ABCTimestamp'&gt;, &lt;class 'datetime.datetime'&gt;, &lt;class 'datetime.date'&gt;]
 ————————————————————————————————————————————————————————————————————————
 Methods:
@@ -805,9 +807,9 @@ Properties:
      daysinmonth: 31
             fold: 0
  fromisocalendar: &lt;built-in method fromisocalendar of type object at
-                  0x556b947d1ba [...]
+                  0x55d62568504 [...]
    fromisoformat: &lt;built-in method fromisoformat of type object at
-                  0x556b947d1ba0&gt;
+                  0x55d625685040&gt;
             hour: 0
     is_leap_year: False
     is_month_end: False
@@ -1001,21 +1003,33 @@ array([0.        , 0.99999999, 1.99999998, 2.99999997, 3.99999996,
 <span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>plt.axvline(start, color<span class="op">=</span><span class="st">'k'</span>, label<span class="op">=</span><span class="st">'Intervention'</span>)</span>
 <span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>plt.legend()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "Sim 0" with 5000 agentsInitializing sim "Sim 1" with 5000 agents
+<pre><code>Initializing sim "Sim 0" with 5000 agents
+Initializing sim "Sim 1" with 5000 agents
 
   Running "Sim 0": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "Sim 1": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running "Sim 0": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
-  Running "Sim 1": 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
-  Running "Sim 0": 2020.01.01 (20/51) (0.36 s)  ••••••••———————————— 41%
-  Running "Sim 1": 2020.01.01 (20/51) (0.36 s)  ••••••••———————————— 41%
-  Running "Sim 0": 2030.01.01 (30/51) (0.40 s)  ••••••••••••———————— 61%
-  Running "Sim 1": 2030.01.01 (30/51) (0.41 s)  ••••••••••••———————— 61%
-  Running "Sim 0": 2040.01.01 (40/51) (0.44 s)  ••••••••••••••••———— 80%
-  Running "Sim 1": 2040.01.01 (40/51) (0.45 s)  ••••••••••••••••———— 80%
-  Running "Sim 0": 2050.01.01 (50/51) (0.48 s)  •••••••••••••••••••• 100%
 
-  Running "Sim 1": 2050.01.01 (50/51) (0.50 s)  •••••••••••••••••••• 100%
+  Running "Sim 1": 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
+  Running "Sim 0": 2010.01.01 (10/51) (0.51 s)  ••••———————————————— 22%
+
+  Running "Sim 1": 2010.01.01 (10/51) (0.52 s)  ••••———————————————— 22%
+
+  Running "Sim 0": 2020.01.01 (20/51) (0.55 s)  ••••••••———————————— 41%
+
+  Running "Sim 1": 2020.01.01 (20/51) (0.56 s)  ••••••••———————————— 41%
+
+  Running "Sim 0": 2030.01.01 (30/51) (0.59 s)  ••••••••••••———————— 61%
+
+  Running "Sim 1": 2030.01.01 (30/51) (0.60 s)  ••••••••••••———————— 61%
+
+  Running "Sim 0": 2040.01.01 (40/51) (0.63 s)  ••••••••••••••••———— 80%
+
+  Running "Sim 0": 2050.01.01 (50/51) (0.67 s)  •••••••••••••••••••• 100%
+
+
+  Running "Sim 1": 2040.01.01 (40/51) (0.65 s)  ••••••••••••••••———— 80%
+
+  Running "Sim 1": 2050.01.01 (50/51) (0.70 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1678,7 +1692,7 @@ freqperday(5)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.2 (2026-03-11).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

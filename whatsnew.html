@@ -2,13 +2,16 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.9.36">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
 <title>What’s new – Starsim</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -35,19 +38,18 @@ ul.task-list li input[type="checkbox"] {
 <link href=".//assets/favicon.ico" rel="icon">
 <script src="site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="site_libs/quarto-html/popper.min.js"></script>
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-dbc92dda8186f57fa2e333fbb71d6a9d.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="site_libs/bootstrap/bootstrap-dark-7f96a4abcef3e6124538963b74d78179.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-dark-14901936a922a1bc8a6001461cfd21cd.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -623,6 +625,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul class="collapse">
+  <li><a href="#version-3.3.0-2026-03-27" id="toc-version-3.3.0-2026-03-27" class="nav-link" data-scroll-target="#version-3.3.0-2026-03-27">Version 3.3.0 (2026-03-27)</a>
+  <ul class="collapse">
+  <li><a href="#pregnancy-loss-and-neonatal-death-classification" id="toc-pregnancy-loss-and-neonatal-death-classification" class="nav-link" data-scroll-target="#pregnancy-loss-and-neonatal-death-classification">Pregnancy loss and neonatal death classification</a></li>
+  <li><a href="#generic-congenital-outcome-framework" id="toc-generic-congenital-outcome-framework" class="nav-link" data-scroll-target="#generic-congenital-outcome-framework">Generic congenital outcome framework</a></li>
+  <li><a href="#fetalhealth-improvements" id="toc-fetalhealth-improvements" class="nav-link" data-scroll-target="#fetalhealth-improvements">FetalHealth improvements</a></li>
+  <li><a href="#mnch-examples" id="toc-mnch-examples" class="nav-link" data-scroll-target="#mnch-examples">MNCH examples</a></li>
+  </ul></li>
   <li><a href="#version-3.2.2-2026-03-11" id="toc-version-3.2.2-2026-03-11" class="nav-link" data-scroll-target="#version-3.2.2-2026-03-11">Version 3.2.2 (2026-03-11)</a></li>
   <li><a href="#version-3.2.1-2026-03-06" id="toc-version-3.2.1-2026-03-06" class="nav-link" data-scroll-target="#version-3.2.1-2026-03-06">Version 3.2.1 (2026-03-06)</a></li>
   <li><a href="#version-3.2.0-2026-03-03" id="toc-version-3.2.0-2026-03-03" class="nav-link" data-scroll-target="#version-3.2.0-2026-03-03">Version 3.2.0 (2026-03-03)</a>
@@ -745,11 +754,62 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms “Migration” or “Regression”.</p>
+<section id="version-3.3.0-2026-03-27" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.3.0-2026-03-27">Version 3.3.0 (2026-03-27)</h2>
+<ul>
+<li>Made scalar time parameters behave more consistently by removing the ability to index them if they are scalars, and also having <a href="https://numpy.org/doc/stable/reference/generated/numpy.iterable.html#np.iterable" title="1"><code>np.iterable()</code></a> return <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a> for such parameters</li>
+<li><strong>Backwards-compatibility notes:</strong> This change may cause simulation results to be numerically different, as it will cause distributions to use a more efficient sampling method for affected scalar parameters (in such cases, there is likely to be a performance increase)</li>
+</ul>
+<section id="pregnancy-loss-and-neonatal-death-classification" class="level3">
+<h3 class="anchored" data-anchor-id="pregnancy-loss-and-neonatal-death-classification">Pregnancy loss and neonatal death classification</h3>
+<ul>
+<li>Added background pregnancy loss via <code>p_loss</code> parameter in <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a>. Per-timestep hazard means early losses are naturally more common.</li>
+<li>Prenatal deaths are now classified by gestational age: miscarriage (&lt;20w) vs stillbirth (&gt;=20w), controlled by <code>loss_threshold</code> parameter.</li>
+<li>Preterm (&lt;37w) and very preterm (&lt;32w) births are now classified and tracked, with configurable thresholds via <code>preterm_threshold</code> and <code>very_preterm_threshold</code>.</li>
+<li>Added passive neonatal death detection: deaths of agents aged 0-28 days are classified as neonatal deaths.</li>
+<li>New results: <code>miscarriages</code>, <code>stillbirths</code>, <code>nnds</code>, <code>n_preterm</code>, <code>n_very_preterm</code>, <code>preterm_rate</code>.</li>
+<li>New states on newborns: <code>preterm</code>, <code>very_preterm</code>, <code>neonatal_death</code>.</li>
+<li>Removed unused <code>_p_miscarriage</code> and <code>_p_stillbirth</code> placeholder distributions.</li>
+<li><strong>Migration</strong>: <code>n_pregnancies_this_step</code> and <code>n_births_this_step</code> counters removed; use results directly.</li>
+</ul>
+</section>
+<section id="generic-congenital-outcome-framework" class="level3">
+<h3 class="anchored" data-anchor-id="generic-congenital-outcome-framework">Generic congenital outcome framework</h3>
+<ul>
+<li>Added <code>set_congenital()</code> to the base <a href="./api/diseases.html#starsim.diseases.Infection" title="0"><code>Infection</code></a> class. Diseases opt in by defining <code>birth_outcome_keys</code> and <code>birth_outcomes</code> in pars.</li>
+<li>Added <code>step_congenital()</code> helper to process scheduled congenital events at delivery time.</li>
+<li>Added <code>_assign_congenital_outcomes()</code> override point for state- or GA-dependent outcome probabilities.</li>
+<li>Death outcomes (<code>miscarriage</code>, <code>nnd</code>, <code>stillborn</code>) trigger <code>request_death</code>; non-lethal outcomes set a bool state.</li>
+</ul>
+</section>
+<section id="fetalhealth-improvements" class="level3">
+<h3 class="anchored" data-anchor-id="fetalhealth-improvements">FetalHealth improvements</h3>
+<ul>
+<li>Simplified <code>apply_timing_shift</code>, <code>apply_growth_restriction</code>, <code>reverse_timing_shift</code>, <code>reverse_growth_restriction</code> — removed redundant pregnancy filtering and type coercions.</li>
+<li><code>n_exposures</code> state tracks disease exposures during pregnancy (connectors increment directly via <code>fh.n_exposures[uids] += 1</code>).</li>
+<li>Added <code>interp_fn</code> parameter for customizing birth weight interpolation.</li>
+<li>Negative growth penalties (growth boost, e.g.&nbsp;GDM macrosomia) are now additive rather than using diminishing returns.</li>
+</ul>
+</section>
+<section id="mnch-examples" class="level3">
+<h3 class="anchored" data-anchor-id="mnch-examples">MNCH examples</h3>
+<ul>
+<li>Added <code>starsim_examples/mnch/</code> with reusable maternal/newborn/child health examples:
+<ul>
+<li><code>CongenitalDisease</code>: simple SIR with congenital outcomes via the generic framework.</li>
+<li><code>NeonatalSepsis</code>: SIR that infects/kills newborns, useful for testing NND detection.</li>
+<li><code>fetal_infection</code>: connector that damages fetal health when mothers are infected.</li>
+<li><code>treat_pregnant</code>: intervention that treats infected pregnant women.</li>
+</ul></li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1269">1269</a></li>
+</ul>
+</section>
+</section>
 <section id="version-3.2.2-2026-03-11" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.2.2-2026-03-11">Version 3.2.2 (2026-03-11)</h2>
 <ul>
 <li>Added <code>people.born</code>, which tracks agents that are alive (<code>sim.people.alive</code>) and born (<code>sim.people.age &gt;= 0</code>).</li>
-<li>Fixed a bug that prevented <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> objects from being modified in-place by functions involving other <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> object.</li>
+<li>Fixed a bug that prevented <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> objects from being modified in-place by functions involving other <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> objects.</li>
 <li>Fixed an initialization bug in <a href="./api/networks.html#starsim.networks.HouseholdNet" title="0"><code>ss.HouseholdNet</code></a>.</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1227">1227</a></li>
 </ul>
@@ -1034,7 +1094,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h4 class="anchored" data-anchor-id="migration-summary">Migration summary</h4>
 <ul>
 <li>An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read <code>llms.txt</code>, then <code>docs/migration/v2_v3/README.md</code>. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want <code>ss.beta()</code> ported literally to <code>ss.probperyear()</code>, or “upgraded” to <code>ss.peryear()</code>).</li>
-<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1008">1008</a></li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/927">927</a></li>
 </ul>
 </section>
 </section>
@@ -2186,7 +2246,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.2 (2026-03-11).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

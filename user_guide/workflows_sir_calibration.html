@@ -2,13 +2,16 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.9.36">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
 <title>Parameter identification – Starsim</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -70,19 +73,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-dbc92dda8186f57fa2e333fbb71d6a9d.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-7f96a4abcef3e6124538963b74d78179.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-14901936a922a1bc8a6001461cfd21cd.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -123,7 +125,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
 
   <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
 
 <script type="text/javascript">
 const typesetMath = (el) => {
@@ -1075,13 +1077,13 @@ window.Quarto = {
 <div class="ansi-escaped-output">
 <pre><span class="ansi-blue-fg">The best parameters identified by the optimization are:
 
-    * {'beta': 0.06433530136720803, 'gamma': 0.03233129423846339, 'rand_seed': 903302}
+    * {'beta': 0.06139575204103709, 'gamma': 0.03281498744890516, 'rand_seed': 837734}
 
     These parameters should be close to the true parameters:
 
     * {'beta': {'value': 0.05}, 'gamma': {'value': 0.03}}
 
-    The best parameters resulted in a loss of 3.7224338506054835.</span>
+    The best parameters resulted in a loss of 3.751880308915105.</span>
 </pre>
 </div>
 </div>
@@ -1121,113 +1123,113 @@ window.Quarto = {
 </thead>
 <tbody>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">63</th>
-<td>3.722434</td>
-<td>2026-03-11 20:40:43.572286</td>
-<td>2026-03-11 20:40:43.987454</td>
-<td>0 days 00:00:00.415168</td>
-<td>0.064335</td>
-<td>0.032331</td>
-<td>903302</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">65</th>
-<td>3.725768</td>
-<td>2026-03-11 20:40:43.904161</td>
-<td>2026-03-11 20:40:44.309852</td>
-<td>0 days 00:00:00.405691</td>
-<td>0.065468</td>
-<td>0.032383</td>
-<td>505340</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="odd">
 <th data-quarto-table-cell-role="th">64</th>
-<td>3.726799</td>
-<td>2026-03-11 20:40:43.835059</td>
-<td>2026-03-11 20:40:44.244298</td>
-<td>0 days 00:00:00.409239</td>
-<td>0.062306</td>
-<td>0.033168</td>
-<td>906825</td>
+<td>3.751880</td>
+<td>2026-03-27 19:28:45.475666</td>
+<td>2026-03-27 19:28:45.895199</td>
+<td>0 days 00:00:00.419533</td>
+<td>0.061396</td>
+<td>0.032815</td>
+<td>837734</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">70</th>
-<td>3.745572</td>
-<td>2026-03-11 20:40:44.382341</td>
-<td>2026-03-11 20:40:44.796101</td>
-<td>0 days 00:00:00.413760</td>
-<td>0.063362</td>
-<td>0.032134</td>
-<td>912888</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">71</th>
-<td>3.752398</td>
-<td>2026-03-11 20:40:44.426859</td>
-<td>2026-03-11 20:40:44.842844</td>
-<td>0 days 00:00:00.415985</td>
-<td>0.064427</td>
-<td>0.031915</td>
-<td>928736</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">67</th>
-<td>3.766864</td>
-<td>2026-03-11 20:40:43.998827</td>
-<td>2026-03-11 20:40:44.416727</td>
-<td>0 days 00:00:00.417900</td>
-<td>0.063704</td>
-<td>0.031858</td>
-<td>739861</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">61</th>
-<td>3.799554</td>
-<td>2026-03-11 20:40:43.479139</td>
-<td>2026-03-11 20:40:43.892898</td>
-<td>0 days 00:00:00.413759</td>
-<td>0.062456</td>
-<td>0.031715</td>
-<td>565049</td>
-<td>COMPLETE</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">98</th>
-<td>3.804900</td>
-<td>2026-03-11 20:40:47.358889</td>
-<td>2026-03-11 20:40:47.749131</td>
-<td>0 days 00:00:00.390242</td>
-<td>0.066811</td>
-<td>0.032577</td>
-<td>719339</td>
+<th data-quarto-table-cell-role="th">81</th>
+<td>3.782736</td>
+<td>2026-03-27 19:28:47.277127</td>
+<td>2026-03-27 19:28:47.699367</td>
+<td>0 days 00:00:00.422240</td>
+<td>0.066591</td>
+<td>0.031614</td>
+<td>736363</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">62</th>
-<td>3.817914</td>
-<td>2026-03-11 20:40:43.539734</td>
-<td>2026-03-11 20:40:43.953719</td>
-<td>0 days 00:00:00.413985</td>
-<td>0.061826</td>
-<td>0.033523</td>
-<td>898029</td>
+<td>3.905580</td>
+<td>2026-03-27 19:28:45.195600</td>
+<td>2026-03-27 19:28:45.620800</td>
+<td>0 days 00:00:00.425200</td>
+<td>0.061144</td>
+<td>0.034254</td>
+<td>863502</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">89</th>
-<td>4.043026</td>
-<td>2026-03-11 20:40:46.430133</td>
-<td>2026-03-11 20:40:46.845503</td>
-<td>0 days 00:00:00.415370</td>
-<td>0.066578</td>
-<td>0.030254</td>
-<td>952166</td>
+<th data-quarto-table-cell-role="th">59</th>
+<td>3.969823</td>
+<td>2026-03-27 19:28:44.829895</td>
+<td>2026-03-27 19:28:45.252322</td>
+<td>0 days 00:00:00.422427</td>
+<td>0.063392</td>
+<td>0.033998</td>
+<td>855274</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">88</th>
+<td>4.173169</td>
+<td>2026-03-27 19:28:48.082279</td>
+<td>2026-03-27 19:28:48.506501</td>
+<td>0 days 00:00:00.424222</td>
+<td>0.067847</td>
+<td>0.031258</td>
+<td>726532</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">95</th>
+<td>4.419173</td>
+<td>2026-03-27 19:28:48.747662</td>
+<td>2026-03-27 19:28:49.177892</td>
+<td>0 days 00:00:00.430230</td>
+<td>0.063121</td>
+<td>0.035138</td>
+<td>726586</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">48</th>
+<td>4.560987</td>
+<td>2026-03-27 19:28:43.789870</td>
+<td>2026-03-27 19:28:44.194943</td>
+<td>0 days 00:00:00.405073</td>
+<td>0.059494</td>
+<td>0.034962</td>
+<td>657246</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">96</th>
+<td>4.621076</td>
+<td>2026-03-27 19:28:48.957404</td>
+<td>2026-03-27 19:28:49.384863</td>
+<td>0 days 00:00:00.427459</td>
+<td>0.064536</td>
+<td>0.035054</td>
+<td>728723</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">94</th>
+<td>4.641973</td>
+<td>2026-03-27 19:28:48.707625</td>
+<td>2026-03-27 19:28:49.133355</td>
+<td>0 days 00:00:00.425730</td>
+<td>0.064593</td>
+<td>0.035577</td>
+<td>657596</td>
+<td>COMPLETE</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">92</th>
+<td>4.651855</td>
+<td>2026-03-27 19:28:48.517646</td>
+<td>2026-03-27 19:28:48.946516</td>
+<td>0 days 00:00:00.428870</td>
+<td>0.063468</td>
+<td>0.035615</td>
+<td>779393</td>
 <td>COMPLETE</td>
 </tr>
 </tbody>
@@ -1362,10 +1364,10 @@ window.Quarto = {
 <span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>display(posterior_pars.head())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>============================================================
-Effective Sample Size (ESS) = 4.9 out of 100
+Effective Sample Size (ESS) = 12.0 out of 100
 WARNING: ESS is below 30, consider increasing N
 ============================================================
-Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></pre>
+Resampling K = 19 samples from the weighted ensemble of N = 100 samples</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -1386,29 +1388,29 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
 </thead>
 <tbody>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">289066</th>
-<td>0.065929</td>
-<td>0.053106</td>
+<th data-quarto-table-cell-role="th">444651</th>
+<td>0.026344</td>
+<td>0.021250</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">52976</th>
-<td>0.043585</td>
-<td>0.029970</td>
+<th data-quarto-table-cell-role="th">522960</th>
+<td>0.043989</td>
+<td>0.023164</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">203035</th>
-<td>0.031311</td>
-<td>0.015918</td>
+<th data-quarto-table-cell-role="th">403186</th>
+<td>0.053646</td>
+<td>0.037635</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">52976</th>
-<td>0.043585</td>
-<td>0.029970</td>
+<th data-quarto-table-cell-role="th">231609</th>
+<td>0.054471</td>
+<td>0.027974</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">203035</th>
-<td>0.031311</td>
-<td>0.015918</td>
+<th data-quarto-table-cell-role="th">522960</th>
+<td>0.043989</td>
+<td>0.023164</td>
 </tr>
 </tbody>
 </table>
@@ -1991,7 +1993,7 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.2 (2026-03-11).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -2,13 +2,16 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.9.36">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
 <title>Nonstandard usage – Starsim</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -70,19 +73,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-dbc92dda8186f57fa2e333fbb71d6a9d.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-7f96a4abcef3e6124538963b74d78179.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-14901936a922a1bc8a6001461cfd21cd.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -793,17 +795,28 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>csim.diseases.compsis.plot()<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/1001) (0.00 s)  ———————————————————— 0%
+
   Running 2010.01.01 (100/1001) (0.02 s)  ••—————————————————— 10%
-  Running 2020.01.01 (200/1001) (0.04 s)  ••••———————————————— 20%
-  Running 2030.01.01 (300/1001) (0.06 s)  ••••••—————————————— 30%
+
+  Running 2020.01.01 (200/1001) (0.05 s)  ••••———————————————— 20%
+
+  Running 2030.01.01 (300/1001) (0.07 s)  ••••••—————————————— 30%
+
   Running 2040.01.01 (400/1001) (0.09 s)  ••••••••———————————— 40%
+
   Running 2050.01.01 (500/1001) (0.11 s)  ••••••••••—————————— 50%
+
   Running 2060.01.01 (600/1001) (0.13 s)  ••••••••••••———————— 60%
+
   Running 2070.01.01 (700/1001) (0.15 s)  ••••••••••••••—————— 70%
-  Running 2080.01.01 (800/1001) (0.17 s)  ••••••••••••••••———— 80%
-  Running 2090.01.01 (900/1001) (0.19 s)  ••••••••••••••••••—— 90%
-  Running 2100.01.01 (1000/1001) (0.21 s)  •••••••••••••••••••• 100%
+
+  Running 2080.01.01 (800/1001) (0.18 s)  ••••••••••••••••———— 80%
+
+  Running 2090.01.01 (900/1001) (0.20 s)  ••••••••••••••••••—— 90%
+
+  Running 2100.01.01 (1000/1001) (0.22 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -826,17 +839,28 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>abm.diseases.sis.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/1001) (0.00 s)  ———————————————————— 0%
+
   Running 2010.01.01 (100/1001) (0.68 s)  ••—————————————————— 10%
-  Running 2020.01.01 (200/1001) (1.12 s)  ••••———————————————— 20%
-  Running 2030.01.01 (300/1001) (1.57 s)  ••••••—————————————— 30%
-  Running 2040.01.01 (400/1001) (2.01 s)  ••••••••———————————— 40%
-  Running 2050.01.01 (500/1001) (2.46 s)  ••••••••••—————————— 50%
-  Running 2060.01.01 (600/1001) (2.90 s)  ••••••••••••———————— 60%
-  Running 2070.01.01 (700/1001) (3.35 s)  ••••••••••••••—————— 70%
-  Running 2080.01.01 (800/1001) (3.79 s)  ••••••••••••••••———— 80%
-  Running 2090.01.01 (900/1001) (4.24 s)  ••••••••••••••••••—— 90%
-  Running 2100.01.01 (1000/1001) (4.68 s)  •••••••••••••••••••• 100%
+
+  Running 2020.01.01 (200/1001) (1.13 s)  ••••———————————————— 20%
+
+  Running 2030.01.01 (300/1001) (1.58 s)  ••••••—————————————— 30%
+
+  Running 2040.01.01 (400/1001) (2.03 s)  ••••••••———————————— 40%
+
+  Running 2050.01.01 (500/1001) (2.48 s)  ••••••••••—————————— 50%
+
+  Running 2060.01.01 (600/1001) (2.93 s)  ••••••••••••———————— 60%
+
+  Running 2070.01.01 (700/1001) (3.38 s)  ••••••••••••••—————— 70%
+
+  Running 2080.01.01 (800/1001) (3.82 s)  ••••••••••••••••———— 80%
+
+  Running 2090.01.01 (900/1001) (4.27 s)  ••••••••••••••••••—— 90%
+
+  Running 2100.01.01 (1000/1001) (4.72 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -1041,16 +1065,27 @@ Figure(672x480)</code></pre>
 <span id="cb6-76"><a href="#cb6-76" aria-hidden="true" tabindex="-1"></a>wealth.plot3d()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 100 agents
+
   Running 0.0 ( 0/101) (0.00 s)  ———————————————————— 1%
+
   Running 10.0 (10/101) (0.00 s)  ••—————————————————— 11%
+
   Running 20.0 (20/101) (0.01 s)  ••••———————————————— 21%
+
   Running 30.0 (30/101) (0.01 s)  ••••••—————————————— 31%
+
   Running 40.0 (40/101) (0.01 s)  ••••••••———————————— 41%
+
   Running 50.0 (50/101) (0.02 s)  ••••••••••—————————— 50%
+
   Running 60.0 (60/101) (0.02 s)  ••••••••••••———————— 60%
+
   Running 70.0 (70/101) (0.02 s)  ••••••••••••••—————— 70%
+
   Running 80.0 (80/101) (0.02 s)  ••••••••••••••••———— 80%
+
   Running 90.0 (90/101) (0.03 s)  ••••••••••••••••••—— 90%
+
   Running 100.0 (100/101) (0.03 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
@@ -1515,7 +1550,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.2 (2026-03-11).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

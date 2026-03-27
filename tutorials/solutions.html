@@ -2,13 +2,16 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.27">
+<meta name="generator" content="quarto-1.9.36">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
 <title>Solutions – Starsim</title>
 <style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
 div.columns{display: flex; gap: min(4vw, 1.5em);}
@@ -70,19 +73,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-f1aadacce99040138bbb613f9330654f.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-8b4baf804e461d9b72633f0de59a0cac.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-dbc92dda8186f57fa2e333fbb71d6a9d.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-a06763021a52c43c40a351ac8b799b8f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-7f96a4abcef3e6124538963b74d78179.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-9800123cbf8756ef46e73b8734affa4a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-14901936a922a1bc8a6001461cfd21cd.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-0b18288e5c99e73c481a118a521e9846.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -746,11 +748,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>sim.diseases.sis.plot() <span class="co"># &lt;-- change this</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.29 s)  ••••———————————————— 22%
+
+  Running 2010.01.01 (10/51) (0.28 s)  ••••———————————————— 22%
+
   Running 2020.01.01 (20/51) (0.33 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.38 s)  ••••••••••••———————— 61%
+
+  Running 2030.01.01 (30/51) (0.37 s)  ••••••••••••———————— 61%
+
   Running 2040.01.01 (40/51) (0.42 s)  ••••••••••••••••———— 80%
+
   Running 2050.01.01 (50/51) (0.47 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
@@ -786,12 +794,18 @@ Figure(768x576)</code></pre>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>sim2.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
   Running 2010.01.01 (10/51) (0.05 s)  ••••———————————————— 22%
+
   Running 2020.01.01 (20/51) (0.11 s)  ••••••••———————————— 41%
+
   Running 2030.01.01 (30/51) (0.15 s)  ••••••••••••———————— 61%
+
   Running 2040.01.01 (40/51) (0.19 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.23 s)  •••••••••••••••••••• 100%
+
+  Running 2050.01.01 (50/51) (0.24 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -811,11 +825,17 @@ Figure(672x480)</code></pre>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>sim3.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
   Running 2010.01.01 (10/51) (0.05 s)  ••••———————————————— 22%
+
   Running 2020.01.01 (20/51) (0.10 s)  ••••••••———————————— 41%
+
   Running 2030.01.01 (30/51) (0.15 s)  ••••••••••••———————— 61%
+
   Running 2040.01.01 (40/51) (0.20 s)  ••••••••••••••••———— 80%
+
   Running 2050.01.01 (50/51) (0.25 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
@@ -840,11 +860,17 @@ Figure(672x480)</code></pre>
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>sim4.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 200 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
   Running 2010.01.01 (10/51) (0.02 s)  ••••———————————————— 22%
+
   Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
+
   Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
+
+  Running 2040.01.01 (40/51) (0.10 s)  ••••••••••••••••———— 80%
+
   Running 2050.01.01 (50/51) (0.12 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
@@ -892,19 +918,32 @@ Figure(672x480)</code></pre>
 <span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Cumulative infections over one year: </span><span class="sc">{</span>answer<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
+
   Running 2025.01.01 ( 0/366) (0.00 s)  ———————————————————— 0%
-  Running 2025.01.31 (30/366) (0.07 s)  •——————————————————— 8%
+
+  Running 2025.01.31 (30/366) (0.08 s)  •——————————————————— 8%
+
   Running 2025.03.02 (60/366) (0.15 s)  •••————————————————— 17%
-  Running 2025.04.01 (90/366) (0.22 s)  ••••———————————————— 25%
-  Running 2025.05.01 (120/366) (0.30 s)  ••••••—————————————— 33%
-  Running 2025.05.31 (150/366) (0.38 s)  ••••••••———————————— 41%
-  Running 2025.06.30 (180/366) (0.46 s)  •••••••••——————————— 49%
-  Running 2025.07.30 (210/366) (0.54 s)  •••••••••••————————— 58%
-  Running 2025.08.29 (240/366) (0.62 s)  •••••••••••••——————— 66%
-  Running 2025.09.28 (270/366) (0.69 s)  ••••••••••••••—————— 74%
-  Running 2025.10.28 (300/366) (0.76 s)  ••••••••••••••••———— 82%
-  Running 2025.11.27 (330/366) (0.83 s)  ••••••••••••••••••—— 90%
-  Running 2025.12.27 (360/366) (0.90 s)  •••••••••••••••••••— 99%
+
+  Running 2025.04.01 (90/366) (0.23 s)  ••••———————————————— 25%
+
+  Running 2025.05.01 (120/366) (0.31 s)  ••••••—————————————— 33%
+
+  Running 2025.05.31 (150/366) (0.40 s)  ••••••••———————————— 41%
+
+  Running 2025.06.30 (180/366) (0.48 s)  •••••••••——————————— 49%
+
+  Running 2025.07.30 (210/366) (0.56 s)  •••••••••••————————— 58%
+
+  Running 2025.08.29 (240/366) (0.64 s)  •••••••••••••——————— 66%
+
+  Running 2025.09.28 (270/366) (0.72 s)  ••••••••••••••—————— 74%
+
+  Running 2025.10.28 (300/366) (0.80 s)  ••••••••••••••••———— 82%
+
+  Running 2025.11.27 (330/366) (0.87 s)  ••••••••••••••••••—— 90%
+
+  Running 2025.12.27 (360/366) (0.94 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -949,8 +988,11 @@ Figure(768x576)</code></pre>
 <span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Population size in year </span><span class="sc">{</span>pars<span class="sc">.</span>stop<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>answer<span class="sc">}</span><span class="ss"> million'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2020.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
+
   Running 2030.01.01 (10/21) (0.02 s)  ••••••••••—————————— 52%
+
   Running 2040.01.01 (20/21) (0.04 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
@@ -1119,7 +1161,7 @@ Performing automatic search...
 
      step 1 (0.4 s) ++ (orig:1.000 | best:1.000 | new:0.9000 | diff:-0.1000)
 
-     step 2 (0.7 s) ++ (orig:1.000 | best:0.9000 | new:0.7000 | diff:-0.2000)
+     step 2 (0.8 s) ++ (orig:1.000 | best:0.9000 | new:0.7000 | diff:-0.2000)
 
      step 3 (1.1 s) -- (orig:1.000 | best:0.7000 | new:10.30 | diff:9.600)
 
@@ -1127,19 +1169,19 @@ Performing automatic search...
 
      step 5 (1.9 s) -- (orig:1.000 | best:0.5000 | new:10.10 | diff:9.600)
 
-     step 6 (2.2 s) -- (orig:1.000 | best:0.5000 | new:10.30 | diff:9.800)
+     step 6 (2.3 s) -- (orig:1.000 | best:0.5000 | new:10.30 | diff:9.800)
 
-     step 7 (2.6 s) -- (orig:1.000 | best:0.5000 | new:10.40 | diff:9.900)
+     step 7 (2.7 s) -- (orig:1.000 | best:0.5000 | new:10.40 | diff:9.900)
 
      step 8 (3.0 s) -- (orig:1.000 | best:0.5000 | new:0.6000 | diff:0.1000)
 
      step 9 (3.4 s) -- (orig:1.000 | best:0.5000 | new:10.45 | diff:9.950)
 
-     step 10 (3.7 s) -- (orig:1.000 | best:0.5000 | new:0.5500 | diff:0.05000)
+     step 10 (3.8 s) ++ (orig:1.000 | best:0.5000 | new:0.4750 | diff:-0.02500)
 
-===  Maximum iterations reached (10 steps, orig: 1.000 | best: 0.5000 | ratio: 2.0000000000000004) ===
+===  Maximum iterations reached (10 steps, orig: 1.000 | best: 0.4750 | ratio: 2.105263157894737) ===
 
-<span class="ansi-bold">Result: 0.49999999999999994</span>
+<span class="ansi-bold">Result: 0.4749999999999999</span>
 </pre>
 </div>
 </div>
@@ -1582,7 +1624,7 @@ Performing automatic search...
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.2.2 (2026-03-11).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
