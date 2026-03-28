@@ -31,7 +31,26 @@ pars = sc.dictobj(
 
 class Sim(sc.prettyobj):
     """ Minimal translation of Starsim's Sim class"""
-    pass
+    def __init__(self, pars, network, disease, verbose=0):
+        self.n_agents = pars.n_agents
+        self.dur = pars.dur
+        self.disease = disease
+        self.network = network
+        self.verbose = verbose
+        self.ti = 0
+        return
+    
+    def step(self):
+        net = self.network
+        dis = self.disease
+        net.step()
+        dis.step()
+        return
+
+    def run(self):
+        for t in range(self.dur):
+            self.step()
+        return
 
 
 class Random(sc.prettyobj):
@@ -68,9 +87,10 @@ class SIS(sc.prettyobj):
         return
     
     def step(self):
-        """ Progress the simulation by one time step """
+        """ Progress the disease by one time step """
         self.step_state()
         self.update_immunity()
+        self.infect()
         self.update_results()
         self.ti += 1
         return
@@ -79,8 +99,7 @@ class SIS(sc.prettyobj):
         """ Progress infectious -> recovered """
         recovered = (self.infected & (self.ti_recovered <= self.ti))
         self.infected[recovered] = False
-        self.susceptible[recovered] = True
-        self.update_immunity()        
+        self.susceptible[recovered] = True    
         return
 
     def update_immunity(self):
@@ -93,6 +112,12 @@ class SIS(sc.prettyobj):
     def update_results(self):
         self.n_susceptible[self.ti] = self.susceptible.sum()
         self.n_infected[self.ti] = self.infected.sum()
+        return
+    
+    def infect(self):
+        """ Calculate transmission """
+
+        self.set_prognoses(uids)
         return
 
     def set_prognoses(self, uids, sources=None):
