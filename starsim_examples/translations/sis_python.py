@@ -44,7 +44,7 @@ class Sim(sc.prettyobj):
         net = self.network
         dis = self.disease
         net.step()
-        dis.step()
+        dis.step(net)
         return
 
     def run(self):
@@ -156,7 +156,15 @@ class SIS(sc.prettyobj):
         self.infected = boolzeros(self.n_agents)
         self.ti_recovered = floatzeros(self.n_agents)
         self.immunity = floatzeros(self.n_agents)
-        self.rel_sus = floatzeros(self.n_agents)
+        self.rel_sus = np.ones(self.n_agents, dtype=npfloat)
+
+        # Seed initial infections
+        self.susceptible[:] = True
+        n_inf = int(self.init_prev * self.n_agents)
+        init_inds = np.random.choice(self.n_agents, n_inf, replace=False)
+        self.susceptible[init_inds] = False
+        self.infected[init_inds] = True
+        self.ti = 0
 
         # Create results
         self.n_susceptible = floatzeros(self.dur)
@@ -164,11 +172,11 @@ class SIS(sc.prettyobj):
         self.mean_rel_sus = floatzeros(self.dur)
         return
     
-    def step(self):
+    def step(self, net):
         """ Progress the disease by one time step """
         self.step_state()
         self.update_immunity()
-        self.infect()
+        self.infect(net)
         self.update_results()
         self.ti += 1
         return
@@ -192,34 +200,46 @@ class SIS(sc.prettyobj):
         self.n_infected[self.ti] = self.infected.sum()
         return
     
-    def infect(self):
-        """ Calculate transmission """
+    def infect(self, net):
+        """ Calculate transmission across network edges """
+        p1 = net.p1
+        p2 = net.p2
 
-        self.set_prognoses(uids)
+        # Find edges where one end is infected and the other is susceptible
+        p1_inf = self.infected[p1] & self.susceptible[p2]
+        p2_inf = self.infected[p2] & self.susceptible[p1]
+
+        # Apply beta: disease_beta * edge_beta * rel_sus of the target
+        beta_p1 = self.beta * net.edge_beta[p1_inf] * self.rel_sus[p2[p1_inf]]
+        beta_p2 = self.beta * net.edge_beta[p2_inf] * self.rel_sus[p1[p2_inf]]
+
+        # Determine which transmissions actually occur
+        targets_from_p1 = p2[p1_inf][np.random.random(len(beta_p1)) < beta_p1]
+        targets_from_p2 = p1[p2_inf][np.random.random(len(beta_p2)) < beta_p2]
+
+        # Combine and deduplicate
+        uids = np.unique(np.concatenate([targets_from_p1, targets_from_p2]))
+
+        if len(uids):
+            self.set_prognoses(uids)
         return
 
-    def set_prognoses(self, uids, sources=None):
-        """ Set prognoses """
-        super().set_prognoses(uids, sources)
+    def set_prognoses(self, uids):
+        """ Set prognoses for newly infected agents """
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
         self.immunity[uids] += self.imm_boost
 
-        # Sample duration of infection
-        dur_inf = lognormal_ex(mean=self.dur_inf, size=len(uids))
-
-        # Determine when people recover
+        # Sample duration of infection and determine recovery time
+        dur_inf = lognormal_ex(mean=self.dur_inf, std=self.dur_inf, size=len(uids))
         self.ti_recovered[uids] = self.ti + dur_inf
-
         return
 
 # Create the sim
 sim = Sim(
-    n_agents=pars.n_agents,
-    dur=pars.dur,
-    diseases = SIS(pars),
-    networks = Random(),
+    pars = pars,
+    disease = SIS(pars),
+    network = RandomNet(pars),
     verbose = 0,
 )
 
