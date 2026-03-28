@@ -53,9 +53,87 @@ class Sim(sc.prettyobj):
         return
 
 
-class Random(sc.prettyobj):
+class RandomNet(sc.prettyobj):
     """ Minimal translation of Starsim's Random network """
-    pass
+
+    def __init__(self, pars, n_contacts=10, dur=0, beta=1.0):
+
+        # Set parameters
+        self.n_agents = pars.n_agents
+        self.n_contacts = n_contacts
+        self.dur = dur
+        self.beta = beta
+
+        # Initialize edge arrays
+        self.p1 = np.empty(0, dtype=int)
+        self.p2 = np.empty(0, dtype=int)
+        self.edge_beta = np.empty(0, dtype=npfloat)
+        self.edge_dur = np.empty(0, dtype=npfloat)
+        return
+
+    def step(self):
+        """ Update the network """
+        self.end_pairs()
+        self.add_pairs()
+        return
+
+    def end_pairs(self):
+        """ Remove expired edges """
+        self.edge_dur -= 1
+        active = self.edge_dur > 0
+        self.p1 = self.p1[active]
+        self.p2 = self.p2[active]
+        self.edge_beta = self.edge_beta[active]
+        self.edge_dur = self.edge_dur[active]
+        return
+
+    @staticmethod
+    def get_source(inds, n_contacts):
+        """ Get source array from contact counts """
+        n_half_edges = n_contacts.sum()
+        source = np.zeros(n_half_edges, dtype=int)
+        count = 0
+        for i, person_id in enumerate(inds):
+            n = n_contacts[i]
+            source[count:count + n] = person_id
+            count += n
+        return source
+
+    def get_edges(self, inds, n_contacts):
+        """ Create random edges by shuffling source into target """
+        source = self.get_source(inds, n_contacts)
+        target = np.random.permutation(source)
+        return source, target
+
+    def add_pairs(self):
+        """ Generate new random edges """
+        inds = np.arange(self.n_agents)
+        n_conn = np.full(self.n_agents, self.n_contacts)
+
+        # Calculate how many new edges are needed
+        target_edges = n_conn.sum() / 2  # Divide by 2 since edges are bidirectional
+        current_edges = len(self.p1)
+        needed = target_edges - current_edges
+
+        if needed > 0:
+            # Scale down contacts proportionally to only create what's needed
+            scale = needed / n_conn.sum()
+            n_conn = np.round(n_conn * scale).astype(int)
+
+            # Get the new edges
+            p1, p2 = self.get_edges(inds, n_conn)
+            beta = np.full(len(p1), self.beta, dtype=npfloat)
+            if self.dur == 0:
+                dur = np.zeros(len(p1), dtype=npfloat)
+            else:
+                dur = np.full(len(p1), self.dur, dtype=npfloat)
+
+            # Append new edges
+            self.p1 = np.concatenate([self.p1, p1])
+            self.p2 = np.concatenate([self.p2, p2])
+            self.edge_beta = np.concatenate([self.edge_beta, beta])
+            self.edge_dur = np.concatenate([self.edge_dur, dur])
+        return
 
 
 class SIS(sc.prettyobj):
