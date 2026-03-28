@@ -19,7 +19,13 @@ def boolzeros(*args, **kwargs):
 
 #%% Numba-optimized kernels
 
-@nb.njit(cache=True)
+jit_kw = dict(
+    cache    = True, 
+    fastmath = True, 
+)
+parallel = True
+
+@nb.njit(**jit_kw)
 def nb_get_edges(inds, n_contacts):
     """ Build source array from contact counts and Fisher-Yates shuffle into target """
     n_half_edges = 0
@@ -44,14 +50,14 @@ def nb_get_edges(inds, n_contacts):
     return source, target
 
 
-@nb.njit(cache=True)
+@nb.njit(**jit_kw, parallel=parallel)
 def nb_end_pairs(p1, p2, edge_beta, edge_dur):
     """ Decrement durations and compact active edges in fused passes """
     n = len(p1)
 
     # First pass: decrement and count active
     n_active = 0
-    for i in range(n):
+    for i in nb.prange(n):
         edge_dur[i] -= 1
         if edge_dur[i] > 0:
             n_active += 1
@@ -73,17 +79,17 @@ def nb_end_pairs(p1, p2, edge_beta, edge_dur):
     return new_p1, new_p2, new_beta, new_dur
 
 
-@nb.njit(cache=True)
+@nb.njit(**jit_kw, parallel=parallel)
 def nb_step_state(infected, susceptible, ti_recovered, ti):
     """ Progress infectious -> recovered in one fused pass """
-    for i in range(len(infected)):
+    for i in nb.prange(len(infected)):
         if infected[i] and ti_recovered[i] <= ti:
             infected[i] = False
             susceptible[i] = True
 
 
-@nb.njit(cache=True)
-def nb_update_immunity(immunity, rel_sus, waning):
+@nb.njit(**jit_kw)
+def nb_update_immunity(immunity, rel_sus, waning, parallel=parallel):
     """ Wane immunity and update relative susceptibility in one pass; return mean rel_sus """
     total = 0.0
     n = len(immunity)
@@ -99,7 +105,7 @@ def nb_update_immunity(immunity, rel_sus, waning):
     return total / n
 
 
-@nb.njit(cache=True)
+@nb.njit(**jit_kw, parallel=parallel)
 def nb_infect(p1, p2, edge_beta, infected, susceptible, rel_sus, disease_beta, n_agents):
     """ Fused edge traversal, transmission sampling, and deduplication """
     n_edges = len(p1)
@@ -107,7 +113,7 @@ def nb_infect(p1, p2, edge_beta, infected, susceptible, rel_sus, disease_beta, n
     # Boolean flag array for O(1) deduplication
     is_target = np.zeros(n_agents, dtype=np.bool_)
 
-    for i in range(n_edges):
+    for i in nb.prange(n_edges):
         a = p1[i]
         b = p2[i]
         eb = edge_beta[i]
@@ -140,13 +146,13 @@ def nb_infect(p1, p2, edge_beta, infected, susceptible, rel_sus, disease_beta, n
     return uids
 
 
-@nb.njit(cache=True)
+@nb.njit(**jit_kw)
 def nb_set_prognoses(uids, susceptible, infected, immunity, ti_recovered, imm_boost, dur_inf_mean, ti):
     """ Set prognoses with inline lognormal sampling """
     sigma = np.sqrt(np.log(2.0))  # Simplifies when std == mean
     mu = np.log(dur_inf_mean) - sigma * sigma / 2.0
 
-    for i in range(len(uids)):
+    for i in nb.prange(len(uids)):
         uid = uids[i]
         susceptible[uid] = False
         infected[uid] = True
@@ -155,7 +161,7 @@ def nb_set_prognoses(uids, susceptible, infected, immunity, ti_recovered, imm_bo
         ti_recovered[uid] = ti + dur
 
 
-@nb.njit(cache=True)
+@nb.njit(**jit_kw)
 def nb_count_states(susceptible, infected):
     """ Count susceptible and infected in a single pass """
     n_sus = 0
