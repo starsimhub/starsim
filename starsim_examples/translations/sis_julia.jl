@@ -153,75 +153,46 @@ end
 
 function step_state!(dis::SIS)
     """Progress infectious -> recovered"""
-    @inbounds for i in 1:dis.n_agents
-        if dis.infected[i] && dis.ti_recovered[i] <= dis.ti
-            dis.infected[i] = false
-            dis.susceptible[i] = true
-        end
-    end
+    recovered = dis.infected .& (dis.ti_recovered .<= dis.ti)
+    dis.infected[recovered] .= false
+    dis.susceptible[recovered] .= true
 end
 
 function update_immunity!(dis::SIS)
     """Wane immunity and update relative susceptibility"""
     ti = round(Int, dis.ti) + 1  # 1-based index
-    wane_factor = F(1 - dis.waning)
-    total = F(0)
-    @inbounds for i in 1:dis.n_agents
-        if dis.immunity[i] > 0
-            dis.immunity[i] *= wane_factor
-            dis.rel_sus[i] = max(F(0), F(1) - dis.immunity[i])
-        end
-        total += dis.rel_sus[i]
-    end
-    dis.mean_rel_sus[ti] = total / dis.n_agents
+    has_imm = dis.immunity .> 0
+    dis.immunity[has_imm] .*= (1 - dis.waning)
+    dis.rel_sus[has_imm] .= max.(0, 1 .- dis.immunity[has_imm])
+    dis.mean_rel_sus[ti] = mean(dis.rel_sus)
 end
 
 function update_results!(dis::SIS)
     """Count susceptible and infected"""
     ti = round(Int, dis.ti) + 1  # 1-based index
-    n_sus = 0
-    n_inf = 0
-    @inbounds for i in 1:dis.n_agents
-        n_sus += dis.susceptible[i]
-        n_inf += dis.infected[i]
-    end
-    dis.n_susceptible[ti] = n_sus
-    dis.n_infected[ti] = n_inf
+    dis.n_susceptible[ti] = sum(dis.susceptible)
+    dis.n_infected[ti] = sum(dis.infected)
 end
 
 function infect!(dis::SIS, net::RandomNet)
     """Calculate transmission across network edges"""
     p1 = net.p1
     p2 = net.p2
-    n_edges = length(p1)
 
-    # Boolean flag array for deduplication
-    is_target = falses(dis.n_agents)
+    # Find edges where one end is infected and the other is susceptible
+    p1_inf = dis.infected[p1] .& dis.susceptible[p2]
+    p2_inf = dis.infected[p2] .& dis.susceptible[p1]
 
-    @inbounds for i in 1:n_edges
-        a = p1[i]
-        b = p2[i]
-        eb = net.edge_beta[i]
+    # Apply beta: disease_beta * edge_beta * rel_sus of the target
+    beta_p1 = dis.beta .* net.edge_beta[p1_inf] .* dis.rel_sus[p2[p1_inf]]
+    beta_p2 = dis.beta .* net.edge_beta[p2_inf] .* dis.rel_sus[p1[p2_inf]]
 
-        # p1 infected -> p2 susceptible
-        if dis.infected[a] && dis.susceptible[b]
-            beta = dis.beta * eb * dis.rel_sus[b]
-            if rand() < beta
-                is_target[b] = true
-            end
-        end
+    # Determine which transmissions actually occur
+    targets_from_p1 = p2[p1_inf][rand(length(beta_p1)) .< beta_p1]
+    targets_from_p2 = p1[p2_inf][rand(length(beta_p2)) .< beta_p2]
 
-        # p2 infected -> p1 susceptible
-        if dis.infected[b] && dis.susceptible[a]
-            beta = dis.beta * eb * dis.rel_sus[a]
-            if rand() < beta
-                is_target[a] = true
-            end
-        end
-    end
-
-    # Collect unique targets
-    uids = findall(is_target)
+    # Combine and deduplicate
+    uids = unique(vcat(targets_from_p1, targets_from_p2))
 
     if !isempty(uids)
         set_prognoses!(dis, uids)
