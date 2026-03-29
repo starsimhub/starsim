@@ -3,6 +3,7 @@ Test simulation performance
 """
 import starsim as ss
 import sciris as sc
+import matplotlib.pyplot as plt
 
 # Define the parameters
 pars = sc.dictobj(
@@ -42,3 +43,13 @@ def test_inf(sim):
     return n_inf
 
 n_inf = test_inf(sim)
+
+
+# Plot
+do_plot = True
+if do_plot:
+    n_sus = sim.results.sis.n_susceptible
+    n_inf = sim.results.sis.n_infected
+    plt.figure('SIS-Starsim')
+    plt.plot(n_sus)
+    plt.plot(n_inf)

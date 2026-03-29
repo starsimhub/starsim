@@ -3,6 +3,7 @@ Test simulation performance
 """
 import numpy as np
 import sciris as sc
+import matplotlib.pyplot as plt
 
 # Default dtype
 npfloat = np.float32
@@ -257,3 +258,13 @@ def test_inf(sim):
     return n_inf
 
 n_inf = test_inf(sim)
+
+
+# Plot
+do_plot = True
+if do_plot:
+    n_sus = sim.disease.n_susceptible
+    n_inf = sim.disease.n_infected
+    plt.figure('SIS-Python')
+    plt.plot(n_sus)
+    plt.plot(n_inf)

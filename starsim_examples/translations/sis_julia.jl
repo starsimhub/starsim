@@ -133,6 +133,8 @@ function SIS(pars::Pars; beta=0.05, init_prev=0.01, dur_inf=10, waning=0.05, imm
     init_inds = randperm(n)[1:n_inf]
     susceptible[init_inds] .= false
     infected[init_inds] .= true
+    dur_inf_samples = lognormal_ex(Float64(dur_inf), 1.0, n_inf)
+    ti_recovered[init_inds] .= dur_inf_samples
 
     # Create results
     n_susceptible = zeros(F, pars.dur)
@@ -261,3 +263,26 @@ t0 = time()
 run!(sim)
 elapsed = round(time() - t0, digits=3)
 println("Time for SIS-Julia, n_agents=$(pars.n_agents), dur=$(pars.dur): $(elapsed)s")
+
+
+# Tests
+function test_inf(sim)
+    n_inf = sim.disease.n_infected
+    inf0 = n_inf[1]
+    infm = maximum(n_inf)
+    inf1 = n_inf[end]
+    n_agents = sim.n_agents
+    tests = [
+        ("Initial infections are nonzero: $inf0", inf0 > 0.005 * n_agents),
+        ("Initial infections start low: $inf0",   inf0 < 0.05 * n_agents),
+        ("Infections peak high: $infm",           infm > 0.5 * n_agents),
+        ("Infections stabilize: $inf1",           inf1 < infm),
+    ]
+    for (k, tf) in tests
+        println(tf ? "✓ $k" : "× $k")
+    end
+    @assert all(last.(tests))
+    return n_inf
+end
+
+n_inf = test_inf(sim)
