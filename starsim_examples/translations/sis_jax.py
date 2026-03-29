@@ -5,7 +5,7 @@ Uses a single JIT-compiled function with jax.lax.fori_loop to avoid
 per-step dispatch overhead. All state is carried as JAX arrays (immutable).
 """
 import os
-os.environ["JAX_PLATFORM_NAME"] = ["cpu", "gpu"][1] # Toggle between CPU and GPU
+os.environ["JAX_PLATFORM_NAME"] = ["cpu", "gpu"][0] # Toggle between CPU and GPU
 
 import jax
 import jax.numpy as jnp
