@@ -208,7 +208,7 @@ function set_prognoses!(dis::SIS, uids)
     dis.immunity[uids] .+= dis.imm_boost
 
     # Sample duration of infection and determine recovery time
-    dur_inf = lognormal_ex(dis.dur_inf, dis.dur_inf, length(uids))
+    dur_inf = lognormal_ex(dis.dur_inf, 1.0, length(uids))
     dis.ti_recovered[uids] .= dis.ti .+ dur_inf
 end
 

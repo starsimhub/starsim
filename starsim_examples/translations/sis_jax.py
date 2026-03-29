@@ -29,8 +29,8 @@ def jax_run(key, state, n_agents, n_edges, dur, source, edge_beta, disease_beta,
     """ Run the full SIS simulation inside a single JIT-compiled loop """
     infected, susceptible, ti_recovered, immunity, rel_sus, res_sus, res_inf, res_rel_sus = state
 
-    # Pre-compute lognormal parameters (std == mean simplification)
-    sigma = jnp.sqrt(jnp.log(2.0))
+    # Pre-compute lognormal parameters (std=1)
+    sigma = jnp.sqrt(jnp.log(1.0 + 1.0 / (dur_inf * dur_inf)))
     mu = jnp.log(dur_inf) - sigma * sigma / 2.0
 
     def step_fn(ti, carry):

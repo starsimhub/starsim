@@ -18,8 +18,8 @@ def numba_run(seed, infected, susceptible, ti_recovered, immunity, rel_sus,
     """ Run the full SIS simulation inside a single njit-compiled loop """
     np.random.seed(seed)
 
-    # Pre-compute lognormal parameters (std == mean simplification)
-    sigma = np.sqrt(np.log(2.0))
+    # Pre-compute lognormal parameters (std=1)
+    sigma = np.sqrt(np.log(1.0 + 1.0 / (dur_inf * dur_inf)))
     mu = np.log(dur_inf) - sigma * sigma / 2.0
 
     for ti in range(dur):

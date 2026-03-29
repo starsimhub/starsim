@@ -153,7 +153,7 @@ def nb_infect(p1, p2, edge_beta, infected, susceptible, rel_sus, disease_beta, n
 @nb.njit(**jit_kw)
 def nb_set_prognoses(uids, susceptible, infected, immunity, ti_recovered, imm_boost, dur_inf_mean, ti):
     """ Set prognoses with inline lognormal sampling """
-    sigma = np.sqrt(np.log(2.0))  # Simplifies when std == mean
+    sigma = np.sqrt(np.log(1.0 + 1.0 / (dur_inf_mean * dur_inf_mean)))  # std=1
     mu = np.log(dur_inf_mean) - sigma * sigma / 2.0
 
     for i in range(len(uids)):

@@ -310,7 +310,7 @@ impl SIS {
 
     /// Set prognoses for newly infected agents
     fn set_prognoses(&mut self, rng: &mut Rng, uids: &[usize]) {
-        let dur_inf = Self::lognormal_ex(rng, self.dur_inf, self.dur_inf, uids.len());
+        let dur_inf = Self::lognormal_ex(rng, self.dur_inf, 1.0, uids.len());
         for (j, &uid) in uids.iter().enumerate() {
             self.susceptible[uid] = false;
             self.infected[uid] = true;

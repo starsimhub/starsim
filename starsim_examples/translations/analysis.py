@@ -23,8 +23,27 @@ df['mtime'] = df.times.apply(lambda x: np.array(x).mean())
 
 
 # Plot
+n = len(df)
+y = np.arange(n, 0, -1)
 fig = plt.figure(figsize=(16,9))
+
 ax1 = plt.subplot(1,3,1)
+ax1.set_title('Times')
+ax1.barh(y, df.mtime.values)
+ax1.set_yticks(y, df.index)
+ax1.set_xlabel('Time (s)')
+
+ax1 = plt.subplot(1,3,2)
+ax1.set_title('Flexibility')
+ax1.barh(y, df.flex.values)
+ax1.set_yticks(y, df.index)
+ax1.set_xlabel('Flexibility (out of 10)')
+
+ax1 = plt.subplot(1,3,3)
+ax1.set_title('Lines of code')
+ax1.barh(y, df.lines.values)
+ax1.set_yticks(y, df.index)
+ax1.set_xlabel('Lines of code')
 
 fig.tight_layout()
 plt.show()
