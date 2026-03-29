@@ -627,16 +627,26 @@ class RandomNet(DynamicNetwork):
 
             # Get the new edges -- the key step
             p1, p2 = self.get_edges(uids, n_conn)
-            beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
+            n = len(p1)
+            beta = np.full(n, self.pars.beta, dtype=ss_float)
 
             if isinstance(p.dur, ss.Dist):
                 dur = p.dur.rvs(p1)
             elif p.dur == 0:
-                dur = np.zeros(len(p1))
+                dur = np.zeros(n)
             else:
-                dur = np.ones(len(p1))*(p.dur/self.t.dt) # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+                dur = np.ones(n)*(p.dur/self.t.dt)
 
-            self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+            # Use zero-copy view for UIDs and skip concatenation when network is empty
+            p1 = p1.view(ss.uids)
+            p2 = p2.view(ss.uids)
+            if current == 0:
+                self.edges.p1 = p1
+                self.edges.p2 = p2
+                self.edges.beta = beta
+                self.edges.dur = dur
+            else:
+                self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
 
