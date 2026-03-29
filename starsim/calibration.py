@@ -98,6 +98,7 @@ class Calibration(sc.prettyobj):
         if keep_db      is None: keep_db        = False
         if check_fit    is None: check_fit      = True
         if n_reps is None      : n_reps         = 1
+        if sampler      is None: sampler        = op.samplers.TPESampler(multivariate=True, constant_liar=True) # Set multivariate and constant_liar as True - these are expected to be beneficial most of the time (multiple workers) and unlikely to cause harm otherwise
 
         self._parse_storage(study_name, storage) # Process storage arguments to select storage backend and file names
         self._rdb_storage_cache = None # Cache database storage to avoid unnecessarily opening extra database connections

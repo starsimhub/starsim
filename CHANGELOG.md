@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
-## Version 3.2.3 (2026-XX-XX)
+## Version 3.3.1 (2026-XX-XX)
 
 ### Calibration changes
 - Calibration now uses Optuna's Journal file storage backend by default, which is more robust for disk-based multiprocessing. 
