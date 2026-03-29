@@ -27,26 +27,21 @@ n = len(df)
 y = np.arange(n, 0, -1)
 fig = plt.figure(figsize=(16,9))
 
-ax1 = plt.subplot(1,3,1)
-ax1.set_title('Times')
-bars = ax1.barh(y, df.mtime.values, color=sc.vectocolor(df.mtime.values, cmap='RdYlGn_r'))
-ax1.bar_label(bars, fmt='%.2f')
-ax1.set_yticks(y, df.index)
-ax1.set_xlabel('Time (s)')
-
-ax2 = plt.subplot(1,3,2)
-ax2.set_title('Flexibility')
-bars = ax2.barh(y, df.flex.values, color=sc.vectocolor(df.flex.values, cmap='RdYlGn'))
-ax2.bar_label(bars)
-ax2.set_yticks(y, df.index)
-ax2.set_xlabel('Flexibility (out of 10)')
-
-ax3 = plt.subplot(1,3,3)
-ax3.set_title('Lines of code')
-bars = ax3.barh(y, df.lines.values, color=sc.vectocolor(df.lines.values, cmap='RdYlGn_r'))
-ax3.bar_label(bars)
-ax3.set_yticks(y, df.index)
-ax3.set_xlabel('Lines of code')
+plots = [
+    dict(col='mtime',  title='Times',         xlabel='Time (s)',                cmap='RdYlGn_r', fmt='%.2f'),
+    dict(col='flex',   title='Flexibility',   xlabel='Flexibility (out of 10)', cmap='RdYlGn'),
+    dict(col='lines',  title='Lines of code', xlabel='Lines of code',           cmap='RdYlGn_r'),
+]
+for i, p in enumerate(plots):
+    p = sc.dictobj(p)
+    ax = plt.subplot(1, 3, i+1)
+    vals = df[p.col].values
+    bars = ax.barh(y, vals, color=sc.vectocolor(vals, cmap=p.cmap))
+    ax.bar_label(bars, fmt=p.get('fmt', '%g'))
+    ax.set_yticks(y, df.index)
+    ax.set_xlabel(p.xlabel)
+    ax.set_title(p.title)
+    sc.boxoff(ax)
 
 fig.tight_layout()
 plt.show()
