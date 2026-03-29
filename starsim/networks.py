@@ -566,19 +566,6 @@ class RandomNet(DynamicNetwork):
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
-    def get_source(inds, n_contacts):
-        """ Optimized helper function for getting contacts """
-        n_half_edges = np.sum(n_contacts)
-        count = 0
-        source = np.zeros((n_half_edges,), dtype=ss_int)
-        for i, person_id in enumerate(inds):
-            n = n_contacts[i]
-            source[count: count + n] = person_id
-            count += n
-        return source
-
     def get_edges(self, inds, n_contacts):
         """
         Efficiently find edges
@@ -600,7 +587,7 @@ class RandomNet(DynamicNetwork):
         Returns:
             Two arrays, for source and target
         """
-        source = self.get_source(inds, n_contacts)
+        source = np.repeat(inds, n_contacts)
         target = self.dist.rng.permutation(source)
         self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
