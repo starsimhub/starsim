@@ -221,16 +221,18 @@ impl SIS {
 
         let mut susceptible = vec![true; n];
         let mut infected = vec![false; n];
-        let ti_recovered = vec![0.0 as F; n];
+        let mut ti_recovered = vec![0.0 as F; n];
         let immunity = vec![0.0 as F; n];
         let rel_sus = vec![1.0 as F; n];
 
         // Seed initial infections
         let n_inf = (init_prev * n as f64).round() as usize;
         let perm = rng.randperm(n);
-        for &i in &perm[..n_inf] {
+        let dur_samples = Self::lognormal_ex(rng, dur_inf, 1.0, n_inf);
+        for (j, &i) in perm[..n_inf].iter().enumerate() {
             susceptible[i] = false;
             infected[i] = true;
+            ti_recovered[i] = dur_samples[j] as F;
         }
 
         let n_susceptible = vec![0.0 as F; pars.dur];
@@ -392,6 +394,34 @@ impl Sim {
 }
 
 
+// ---- Tests ----
+
+fn test_inf(sim: &Sim, n_agents: usize) {
+    let n_inf = &sim.disease.n_infected;
+    let inf0 = n_inf[0];
+    let infm = n_inf.iter().cloned().fold(F::NEG_INFINITY, F::max);
+    let inf1 = n_inf[n_inf.len() - 1];
+
+    let tests = [
+        (format!("Initial infections are nonzero: {}", inf0), inf0 > 0.005 * n_agents as F),
+        (format!("Initial infections start low: {}", inf0), inf0 < 0.05 * n_agents as F),
+        (format!("Infections peak high: {}", infm), infm > 0.5 * n_agents as F),
+        (format!("Infections stabilize: {}", inf1), inf1 < infm),
+    ];
+
+    let mut all_pass = true;
+    for (msg, pass) in &tests {
+        if *pass {
+            println!("✓ {}", msg);
+        } else {
+            println!("× {}", msg);
+            all_pass = false;
+        }
+    }
+    assert!(all_pass);
+}
+
+
 // ---- Main ----
 
 fn main() {
@@ -421,4 +451,6 @@ fn main() {
         "Time for SIS-Rust, n_agents={}, dur={}: {:.3}s",
         pars.n_agents, pars.dur, elapsed
     );
+
+    test_inf(&sim, pars.n_agents);
 }
