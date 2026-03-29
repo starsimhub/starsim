@@ -2,7 +2,6 @@
 Base classes for diseases
 """
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
 import starsim as ss
@@ -15,24 +14,6 @@ ss_float = ss.dtypes.float
 _ = None # For function signatures
 
 __all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
-
-
-# %% Numba-optimized kernels
-
-@nb.njit(cache=True)
-def _nb_compute_transmission(src, trg, rel_trans_raw, rel_sus_raw, beta_per_dt, randvals):
-    """ Fused edge traversal: indexing + multiplication + comparison + filtering in one pass """
-    n = len(src)
-    target_uids = np.empty(n, dtype=src.dtype)
-    source_uids = np.empty(n, dtype=src.dtype)
-    j = 0
-    for i in range(n):
-        p = rel_trans_raw[src[i]] * rel_sus_raw[trg[i]] * beta_per_dt[i]
-        if p > randvals[i]:
-            target_uids[j] = trg[i]
-            source_uids[j] = src[i]
-            j += 1
-    return target_uids[:j], source_uids[:j]
 
 
 class Disease(ss.Module):
@@ -237,10 +218,14 @@ class Infection(Disease):
 
         return new_cases, sources, networks
 
-    @staticmethod
+    @staticmethod # In future, consider: @nb.njit(fastmath=True, parallel=True, cache=True), but no faster it seems
     def compute_transmission(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Compute the probability of a->b transmission for networks (for other routes, the Route handles this) """
-        return _nb_compute_transmission(src, trg, rel_trans.raw, rel_sus.raw, beta_per_dt, randvals)
+        p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
+        transmitted = p_transmit > randvals
+        target_uids = trg[transmitted]
+        source_uids = src[transmitted]
+        return target_uids, source_uids
 
     def infect(self):
         """ Determine who gets infected on this timestep via transmission on the network """

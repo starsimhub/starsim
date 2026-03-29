@@ -17,22 +17,6 @@ _ = None
 __all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork']
 
 
-# %% Numba-optimized kernels
-
-@nb.njit(cache=True)
-def _nb_end_pairs(dur, alive, p1, p2):
-    """ Decrement durations and compute active mask in a single fused pass """
-    n = len(dur)
-    active = np.empty(n, dtype=nb.boolean)
-    n_active = 0
-    for i in range(n):
-        dur[i] -= 1
-        a = (dur[i] > 0) and alive[p1[i]] and alive[p2[i]]
-        active[i] = a
-        n_active += a
-    return active, n_active
-
-
 # %% General network classes
 
 class Route(ss.Module):
@@ -432,15 +416,13 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        n = len(self.edges.p1)
-        if n == 0:
-            return n
-        active, n_active = _nb_end_pairs(
-            self.edges.dur, people.alive.raw, self.edges.p1, self.edges.p2
-        )
+        self.edges.dur = self.edges.dur - 1 # Assume that the edge duration is in units of self.t.dt
+
+        # Non-alive agents are removed
+        active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
         for k in self.meta_keys():
             self.edges[k] = self.edges[k][active]
-        return n
+        return len(active)
 
 
 class SexualNetwork(DynamicNetwork):
