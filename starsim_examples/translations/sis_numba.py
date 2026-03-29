@@ -360,3 +360,22 @@ sim = Sim(
 T = sc.timer()
 sim.run()
 T.toc(f'Time for SIS-Numba, n_agents={pars.n_agents}, dur={pars.dur}')
+
+# Tests
+def test_inf(sim):
+    n_inf = sim.disease.n_infected
+    inf0 = n_inf[0]
+    infm = n_inf.max()
+    inf1 = n_inf[-1]
+    tests = {
+        f'Initial infections are nonzero: {inf0}' : inf0 > 0.01*pars.n_agents,
+        f'Initial infections start low: {inf0}'   : inf0 < 0.05*pars.n_agents,
+        f'Infections peak high: {infm}'           : infm > 0.5*pars.n_agents,
+        f'Infections stabilize: {inf1}'           : inf1 < n_inf.max(),
+    }
+    for k,tf in tests.items():
+        print(f'✓ {k}') if tf else print(f'× {k}')
+    assert all(tests.values())
+    return tests
+
+test_inf(sim)

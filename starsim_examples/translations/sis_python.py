@@ -87,21 +87,9 @@ class RandomNet(sc.prettyobj):
         self.edge_dur = self.edge_dur[active]
         return
 
-    @staticmethod
-    def get_source(inds, n_contacts):
-        """ Get source array from contact counts """
-        n_half_edges = n_contacts.sum()
-        source = np.zeros(n_half_edges, dtype=int)
-        count = 0
-        for i, person_id in enumerate(inds):
-            n = n_contacts[i]
-            source[count:count + n] = person_id
-            count += n
-        return source
-
     def get_edges(self, inds, n_contacts):
         """ Create random edges by shuffling source into target """
-        source = self.get_source(inds, n_contacts)
+        source = np.repeat(inds, n_contacts)
         target = np.random.permutation(source)
         return source, target
 
@@ -247,3 +235,22 @@ sim = Sim(
 T = sc.timer()
 sim.run()
 T.toc(f'Time for SIS-Python, n_agents={pars.n_agents}, dur={pars.dur}')
+
+# Tests
+def test_inf(sim):
+    n_inf = sim.disease.n_infected
+    inf0 = n_inf[0]
+    infm = n_inf.max()
+    inf1 = n_inf[-1]
+    tests = {
+        f'Initial infections are nonzero: {inf0}' : inf0 > 0.01*pars.n_agents,
+        f'Initial infections start low: {inf0}'   : inf0 < 0.05*pars.n_agents,
+        f'Infections peak high: {infm}'           : infm > 0.5*pars.n_agents,
+        f'Infections stabilize: {inf1}'           : inf1 < n_inf.max(),
+    }
+    for k,tf in tests.items():
+        print(f'✓ {k}') if tf else print(f'× {k}')
+    assert all(tests.values())
+    return tests
+
+test_inf(sim)
