@@ -11,7 +11,7 @@ ss_int = ss.dtypes.int
 _ = None
 
 
-__all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy']
+__all__ = ['Demographics', 'Births', 'Deaths', 'PregnancyPars', 'Pregnancy', 'FetalHealth']
 
 
 class Demographics(ss.Module):
@@ -305,37 +305,43 @@ class PregnancyPars(ss.Pars):
         super().__init__()
 
         # Parameters related to probability of getting pregnant
-        self.fertility_rate=ss.peryear(100)  # Can be a number or a Pandas DataFrame
-        self.rel_fertility=1  # Constant to scale all fertility rates, useful if a dataframe is used
-        self.p_infertile=ss.bernoulli(p=0)  # Primary infertility
-        self.min_age=15  # Minimum age to become pregnant
-        self.max_age=50  # Maximum age to become pregnant
-        self.rate_units=1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+        self.fertility_rate = ss.peryear(100)  # Can be a number or a Pandas DataFrame
+        self.rel_fertility = 1  # Constant to scale all fertility rates, useful if a dataframe is used
+        self.p_infertile = ss.bernoulli(p=0)  # Primary infertility
+        self.min_age = 15  # Minimum age to become pregnant
+        self.max_age = 50  # Maximum age to become pregnant
+        self.rate_units = 1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
 
         # Parameters related to pregnancy duration
-        self.dur_pregnancy=ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
+        self.dur_pregnancy = ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
 
         # Parameters related to breastfeeding
-        self.dur_breastfeed=ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))
-        self.p_breastfeed=ss.bernoulli(p=1)
+        self.dur_breastfeed = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))
+        self.p_breastfeed = ss.bernoulli(p=1)
 
         # Parameters related to implantation rate
         self.embryos_per_pregnancy = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0]))  # Embryos per pregnancy
 
-        # Pregnancy outcome parameters - PTBs, deaths
-        self.rr_ptb=ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
-        self.rr_ptb_age= np.array([[18, 35, 1000], [1.2, 1, 1.2]]) # Relative risk of pre-term birth by maternal age
-        self.p_maternal_death=ss.bernoulli(0)
-        self.p_survive_maternal_death=ss.bernoulli(0)
+        # Pregnancy outcome parameters - PTBs, deaths, losses
+        self.rr_ptb = ss.normal(loc=1, scale=0.1)  # Base risk of pre-term birth due to factors other than maternal age
+        self.rr_ptb_age = np.array([[18, 35, 1000], [1.2, 1, 1.2]]) # Relative risk of pre-term birth by maternal age
+        self.p_maternal_death = ss.bernoulli(0)
+        self.p_survive_maternal_death = ss.bernoulli(0)
+        self.p_loss = ss.bernoulli(p=0)     # Per-timestep probability of spontaneous pregnancy loss (miscarriage or stillbirth)
+        self.loss_threshold = ss.weeks(20)  # GA cutoff: <20w = miscarriage, >=20w = stillbirth
 
         # Parameters related to newborn agents
-        self.sex_ratio=ss.bernoulli(0.5)  # Ratio of babies born female
-        self.slot_scale=5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
-        self.min_slots=100  # Minimum number of slots, useful if the population size is very small
+        self.sex_ratio = ss.bernoulli(0.5)  # Ratio of babies born female
+        self.slot_scale = 5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+        self.min_slots = 100  # Minimum number of slots, useful if the population size is very small
+
+        # Classification thresholds
+        self.preterm_threshold = ss.weeks(37)
+        self.very_preterm_threshold = ss.weeks(32)
 
         # Settings
-        self.burnin=True # Should we seed pregnancies that would have happened before the start of the simulation?
-        self.trimesters=[ss.weeks(13), ss.weeks(26)]
+        self.burnin = True # Should we seed pregnancies that would have happened before the start of the simulation?
+        self.trimesters = [ss.weeks(13), ss.weeks(26)]
         self.update(kwargs)
         return
 
@@ -367,6 +373,8 @@ class Pregnancy(Demographics):
         burnin (bool): whether to seed pregnancies from before simulation start (default true)
         slot_scale (float): scale factor for assigning slots to newborn agents (default 5)
         min_slots (int): minimum number of slots for newborn agents (default 100)
+        preterm_threshold (dur): gestational age below which preterm is declared (default 37w)
+        very_preterm_threshold (dur): gestational age below which very preterm is declared (default 32w)
         trimesters (list): list of durations defining the end of each trimester
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
     """
@@ -380,9 +388,7 @@ class Pregnancy(Demographics):
         self.update_pars(pars, **kwargs)
 
         # Distributions: binary outcomes
-        self._p_miscarriage = ss.bernoulli(p=0)  # Probability of miscarriage - placeholder, not used
-        self._p_conceive = ss.bernoulli(p=0)   # Placeholder, see make_p_conceive
-        self._p_stillbirth = ss.bernoulli(p=0)  # Probability of stillbirth - placeholder, not used
+        self._p_conceive = ss.bernoulli(p=0)  # Placeholder, see make_p_conceive
 
         # States
         self.define_states(
@@ -393,7 +399,8 @@ class Pregnancy(Demographics):
             ss.FloatArr('dur_pregnancy', label='Pregnancy duration'),  # Duration of pregnancy
             ss.FloatArr('parity', label='Parity', default=0),  # Number of births (may include live + still)
             ss.FloatArr('n_pregnancies', label='Number of pregnancies', default=0),  # Number of pregnancies
-            ss.FloatArr('n_miscarriages', label='Number of miscarriages', default=0),  # Number of miscarriages
+            ss.FloatArr('n_miscarriages', label='Number of miscarriages', default=0),  # Number of miscarriages per mother
+            ss.FloatArr('n_stillbirths', label='Number of stillbirths', default=0),  # Number of stillbirths per mother
             ss.FloatArr('gestation', label='Number of weeks into pregnancy'),  # Gestational clock
             ss.FloatArr('gestation_at_birth', label='Gestational age in weeks'),  # Gestational age at birth, NA if not born during the sim
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
@@ -410,6 +417,11 @@ class Pregnancy(Demographics):
             ss.FloatArr('dur_breastfeed', label='Duration of breastfeeding'),  # Duration of breastfeeding
             ss.FloatArr('ti_stop_breastfeed', label='Time breastfeeding stops'),  # Time breastfeeding stops
             ss.BoolState('breastfed', label='Breastfed'),  # Property of newborn indicating whether they were breastfed
+
+            # Birth outcome classification (stored on newborns)
+            ss.BoolArr('preterm', label='Preterm birth'),          # <37w GA
+            ss.BoolArr('very_preterm', label='Very preterm birth'),  # <32w GA
+            ss.BoolArr('neonatal_death', label='Neonatal death'),  # Death within 28 days of birth
         )
 
         # Process metadata. Defaults here are the labels used by UN data
@@ -420,10 +432,14 @@ class Pregnancy(Demographics):
         self.choose_slots = None  # Distribution for choosing slots; set in self.init()
         self.fertility_rate_data = None  # Processed data; set in self.init_pre() if fertility rate data is in pars
 
-        # For results tracking
-        self.n_pregnancies_this_step = 0
-        self.n_births_this_step = 0
         self.derived_results = None  # Updated in init_results
+
+        # Step-level accumulators for events in step() (recorded in update_results, then reset)
+        self._counts = sc.objdict(births=0, pregnancies=0, n_preterm=0, n_very_preterm=0)
+
+        # Callbacks for external modules (e.g. FetalHealth)
+        self._conception_callbacks = []
+        self._delivery_callbacks = []
 
         # Define ASFR
         self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
@@ -608,12 +624,18 @@ class Pregnancy(Demographics):
         # Define results
         results = sc.autolist()
         results += [
-            ss.Result('pregnancies', **scaling_kw, label='New pregnancies', summarize_by='sum'),
-            ss.Result('births', **scaling_kw, label='New births', summarize_by='sum'),
-            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum'),
-            ss.Result('mmr', **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate'),
-            ss.Result('cbr', **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
-            ss.Result('tfr', **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
+            ss.Result('pregnancies',     **scaling_kw, label='New pregnancies', summarize_by='sum'),
+            ss.Result('births',          **scaling_kw, label='New births', summarize_by='sum'),
+            ss.Result('n_preterm',       **scaling_kw, label='Preterm births', auto_plot=False),
+            ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births', auto_plot=False),
+            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
+            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
+            ss.Result('neonatal_deaths', **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate', auto_plot=False),
+            ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate', auto_plot=False),
+            ss.Result('cbr',             **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
+            ss.Result('tfr',             **nonscaling_kw, summarize_by='sum',  label='Total fertility rate'),
         ]
         for res in self.derived_results:
             results += ss.Result(res, **scaling_kw)
@@ -675,7 +697,7 @@ class Pregnancy(Demographics):
 
     def update_breastfeeding(self, uids):
         stopping = uids[self.ti >= self.ti_stop_breastfeed[uids]]
-        if np.any(stopping):
+        if stopping.any():
             self.breastfeeding[stopping] = False
         return stopping
 
@@ -690,6 +712,16 @@ class Pregnancy(Demographics):
         """
         newborn_parents = self.sim.people.parent[newborn_uids]  # Find which parent each newborn belongs to
         self.gestation_at_birth[newborn_uids] = self.gestation[newborn_parents]  # Transfer to newborn
+
+        # Classify preterm births (stored on newborns)
+        ga_wk = self.gestation_at_birth[newborn_uids]
+        preterm      = ga_wk < self.pars.preterm_threshold.weeks
+        very_preterm = ga_wk < self.pars.very_preterm_threshold.weeks
+        self.preterm[newborn_uids]      = preterm
+        self.very_preterm[newborn_uids] = very_preterm
+        self._counts.n_preterm      += preterm.sum()
+        self._counts.n_very_preterm += very_preterm.sum()
+
         self.pregnant[mother_uids] = False
         self.ti_delivery[mother_uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
         self.carrying_multiple[mother_uids] = False  # Reset multiple embryo status
@@ -721,8 +753,20 @@ class Pregnancy(Demographics):
 
         return
 
+    def add_conception_callback(self, fn):
+        """ Register a function ``fn(uids)`` to be called after new pregnancies are created """
+        self._conception_callbacks.append(fn)
+        return
+
+    def add_delivery_callback(self, fn):
+        """ Register a function ``fn(mother_uids, newborn_uids)`` to be called after delivery """
+        self._delivery_callbacks.append(fn)
+        return
+
     def _post_delivery(self, mother_uids, newborn_uids):
         """Hook for subclasses to add post-delivery logic. Base implementation does nothing."""
+        for cb in self._delivery_callbacks:
+            cb(mother_uids, newborn_uids)
         return
 
     def set_breastfeeding(self, mother_uids, newborn_uids):
@@ -746,15 +790,25 @@ class Pregnancy(Demographics):
 
     def progress_pregnancies(self):
         """
-        Update pregnant women. The method can be enhanced by derived classes that add logic
-        for miscarriage, termination, maternal death, etc.
+        Update pregnant women: advance gestational clock, apply background pregnancy loss.
         """
-        # Update gestational clock for ongoing pregnancies
-        if self.pregnant.any():
-            will_deliver = self.pregnant & (self.ti_delivery <= self.ti)
-            self.gestation[self.pregnant] += self.dt.weeks
-            # For those delivering, set to the gestational age at delivery, which may be part-way through the timestep
-            self.gestation[will_deliver] = (self.t.dt*self.dur_pregnancy[will_deliver]).weeks
+        if not self.pregnant.any():
+            return
+
+        will_deliver = self.pregnant & (self.ti_delivery <= self.ti)
+        self.gestation[self.pregnant] += self.dt.weeks
+
+        # For those delivering, compute actual GA from timing (handles FetalHealth shifts)
+        actual_dur = self.ti_delivery[will_deliver] - self.ti_pregnant[will_deliver]
+        self.gestation[will_deliver] = (self.t.dt * actual_dur).weeks
+
+        # Background spontaneous pregnancy loss (only for ongoing pregnancies)
+        ongoing = self.pregnant & ~will_deliver
+        if ongoing.any():
+            loss_uids = self.pars.p_loss.filter(ongoing.uids)
+            if len(loss_uids):
+                unborn = self.find_unborn_children(loss_uids)
+                self.sim.people.request_death(unborn)
 
         return
 
@@ -780,7 +834,7 @@ class Pregnancy(Demographics):
             return ss.uids()
 
         # Validation
-        if np.any(self.pregnant[conceive_uids]):
+        if self.pregnant[conceive_uids].any():
             which_uids = conceive_uids[self.pregnant[conceive_uids]]
             errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
@@ -876,7 +930,7 @@ class Pregnancy(Demographics):
 
         # Check that all pregnant women have a delivery time set
         missing_delivery = self.pregnant[uids] & np.isnan(self.ti_delivery[uids])
-        if np.any(missing_delivery):
+        if missing_delivery.any():
             which_uids = uids[missing_delivery]
             errormsg = f'Delivery time has NaN values for {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
@@ -897,18 +951,22 @@ class Pregnancy(Demographics):
         if len(mothers):
             newborns = self.find_unborn_children(mothers)
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
-            self.n_births_this_step += len(newborns)    # += to handle burn-in
+            self._counts.births += len(newborns)       # += to handle burn-in
             self.process_newborns(newborns)             # Process newborns
 
         # Figure out who conceives, set prognoses, and make embryos
         self.set_rel_sus()                              # Update rel_sus
-        conceivers = self.select_conceivers()           # Get the UIDs of women who are going to conceive this timestep
-        self.n_pregnancies_this_step += len(conceivers) # += to handle burn-in
+        conceivers = self.select_conceivers()            # Get the UIDs of women who are going to conceive this timestep
+        self._counts.pregnancies += len(conceivers)  # += to handle burn-in
 
         # Make pregnancies and embryos
         if len(conceivers):
             embryo_counts = self.make_pregnancies(conceivers)
             conceive_uids_with_repeats, new_uids = self.make_embryos(conceivers, embryo_counts)
+
+            # Fire conception callbacks
+            for cb in self._conception_callbacks:
+                cb(conceivers)
 
             # Add embryos to prenatal networks
             for net in self.sim.networks.values():
@@ -935,6 +993,7 @@ class Pregnancy(Demographics):
             return
         self.process_maternal_deaths(death_uids)
         self.process_prenatal_deaths(death_uids)
+        self.process_neonatal_deaths(death_uids)
         return
 
     def process_maternal_deaths(self, death_uids):
@@ -953,36 +1012,66 @@ class Pregnancy(Demographics):
 
     def process_prenatal_deaths(self, death_uids):
         """
-        If any deaths occur in unborn agents, we handle changes to pregnancy and record as a miscarriage
+        If any deaths occur in unborn agents, classify by gestational age:
+        - <loss_threshold (default 20w): miscarriage
+        - >=loss_threshold: stillbirth
         """
         is_prenatal = self.sim.people.age[death_uids] < 0
         prenatal_death_uids = death_uids[is_prenatal]
         if len(prenatal_death_uids):
             mother_uids = self.sim.people.parent[prenatal_death_uids]
-            self.n_miscarriages[mother_uids] += 1
+            ga        = self.gestation[mother_uids]
+            threshold = self.pars.loss_threshold.weeks
+
+            is_mc = ga < threshold
+            self.n_miscarriages[mother_uids[is_mc]] += 1
+            self.n_stillbirths[mother_uids[~is_mc]] += 1
+            ti = self.ti
+            if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
+                self.results['miscarriages'][ti] += is_mc.sum()
+                self.results['stillbirths'][ti]  += (~is_mc).sum()
+
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
+        return
+
+    def process_neonatal_deaths(self, death_uids):
+        """
+        Classify deaths of agents aged 0-28 days as neonatal deaths.
+        This is passive detection — any cause of death (disease, background mortality,
+        etc.) that kills a newborn within 28 days of birth is recorded.
+        """
+        age_days = ss.years(self.sim.people.age[death_uids]).days
+        is_nnd   = (age_days >= 0) & (age_days <= 28)
+        nnd_uids = death_uids[is_nnd]
+        if len(nnd_uids):
+            self.neonatal_death[nnd_uids] = True
+            ti = self.ti
+            if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
+                self.results['neonatal_deaths'][ti] += len(nnd_uids)
         return
 
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results['pregnancies'][ti] = self.n_pregnancies_this_step
-        self.results['births'][ti] = self.n_births_this_step
+        res = self.results
 
-        for res in self.derived_results:
-            state = getattr(self, res.replace('n_', ''))
-            self.results[res][self.ti] = state.sum()
+        # Write step-level counts to results
+        for key, val in self._counts.items():
+            res[key][ti] = val
+        self._counts.update({k: 0 for k in self._counts})
 
-        # Reset for the next step
-        self.n_pregnancies_this_step = 0
-        self.n_births_this_step = 0
+        # Derived rates
+        res['preterm_rate'][ti] = sc.safedivide(res['n_preterm'][ti], res['births'][ti])
+
+        for dr in self.derived_results:
+            state = getattr(self, dr.replace('n_', ''))
+            res[dr][ti] = state.sum()
 
         # Update ASFR, TFR, and MMR
-        res = self.results
         self.compute_asfr()
-        self.results.tfr[ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
-        self.results.mmr[ti] = sc.safedivide(res.maternal_deaths[ti], res.births[ti]) * 100e3
+        res.tfr[ti] = sum(self.asfr[:, ti])*self.asfr_width/1000
+        res.mmr[ti] = sc.safedivide(res.maternal_deaths[ti], res.births[ti]) * 100e3
 
         return
 
@@ -1014,3 +1103,307 @@ class Pregnancy(Demographics):
         asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((n_bins, 1)), cs[:, :-tdim]])
         self.asfr = asfr
         return
+
+
+# %% Fetal health
+
+class FetalHealth(ss.Module):
+    """
+    Track fetal health outcomes during pregnancy.
+
+    Works alongside the Pregnancy module to model birth weight outcomes (low
+    birth weight, small for gestational age) based on fetal growth restriction.
+    Disease-agnostic by design: external modules (connectors, interventions)
+    modify fetal health via the public API methods.
+
+    Preterm classification is handled by the Pregnancy module (based on
+    gestational age at birth). This module focuses on the weight/growth axis.
+
+    Integrates with Pregnancy via callbacks: Pregnancy calls ``on_conception``
+    when new pregnancies begin and ``on_delivery`` when births occur. External
+    modules (e.g. disease connectors) can register their own callbacks via
+    ``add_conception_callback`` to act on new pregnancies after baseline
+    initialization.
+
+    During pregnancy, ``weight_percentile``, ``growth_restriction``,
+    ``timing_shift``, and ``n_exposures`` are tracked on the mother. At
+    delivery, ``birth_weight``, ``lbw``, ``vlbw``, and ``sga`` are stored
+    on the newborn.
+
+    Each pregnancy gets a baseline weight percentile drawn at conception.
+    Two modification levers are available:
+
+        1. **Delivery timing**: bring ``ti_delivery`` forward (preterm birth risk)
+        2. **Growth restriction**: accumulate fractional weight reduction
+
+    At delivery: ``birth_weight = baseline_for_GA × percentile × (1 - restriction)``
+
+    Args:
+        weight_by_ga (array):           Nx2 array of [gestational_age_weeks, weight_grams]
+        interp_fn (callable):           interpolation function with signature (x, xp, fp) -> array (default np.interp)
+        sga_ratio (float):              fraction of GA-appropriate weight below which SGA is declared
+        lbw_threshold (float):          birth weight in grams below which LBW is declared
+        vlbw_threshold (float):         birth weight in grams below which VLBW is declared
+        min_ga (dur):                   floor for timing shifts (delivery can't be brought before this GA)
+        percentile_dist (Dist):         distribution for baseline fetal weight percentile
+
+    **Example**::
+
+        import starsim as ss
+
+        sim = ss.Sim(
+            demographics=[ss.Pregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
+            modules=ss.FetalHealth(),
+            networks=ss.PrenatalNet(),
+        )
+        sim.run()
+    """
+
+    # Approximate 50th percentile fetal weight (grams) by gestational age (weeks)
+    # Source: Hadlock 1991 / INTERGROWTH-21st
+    default_weight_by_ga = np.array([
+        [24, 600],  [25, 700],  [26, 800],  [27, 900],  [28, 1000],
+        [29, 1150], [30, 1300], [31, 1500], [32, 1700], [33, 1900],
+        [34, 2100], [35, 2400], [36, 2600], [37, 2850], [38, 3050],
+        [39, 3250], [40, 3400], [41, 3500], [42, 3550],
+    ], dtype=float)
+
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(name='fetal_health')
+        self.define_pars(
+            weight_by_ga=self.default_weight_by_ga,
+            interp_fn=np.interp,  # Interpolation function for mapping gestational age to reference birth weight
+            sga_ratio=0.87,  # SGA if birth_weight < baseline_for_ga * sga_ratio; ~10% baseline rate given percentile_dist=N(1,0.1)
+            lbw_threshold=2500,
+            vlbw_threshold=1500,
+            min_ga=ss.weeks(24),  # Earliest possible delivery GA; timing shifts cannot bring delivery before this
+            percentile_dist=ss.normal(loc=1.0, scale=0.1),
+        )
+        self.update_pars(pars, **kwargs)
+
+        self.define_states(
+            # Pregnancy-time tracking (stored on mothers)
+            ss.FloatArr('weight_percentile', label='Fetal weight percentile'),
+            ss.FloatArr('growth_restriction', label='Cumulative growth restriction'),
+            ss.FloatArr('timing_shift',      label='Accumulated delivery shift (weeks)'),
+            ss.FloatArr('n_exposures',       label='Disease exposures during pregnancy'),
+
+            # Birth outcomes (stored on newborns at delivery)
+            ss.FloatArr('birth_weight', label='Birth weight (grams)'),
+            ss.BoolArr('lbw',  label='Low birth weight'),
+            ss.BoolArr('vlbw', label='Very low birth weight'),
+            ss.BoolArr('sga',  label='Small for gestational age'),
+            ss.BoolArr('svn',  label='Small vulnerable newborn'),
+        )
+
+        self._conception_callbacks = []
+        return
+
+    def init_pre(self, sim):
+        """ Register callbacks with the Pregnancy module """
+        super().init_pre(sim)
+        if not hasattr(sim.demographics, 'pregnancy'):
+            raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
+        preg = sim.demographics.pregnancy
+        preg.add_conception_callback(self.on_conception)
+        preg.add_delivery_callback(self.on_delivery)
+        return
+
+    def add_conception_callback(self, fn):
+        """
+        Register a function to be called when new pregnancies are detected.
+        The function receives ``(uids,)`` after baseline initialization.
+        """
+        self._conception_callbacks.append(fn)
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('n_births',          dtype=int, label='Births'),
+            ss.Result('n_lbw',             dtype=int, label='Low birth weight'),
+            ss.Result('n_vlbw',            dtype=int, label='Very low birth weight'),
+            ss.Result('n_sga',             dtype=int, label='Small for gestational age'),
+            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns'),
+            ss.Result('mean_birth_weight', scale=False, label='Mean birth weight (g)'),
+            ss.Result('mean_ga_at_birth',  scale=False, label='Mean GA at birth (weeks)'),
+            ss.Result('mean_exposures',    scale=False, label='Mean exposures per pregnancy'),
+            ss.Result('lbw_rate',          scale=False, label='LBW rate'),
+            ss.Result('sga_rate',          scale=False, label='SGA rate'),
+            ss.Result('svn_rate',          scale=False, label='SVN rate'),
+        )
+        return
+
+    def on_conception(self, uids):
+        """ Initialize fetal health for new pregnancies (called by Pregnancy) """
+        self.weight_percentile[uids] = self.pars.percentile_dist.rvs(uids)
+        self.growth_restriction[uids] = 0.0
+        self.timing_shift[uids] = 0.0
+        self.n_exposures[uids] = 0
+        for cb in self._conception_callbacks:
+            cb(uids)
+        return
+
+    def on_delivery(self, mother_uids, newborn_uids):
+        """
+        Classify birth outcomes (called by Pregnancy).
+
+        Birth weight is computed from the mother's pregnancy-time states
+        (weight_percentile, growth_restriction). Outcomes (birth_weight,
+        lbw, vlbw, sga) are stored on the newborn agents.
+        """
+        if not len(newborn_uids):
+            return
+
+        # Compute birth weight using mother states (handles twins via parent lookup)
+        parents = self.sim.people.parent[newborn_uids]
+        birth_weights, ga_wk = self.compute_birth_weight(parents)
+
+        # Store outcomes on newborns
+        self.birth_weight[newborn_uids] = birth_weights
+
+        ref = self.pars.weight_by_ga
+        sga_threshold = self.pars.interp_fn(ga_wk, ref[:, 0], ref[:, 1]) * self.pars.sga_ratio
+        lbw  = birth_weights < self.pars.lbw_threshold
+        vlbw = birth_weights < self.pars.vlbw_threshold
+        sga  = birth_weights < sga_threshold
+
+        self.lbw[newborn_uids]  = lbw
+        self.vlbw[newborn_uids] = vlbw
+        self.sga[newborn_uids]  = sga
+
+        # SVN: small vulnerable newborn = preterm | lbw | sga
+        preterm = self.sim.demographics.pregnancy.preterm[newborn_uids]
+        svn = preterm | lbw | sga
+        self.svn[newborn_uids] = svn
+
+        # Results
+        n  = len(newborn_uids)
+        ti = self.ti
+        self.results['n_births'][ti]          += n
+        self.results['n_lbw'][ti]             += lbw.sum()
+        self.results['n_vlbw'][ti]            += vlbw.sum()
+        self.results['n_sga'][ti]             += sga.sum()
+        self.results['n_svn'][ti]             += svn.sum()
+        self.results['mean_birth_weight'][ti]  = birth_weights.mean() if n else 0
+        self.results['mean_ga_at_birth'][ti]   = ga_wk.mean() if n else 0
+        self.results['mean_exposures'][ti]     = self.n_exposures[parents].mean() if n else 0
+        self.results['lbw_rate'][ti]           = lbw.mean() if n else 0
+        self.results['sga_rate'][ti]           = sga.mean() if n else 0
+        self.results['svn_rate'][ti]           = svn.mean() if n else 0
+        return
+
+    def apply_timing_shift(self, uids, shift_weeks):
+        """
+        Bring delivery forward for pregnant women.
+
+        Uses a one-way ratchet: delivery can only be brought forward, never
+        pushed back. The actual shift applied is tracked in ``timing_shift``.
+
+        Args:
+            uids: UIDs of pregnant women
+            shift_weeks (float/array): shift in weeks; positive = earlier delivery
+        """
+        if not len(uids):
+            return
+
+        preg = self.sim.people.pregnancy
+        weeks_per_ts = self.dt.weeks
+        shifts_ts = shift_weeks / weeks_per_ts
+
+        min_ga_ts = self.pars.min_ga.weeks / weeks_per_ts
+        current_delivery = preg.ti_delivery[uids]
+        new_delivery = current_delivery - shifts_ts
+        min_delivery = preg.ti_pregnant[uids] + min_ga_ts
+        new_delivery = np.maximum(new_delivery, min_delivery)
+
+        actually_shifted_ts = np.maximum(0, current_delivery - new_delivery)
+        preg.ti_delivery[uids] = np.minimum(current_delivery, new_delivery)
+        self.timing_shift[uids] += actually_shifted_ts * weeks_per_ts
+        return
+
+    def apply_growth_restriction(self, uids, penalty):
+        """
+        Apply fractional growth restriction (cumulative, diminishing).
+
+        Positive penalties use diminishing returns: ``current + (1-current) * penalty``.
+        Negative penalties (growth boost, e.g. GDM macrosomia) are additive.
+
+        Args:
+            uids: UIDs of pregnant women
+            penalty (float): fractional weight reduction; negative = growth boost
+        """
+        if not len(uids):
+            return
+
+        current = self.growth_restriction[uids]
+        positive = penalty >= 0
+        new_val = np.where(positive, current + (1 - current) * penalty, current + penalty)
+        self.growth_restriction[uids] = new_val
+        return
+
+    def reverse_timing_shift(self, uids, fraction):
+        """
+        Recover a fraction of the accumulated delivery timing shift.
+
+        Args:
+            uids: UIDs of pregnant women
+            fraction (float/array): fraction to recover (0-1)
+        """
+        if not len(uids):
+            return
+
+        preg = self.sim.people.pregnancy
+        current_shift = self.timing_shift[uids]
+        recover_weeks = current_shift * fraction
+
+        has_shift = recover_weeks > 0
+        if not has_shift.any():
+            return
+
+        recover_uids = uids[has_shift]
+        recover_wk   = recover_weeks[has_shift]
+        recover_ts   = recover_wk / self.dt.weeks
+
+        current_delivery = preg.ti_delivery[recover_uids]
+        preg.ti_delivery[recover_uids] = current_delivery + recover_ts
+        self.timing_shift[recover_uids] -= recover_wk
+        return
+
+    def reverse_growth_restriction(self, uids, amount):
+        """
+        Reverse a specific amount of growth restriction.
+
+        Args:
+            uids: UIDs of pregnant women
+            amount (float/array): amount to reverse
+        """
+        if not len(uids):
+            return
+
+        current = self.growth_restriction[uids]
+        self.growth_restriction[uids] = np.maximum(0, current - amount)
+        return
+
+    def compute_birth_weight(self, uids):
+        """
+        Compute birth weight at delivery.
+
+        Override this method to customize the birth weight formula. The
+        interpolation function can be swapped via ``pars.interp_fn``.
+
+        Returns:
+            tuple: (birth_weights, ga_weeks) arrays
+        """
+        preg = self.sim.people.pregnancy
+        ga_wk = (preg.ti_delivery[uids] - preg.ti_pregnant[uids]) * self.dt.weeks
+
+        ref = self.pars.weight_by_ga
+        baseline    = self.pars.interp_fn(ga_wk, ref[:, 0], ref[:, 1])
+        percentile  = self.weight_percentile[uids]
+        restriction = self.growth_restriction[uids]
+
+        return baseline * percentile * (1 - restriction), ga_wk
+
+    def step(self):
+        pass  # All logic is driven by Pregnancy callbacks

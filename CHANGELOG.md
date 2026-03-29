@@ -20,10 +20,40 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
 
 
-## Version 3.2.3 (2026-03-XX)
+## Version 3.3.0 (2026-03-27)
 - Made scalar time parameters behave more consistently by removing the ability to index them if they are scalars, and also having `np.iterable()` return `False` for such parameters
 - **Backwards-compatibility notes:** This change may cause simulation results to be numerically different, as it will cause distributions to use a more efficient sampling method for affected scalar parameters (in such cases, there is likely to be a performance increase)
-- *GitHub info*: PR [XX](https://github.com/starsimhub/starsim/pull/XX)
+
+### Pregnancy loss and neonatal death classification
+- Added background pregnancy loss via `p_loss` parameter in `Pregnancy`. Per-timestep hazard means early losses are naturally more common.
+- Prenatal deaths are now classified by gestational age: miscarriage (<20w) vs stillbirth (>=20w), controlled by `loss_threshold` parameter.
+- Preterm (<37w) and very preterm (<32w) births are now classified and tracked, with configurable thresholds via `preterm_threshold` and `very_preterm_threshold`.
+- Added passive neonatal death detection: deaths of agents aged 0-28 days are classified as neonatal deaths.
+- New results: `miscarriages`, `stillbirths`, `nnds`, `n_preterm`, `n_very_preterm`, `preterm_rate`.
+- New states on newborns: `preterm`, `very_preterm`, `neonatal_death`.
+- Removed unused `_p_miscarriage` and `_p_stillbirth` placeholder distributions.
+- **Migration**: `n_pregnancies_this_step` and `n_births_this_step` counters removed; use results directly.
+
+### Generic congenital outcome framework
+- Added `set_congenital()` to the base `Infection` class. Diseases opt in by defining `birth_outcome_keys` and `birth_outcomes` in pars.
+- Added `step_congenital()` helper to process scheduled congenital events at delivery time.
+- Added `_assign_congenital_outcomes()` override point for state- or GA-dependent outcome probabilities.
+- Death outcomes (`miscarriage`, `nnd`, `stillborn`) trigger `request_death`; non-lethal outcomes set a bool state.
+
+### FetalHealth improvements
+- Simplified `apply_timing_shift`, `apply_growth_restriction`, `reverse_timing_shift`, `reverse_growth_restriction` — removed redundant pregnancy filtering and type coercions.
+- `n_exposures` state tracks disease exposures during pregnancy (connectors increment directly via `fh.n_exposures[uids] += 1`).
+- Added `interp_fn` parameter for customizing birth weight interpolation.
+- Negative growth penalties (growth boost, e.g. GDM macrosomia) are now additive rather than using diminishing returns.
+
+### MNCH examples
+- Added `starsim_examples/mnch/` with reusable maternal/newborn/child health examples:
+  - `CongenitalDisease`: simple SIR with congenital outcomes via the generic framework.
+  - `NeonatalSepsis`: SIR that infects/kills newborns, useful for testing NND detection.
+  - `fetal_infection`: connector that damages fetal health when mothers are infected.
+  - `treat_pregnant`: intervention that treats infected pregnant women.
+
+- *GitHub info*: PR [1269](https://github.com/starsimhub/starsim/pull/1269)
 
 
 ## Version 3.2.2 (2026-03-11)
