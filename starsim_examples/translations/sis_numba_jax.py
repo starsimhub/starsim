@@ -148,7 +148,7 @@ T.toc('Warmup (includes JIT compilation)')
 # Timed run
 T = sc.timer()
 result = run_sim(pars, seed=1)
-T.toc(f'Time for SIS-Numba, n_agents={pars.n_agents}, dur={pars.dur}')
+T.toc(f'Time for SIS-Numba-Jax, n_agents={pars.n_agents}, dur={pars.dur}')
 
 
 # Tests

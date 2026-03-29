@@ -222,7 +222,7 @@ class SIS(sc.prettyobj):
         self.immunity[uids] += self.imm_boost
 
         # Sample duration of infection and determine recovery time
-        dur_inf = lognormal_ex(mean=self.dur_inf, std=self.dur_inf, size=len(uids))
+        dur_inf = lognormal_ex(mean=self.dur_inf, std=1, size=len(uids))
         self.ti_recovered[uids] = self.ti + dur_inf
         return
 

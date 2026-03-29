@@ -2,17 +2,29 @@
 Analyzes results from the other languages
 """
 
+import numpy as np
 import sciris as sc
 import matplotlib.pyplot as plt
-
+sc.options(dpi=150)
 
 # Data -- from running manually
 d = sc.objdict()
-d.starsim   = dict(flex=9, lines=25, times=[2.48, 2.53, 2.50])
-d.python    = dict(flex=8, lines=239, times=[1.83, 2.18, 1.88])
-d.numba     = dict(flex=, lines=, times=[])
-d.numba_jax = dict(flex=, lines=, times=[])
-d.jax_cpu   = dict(flex=, lines=, times=[])
-d.jax_gpu   = dict(flex=, lines=, times=[])
-d.julia     = dict(flex=, lines=, times=[])
-d.rust      = dict(flex=, lines=, times=[])
+d.starsim   = dict(flex=9, lines= 25, times=[2.48, 2.53, 2.50])
+d.python    = dict(flex=8, lines=239, times=[2.43, 2.24, 2.31])
+d.numba     = dict(flex=5, lines=371, times=[1.90, 1.87, 1.71])
+d.numba_jax = dict(flex=1, lines=171, times=[1.06, 1.02, 1.02])
+d.jax_cpu   = dict(flex=1, lines=153, times=[0.94, 0.98, 0.90])
+d.jax_gpu   = dict(flex=1, lines=153, times=[0.06, 0.07, 0.06])
+d.julia     = dict(flex=3, lines=288, times=[1.11, 1.17, 1.15])
+d.rust      = dict(flex=1, lines=456, times=[0.61, 0.59, 0.59])
+
+df = sc.dataframe.from_dict(d, orient='index')
+df['mtime'] = df.times.apply(lambda x: np.array(x).mean())
+
+
+# Plot
+fig = plt.figure(figsize=(16,9))
+ax1 = plt.subplot(1,3,1)
+
+fig.tight_layout()
+plt.show()
