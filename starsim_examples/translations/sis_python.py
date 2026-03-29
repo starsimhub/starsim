@@ -152,6 +152,8 @@ class SIS(sc.prettyobj):
         init_inds = np.random.choice(self.n_agents, n_inf, replace=False)
         self.susceptible[init_inds] = False
         self.infected[init_inds] = True
+        dur_inf = lognormal_ex(mean=self.dur_inf, size=n_inf)
+        self.ti_recovered[init_inds] = dur_inf
         self.ti = 0
 
         # Create results

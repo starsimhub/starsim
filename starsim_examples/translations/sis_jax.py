@@ -106,6 +106,11 @@ def make_initial_state(pars, seed=0, beta=0.05, init_prev=0.01, dur_inf=10, wani
     init_inds = jax.random.choice(subkey, n_agents, shape=(n_inf,), replace=False)
     susceptible = susceptible.at[init_inds].set(False)
     infected = infected.at[init_inds].set(True)
+    sigma = jnp.sqrt(jnp.log(1 + (1.0 / dur_inf) ** 2))
+    mu = jnp.log(dur_inf) - sigma * sigma / 2.0
+    key, subkey2 = jax.random.split(key)
+    dur_samples = jnp.exp(jax.random.normal(subkey2, shape=(n_inf,)) * sigma + mu)
+    ti_recovered = ti_recovered.at[init_inds].set(dur_samples)
 
     # Result arrays
     res_sus = jnp.zeros(dur, dtype=jxfloat)
@@ -146,3 +151,23 @@ T = sc.timer()
 result = run_sim(pars, seed=1)
 jax.block_until_ready(result)
 T.toc(f'Time for SIS-JAX, n_agents={pars.n_agents}, dur={pars.dur}')
+
+
+# Tests
+def test_inf(result):
+    n_inf = result[6]  # res_inf
+    inf0 = n_inf[0]
+    infm = n_inf.max()
+    inf1 = n_inf[-1]
+    tests = {
+        f'Initial infections are nonzero: {inf0}' : inf0 > 0.005*pars.n_agents,
+        f'Initial infections start low: {inf0}'   : inf0 < 0.05*pars.n_agents,
+        f'Infections peak high: {infm}'           : infm > 0.5*pars.n_agents,
+        f'Infections stabilize: {inf1}'           : inf1 < n_inf.max(),
+    }
+    for k,tf in tests.items():
+        print(f'✓ {k}') if tf else print(f'× {k}')
+    assert all(tests.values())
+    return n_inf
+
+n_inf = test_inf(result)

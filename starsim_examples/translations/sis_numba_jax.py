@@ -104,6 +104,10 @@ def make_initial_state(pars, seed=0, beta=0.05, init_prev=0.01, dur_inf=10, wani
     init_inds = rng.choice(n_agents, size=n_inf, replace=False)
     susceptible[init_inds] = False
     infected[init_inds] = True
+    sigma = np.sqrt(np.log(1 + (1.0 / dur_inf) ** 2))
+    mu = np.log(dur_inf) - sigma * sigma / 2.0
+    dur_samples = np.exp(rng.normal(size=n_inf) * sigma + mu).astype(np.float32)
+    ti_recovered[init_inds] = dur_samples
 
     # Result arrays
     res_sus = np.zeros(dur, dtype=np.float32)
@@ -145,3 +149,23 @@ T.toc('Warmup (includes JIT compilation)')
 T = sc.timer()
 result = run_sim(pars, seed=1)
 T.toc(f'Time for SIS-Numba, n_agents={pars.n_agents}, dur={pars.dur}')
+
+
+# Tests
+def test_inf(result):
+    n_inf = result[6]  # res_inf
+    inf0 = n_inf[0]
+    infm = n_inf.max()
+    inf1 = n_inf[-1]
+    tests = {
+        f'Initial infections are nonzero: {inf0}' : inf0 > 0.005*pars.n_agents,
+        f'Initial infections start low: {inf0}'   : inf0 < 0.05*pars.n_agents,
+        f'Infections peak high: {infm}'           : infm > 0.5*pars.n_agents,
+        f'Infections stabilize: {inf1}'           : inf1 < n_inf.max(),
+    }
+    for k,tf in tests.items():
+        print(f'✓ {k}') if tf else print(f'× {k}')
+    assert all(tests.values())
+    return n_inf
+
+n_inf = test_inf(result)

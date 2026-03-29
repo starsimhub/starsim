@@ -16,6 +16,13 @@ def boolzeros(*args, **kwargs):
     """ Create a boolean array """
     return np.zeros(*args, dtype=bool, **kwargs)
 
+def lognormal_ex(mean=0, std=1, size=1):
+    """ Create a lognormal distribution with the specified mean and exponential SD """
+    sigma = np.sqrt(np.log(1 + (std / mean) ** 2))
+    mu = np.log(mean) - (sigma ** 2) / 2
+    rvs = np.random.lognormal(mean=mu, sigma=sigma, size=size)
+    return rvs
+
 
 #%% Numba-optimized kernels
 
@@ -291,6 +298,8 @@ class SIS(sc.prettyobj):
         init_inds = np.random.choice(self.n_agents, n_inf, replace=False)
         self.susceptible[init_inds] = False
         self.infected[init_inds] = True
+        dur_inf = lognormal_ex(mean=self.dur_inf, size=n_inf)
+        self.ti_recovered[init_inds] = dur_inf
         self.ti = 0
 
         # Create results
