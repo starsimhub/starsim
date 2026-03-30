@@ -842,6 +842,19 @@ class uids(np.ndarray):
     has additional methods `uids.concat()` (instance method), [`ss.uids.cat()`](`starsim.arrays.uids.cat`)
     (class method), `uids.remove()`, and `uids.intersect()` to simplify common
     UID operations.
+
+    The following operators are supported:
+
+    - ``+`` / ``+=``: concatenation — equivalent to `uids.concat()`. Duplicate entries are **preserved**.
+    - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
+    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use `+` instead to keep them)
+    - ``&`` / ``&=``: intersection
+    - ``^`` / ``^=``: symmetric difference
+
+    Note: because `uids` is a subclass of `np.ndarray`, all in-place operators
+    (``+=``, ``-=``, etc.) must return a new array and rebind the variable, exactly
+    like in-place operations other immutable types. Any prior references to the original
+    array will still point to the old, unmodified object.
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
@@ -893,7 +906,7 @@ class uids(np.ndarray):
         return np.setxor1d(self, other, **kw).view(self.__class__)
 
     def to_numpy(self):
-        """ Return a view as a standard NumPy array """
+        """ Return a view as maia standard NumPy array """
         return self.view(np.ndarray)
 
     def unique(self, return_index=False):
@@ -905,15 +918,44 @@ class uids(np.ndarray):
             arr = np.unique(self).view(self.__class__)
             return arr
 
+    def __array_wrap__(self, out_arr, context=None, return_scalar=False):
+        # Guard 1: non-integer dtype → return a plain ndarray.
+        # Example: `uids_a == uids_b` produces a bool array. A boolean uids should
+        # never exist — uids are integer indices only — and returning one would cause
+        # `~(a == b)` to hit our __invert__ guard instead of doing a normal bitwise NOT.
+        if out_arr.dtype.kind not in ('i', 'u'):
+            return out_arr.view(np.ndarray)
+        # Guard 2: scalar reductions → return a plain Python int.
+        # Example: `uids.max()` should behave like `uids[0]` (a bare integer), not
+        # return a 0-d uids whose subsequent use in arithmetic (e.g. `max + 1`) would
+        # incorrectly route through our __add__ concatenation operator.
+        if return_scalar:
+            return out_arr.item()
+        return super().__array_wrap__(out_arr, context, return_scalar)
+
+    def _uid_op_error(self, name):
+        msg = f'{name}() is not meaningful for {self.__class__.__name__}: UIDs are identifiers, not numeric values'
+        raise TypeError(msg)
+
+    def sum(self, *args, **kwargs):     self._uid_op_error('sum')
+    def mean(self, *args, **kwargs):    self._uid_op_error('mean')
+    def std(self, *args, **kwargs):     self._uid_op_error('std')
+    def var(self, *args, **kwargs):     self._uid_op_error('var')
+    def prod(self, *args, **kwargs):    self._uid_op_error('prod')
+    def cumsum(self, *args, **kwargs):  self._uid_op_error('cumsum')
+    def cumprod(self, *args, **kwargs): self._uid_op_error('cumprod')
+
     # Implement collection of operators
-    def __and__(self, other): return self.intersect(other)
-    def __or__(self, other) : return self.union(other)
-    def __sub__(self, other): return self.remove(other)
-    def __xor__(self, other): return self.xor(other)
-    def __invert__(self)    : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+    def __add__(self, other) : return self.concat(other)
+    def __and__(self, other) : return self.intersect(other)
+    def __or__(self, other)  : return self.union(other)
+    def __sub__(self, other) : return self.remove(other)
+    def __xor__(self, other) : return self.xor(other)
+    def __invert__(self)     : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
 
     # As the size of a set might change, in-place operations must necessarily return a copy
     # that gets reassigned to the original variable (the same as inplace operations on an immutable type)
+    def __iadd__(self, other): return self.__add__(other)
     def __iand__(self, other): return self.__and__(other)
     def __ior__(self, other) : return self.__or__(other)
     def __isub__(self, other): return self.__sub__(other)

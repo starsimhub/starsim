@@ -257,6 +257,92 @@ def test_arr_type_conversion():
     return dict(ab=ab, ba=ba, cd=cd, dc=dc)
 
 
+@sc.timer()
+def test_uids_operators():
+    sc.heading('Testing uids + and += operators')
+
+    a = ss.uids([1, 2, 3])
+    b = ss.uids([4, 5])
+
+    # __add__ returns a new uids with concatenated values
+    c = a + b
+    assert isinstance(c, ss.uids), '__add__ must return a uids instance'
+    assert list(c) == [1, 2, 3, 4, 5], '__add__ must concatenate values in order'
+
+    # __add__ does not modify the operands
+    assert list(a) == [1, 2, 3], '__add__ must not modify the left operand'
+    assert list(b) == [4, 5],    '__add__ must not modify the right operand'
+
+    # __add__ result is a distinct object
+    assert id(c) != id(a), '__add__ must return a new object'
+
+    # + with empty
+    assert list(a + ss.uids()) == [1, 2, 3], 'Concatenation with empty on right must return original values'
+    assert list(ss.uids() + a) == [1, 2, 3], 'Concatenation with empty on left must return original values'
+
+    # + accepts a plain ndarray on the RHS (same as concat)
+    c_np = a + np.array([4, 5])
+    assert isinstance(c_np, ss.uids), '__add__ with ndarray RHS must return a uids instance'
+    assert list(c_np) == [1, 2, 3, 4, 5], '__add__ with ndarray RHS must concatenate correctly'
+
+    # + preserves duplicates (unlike | which deduplicates)
+    dup = ss.uids([1, 2, 3])
+    assert list(a + dup) == [1, 2, 3, 1, 2, 3], '+ must preserve duplicate entries'
+    assert len(a | dup) == 3, '| must deduplicate'
+
+    # __iadd__ produces the same values as concat
+    x = ss.uids([10, 20])
+    y = ss.uids([30, 40])
+    via_concat = x.concat(y)
+    x += y
+    np.testing.assert_array_equal(x, via_concat), '+= must produce same result as concat'
+    assert isinstance(x, ss.uids), '+= must return a uids instance'
+
+    # += necessarily changes id (uids is a fixed-size ndarray subclass — cannot resize in-place)
+    a = ss.uids([1, 2, 3])
+    ref = a
+    original_id = id(a)
+    a += ss.uids([4, 5])
+    assert id(a) != original_id, '+= must rebind to a new object (cannot resize ndarray in-place)'
+    # The prior reference still points to the old, unmodified array
+    assert list(ref) == [1, 2, 3], 'Prior reference must still point to the original unmodified array'
+
+    return x
+
+
+@sc.timer()
+def test_uids_array_wrap():
+    sc.heading('Testing uids __array_wrap__ guards')
+
+    x = ss.uids([1, 2, 3])
+
+    # Scalar reductions must return plain Python ints, not uids
+    assert type(x.max()) is int, 'max() must return a plain Python int'
+    assert type(x.min()) is int, 'min() must return a plain Python int'
+    assert x.max() == 3, 'max() must return the correct value'
+    assert x.min() == 1, 'min() must return the correct value'
+
+    # Arithmetic on the returned scalar must not route through uids.__add__
+    assert x.max() + 1 == 4, 'max() + 1 must be plain integer arithmetic, not concatenation'
+
+    # Comparisons must return plain ndarray (not uids) to avoid hitting __invert__
+    eq = x == ss.uids([1, 2, 3])
+    assert type(eq) is np.ndarray, '== must return a plain ndarray, not uids'
+    assert eq.dtype == bool, '== result must have bool dtype'
+    assert np.all(~eq == False), '~ on the bool result of == must work normally'
+
+    # Nonsensical numeric reductions must raise TypeError — via instance method
+    for op in ('sum', 'mean', 'std', 'var', 'prod', 'cumsum', 'cumprod'):
+        with pytest.raises(TypeError):
+            getattr(x, op)()
+
+    # np.sum(x) also routes through x.sum() and must raise the same error
+    with pytest.raises(TypeError):
+        np.sum(x)
+
+    return x
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -269,6 +355,8 @@ if __name__ == '__main__':
     sims  = test_arrs()
     arrs  = test_arr_inplace()
     vals  = test_arr_type_conversion()
+    uids  = test_uids_operators()
+    wrap  = test_uids_array_wrap()
 
     sc.toc(T)
     plt.show()
