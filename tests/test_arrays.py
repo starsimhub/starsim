@@ -280,32 +280,43 @@ def test_uids_operators():
     assert list(a + ss.uids()) == [1, 2, 3], 'Concatenation with empty on right must return original values'
     assert list(ss.uids() + a) == [1, 2, 3], 'Concatenation with empty on left must return original values'
 
-    # + accepts a plain ndarray on the RHS (same as concat)
-    c_np = a + np.array([4, 5])
-    assert isinstance(c_np, ss.uids), '__add__ with ndarray RHS must return a uids instance'
-    assert list(c_np) == [1, 2, 3, 4, 5], '__add__ with ndarray RHS must concatenate correctly'
+    # + with a uids RHS concatenates; with a non-uids RHS does element-wise addition
+    assert list(a + ss.uids([4, 5])) == [1, 2, 3, 4, 5],    '+ with uids RHS must concatenate'
+    assert list(a + 10) == [11, 12, 13],                      '+ with scalar RHS must add element-wise'
+    assert list(a + np.array([10, 20, 30])) == [11, 22, 33],  '+ with ndarray RHS must add element-wise'
+    assert isinstance(a + 1, ss.uids), '+ with scalar RHS must return a uids'
 
-    # + preserves duplicates (unlike | which deduplicates)
+    # element-wise addition is commutative via __radd__
+    assert list(10 + a) == [11, 12, 13], 'scalar + uids must also do element-wise addition'
+    assert isinstance(10 + a, ss.uids),  'scalar + uids must return a uids'
+
+    # + with uids RHS preserves duplicates (unlike | which deduplicates)
     dup = ss.uids([1, 2, 3])
-    assert list(a + dup) == [1, 2, 3, 1, 2, 3], '+ must preserve duplicate entries'
+    assert list(a + dup) == [1, 2, 3, 1, 2, 3], '+ with uids RHS must preserve duplicate entries'
     assert len(a | dup) == 3, '| must deduplicate'
 
-    # __iadd__ produces the same values as concat
+    # __iadd__ with uids RHS concatenates and rebinds (size changes, id changes)
     x = ss.uids([10, 20])
     y = ss.uids([30, 40])
     via_concat = x.concat(y)
     x += y
-    np.testing.assert_array_equal(x, via_concat), '+= must produce same result as concat'
-    assert isinstance(x, ss.uids), '+= must return a uids instance'
+    assert list(x) == list(via_concat), '+= with uids RHS must produce same result as concat'
+    assert isinstance(x, ss.uids), '+= with uids RHS must return a uids instance'
 
-    # += necessarily changes id (uids is a fixed-size ndarray subclass — cannot resize in-place)
+    # __iadd__ with uids RHS changes id (size changes, cannot resize ndarray in-place)
     a = ss.uids([1, 2, 3])
     ref = a
     original_id = id(a)
     a += ss.uids([4, 5])
-    assert id(a) != original_id, '+= must rebind to a new object (cannot resize ndarray in-place)'
-    # The prior reference still points to the old, unmodified array
+    assert id(a) != original_id, '+= with uids RHS must rebind to a new object'
     assert list(ref) == [1, 2, 3], 'Prior reference must still point to the original unmodified array'
+
+    # __iadd__ with scalar RHS modifies in-place (size unchanged, id preserved)
+    a = ss.uids([1, 2, 3])
+    original_id = id(a)
+    a += 10
+    assert list(a) == [11, 12, 13], '+= with scalar RHS must add element-wise'
+    assert id(a) == original_id,    '+= with scalar RHS must preserve id (in-place modification)'
 
     return x
 

@@ -845,16 +845,16 @@ class uids(np.ndarray):
 
     The following operators are supported:
 
-    - ``+`` / ``+=``: concatenation — equivalent to `uids.concat()`. Duplicate entries are **preserved**.
+    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concat()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
     - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
-    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use `+` instead to keep them)
+    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use ``+`` instead to keep them).
     - ``&`` / ``&=``: intersection
     - ``^`` / ``^=``: symmetric difference
 
-    Note: because `uids` is a subclass of `np.ndarray`, all in-place operators
-    (``+=``, ``-=``, etc.) must return a new array and rebind the variable, exactly
-    like in-place operations other immutable types. Any prior references to the original
-    array will still point to the old, unmodified object.
+    Note: because `uids` is a subclass of `np.ndarray`, set-like in-place operators
+    (``+=`` with a ``uids`` RHS, ``-=``, ``|=``, ``&=``, ``^=``) must return a new array and rebind
+    the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
+    and preserves ``id(self)``.
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
@@ -946,16 +946,25 @@ class uids(np.ndarray):
     def cumprod(self, *args, **kwargs): self._uid_op_error('cumprod')
 
     # Implement collection of operators
-    def __add__(self, other) : return self.concat(other)
+    def __add__(self, other):
+        if isinstance(other, uids):
+            return self.concat(other)   # concatenation: uids([1,2]) + uids([3]) → uids([1,2,3])
+        return super().__add__(other)   # element-wise:  uids([1,2]) + 1        → uids([2,3])
     def __and__(self, other) : return self.intersect(other)
     def __or__(self, other)  : return self.union(other)
     def __sub__(self, other) : return self.remove(other)
     def __xor__(self, other) : return self.xor(other)
     def __invert__(self)     : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
 
-    # As the size of a set might change, in-place operations must necessarily return a copy
-    # that gets reassigned to the original variable (the same as inplace operations on an immutable type)
-    def __iadd__(self, other): return self.__add__(other)
+    # For set-like operations (uids RHS) the size changes, so in-place must return a new object
+    # and rebind the variable — same semantics as in-place operations on an immutable type.
+    # For scalar/array RHS (element-wise arithmetic) the size is unchanged, so we can modify
+    # in-place and preserve id(self).
+    def __iadd__(self, other):
+        if isinstance(other, uids):
+            return self.__add__(other)   # new object — size changes
+        np.add(self, other, out=self)    # in-place — size unchanged, id preserved
+        return self
     def __iand__(self, other): return self.__and__(other)
     def __ior__(self, other) : return self.__or__(other)
     def __isub__(self, other): return self.__sub__(other)
