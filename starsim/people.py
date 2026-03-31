@@ -377,7 +377,7 @@ class People:
             state.grow(new_uids)
 
         # Finally, update the alive indices
-        self.auids = self.auids.concat(new_uids)
+        self.auids = self.auids.concatenate(new_uids)
         return new_uids
 
     def filter(self, criteria=None, uids=None, split=False):
