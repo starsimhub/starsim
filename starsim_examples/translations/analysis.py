@@ -28,9 +28,10 @@ y = np.arange(n, 0, -1)
 fig = plt.figure(figsize=(16,9))
 
 plots = [
-    dict(col='mtime',  title='Times',         xlabel='Time (s)',                cmap='RdYlGn_r', fmt='%.2f'),
-    dict(col='flex',   title='Flexibility',   xlabel='Flexibility (out of 10)', cmap='RdYlGn'),
-    dict(col='lines',  title='Lines of code', xlabel='Lines of code',           cmap='RdYlGn_r'),
+    dict(col='mtime',  title='Times',              xlabel='Time (s)',                cmap='RdYlGn_r', fmt='%.2f'),
+    dict(col='lines',  title='Lines of code',      xlabel='Lines of code',           cmap='RdYlGn_r'),
+    dict(col='flex',   title='Flexibility (est.)', xlabel='Flexibility (out of 10)', cmap='RdYlGn'),
+
 ]
 for i, p in enumerate(plots):
     p = sc.dictobj(p)
