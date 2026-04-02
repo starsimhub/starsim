@@ -4,7 +4,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.3.2 (2026-04-XX)
-- *GitHub info*: PR [12XX](https://github.com/starsimhub/starsim/pull/12XX)
+- *GitHub info*: PR [1293](https://github.com/starsimhub/starsim/pull/1293)
 
 
 ## Version 3.3.1 (2026-04-02)
