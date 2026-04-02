@@ -263,7 +263,7 @@ class Infection(Disease):
                 disease_beta = betamap[nk][0].to_prob(self.t.dt) if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
                 target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
                 new_cases.append(target_uids)
-                sources.append(np.full(len(target_uids), dtype=ss_float, fill_value=np.nan))
+                sources.append(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan))
                 networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
             else:
                 errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
