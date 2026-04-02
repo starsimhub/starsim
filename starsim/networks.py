@@ -1219,8 +1219,8 @@ class HouseholdNet(Network):
             p1.append(hh_contacts)
             p2.append([new_uid] * len(hh_contacts))
 
-        p1 = ss.uids.cat(p1)
-        p2 = ss.uids.cat(p2)
+        p1 = ss.uids.concatenate(p1)
+        p2 = ss.uids.concatenate(p2)
 
         beta = np.ones(len(p1), dtype=ss.dtypes.float)
         self.append(p1=p1, p2=p2, beta=beta)
@@ -1241,7 +1241,7 @@ class HouseholdNet(Network):
             potential_partners = ss.uids(ppl.male & (ppl.age > 15) & (ppl.age < 50))
             partner_inds = np.random.permutation(len(potential_partners))[:len(moving_out)]
             partners = potential_partners[partner_inds]
-            to_remove = ss.uids.cat([moving_out, partners])
+            to_remove = ss.uids.concatenate([moving_out, partners])
             self.remove_uids(to_remove)
             beta = np.ones(len(moving_out), dtype=ss.dtypes.float)
             self.append(p1=moving_out, p2=partners, beta=beta)
