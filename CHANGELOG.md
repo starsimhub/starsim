@@ -3,8 +3,10 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
-## Version 3.3.1 (2026-XX-XX)
-- Added `+` and `+=` operators to `ss.uids` for concatenation (e.g. `a + b` is equivalent to `a.concat(b)`). Note that `+` preserves duplicates, unlike `|` which deduplicates.
+## Version 3.3.1 (2026-04-02)
+- Added `uids.concatenate()`, which unifies `uids.concat()` and `uids.cat()` into a single method that works as both an instance method (`x.concatenate(y)`) and an unbound class method (`ss.uids.concatenate(x, y)` or `ss.uids.concatenate([x, y])`). `None` values are silently filtered. 
+- `uids.concat()` and `uids.cat()` are deprecated but provide a `DeprecationWarning` for backwards compatibility, to be removed in a future release.
+- Added `+` and `+=` operators to `ss.uids` for concatenation (e.g. `a + b` is equivalent to `a.concatenate(b)`). Note that `+` preserves duplicates, unlike `|` which deduplicates.
 - Comparison operations on `ss.uids` (e.g. `a == b`) now correctly return a plain `np.ndarray` instead of a `uids` instance.
 - Scalar reductions on `ss.uids` (e.g. `x.max()`, `x.min()`) now return a plain Python `int`, consistent with element indexing (`x[0]`).
 - Numeric aggregation operations that are not meaningful for UID arrays (`sum()`, `mean()`, `std()`, `var()`, `prod()`, `cumsum()`, `cumprod()`) now raise `TypeError`.

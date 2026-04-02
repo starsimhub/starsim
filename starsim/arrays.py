@@ -839,13 +839,12 @@ class uids(np.ndarray):
     """ Class to specify that integers should be interpreted as UIDs.
 
     For all practical purposes, behaves like a NumPy integer array. However,
-    has additional methods `uids.concat()` (instance method), [`ss.uids.cat()`](`starsim.arrays.uids.cat`)
-    (class method), `uids.remove()`, and `uids.intersect()` to simplify common
-    UID operations.
+    has additional methods `uids.concatenate()`, `uids.remove()`, and
+    `uids.intersect()` to simplify common UID operations.
 
     The following operators are supported:
 
-    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concat()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
+    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
     - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
     - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use ``+`` instead to keep them).
     - ``&`` / ``&=``: intersection
@@ -869,17 +868,36 @@ class uids(np.ndarray):
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
-    def concat(self, other, **kw): # Class and instance methods can't share a name
-        """ Equivalent to np.concatenate(), but return correct type """
-        return np.concatenate([self, other], **kw).view(self.__class__)
+    def concatenate(*args):
+        """
+        Concatenate uids into a single instance
+
+        Can be called as either an instance method or an unbound class method::
+
+            x.concatenate(y)               # instance method
+            x.concatenate(None)            # None is treated as empty
+            ss.uids.concatenate(x, y)      # unbound; identical to instance call
+            ss.uids.concatenate([x, y])    # single iterable of arrays
+            ss.uids.concatenate([None, x]) # None elements are filtered out
+            ss.uids.concatenate()          # returns empty ss.uids()
+        """
+        if len(args) == 1 and sc.isiterable(args[0], exclude=(uids, np.ndarray)):
+            arrays = list(args[0])
+        else:
+            arrays = list(args)
+        valid = [a for a in arrays if a is not None]
+        return np.concatenate(valid).view(uids) if valid else uids()
+
+    def concat(self, other):
+        """ Deprecated — use ``uids.concatenate()`` instead """
+        ss.warn('uids.concat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
+        return self.concatenate(other)
 
     @classmethod
-    def cat(cls, *args, **kw):
-        """ Equivalent to np.concatenate(), but return correct type """
-        if len(args) == 0 or (len(args) == 1 and (args[0] is None or not len(args[0]))):
-            return uids()
-        arrs = args[0] if len(args) == 1 else args # TODO: handle one-array case
-        return np.concatenate(arrs, **kw).view(cls)
+    def cat(cls, *args):
+        """ Deprecated — use ``uids.concatenate()`` instead """
+        ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
+        return uids.concatenate(*args)
 
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
@@ -948,7 +966,7 @@ class uids(np.ndarray):
     # Implement collection of operators
     def __add__(self, other):
         if isinstance(other, uids):
-            return self.concat(other)   # concatenation: uids([1,2]) + uids([3]) → uids([1,2,3])
+            return self.concatenate(other)   # concatenation: uids([1,2]) + uids([3]) → uids([1,2,3])
         return super().__add__(other)   # element-wise:  uids([1,2]) + 1        → uids([2,3])
     def __and__(self, other) : return self.intersect(other)
     def __or__(self, other)  : return self.union(other)

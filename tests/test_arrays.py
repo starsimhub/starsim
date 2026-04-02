@@ -298,10 +298,10 @@ def test_uids_operators():
     # __iadd__ with uids RHS concatenates and rebinds (size changes, id changes)
     x = ss.uids([10, 20])
     y = ss.uids([30, 40])
-    via_concat = x.concat(y)
+    via_concatenate = x.concatenate(y)
     x += y
-    assert list(x) == list(via_concat), '+= with uids RHS must produce same result as concat'
-    assert isinstance(x, ss.uids), '+= with uids RHS must return a uids instance'
+    np.testing.assert_array_equal(x, via_concatenate), '+= must produce same result as concatenate'
+    assert isinstance(x, ss.uids), '+= must return a uids instance'
 
     # __iadd__ with uids RHS changes id (size changes, cannot resize ndarray in-place)
     a = ss.uids([1, 2, 3])
@@ -318,7 +318,66 @@ def test_uids_operators():
     assert list(a) == [11, 12, 13], '+= with scalar RHS must add element-wise'
     assert id(a) == original_id,    '+= with scalar RHS must preserve id (in-place modification)'
 
-    return x
+
+@sc.timer()
+def test_uids_concatenate():
+    sc.heading('Testing uids.concatenate()')
+
+    x = ss.uids([1, 2, 3])
+    y = ss.uids([4, 5, 6])
+    expected = ss.uids([1, 2, 3, 4, 5, 6])
+
+    # Instance method: x.concatenate(y)
+    result = x.concatenate(y)
+    assert isinstance(result, ss.uids), 'instance call must return a uids'
+    np.testing.assert_array_equal(result, expected)
+
+    # Instance method with None: x.concatenate(None)
+    result = x.concatenate(None)
+    assert isinstance(result, ss.uids), 'instance call with None must return a uids'
+    np.testing.assert_array_equal(result, x)
+
+    # Unbound two-arg: ss.uids.concatenate(x, y)
+    result = ss.uids.concatenate(x, y)
+    assert isinstance(result, ss.uids), 'unbound two-arg call must return a uids'
+    np.testing.assert_array_equal(result, expected)
+
+    # Single collection: ss.uids.concatenate([x, y])
+    result = ss.uids.concatenate([x, y])
+    assert isinstance(result, ss.uids), 'single-list call must return a uids'
+    np.testing.assert_array_equal(result, expected)
+
+    # Collection with leading None: ss.uids.concatenate([None, x])
+    result = ss.uids.concatenate([None, x])
+    assert isinstance(result, ss.uids), 'collection with leading None must return a uids'
+    np.testing.assert_array_equal(result, x)
+
+    # Collection with interior None: ss.uids.concatenate([x, None, y])
+    result = ss.uids.concatenate([x, None, y])
+    assert isinstance(result, ss.uids), 'collection with interior None must return a uids'
+    np.testing.assert_array_equal(result, expected)
+
+    # Zero-arg unbound: ss.uids.concatenate()
+    result = ss.uids.concatenate()
+    assert isinstance(result, ss.uids), 'zero-arg call must return a uids'
+    assert len(result) == 0, 'zero-arg call must return empty uids'
+
+    # Works on non-list iterables (e.g. tuple, generator)
+    result = ss.uids.concatenate((x, y))
+    np.testing.assert_array_equal(result, expected)
+    result = ss.uids.concatenate(a for a in [x, y])
+    np.testing.assert_array_equal(result, expected)
+
+    # Deprecated concat() and cat() delegate correctly and warn
+    with pytest.warns(DeprecationWarning, match='uids.concat'):
+        result = x.concat(y)
+    np.testing.assert_array_equal(result, expected)
+
+    with pytest.warns(DeprecationWarning, match='uids.cat'):
+        result = ss.uids.cat(x, y)
+    np.testing.assert_array_equal(result, expected)
+
+    return result
 
 
 @sc.timer()
@@ -367,6 +426,7 @@ if __name__ == '__main__':
     arrs  = test_arr_inplace()
     vals  = test_arr_type_conversion()
     uids  = test_uids_operators()
+    cat   = test_uids_concatenate()
     wrap  = test_uids_array_wrap()
 
     sc.toc(T)
