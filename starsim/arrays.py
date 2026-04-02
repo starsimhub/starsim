@@ -881,12 +881,23 @@ class uids(np.ndarray):
             ss.uids.concatenate([None, x]) # None elements are filtered out
             ss.uids.concatenate()          # returns empty ss.uids()
         """
-        if len(args) == 1 and sc.isiterable(args[0], exclude=(uids, np.ndarray)):
+        # Handle a single input argument: my_uids.concatenate([uids1, uids2])
+        if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))):
             arrays = list(args[0])
+        
+        # Handle multiple input arguments: my_uids.concatenate(uids1, uids2)
         else:
             arrays = list(args)
+        
+        # Remove any None values
         valid = [a for a in arrays if a is not None]
-        return np.concatenate(valid).view(uids) if valid else uids()
+
+        # If non-empty arrays remain, concatenate, always using int type
+        if valid:
+            out = np.concatenate(valid, dtype=ss_int).view(uids)
+        else:
+            out = uids()
+        return out
 
     def concat(self, other):
         """ Deprecated — use ``uids.concatenate()`` instead """
