@@ -257,6 +257,103 @@ def test_arr_type_conversion():
     return dict(ab=ab, ba=ba, cd=cd, dc=dc)
 
 
+@sc.timer()
+def test_uids_operators():
+    sc.heading('Testing uids + and += operators')
+
+    a = ss.uids([1, 2, 3])
+    b = ss.uids([4, 5])
+
+    # __add__ returns a new uids with concatenated values
+    c = a + b
+    assert isinstance(c, ss.uids), '__add__ must return a uids instance'
+    assert list(c) == [1, 2, 3, 4, 5], '__add__ must concatenate values in order'
+
+    # __add__ does not modify the operands
+    assert list(a) == [1, 2, 3], '__add__ must not modify the left operand'
+    assert list(b) == [4, 5],    '__add__ must not modify the right operand'
+
+    # __add__ result is a distinct object
+    assert id(c) != id(a), '__add__ must return a new object'
+
+    # + with empty
+    assert list(a + ss.uids()) == [1, 2, 3], 'Concatenation with empty on right must return original values'
+    assert list(ss.uids() + a) == [1, 2, 3], 'Concatenation with empty on left must return original values'
+
+    # + with a uids RHS concatenates; with a non-uids RHS does element-wise addition
+    assert list(a + ss.uids([4, 5])) == [1, 2, 3, 4, 5],    '+ with uids RHS must concatenate'
+    assert list(a + 10) == [11, 12, 13],                      '+ with scalar RHS must add element-wise'
+    assert list(a + np.array([10, 20, 30])) == [11, 22, 33],  '+ with ndarray RHS must add element-wise'
+    assert isinstance(a + 1, ss.uids), '+ with scalar RHS must return a uids'
+
+    # element-wise addition is commutative via __radd__
+    assert list(10 + a) == [11, 12, 13], 'scalar + uids must also do element-wise addition'
+    assert isinstance(10 + a, ss.uids),  'scalar + uids must return a uids'
+
+    # + with uids RHS preserves duplicates (unlike | which deduplicates)
+    dup = ss.uids([1, 2, 3])
+    assert list(a + dup) == [1, 2, 3, 1, 2, 3], '+ with uids RHS must preserve duplicate entries'
+    assert len(a | dup) == 3, '| must deduplicate'
+
+    # __iadd__ with uids RHS concatenates and rebinds (size changes, id changes)
+    x = ss.uids([10, 20])
+    y = ss.uids([30, 40])
+    via_concat = x.concat(y)
+    x += y
+    assert list(x) == list(via_concat), '+= with uids RHS must produce same result as concat'
+    assert isinstance(x, ss.uids), '+= with uids RHS must return a uids instance'
+
+    # __iadd__ with uids RHS changes id (size changes, cannot resize ndarray in-place)
+    a = ss.uids([1, 2, 3])
+    ref = a
+    original_id = id(a)
+    a += ss.uids([4, 5])
+    assert id(a) != original_id, '+= with uids RHS must rebind to a new object'
+    assert list(ref) == [1, 2, 3], 'Prior reference must still point to the original unmodified array'
+
+    # __iadd__ with scalar RHS modifies in-place (size unchanged, id preserved)
+    a = ss.uids([1, 2, 3])
+    original_id = id(a)
+    a += 10
+    assert list(a) == [11, 12, 13], '+= with scalar RHS must add element-wise'
+    assert id(a) == original_id,    '+= with scalar RHS must preserve id (in-place modification)'
+
+    return x
+
+
+@sc.timer()
+def test_uids_array_wrap():
+    sc.heading('Testing uids __array_wrap__ guards')
+
+    x = ss.uids([1, 2, 3])
+
+    # Scalar reductions must return plain Python ints, not uids
+    assert type(x.max()) is int, 'max() must return a plain Python int'
+    assert type(x.min()) is int, 'min() must return a plain Python int'
+    assert x.max() == 3, 'max() must return the correct value'
+    assert x.min() == 1, 'min() must return the correct value'
+
+    # Arithmetic on the returned scalar must not route through uids.__add__
+    assert x.max() + 1 == 4, 'max() + 1 must be plain integer arithmetic, not concatenation'
+
+    # Comparisons must return plain ndarray (not uids) to avoid hitting __invert__
+    eq = x == ss.uids([1, 2, 3])
+    assert type(eq) is np.ndarray, '== must return a plain ndarray, not uids'
+    assert eq.dtype == bool, '== result must have bool dtype'
+    assert np.all(~eq == False), '~ on the bool result of == must work normally'
+
+    # Nonsensical numeric reductions must raise TypeError — via instance method
+    for op in ('sum', 'mean', 'std', 'var', 'prod', 'cumsum', 'cumprod'):
+        with pytest.raises(TypeError):
+            getattr(x, op)()
+
+    # np.sum(x) also routes through x.sum() and must raise the same error
+    with pytest.raises(TypeError):
+        np.sum(x)
+
+    return x
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -269,6 +366,8 @@ if __name__ == '__main__':
     sims  = test_arrs()
     arrs  = test_arr_inplace()
     vals  = test_arr_type_conversion()
+    uids  = test_uids_operators()
+    wrap  = test_uids_array_wrap()
 
     sc.toc(T)
     plt.show()

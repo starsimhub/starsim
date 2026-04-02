@@ -4,6 +4,10 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.3.1 (2026-XX-XX)
+- Added `+` and `+=` operators to `ss.uids` for concatenation (e.g. `a + b` is equivalent to `a.concat(b)`). Note that `+` preserves duplicates, unlike `|` which deduplicates.
+- Comparison operations on `ss.uids` (e.g. `a == b`) now correctly return a plain `np.ndarray` instead of a `uids` instance.
+- Scalar reductions on `ss.uids` (e.g. `x.max()`, `x.min()`) now return a plain Python `int`, consistent with element indexing (`x[0]`).
+- Numeric aggregation operations that are not meaningful for UID arrays (`sum()`, `mean()`, `std()`, `var()`, `prod()`, `cumsum()`, `cumprod()`) now raise `TypeError`.
 
 
 ## Version 3.3.0 (2026-03-27)
