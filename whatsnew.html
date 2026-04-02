@@ -625,6 +625,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul class="collapse">
+  <li><a href="#version-3.3.1-2026-04-02" id="toc-version-3.3.1-2026-04-02" class="nav-link" data-scroll-target="#version-3.3.1-2026-04-02">Version 3.3.1 (2026-04-02)</a></li>
   <li><a href="#version-3.3.0-2026-03-27" id="toc-version-3.3.0-2026-03-27" class="nav-link" data-scroll-target="#version-3.3.0-2026-03-27">Version 3.3.0 (2026-03-27)</a>
   <ul class="collapse">
   <li><a href="#pregnancy-loss-and-neonatal-death-classification" id="toc-pregnancy-loss-and-neonatal-death-classification" class="nav-link" data-scroll-target="#pregnancy-loss-and-neonatal-death-classification">Pregnancy loss and neonatal death classification</a></li>
@@ -754,6 +755,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms “Migration” or “Regression”.</p>
+<section id="version-3.3.1-2026-04-02" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.3.1-2026-04-02">Version 3.3.1 (2026-04-02)</h2>
+<ul>
+<li>Added <a href="./api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a>, which unifies <a href="./api/arrays.html#starsim.arrays.uids.concat" title="0"><code>uids.concat()</code></a> and <a href="./api/arrays.html#starsim.arrays.uids.cat" title="0"><code>uids.cat()</code></a> into a single method that works as both an instance method (<code>x.concatenate(y)</code>) and an unbound class method (<code>ss.uids.concatenate(x, y)</code> or <code>ss.uids.concatenate([x, y])</code>). <a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a> values are silently filtered.</li>
+<li><a href="./api/arrays.html#starsim.arrays.uids.concat" title="0"><code>uids.concat()</code></a> and <a href="./api/arrays.html#starsim.arrays.uids.cat" title="0"><code>uids.cat()</code></a> are deprecated but provide a <a href="https://docs.python.org/3/library/exceptions.html#DeprecationWarning" title="1"><code>DeprecationWarning</code></a> for backwards compatibility, to be removed in a future release.</li>
+<li>Added <code>+</code> and <code>+=</code> operators to <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a> for concatenation (e.g.&nbsp;<code>a + b</code> is equivalent to <code>a.concatenate(b)</code>). Note that <code>+</code> preserves duplicates, unlike <code>|</code> which deduplicates.</li>
+<li>Comparison operations on <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a> (e.g.&nbsp;<code>a == b</code>) now correctly return a plain <a href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#np.ndarray" title="1"><code>np.ndarray</code></a> instead of a <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> instance.</li>
+<li>Scalar reductions on <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a> (e.g.&nbsp;<code>x.max()</code>, <code>x.min()</code>) now return a plain Python <a href="https://docs.python.org/3/library/functions.html#int" title="1"><code>int</code></a>, consistent with element indexing (<code>x[0]</code>).</li>
+<li>Numeric aggregation operations that are not meaningful for UID arrays (<a href="https://docs.python.org/3/library/functions.html#sum" title="1"><code>sum()</code></a>, <code>mean()</code>, <code>std()</code>, <code>var()</code>, <code>prod()</code>, <code>cumsum()</code>, <code>cumprod()</code>) now raise <a href="https://docs.python.org/3/library/exceptions.html#TypeError" title="1"><code>TypeError</code></a>.</li>
+<li>Added <code>ndim</code> to <a href="./api/time.html#starsim.time.TimePar" title="0"><code>ss.TimePar</code></a>, fixing a bug when trying to assign scalar TimePars (e.g.&nbsp;<code>ss.years(1990)</code>) to <a href="https://pandas.pydata.org/pandas-docs/stable/index.html#module-pandas" title="1"><code>pandas</code></a> dataframes.</li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1279">1279</a></li>
+</ul>
+</section>
 <section id="version-3.3.0-2026-03-27" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.3.0-2026-03-27">Version 3.3.0 (2026-03-27)</h2>
 <ul>
@@ -2246,7 +2260,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

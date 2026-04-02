@@ -1073,7 +1073,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="starsim.arrays.uids">uids</h3>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>arrays.uids()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Class to specify that integers should be interpreted as UIDs.</p>
-<p>For all practical purposes, behaves like a NumPy integer array. However, has additional methods <a href="../api/arrays.html#starsim.arrays.uids.concat" title="0"><code>uids.concat()</code></a> (instance method), <a href="../api/arrays.html#starsim.arrays.uids.cat"><span><code>ss.uids.cat()</code></span></a> (class method), <a href="../api/arrays.html#starsim.arrays.uids.remove" title="0"><code>uids.remove()</code></a>, and <a href="../api/arrays.html#starsim.arrays.uids.intersect" title="0"><code>uids.intersect()</code></a> to simplify common UID operations.</p>
+<p>For all practical purposes, behaves like a NumPy integer array. However, has additional methods <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a>, <a href="../api/arrays.html#starsim.arrays.uids.remove" title="0"><code>uids.remove()</code></a>, and <a href="../api/arrays.html#starsim.arrays.uids.intersect" title="0"><code>uids.intersect()</code></a> to simplify common UID operations.</p>
+<p>The following operators are supported:</p>
+<ul>
+<li><code>+</code> / <code>+=</code>: if the RHS is a <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a>, concatenation (equivalent to <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a>); otherwise element-wise addition (e.g.&nbsp;<code>uids([1,2]) + 1</code> → <code>uids([2,3])</code>). Concatenation preserves duplicates.</li>
+<li><code>-</code> / <code>-=</code>: set difference — equivalent to <a href="../api/arrays.html#starsim.arrays.uids.remove" title="0"><code>uids.remove()</code></a>. Duplicate entries in the original will also be removed (uses <a href="https://numpy.org/doc/stable/reference/generated/numpy.setdiff1d.html#np.setdiff1d" title="1"><code>np.setdiff1d</code></a> internally).</li>
+<li><code>|</code> / <code>|=</code>: union (unique elements from both arrays). Note that duplicate entries in the original are <strong>removed</strong> (use <code>+</code> instead to keep them).</li>
+<li><code>&amp;</code> / <code>&amp;=</code>: intersection</li>
+<li><code>^</code> / <code>^=</code>: symmetric difference</li>
+</ul>
+<p>Note: because <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> is a subclass of <a href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#np.ndarray" title="1"><code>np.ndarray</code></a>, set-like in-place operators (<code>+=</code> with a <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> RHS, <code>-=</code>, <code>|=</code>, <code>&amp;=</code>, <code>^=</code>) must return a new array and rebind the variable. However, <code>+=</code> with a scalar or array RHS modifies the array in-place and preserves <code>id(self)</code>.</p>
 <section id="methods-4" class="level4">
 <h4 class="anchored" data-anchor-id="methods-4">Methods</h4>
 <table class="caption-top table">
@@ -1086,33 +1095,37 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td><a href="#starsim.arrays.uids.cat">cat</a></td>
-<td>Equivalent to np.concatenate(), but return correct type</td>
+<td>Deprecated — use <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a> instead</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.arrays.uids.concat">concat</a></td>
-<td>Equivalent to np.concatenate(), but return correct type</td>
+<td>Deprecated — use <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a> instead</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.arrays.uids.concatenate">concatenate</a></td>
+<td>Concatenate uids into a single instance</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.arrays.uids.intersect">intersect</a></td>
 <td>Keep only UIDs that are also present in the other array</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.arrays.uids.remove">remove</a></td>
 <td>Remove provided UIDs from current array</td>
 </tr>
-<tr class="odd">
-<td><a href="#starsim.arrays.uids.to_numpy">to_numpy</a></td>
-<td>Return a view as a standard NumPy array</td>
-</tr>
 <tr class="even">
+<td><a href="#starsim.arrays.uids.to_numpy">to_numpy</a></td>
+<td>Return a view as maia standard NumPy array</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.arrays.uids.union">union</a></td>
 <td>Return all UIDs present in both arrays</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.arrays.uids.unique">unique</a></td>
 <td>Return unique UIDs; equivalent to np.unique()</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.arrays.uids.xor">xor</a></td>
 <td>Return UIDs present in only one of the arrays</td>
 </tr>
@@ -1120,42 +1133,54 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.arrays.uids.cat" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.cat">cat</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.cat(<span class="op">*</span>args, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Equivalent to np.concatenate(), but return correct type</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.cat(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Deprecated — use <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a> instead</p>
 </section>
 <section id="starsim.arrays.uids.concat" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.concat">concat</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concat(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Equivalent to np.concatenate(), but return correct type</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concat(other)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Deprecated — use <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a> instead</p>
+</section>
+<section id="starsim.arrays.uids.concatenate" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.arrays.uids.concatenate">concatenate</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concatenate(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Concatenate uids into a single instance</p>
+<p>Can be called as either an instance method or an unbound class method::</p>
+<pre><code>x.concatenate(y)               # instance method
+x.concatenate(None)            # None is treated as empty
+ss.uids.concatenate(x, y)      # unbound; identical to instance call
+ss.uids.concatenate([x, y])    # single iterable of arrays
+ss.uids.concatenate([None, x]) # None elements are filtered out
+ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
 </section>
 <section id="starsim.arrays.uids.intersect" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.intersect">intersect</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.intersect(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.intersect(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Keep only UIDs that are also present in the other array</p>
 </section>
 <section id="starsim.arrays.uids.remove" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.remove">remove</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.remove(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.remove(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Remove provided UIDs from current array</p>
 </section>
 <section id="starsim.arrays.uids.to_numpy" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.to_numpy">to_numpy</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.to_numpy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Return a view as a standard NumPy array</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.to_numpy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return a view as maia standard NumPy array</p>
 </section>
 <section id="starsim.arrays.uids.union" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.union">union</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.union(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.union(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return all UIDs present in both arrays</p>
 </section>
 <section id="starsim.arrays.uids.unique" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.unique">unique</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.unique(return_index<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.unique(return_index<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return unique UIDs; equivalent to np.unique()</p>
 </section>
 <section id="starsim.arrays.uids.xor" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.xor">xor</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.xor(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.xor(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return UIDs present in only one of the arrays</p>
 
 
@@ -1598,7 +1623,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.0 (2026-03-27).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
