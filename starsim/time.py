@@ -890,6 +890,10 @@ Examples:
     def is_array(self):
         return isinstance(self.value, np.ndarray)
 
+    @property
+    def ndim(self):
+        return np.ndim(self.value)
+
     def to(self, unit):
         """ Convert this TimePar to one of a different class """
         unit = get_unit_class(self.timepar_type, unit)

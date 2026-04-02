@@ -10,6 +10,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Comparison operations on `ss.uids` (e.g. `a == b`) now correctly return a plain `np.ndarray` instead of a `uids` instance.
 - Scalar reductions on `ss.uids` (e.g. `x.max()`, `x.min()`) now return a plain Python `int`, consistent with element indexing (`x[0]`).
 - Numeric aggregation operations that are not meaningful for UID arrays (`sum()`, `mean()`, `std()`, `var()`, `prod()`, `cumsum()`, `cumprod()`) now raise `TypeError`.
+- Added `ndim` to `ss.TimePar`, fixing a bug when trying to assign scalar TimePars (e.g. `ss.years(1990)`) to `pandas` dataframes.
+- *GitHub info*: PR [1279](https://github.com/starsimhub/starsim/pull/1279)
 
 
 ## Version 3.3.0 (2026-03-27)
