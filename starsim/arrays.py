@@ -883,7 +883,7 @@ class uids(np.ndarray):
         """
         # Handle a single input argument: my_uids.concatenate([uids1, uids2])
         if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))):
-            arrays = list(args[0])
+            arrays = list(args[0]) if not isinstance(args[0], list) else args[0] # Handle corner case of [[]]
         
         # Handle multiple input arguments: my_uids.concatenate(uids1, uids2)
         else:
@@ -894,7 +894,7 @@ class uids(np.ndarray):
 
         # If non-empty arrays remain, concatenate, always using int type
         if valid:
-            out = np.concatenate(valid, dtype=ss_int).view(uids)
+            out = np.concatenate(valid).astype(ss_int).view(uids)
         else:
             out = uids()
         return out
