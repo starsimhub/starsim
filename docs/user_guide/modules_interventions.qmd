@@ -1,0 +1,148 @@
+---
+title: Interventions
+jupyter: python3
+---
+
+
+This guide describes how to implementing interventions in Starsim. Interventions represent actions that affect disease transmission, such as screening, treatment, and vaccination programs.
+
+For learning-oriented content on interventions, see [Tutorial 6 - Interventions](../tutorials/t6_interventions.ipynb).
+
+## Comparison of intervention classes
+
+### Base classes
+
+| Class | Purpose | Key features |
+|-------|---------|--------------|
+| `Intervention` | Base intervention class | Eligibility checking, product integration, step() method |
+| `RoutineDelivery` | Continuous delivery over time | Interpolated probabilities, annual/timestep rates |
+| `CampaignDelivery` | One-off or discrete campaigns | Specific years, optional interpolation |
+| `BaseTest` | Base for screening/triage | Product administration, outcome tracking |
+| `BaseScreening` | Screening programs | Population-level eligibility checking |
+| `BaseTriage` | Triage/follow-up testing | Targeted eligibility (e.g., screen positives) |
+| `BaseTreatment` | Treatment interventions | Queue management, eligibility validation |
+| `BaseVaccination` | Vaccination programs | Dose tracking, vaccination state management |
+
+### Screening interventions
+
+| Class | Delivery pattern | Use case |
+|-------|------------------|----------|
+| `routine_screening` | Continuous | Regular screening programs (e.g., annual STI screening) |
+| `campaign_screening` | Discrete | Mass screening events (e.g., outbreak response) |
+| `routine_triage` | Continuous | Follow-up testing for positives |
+| `campaign_triage` | Discrete | Campaign-based confirmatory testing |
+
+### Treatment interventions
+
+| Class | Capacity Model | Use Case |
+|-------|----------------|----------|
+| `treat_num` | Fixed capacity per timestep | Resource-constrained treatment programs |
+
+### Vaccination interventions
+
+| Class | Delivery Pattern | Use Case |
+|-------|------------------|----------|
+| `routine_vx` | Continuous | Routine immunization programs |
+| `campaign_vx` | Discrete | Mass vaccination campaigns |
+
+## Implementation patterns
+
+### Eligibility functions
+
+Interventions use eligibility functions to determine who can receive the intervention:
+
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+# Lambda functions for simple eligibility
+eligible_adults = lambda sim: (sim.people.age >= 18).uids
+
+# More complex eligibility combining multiple conditions  
+def high_risk_eligibility(sim):
+    adults = sim.people.age >= 18
+    sexually_active = sim.networks.mfnet.participant
+    return (adults & sexually_active).uids
+
+# Using intervention outcomes for triage
+screen_positives = lambda sim: sim.interventions.screening.outcomes['positive']
+```
+
+### Product integration
+
+Interventions work with products that define the actual medical intervention:
+
+```{python}
+import sciris as sc
+import starsim as ss
+
+# Define parameters
+pars = sc.objdict(
+    n_agents = 5e3,
+    start = 2000,
+    stop = 2020,
+    diseases = 'sis',
+    networks = 'random',
+)
+
+# Define the product data
+dx_data = sc.dataframe(
+    columns =
+        ['disease', 'state', 'result', 'probability'],
+    data = [
+        ['sis', 'susceptible', 'positive', 0.01],
+        ['sis', 'susceptible', 'negative', 0.99],
+        ['sis', 'infected', 'positive', 0.95],
+        ['sis', 'infected', 'negative', 0.05],
+    ]
+)
+
+# Using built-in products
+vx_start = 2005
+my_vaccine = ss.simple_vx(efficacy=0.9)
+vaccination = ss.routine_vx(
+    product = my_vaccine,  # Product object
+    prob = 0.8,
+    start_year = vx_start,
+)
+
+# Using custom products
+dx_start = 2010
+screening = ss.routine_screening(
+    product = ss.Dx(df=dx_data),
+    prob = 0.9,
+    start_year = dx_start,
+)
+
+# Run the sim
+sim = ss.Sim(pars, interventions=[screening, vaccination])
+sim.run()
+sim.plot()
+```
+
+## Adding multiple interventions
+
+If you want to add multiple of the _same_ intervention, you need to give them different names. (This also applies to diseases and other modules.) This example compares simulations with 0, 1, or 2 vaccines:
+
+```{python}
+import starsim as ss
+
+# Create the product - a vaccine with 80% efficacy
+vx = ss.simple_vx(efficacy=0.8)
+
+# Create the interventions -- low and high coverage
+intv_low  = ss.routine_vx(name='intv_low', start_year=2010, prob=0.2, product=vx)
+intv_high = ss.routine_vx(name='intv_high', start_year=2020, prob=0.6, product=vx)
+
+# Create the sims
+pars = dict(n_agents=5000, networks='random', diseases='sis', verbose=0)
+s0 = ss.Sim(pars, label='Baseline')
+s1 = ss.Sim(pars, label='Low vaccine coverage', interventions=intv_low)
+s2 = ss.Sim(pars, label='Low + high vaccine coverage', interventions=[intv_low, intv_high])
+
+# Run & plot
+msim = ss.parallel(s0, s1, s2)
+msim.plot('sis_new_infections')
+```
+

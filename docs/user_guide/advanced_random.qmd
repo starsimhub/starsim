@@ -1,0 +1,197 @@
+---
+title: Random numbers
+jupyter: python3
+---
+
+
+The Starsim framework implements a novel approach to sampling from distributions that prevents random number noise from corrupting differences between two simulations. This user guide will demonstrate how to use the common random number (CRN) feature to achieve low-variance differences in simulation results. This feature is important for scenario and sensitivity analyses, where the goal is to isolate the effects of specific changes in model parameters or configurations. 
+
+For technical details and additional examples, please refer to the following publication:
+[D. J. Klein, R. G. Abeysuriya, R. M. Stuart, and C. C. Kerr, "Noise-free comparison of stochastic agent-based simulations using common random numbers." arXiv preprint arXiv:2409.02086 (2024).](https://arxiv.org/abs/2409.02086)
+
+This guide builds on the [Distributions guide](advanced_distributions.ipynb), so please familiarize yourself with that guide before proceeding.
+
+In this user guide, you will:
+- Understand the concept of common random numbers (CRN)
+- Learn how to sample from distributions using common random numbers
+- See the benefits of using CRN for low-variance differences
+
+
+## Understanding Common Random Numbers (CRN)
+
+Common Random Numbers (CRN) is a sophisticated technique that enables noise-free accounting of the effects of different parameters or interventions on outcomes like infections averted or lives saved. Starsim is the first and only simulation framework that fully supports CRN, including agent-agent interactions like disease transmission and vital dynamics including births.
+
+To understand CRN, you first have to know a little about where random numbers come from. As discussed in the [Advanced Distributions guide](advanced_distributions.ipynb), random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the `numpy` library:
+
+```{python}
+import numpy as np
+np.random.seed(42) # Set the seed to 42
+draws1 = np.random.random(size=10) # Draw 10 realizations
+print(f'First draws: {draws1.round(2)}')
+
+np.random.seed(42) # Reset the seed to 42
+draws2 = np.random.random(size=10) # Draw 10 realizations
+print(f'Second draws: {draws2.round(2)}')
+
+assert np.array_equal(draws1, draws2), "The two sets of draws should be equal since the seed is the same."
+```
+
+### The problem solved by CRN in agent-based simulation modeling
+
+Most agent-based modeling frameworks dole out random numbers to agents sequentially, as needed, drawing values from a single centralized random number generator. The problem arises when you want to compare two similar, but different simulations.
+
+Even if the two simulations are run with the same seed, the difference in outcomes will be a combination of:
+
+1. Real and meaningful "mechanistic" differences caused by the different inputs, and
+2. Random number noise caused by "stochastic branching."
+
+Stochastic branching is just a technical term used to describe which random numbers are used to make each decision.  The random number noise obscures the real differences, making it difficult to determine the true impact of the changes made in the second simulation.
+
+### Example of stochastic branching: Fishing 🎣
+
+As a simple example, consider the following two simulations of a Fishing module.
+
+- Simulation A has 20 agents who are trying to catch fish. On each time step, each agent has a 50% chance of going fishing, and a 20% chance of catching a fish if they go fishing.
+- Simulation B is identical to Simulation A, except that agent 0 is banned from fishing.
+
+Both simulations will use the same random number seed. Because the agents do not interact (they're not actually competing for the same fish!), the only difference in outcomes should be that agent 0 does not go fishing and therefore will never catch a fish. However, because of the way random numbers are generated, the two simulations will use the same random numbers for different purposes. This means that banning agent 0 from fishing will _change which other agents go fishing and catch fish_!
+
+**NOTE:** We have to specifically disable Starsim's CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the `single_rng` option to `True` in this example.
+
+As a first step, we will create a Fishing module:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+class Fishing(ss.Module):
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.define_pars(
+            p_fishing = ss.bernoulli(p=0.5),
+            p_catch = ss.bernoulli(p=0.2),
+            banned_uids = [],
+            verbose = True
+        )
+        self.update_pars(pars=pars, **kwargs)
+        self.define_states(
+            ss.BoolState('fish_caught', default=0)
+        )
+        return
+
+    def step(self):
+        going_fishing_uids = self.pars.p_fishing.filter() # Filter with no arguments tests all agents
+
+        # Remove banned agents from going fishing
+        going_fishing_uids = going_fishing_uids.remove(self.pars.banned_uids)
+
+        catch_uids = self.pars.p_catch.filter(going_fishing_uids)
+        if self.pars.verbose:
+            print(f'Time step {self.ti}:')
+            print(f' * Agents going fishing: {going_fishing_uids}')
+            print(f' * Agents that caught fish: {catch_uids}')
+        self.fish_caught[catch_uids] = self.fish_caught[catch_uids] + 1 # Increment the number of fish caught for each agent that caught a fish
+        return
+```
+
+Now we can build and run the two simulations to compare the results:
+
+```{python}
+# NOTE: For this example, we configure the simulation to be centralized!
+ss.options.single_rng = True
+
+# Shared parameters for both simulations
+pars = dict(n_agents=20, start=ss.days(0), dur=ss.days(1), rand_seed=42)
+
+print('SIMULATION A: WITHOUT BANNED AGENTS', '-'*25)
+simA = ss.Sim(modules=Fishing(), **pars)
+simA.run()
+
+print('\nSIMULATION B: WITH AGENT 0 BANNED', '-'*25)
+simB = ss.Sim(modules=Fishing(banned_uids=[0]), **pars)
+simB.run()
+```
+
+In simulation A, agents 16 and 18 catch fish on the first time step, but in simulation B, agents 17 and 19 catch fish. Then on the second timestep, we can see that different agents go fishing and that 1, 15, and 19 catch fish in A but only 3 is lucky in B -- what?! All we did was to ban agent 0 from fishing. The agents do not interact, so there should not have been a difference!
+
+What we are seeing here is a simple example of the stochastic branching problem. This "random number noise" could easily make it look like banning agent 0 could result in more fish being caught, which should be physically impossible as there are fewer agents fishing.
+
+To see the benefit of CRN, we can simply repeat the above example, but this time restoring the `single_rng` option to its default value of `False`. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing:
+
+```{python}
+# Restore the single_rng option to False (this is the default, so you don't have to do this)
+ss.options.single_rng = False
+
+print('SIMULATION A: WITHOUT BANNED AGENTS', '-'*25)
+simA = ss.Sim(modules=Fishing(), **pars)
+simA.run()
+
+print('\nSIMULATION B: WITH AGENT 1 BANNED', '-'*25)
+simB = ss.Sim(modules=Fishing(banned_uids=[1]), **pars)
+simB.run()
+```
+
+With CRN, banning agent 0 only prevents agent 0 from catching fish. Everything else is identical, as expected. This is the power of common random numbers.
+
+## Tips for CRN-enabled sampling in Starsim
+
+This advanced CRN functionality is built into every distribution in Starsim! You will automatically get the benefits of CRN whenever you properly use distributions in your modules. Here are a few tips to ensure proper usage:
+
+1. Use a separate distribution for each "decision" in your code. Ideally, each distribution would only be called one time per time step.
+2. Create each distribution one time per module. The `__init__` method is a great place to do this. Do not create a new distribution on every step.
+3. When sampling from a distribution, pass `uids` or a boolean mask with length equal to the number of agents in the simulation. This ensures that each agent gets the right random number.
+4. If the parameters of your distribution change every step, set the parameter values to a callable function that performs the calculation.
+
+Preferred and avoided usage examples:
+```python
+# PREFERRED: use uids
+all_uids = self.sim.people.auids
+values = self.dist.rvs(all_uids)
+
+# PREFERRED: use a boolean mask
+mask = (self.infected) & (self.ti >= self.ti_next_event)
+values = self.dist.rvs(mask)
+
+# PREFERRED: set dynamic parameters using a callable
+def dynamic_p(self, sim, uids):
+    p = np.full_like(uids, fill_value=0.5, dtype=float)
+    p[sim.people.age[uids] < 18] = 0.1
+    return p
+def __init__(self):
+    self.dist = self.bernoulli(p=dynamic_p)
+uids = self.dist.filter(mask) # Reminder: filter returns the uids where the bernoulli trial is True
+
+# AVOID calling a distribution with a scalar argument
+values = self.dist.rvs(len(all_uids))
+
+# AVOID: numpy random
+values = np.random.rand(len(all_uids))
+
+# AVOID creating a new distribution every time
+def step(self):
+    new_dist_every_time = self.bernoulli(p=0.5)
+    values = new_dist_every_time.rvs(all_uids) 
+
+# AVOID using the same distribution for multiple decisions
+my_bernoulli = self.bernoulli(p=0)
+my_bernoulli.set(p=p_infection)
+infected_uids = my_bernoulli.filter()
+my_bernoulli.set(p=p_die)
+died_uids = my_bernoulli.filter()
+
+# Try to AVOID calling rvs multiple times per step
+# (It's better to get all the values you need in one call)
+for uid in all_uids:
+    value = self.dist.rvs(uid)
+
+# Try to AVOID overriding parameters every time step
+# (Use dynamic parameters instead)
+def step(self):
+    my_p_vec = np.full(self.sim.n, fill_value=0.5)
+    my_p_vec[self.sim.people.age < 18] = 0.1
+    self.dist.set(p=my_p_vec)
+    uids = self.dist.filter(mask)
+```
+
+Please don't hesitate to create issues related to any problems you encounter or questions you have!
+
