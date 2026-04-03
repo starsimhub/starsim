@@ -5,6 +5,7 @@ Utilities for processing docs (notebooks mostly)
 import os
 import sys
 import importlib
+import subprocess
 import sciris as sc
 import nbformat
 import nbconvert.preprocessors as nbp
@@ -39,24 +40,38 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
 
 def execute_notebook(path, tidy=True):
     """ Executes a single Jupyter notebook and returns success/failure """
-    with sc.timer(label=sc.ansi.green(f'    Execution time for {path}')) as T:
-        ipynb_path = path.with_suffix(".ipynb")
+    qmd_path = path.name
+    os.chdir(path.parent)
+    with sc.timer(label=sc.ansi.green(f'    Execution time for {qmd_path}')) as T:
+        base = qmd_path.removesuffix('.qmd')
+        nb_path = base + '.ipynb'
+        py_path = base + '.py'
         try:
-            print(f'Converting {path}...')
-            sc.runcommand(f'quarto convert {path} --output {ipynb_path}')
-            with open(ipynb_path) as f:
-                print(f'Executing {ipynb_path}...')
-                nb = nbformat.read(f, as_version=4)
-                ep = nbp.ExecutePreprocessor(timeout=timeout, kernel_name='python3')
-                ep.preprocess(nb, {'metadata': {'path': os.path.dirname(ipynb_path)}})
-            string = f'{yay} {path} executed successfully '
-        except nbp.CellExecutionError as e:
-            string = f'{boo} Execution failed for {path}: {str(e)}\n'
+            print(f'Converting {qmd_path}...')
+            qmd2py(path)
+            # sc.runcommand(f'quarto convert {qmd_path} --output {nb_path}', printinput=True, printoutput=True)
+            # sc.runcommand(f'jupyter nbconvert --to python {nb_path} --output {base}', printinput=True, printoutput=True)
+
+            print(f'Executing {py_path}...')
+            subprocess.run(['ipython', py_path], check=True, cwd=path.parent) # Use ipython so get_ipython() is available
+            string = f'{yay} {base} executed successfully '
+        except subprocess.CalledProcessError as e:
+            string = f'{boo} Execution failed for {base}: {e}\n'
         except Exception as e:
-            string = f'{boo} Error processing {path}: {str(e)}\n'
+            string = f'{boo} Error processing {base}: {str(e)}\n'
+        #     with open(ipynb_path) as f:
+        #         print(f'Executing {ipynb_path}...')
+        #         nb = nbformat.read(f, as_version=4)
+        #         ep = nbp.ExecutePreprocessor(timeout=timeout, kernel_name='python3')
+        #         ep.preprocess(nb, {'metadata': {'path': os.path.dirname(ipynb_path)}})
+        #     string = f'{yay} {path} executed successfully '
+        # except nbp.CellExecutionError as e:
+        #     string = f'{boo} Execution failed for {path}: {str(e)}\n'
+        # except Exception as e:
+        #     string = f'{boo} Error processing {path}: {str(e)}\n'
         finally:
             if tidy:
-                sc.rmpath(ipynb_path)
+                sc.rmpath(py_path)
 
     string += f'(time: {T.total:0.1f} s)'
     return string
@@ -64,7 +79,7 @@ def execute_notebook(path, tidy=True):
 
 
 @sc.timer('Executed notebooks')
-def execute_notebooks(*args, folders=None, tidy=True):
+def execute_notebooks(*args, folders=None, tidy=True, debug=True):
     """Executes the notebooks in parallel and prints the results.
 
     Uses sys.argv[1:] if provided; otherwise uses folders to find notebooks.
@@ -85,15 +100,14 @@ def execute_notebooks(*args, folders=None, tidy=True):
             notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.qmd')]
 
     # Wrapper to chdir before execution
-    def execute_with_chdir(i, path, pause=1.0):
+    def execute(i, path, pause=1.0):
         delay = i*pause
         sc.timedsleep(delay) # For some reason the interval argument to parallelize() wasn't working
-        os.chdir(path.parent)
-        return execute_notebook(path.name, tidy=tidy)
+        return execute_notebook(path, tidy=tidy)
 
     sc.heading(f'Running {len(notebooks)} notebooks...')
     notebook_list = list(enumerate(notebooks))
-    out = sc.parallelize(execute_with_chdir, notebook_list, maxcpu=0.9, interval=1.0, lbkwargs=dict(verbose=False))
+    out = sc.parallelize(execute, notebook_list, maxcpu=0.9, interval=1.0, lbkwargs=dict(verbose=False), serial=debug)
     string += sc.strjoin(out, sep=f'\n\n\n{"—"*90}\n')
     for nb, res in zip(notebooks, out):
         results[str(nb)] = res
@@ -121,6 +135,63 @@ def execute_notebooks(*args, folders=None, tidy=True):
     T.toc()
     
     return results
+
+
+def qmd2py(qmd_path, py_path=None):
+    """
+    Convert a .qmd file to a .py file by extracting Python code cells.
+
+    Each ```{python} ... ``` block becomes a cell, separated by "#%% Cell N"
+    headers and two blank lines between cells. Raises an exception if blocks
+    are ambiguous (e.g., nested or unclosed code fences).
+
+    Args:
+        qmd_path (str/Path): path to the .qmd file
+        py_path (str/Path): path to write the .py file (default: same name with .py extension)
+
+    Returns:
+        Path to the written .py file
+    """
+    qmd_path = sc.path(qmd_path)
+    if py_path is None:
+        py_path = qmd_path.with_suffix('.py')
+    else:
+        py_path = sc.path(py_path)
+
+    text = sc.loadtext(qmd_path)
+    lines = text.splitlines()
+
+    cells = []
+    in_block = False
+    current_cell = []
+    block_start_line = None
+
+    for i, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if stripped.startswith('```{python}'):
+            if in_block:
+                raise ValueError(f'Nested or unclosed code block: new block at line {i}, previous block started at line {block_start_line}')
+            in_block = True
+            block_start_line = i
+            current_cell = []
+        elif stripped == '```' and in_block:
+            cells.append('\n'.join(current_cell))
+            in_block = False
+            current_cell = []
+            block_start_line = None
+        elif in_block:
+            current_cell.append(line)
+
+    if in_block:
+        raise ValueError(f'Unclosed code block starting at line {block_start_line}')
+
+    parts = []
+    for n, cell in enumerate(cells, start=1):
+        parts.append(f'#%% Cell {n}\n{cell}')
+
+    output = '\n\n\n'.join(parts) + '\n'
+    sc.savetext(py_path, output)
+    return py_path
 
 
 @sc.timer('Customized aliases')
