@@ -7,7 +7,7 @@ name = "starsim"
 dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
@@ -42,10 +42,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+
+# Accelerates numerical performance on some systems
 fastmath = [
   "mkl",
   "intel-cmplr-lib-rt"
 ]
+
+# For tests and docs
 dev = [
     "pytest>=7.4",
     "pytest-cov",
@@ -55,6 +59,53 @@ dev = [
     "jupyter",
     "jupyter-cache",
     "dask[complete]",
+]
+
+# For exactly reproducible results (replaces uv.lock)
+lock = [
+    "alembic==1.18.4",
+    "colorlog==6.10.1",
+    "contourpy==1.3.3",
+    "cycler==0.12.1",
+    "dill==0.4.1",
+    "et-xmlfile==2.0.0",
+    "fonttools==4.62.1",
+    "gitdb==4.0.12",
+    "gitpython==3.1.46",
+    "greenlet==3.3.2",
+    "jellyfish==1.2.1",
+    "jsonpickle==4.1.1",
+    "kiwisolver==1.5.0",
+    "line-profiler==5.0.2",
+    "llvmlite==0.47.0",
+    "mako==1.3.10",
+    "markupsafe==3.0.3",
+    "matplotlib==3.10.8",
+    "memory-profiler==0.61.0",
+    "multiprocess==0.70.19",
+    "networkx==3.6.1",
+    "numba==0.65.0",
+    "numpy==2.4.4",
+    "openpyxl==3.1.5",
+    "optuna==4.8.0",
+    "packaging==26.0",
+    "pandas==3.0.2",
+    "pillow==12.2.0",
+    "psutil==7.2.2",
+    "pyparsing==3.3.2",
+    "python-dateutil==2.9.0.post0",
+    "pyyaml==6.0.3",
+    "scipy==1.17.1",
+    "sciris==3.2.9",
+    "seaborn==0.13.2",
+    "setuptools==82.0.1",
+    "six==1.17.0",
+    "smmap==5.0.3",
+    "sqlalchemy==2.0.48",
+    "tqdm==4.67.3",
+    "typing-extensions==4.15.0",
+    "xlsxwriter==3.2.9",
+    "zstandard==0.25.0",
 ]
 
 optuna = ["scikit-learn"]
