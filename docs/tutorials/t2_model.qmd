@@ -8,13 +8,6 @@ The purpose of this tutorial is to introduce you to the idea of _model component
 
 In this tutorial we'll focus on people, demographics, networks, diseases. The remaining components (interventions, analyzers, and connectors) will be covered later.
 
-
-<div class="alert alert-info">
-    
-An interactive version of this notebook is available on [Google Colab](https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/buildsim.ipynb) or [Binder](https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Fbuildsim.ipynb).
-    
-</div>
-
 ```{python}
 #| tags: [hide-cell]
 %pip install -q starsim # Install Starsim if required

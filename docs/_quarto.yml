@@ -226,13 +226,7 @@ quartodoc:
         - timeline
         - utils
 
-jupyter: python3
 execute:
-  enabled: false # NB, this is controlled via build_docs
-  daemon: false  # Use Jupyter daemon mode
-  cache: false   # Cache execution results
-  freeze: false # Use caching rather than freezing to store results
   error: true # Do not continue if an error is encountered
   echo: true
   warning: true
-  kernel: python3

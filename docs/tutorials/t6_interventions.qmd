@@ -6,13 +6,6 @@ jupyter: python3
 
 Understanding the impact of interventions is one of the most common reasons to use a disease model. This tutorial shows how to implement standard interventions, as well as how to define your own custom interventions.  
 
-
-<div class="alert alert-info">
-    
-An interactive version of this notebook is available on [Google Colab](https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/tut_interventions.ipynb) or [Binder](https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Finterventions.ipynb).
-    
-</div>
-
 ```{python}
 #| tags: [hide-cell]
 %pip install -q starsim # Install Starsim if required
