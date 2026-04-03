@@ -17,7 +17,7 @@ import sys
 import subprocess
 import sciris as sc
 import starsim as ss
-import docutils as ut
+import quarto_utils as qu
 
 def run(cmd):
     sc.printgreen(f'\n> {cmd}\n')
@@ -63,7 +63,7 @@ run('python -m quartodoc build')
 T.toctic()
 
 sc.heading('3/6 Customizing API aliases...')
-ut.customize_aliases()
+qu.customize_aliases()
 T.toctic()
 
 sc.heading('4/6 Building docs links...')

@@ -9,4 +9,3 @@ quarto publish gh-pages --no-render --no-prompt --no-browser
 
 # Manually tidy
 ./clean_outputs.py
-./normalize_notebooks.py
