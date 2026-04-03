@@ -19,6 +19,8 @@ boo = '😢'
 @sc.timer('Cleaned outputs')
 def clean_outputs(folders=None, sleep=3, patterns=None):
     """ Clears outputs from notebooks """
+    if folders is None:
+        folders = default_folders
     if patterns is None:
         patterns = temp_patterns
     filenames = sc.dcp(temp_items)

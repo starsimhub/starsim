@@ -1,0 +1,4 @@
+#!/bin/bash
+# Render full site
+
+quarto render $@
