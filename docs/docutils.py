@@ -50,7 +50,7 @@ def execute_notebook(path, tidy=True):
 
             print(f'Executing {py_path}...')
             env = {**os.environ, 'MPLBACKEND': 'agg'} # Use non-interactive backend for matplotlib
-            subprocess.run(['ipython', py_path], check=True, cwd=path.parent, env=env) # Use ipython so get_ipython() is available
+            subprocess.run(['python', py_path], check=True, capture_output=True,cwd=path.parent, env=env) # Use ipython so get_ipython() is available
             string = f'{yay} {base} executed successfully '
         except subprocess.CalledProcessError as e:
             string = f'{boo} Execution failed for {base}: {e}\n'
@@ -77,7 +77,7 @@ def execute_notebook(path, tidy=True):
 
 
 @sc.timer('Executed notebooks')
-def execute_notebooks(*args, folders=None, tidy=False, debug=True):
+def execute_notebooks(*args, folders=None, tidy=True, debug=False):
     """Executes the notebooks in parallel and prints the results.
 
     Uses sys.argv[1:] if provided; otherwise uses folders to find notebooks.
