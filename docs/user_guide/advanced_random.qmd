@@ -9,7 +9,7 @@ The Starsim framework implements a novel approach to sampling from distributions
 For technical details and additional examples, please refer to the following publication:
 [D. J. Klein, R. G. Abeysuriya, R. M. Stuart, and C. C. Kerr, "Noise-free comparison of stochastic agent-based simulations using common random numbers." arXiv preprint arXiv:2409.02086 (2024).](https://arxiv.org/abs/2409.02086)
 
-This guide builds on the [Distributions guide](advanced_distributions.ipynb), so please familiarize yourself with that guide before proceeding.
+This guide builds on the [Distributions guide](advanced_distributions.qmd), so please familiarize yourself with that guide before proceeding.
 
 In this user guide, you will:
 - Understand the concept of common random numbers (CRN)
@@ -21,7 +21,7 @@ In this user guide, you will:
 
 Common Random Numbers (CRN) is a sophisticated technique that enables noise-free accounting of the effects of different parameters or interventions on outcomes like infections averted or lives saved. Starsim is the first and only simulation framework that fully supports CRN, including agent-agent interactions like disease transmission and vital dynamics including births.
 
-To understand CRN, you first have to know a little about where random numbers come from. As discussed in the [Advanced Distributions guide](advanced_distributions.ipynb), random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the `numpy` library:
+To understand CRN, you first have to know a little about where random numbers come from. As discussed in the [Advanced Distributions guide](advanced_distributions.qmd), random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the `numpy` library:
 
 ```{python}
 import numpy as np

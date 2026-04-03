@@ -13,7 +13,7 @@ Calibration libraries often treat the disease model as a black box, where the in
 
 While many optimization algorithms are available, Starsim has a built-in interface to the Optuna library, which we will demonstrate in this guide. We will use a simple Susceptible-Infected-Recovered (SIR) model as an example. We will tune three input parameters, the infectivity parameter, `beta`, the initial prevalence parameter, `init_prev`, and the Poisson-distributed degree distribution parameter, `n_contacts`. We will calibrate the model using a beta-binomial likelihood function so as to match prevalence at three distinct time points.
 
-For a comparison of optimization-based and Bayesian approaches to calibration, see the [SIR calibration workflows notebook](workflows_sir_calibration.ipynb).
+For a comparison of optimization-based and Bayesian approaches to calibration, see the [SIR calibration workflows notebook](workflows_sir_calibration.qmd).
 
 We begin with a few imports and default settings:
 

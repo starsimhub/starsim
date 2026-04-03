@@ -6,7 +6,7 @@ jupyter: python3
 
 This guide describes how to implementing interventions in Starsim. Interventions represent actions that affect disease transmission, such as screening, treatment, and vaccination programs.
 
-For learning-oriented content on interventions, see [Tutorial 6 - Interventions](../tutorials/t6_interventions.ipynb).
+For learning-oriented content on interventions, see [Tutorial 6 - Interventions](../tutorials/t6_interventions.qmd).
 
 ## Comparison of intervention classes
 

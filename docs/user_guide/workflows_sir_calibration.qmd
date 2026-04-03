@@ -11,7 +11,7 @@ Here, we use that SIR disease model to test two calibration workflows. The goal 
 1. [Likelihood maximization using the optuna package as integrated with Starsim](#optimization)
 2. [Posterior sampling using a Bayesian workflow](#sampling)
 
- Re-identifying the known parameter values from synthetic data provides reassurance that the calibration workflow is functioning as expected. For a more realistic Starsim calibration example, please see [Calibration](workflows_calibration.ipynb).
+ Re-identifying the known parameter values from synthetic data provides reassurance that the calibration workflow is functioning as expected. For a more realistic Starsim calibration example, please see [Calibration](workflows_calibration.qmd).
 
 [TODO]: <> (Add link to ModelingHub deterministic example once the URL is live.)
 

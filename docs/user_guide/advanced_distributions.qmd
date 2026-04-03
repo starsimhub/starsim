@@ -14,7 +14,7 @@ In this guide, you will:
 - Use distributions with "dynamic parameters" that depend on agent attributes, the simulation time, or other factors.
 - Build an example Starsim intervention that uses a distribution with dynamic parameters.
 
-One key advantage of Starsim distributions is that they enable low-variance comparison between simulations through a technique called "common random numbers" (CRN). To learn more about CRN, see the [Common Random Numbers](advanced_random.ipynb) guide.
+One key advantage of Starsim distributions is that they enable low-variance comparison between simulations through a technique called "common random numbers" (CRN). To learn more about CRN, see the [Common Random Numbers](advanced_random.qmd) guide.
 
 
 ## Available distributions
