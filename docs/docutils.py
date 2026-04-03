@@ -3,12 +3,9 @@ Utilities for processing docs (notebooks mostly)
 """
 
 import os
-import sys
 import importlib
 import subprocess
 import sciris as sc
-import nbformat
-import nbconvert.preprocessors as nbp
 
 default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
 temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed
@@ -44,7 +41,6 @@ def execute_notebook(path, tidy=True):
     os.chdir(path.parent)
     with sc.timer(label=sc.ansi.green(f'    Execution time for {qmd_path}')) as T:
         base = qmd_path.removesuffix('.qmd')
-        nb_path = base + '.ipynb'
         py_path = base + '.py'
         try:
             print(f'Converting {qmd_path}...')
@@ -53,7 +49,8 @@ def execute_notebook(path, tidy=True):
             # sc.runcommand(f'jupyter nbconvert --to python {nb_path} --output {base}', printinput=True, printoutput=True)
 
             print(f'Executing {py_path}...')
-            subprocess.run(['ipython', py_path], check=True, cwd=path.parent) # Use ipython so get_ipython() is available
+            env = {**os.environ, 'MPLBACKEND': 'agg'} # Use non-interactive backend for matplotlib
+            subprocess.run(['ipython', py_path], check=True, cwd=path.parent, env=env) # Use ipython so get_ipython() is available
             string = f'{yay} {base} executed successfully '
         except subprocess.CalledProcessError as e:
             string = f'{boo} Execution failed for {base}: {e}\n'
@@ -74,12 +71,13 @@ def execute_notebook(path, tidy=True):
                 sc.rmpath(py_path)
 
     string += f'(time: {T.total:0.1f} s)'
+    print(string)
     return string
 
 
 
 @sc.timer('Executed notebooks')
-def execute_notebooks(*args, folders=None, tidy=True, debug=True):
+def execute_notebooks(*args, folders=None, tidy=False, debug=True):
     """Executes the notebooks in parallel and prints the results.
 
     Uses sys.argv[1:] if provided; otherwise uses folders to find notebooks.
@@ -137,7 +135,7 @@ def execute_notebooks(*args, folders=None, tidy=True, debug=True):
     return results
 
 
-def qmd2py(qmd_path, py_path=None):
+def qmd2py(qmd_path, py_path=None, keep_text=True):
     """
     Convert a .qmd file to a .py file by extracting Python code cells.
 
@@ -145,9 +143,13 @@ def qmd2py(qmd_path, py_path=None):
     headers and two blank lines between cells. Raises an exception if blocks
     are ambiguous (e.g., nested or unclosed code fences).
 
+    Lines starting with "%" or "!" (IPython magics/shell commands) are commented
+    out since they are not valid Python.
+
     Args:
         qmd_path (str/Path): path to the .qmd file
         py_path (str/Path): path to write the .py file (default: same name with .py extension)
+        keep_text (bool): if True, include non-code text as comments prefixed with "# "
 
     Returns:
         Path to the written .py file
@@ -161,9 +163,10 @@ def qmd2py(qmd_path, py_path=None):
     text = sc.loadtext(qmd_path)
     lines = text.splitlines()
 
-    cells = []
+    chunks = [] # List of (type, content) tuples; type is 'code' or 'text'
     in_block = False
     current_cell = []
+    current_text = []
     block_start_line = None
 
     for i, line in enumerate(lines, start=1):
@@ -171,23 +174,44 @@ def qmd2py(qmd_path, py_path=None):
         if stripped.startswith('```{python}'):
             if in_block:
                 raise ValueError(f'Nested or unclosed code block: new block at line {i}, previous block started at line {block_start_line}')
+            if keep_text and current_text:
+                chunks.append(('text', current_text))
+                current_text = []
             in_block = True
             block_start_line = i
             current_cell = []
         elif stripped == '```' and in_block:
-            cells.append('\n'.join(current_cell))
+            chunks.append(('code', current_cell))
             in_block = False
             current_cell = []
             block_start_line = None
         elif in_block:
             current_cell.append(line)
+        elif keep_text:
+            current_text.append(line)
 
     if in_block:
         raise ValueError(f'Unclosed code block starting at line {block_start_line}')
 
+    if keep_text and current_text:
+        chunks.append(('text', current_text))
+
+    # Build output
     parts = []
-    for n, cell in enumerate(cells, start=1):
-        parts.append(f'#%% Cell {n}\n{cell}')
+    cell_num = 0
+    for kind, content in chunks:
+        if kind == 'code':
+            cell_num += 1
+            processed = []
+            for line in content:
+                if line.lstrip().startswith(('%', '!')):
+                    processed.append(f'# {line}  # IPython not supported in Python files')
+                else:
+                    processed.append(line)
+            parts.append(f'#%% Cell {cell_num}\n' + '\n'.join(processed))
+        else: # text
+            commented = '\n'.join(f'# {line}' if line.strip() else '#' for line in content)
+            parts.append(commented)
 
     output = '\n\n\n'.join(parts) + '\n'
     sc.savetext(py_path, output)
