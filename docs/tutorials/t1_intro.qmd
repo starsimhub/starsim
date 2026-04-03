@@ -5,15 +5,15 @@ jupyter: python3
 
 Starsim is a highly flexible framework for creating agent-based models. Starsim was designed by a team with expertise in infectious diseases, so many of the examples that we'll cover throughout these tutorials are examples of infectious diseases. However, you can also use Starsim for modeling other things, like non-communicable diseases (NCDs) or family planning and maternal health.
 
-Installing and getting started with Starsim is quite simple. 
+Installing and getting started with Starsim is quite simple.
 
 To install, just type `pip install starsim`. If it worked, you should be able to import Starsim with `import starsim as ss`.
 
 The basic design philosophy of Starsim is: **common tasks should be simple**. Since Starsim is most commonly used for modeling infectious diseases, everything related to that should be straightforward. The most common tasks that you are likely to do are:
 
-- Defining parameters
-- Running a simulation
-- Plotting results
+-   Defining parameters
+-   Running a simulation
+-   Plotting results
 
 This tutorial walks you through the simplest possible version of how to do these things.
 
@@ -21,7 +21,6 @@ This tutorial walks you through the simplest possible version of how to do these
 #| tags: [hide-cell]
 %pip install -q starsim # Install Starsim if required
 ```
-
 
 ## Hello world
 
@@ -55,7 +54,7 @@ sim.diseases.sir.plot()
 As the tutorials progress we'll show how to extend this different diseases with different transmission pathways, and how to customize the model in lots of different ways.
 
 ## Exercises
-1. To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?
-2. How do the results change if we increase/decrease `beta`?
-3. How do the results change if we reduce the number of agents to 200?
 
+1.  To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?
+2.  How do the results change if we increase/decrease `beta`?
+3.  How do the results change if we reduce the number of agents to 200?
