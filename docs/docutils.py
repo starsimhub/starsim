@@ -18,52 +18,6 @@ yay = '✓'
 boo = '😢'
 
 
-def get_filenames(folders=None, pattern='**/*.ipynb'):
-    """ Get all *.ipynb files in the folder """
-    if folders is None:
-        folders = default_folders
-    else:
-        folders = sc.tolist(folders)
-
-    filenames = []
-    for folder in folders:
-        filenames += sc.getfilelist(folder=folder, pattern=pattern, recursive=True)
-    return filenames
-
-
-def normalize(filename, validate=True, strip=True):
-    """ Remove all outputs and non-essential metadata from a notebook """
-    # Load file
-    print(filename)
-    with open(filename, "r") as file:
-        nb_orig = nbformat.reader.read(file)
-
-    # Strip outputs
-    if strip:
-        for cell in nb_orig.cells:
-            if cell.cell_type == "code":
-                cell.outputs = []
-                cell.execution_count = None
-
-    # Perform validation
-    if validate:
-        nb_norm = nbformat.validator.normalize(nb_orig)[1]
-        nbformat.validator.validate(nb_norm)
-
-    # Write output
-    with open(filename, "w") as file:
-        nbformat.write(nb_norm, file)
-    return
-
-
-@sc.timer('Normalized notebooks')
-def normalize_notebooks(folders=None):
-    """ Normalize all notebooks """
-    filenames = get_filenames(folders=folders)
-    sc.parallelize(normalize, filenames)
-    return
-
-
 @sc.timer('Cleaned outputs')
 def clean_outputs(folders=None, sleep=3, patterns=None):
     """ Clears outputs from notebooks """
@@ -71,7 +25,8 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
         patterns = temp_patterns
     filenames = sc.dcp(temp_items)
     for pattern in patterns:
-        filenames += get_filenames(folders=folders, pattern=pattern)
+        for folder in folders:
+            filenames += sc.getfilelist(folder=folder, pattern=pattern, recursive=True)
     if len(filenames):
         print(f'Deleting: {sc.newlinejoin(filenames)}\nin {sleep} seconds')
         sc.timedsleep(sleep)
@@ -82,37 +37,34 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
     return
 
 
-def init_cache(folders=None):
-    """ Initialize the Jupyter cache """
-    filenames = get_filenames(folders=folders)
-
-
-def init_cache(folders=None):
-    """ Initialize the Jupyter cache """
-    filenames = get_filenames(folders=folders)
-
-
-def execute_notebook(path):
+def execute_notebook(path, tidy=True):
     """ Executes a single Jupyter notebook and returns success/failure """
     with sc.timer(label=sc.ansi.green(f'    Execution time for {path}')) as T:
+        ipynb_path = path.with_suffix(".ipynb")
         try:
-            with open(path) as f:
-                print(f'Executing {path}...')
+            print(f'Converting {path}...')
+            sc.runcommand(f'quarto convert {path} --output {ipynb_path}')
+            with open(ipynb_path) as f:
+                print(f'Executing {ipynb_path}...')
                 nb = nbformat.read(f, as_version=4)
                 ep = nbp.ExecutePreprocessor(timeout=timeout, kernel_name='python3')
-                ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
+                ep.preprocess(nb, {'metadata': {'path': os.path.dirname(ipynb_path)}})
             string = f'{yay} {path} executed successfully '
         except nbp.CellExecutionError as e:
             string = f'{boo} Execution failed for {path}: {str(e)}\n'
         except Exception as e:
             string = f'{boo} Error processing {path}: {str(e)}\n'
+        finally:
+            if tidy:
+                sc.rmpath(ipynb_path)
+
     string += f'(time: {T.total:0.1f} s)'
     return string
 
 
 
 @sc.timer('Executed notebooks')
-def execute_notebooks(*args, folders=None):
+def execute_notebooks(*args, folders=None, tidy=True):
     """Executes the notebooks in parallel and prints the results.
 
     Uses sys.argv[1:] if provided; otherwise uses folders to find notebooks.
@@ -130,14 +82,14 @@ def execute_notebooks(*args, folders=None):
         folders = sc.ifelse(folders, default_folders)
         for folder in folders:
             folder_path = cwd / folder
-            notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.ipynb')]
+            notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.qmd')]
 
     # Wrapper to chdir before execution
     def execute_with_chdir(i, path, pause=1.0):
         delay = i*pause
         sc.timedsleep(delay) # For some reason the interval argument to parallelize() wasn't working
         os.chdir(path.parent)
-        return execute_notebook(path.name)
+        return execute_notebook(path.name, tidy=tidy)
 
     sc.heading(f'Running {len(notebooks)} notebooks...')
     notebook_list = list(enumerate(notebooks))
