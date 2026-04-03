@@ -70,48 +70,48 @@ website:
           text: "**API reference**"
         - section: "**Tutorials**"
           contents:
-            - tutorials/t1_intro.ipynb
-            - tutorials/t2_model.ipynb
-            - tutorials/t3_demographics.ipynb
-            - tutorials/t4_diseases.ipynb
-            - tutorials/t5_networks.ipynb
-            - tutorials/t6_interventions.ipynb
-            - tutorials/solutions.ipynb
+            - tutorials/t1_intro.qmd
+            - tutorials/t2_model.qmd
+            - tutorials/t3_demographics.qmd
+            - tutorials/t4_diseases.qmd
+            - tutorials/t5_networks.qmd
+            - tutorials/t6_interventions.qmd
+            - tutorials/solutions.qmd
         - section: "**User guide**"
           contents:
           - section: "Introduction"
             contents:
-            - user_guide/intro_starsim.ipynb
-            - user_guide/intro_models.ipynb
+            - user_guide/intro_starsim.qmd
+            - user_guide/intro_models.qmd
           - section: "Basic concepts"
             contents:
-            - user_guide/basics_model.ipynb
-            - user_guide/basics_sim.ipynb
-            - user_guide/basics_people.ipynb
-            - user_guide/basics_parameters.ipynb
+            - user_guide/basics_model.qmd
+            - user_guide/basics_sim.qmd
+            - user_guide/basics_people.qmd
+            - user_guide/basics_parameters.qmd
           - section: "Modules"
             contents:
-            - user_guide/modules_diseases.ipynb
-            - user_guide/modules_networks.ipynb
-            - user_guide/modules_demographics.ipynb
-            - user_guide/modules_interventions.ipynb
-            - user_guide/modules_analyzers.ipynb
-            - user_guide/modules_connectors.ipynb
+            - user_guide/modules_diseases.qmd
+            - user_guide/modules_networks.qmd
+            - user_guide/modules_demographics.qmd
+            - user_guide/modules_interventions.qmd
+            - user_guide/modules_analyzers.qmd
+            - user_guide/modules_connectors.qmd
           - section: "Workflows"
             contents:
-            - user_guide/workflows_run.ipynb
-            - user_guide/workflows_sir_calibration.ipynb
-            - user_guide/workflows_calibration.ipynb
-            - user_guide/workflows_deploy.ipynb
-            - user_guide/workflows_samples.ipynb
+            - user_guide/workflows_run.qmd
+            - user_guide/workflows_sir_calibration.qmd
+            - user_guide/workflows_calibration.qmd
+            - user_guide/workflows_deploy.qmd
+            - user_guide/workflows_samples.qmd
           - section: "Advanced topics"
             contents:
-            - user_guide/advanced_time.ipynb
-            - user_guide/advanced_indexing.ipynb
-            - user_guide/advanced_distributions.ipynb
-            - user_guide/advanced_random.ipynb
-            - user_guide/advanced_profiling.ipynb
-            - user_guide/advanced_nonstandard.ipynb
+            - user_guide/advanced_time.qmd
+            - user_guide/advanced_indexing.qmd
+            - user_guide/advanced_distributions.qmd
+            - user_guide/advanced_random.qmd
+            - user_guide/advanced_profiling.qmd
+            - user_guide/advanced_nonstandard.qmd
         - href: conduct.qmd
           text: "**Code of conduct**"
         - href: contributing.qmd
