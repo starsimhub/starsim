@@ -233,6 +233,8 @@ quartodoc:
         - utils
 
 execute:
+  freeze: auto # Only re-execute notebooks that have changed
+  cache: true # NB, not sure if this is needed for Quarto notebooks
   error: true # Do not continue if an error is encountered
   echo: true
   warning: true
