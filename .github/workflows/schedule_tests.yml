@@ -7,6 +7,6 @@ on:
 
 jobs:
   ci-tests:
-    uses: ./.github/workflows/tests.yaml
+    uses: ./.github/workflows/tests.yml
   downstream-tests:
-    uses: ./.github/workflows/test_downstream.yaml
+    uses: ./.github/workflows/test_downstream.yml
