@@ -1,6 +1,7 @@
 project:
   type: website
   pre-render:
+    - python pre_render.py
     - python -m quartodoc build
     - python -c "import quarto_utils as qu; qu.customize_aliases()"
     - python -m quartodoc interlinks

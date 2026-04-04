@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build & publish site to GitHub Pages
 
 quarto render --cache-refresh

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Render full site
 
 SECONDS=0
