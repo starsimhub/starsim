@@ -1197,9 +1197,10 @@ msim.show() # Prints moderate length output</code></pre>
 <span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    do_run<span class="op">=</span><span class="va">True</span>,</span>
 <span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    parallel<span class="op">=</span><span class="va">True</span>,</span>
 <span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    n_cpus<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    copy_sim<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>For running multiple sims in parallel. If the first argument is a list of sims rather than a single sim, exactly these will be run and most other arguments will be ignored.</p>
 <p>Note: <code>n_cpus=1</code> is <em>not</em> the same thing as setting <code>parallel=False</code>. The former still uses the parallelization methods (just on a single core), while the latter simply runs in a loop.</p>
 <section id="parameters-10" class="level4 doc-section doc-section-parameters">
@@ -1281,12 +1282,18 @@ msim.show() # Prints moderate length output</code></pre>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
+<td>copy_sim (bool)</td>
+<td></td>
+<td>whether to explicitly copy the sim before running (default: False)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
 <td>verbose (int)</td>
 <td></td>
 <td>detail to print</td>
 <td><em>required</em></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>kwargs (dict)</td>
 <td></td>
 <td>also passed to the sim</td>
@@ -1396,16 +1403,17 @@ msim = ss.parallel([s1, s2], shrink=False)</code></pre>
 <span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    sim_args<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    do_run<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    copy_sim<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convenience function to perform a single simulation run. Mostly used for parallelization, but can also be used directly.</p>
 <section id="parameters-12" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-12">Parameters</h4>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 20%">
+<col style="width: 19%">
 <col style="width: 7%">
-<col style="width: 60%">
+<col style="width: 62%">
 <col style="width: 11%">
 </colgroup>
 <thead>
@@ -1478,6 +1486,12 @@ msim = ss.parallel([s1, s2], shrink=False)</code></pre>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
+<td>copy_sim (bool)</td>
+<td></td>
+<td>whether to explicitly copy the sim before running (default: False)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
 <td>kwargs (dict)</td>
 <td></td>
 <td>also passed to the sim</td>
@@ -1948,7 +1962,7 @@ sim = ss.single_run(sim) # Run it, equivalent(ish) to sim.run()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

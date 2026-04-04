@@ -697,7 +697,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>The most straightforward way to use connectors is to define a custom class that inherits from <a href="../api/connectors.html#starsim.connectors.Connector" title="0"><code>ss.Connector</code></a> and implements a <code>step()</code> method. This method is called during each simulation timestep and can modify disease parameters based on the current state of the simulation.</p>
 <p>Here’s a simple example showing how HIV and “SIS” diseases can interact, and also illustrates how you would use an analyzer to compare the two simulations:</p>
-<div id="28oc8cqmebri" class="cell" data-execution_count="1">
+<div id="6efb32ed" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
@@ -820,7 +820,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="advanced-usage-with-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage-with-parameters">Advanced usage with parameters</h2>
 <p>For more complex interactions, you can define parameters in your connector class to control the strength and nature of the interactions. Here’s an example showing bi-directional interactions between HIV and syphilis:</p>
-<div id="kihudbbxze" class="cell" data-execution_count="2">
+<div id="1ae1d621" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HIV_Syphilis(ss.Connector):</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Advanced connector showing bi-directional interactions between HIV and syphilis.</span></span>
@@ -946,7 +946,7 @@ Syphilis infections - With connector: 414.0</code></pre>
 <section id="combining-connectors-with-interventions" class="level2">
 <h2 class="anchored" data-anchor-id="combining-connectors-with-interventions">Combining connectors with interventions</h2>
 <p>Connectors can work alongside interventions to model complex treatment scenarios. Here’s an example that combines the HIV-syphilis connector with a treatment intervention:</p>
-<div id="46o4aojlceu" class="cell" data-execution_count="3">
+<div id="2dc6e88d" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Penicillin(ss.Intervention):</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Penicillin treatment intervention for syphilis.</span></span>
@@ -1539,7 +1539,7 @@ Connector + treatment:
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

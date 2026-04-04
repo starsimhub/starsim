@@ -693,7 +693,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="overview-of-people" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-people">Overview of People</h2>
 <p>More details on the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class can be easily exported to a dataframe, e.g.:</p>
-<div id="d6fcbe2a" class="cell" data-execution_count="1">
+<div id="c71b37b0" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -717,7 +717,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>When a module is added to a sim, this can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. For example:</p>
-<div id="8c10c01b" class="cell" data-execution_count="2">
+<div id="9978cd1b" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">20</span>, diseases<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'sis'</span>, init_prev<span class="op">=</span><span class="fl">0.2</span>), networks<span class="op">=</span><span class="st">'random'</span>)</span>
@@ -784,7 +784,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="what-happens-when-you-add-a-module" class="level2">
 <h2 class="anchored" data-anchor-id="what-happens-when-you-add-a-module">What happens when you add a module?</h2>
 <p>When you add a module to a <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>, the module’s parameters, states, and results will be added to the centralized collections of parameters, states, and results that are maintained within the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>. To illustrate this, let’s create a <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> with an SIR disease module and a random contact network:</p>
-<div id="c1095542" class="cell" data-execution_count="3">
+<div id="8337c977" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
@@ -1238,7 +1238,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

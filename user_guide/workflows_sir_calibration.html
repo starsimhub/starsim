@@ -724,7 +724,7 @@ window.Quarto = {
 <p>The Starsim framework includes a built-in susceptible-infected-recovered (SIR) within-host progression module that can be used as a building block to developing more realistic agent-based models. Here, we use that SIR within-host module in combination with mixing pool transmission to create a simple SIR disease model.</p>
 <p>Here, we use that SIR disease model to test two calibration workflows. The goal is to assess if they able to re-identify a known “true” set of parameters and explore the resulting latent trajectories. The two workflows demonstrated are: 1. <a href="#optimization">Likelihood maximization using the optuna package as integrated with Starsim</a> 2. <a href="#sampling">Posterior sampling using a Bayesian workflow</a></p>
 <p>Re-identifying the known parameter values from synthetic data provides reassurance that the calibration workflow is functioning as expected. For a more realistic Starsim calibration example, please see <a href="../user_guide/workflows_calibration.html">Calibration</a>.</p>
-<div id="7cf42036" class="cell" data-execution_count="1">
+<div id="f179ef7a" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Configure notebook autoreloading and inline plotting</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>load_ext autoreload</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>autoreload <span class="dv">2</span></span>
@@ -752,7 +752,7 @@ window.Quarto = {
 <section id="sir-model-setup" class="level3">
 <h3 class="anchored" data-anchor-id="sir-model-setup">SIR model setup</h3>
 <p>First, we create a simple agent-based SIR simulation using Starsim.</p>
-<div id="0554307c" class="cell" data-execution_count="2">
+<div id="07152736" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim():</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Make a simple SIR simulation using Starsim.</span></span>
@@ -851,7 +851,7 @@ window.Quarto = {
 <section id="calibration-setup" class="level3">
 <h3 class="anchored" data-anchor-id="calibration-setup">Calibration setup</h3>
 <p>We will calibrate two parameters, beta and gamma, each allowed to take on values between 0 and 1.</p>
-<div id="d31b576f" class="cell" data-execution_count="3">
+<div id="1999bf61" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters in a simple dictionary</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'low'</span>: <span class="dv">0</span>, <span class="st">'high'</span>: <span class="fl">0.15</span>},</span>
@@ -859,7 +859,7 @@ window.Quarto = {
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>If using the optimization-based approach in Starsim, likelihood functions are defined and available for use. However, for the sampling-based approach, we will need to create our own likelihood.</p>
-<div id="660af573" class="cell" data-execution_count="4">
+<div id="73dea902" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> beta_binomial_likelihood(results, calib_data,</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    kappa       <span class="op">=</span> <span class="fl">10.0</span>,</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    prior_alpha <span class="op">=</span> <span class="fl">1.0</span>,</span>
@@ -908,7 +908,7 @@ window.Quarto = {
 <span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.exp(np.<span class="bu">sum</span>(loglik)) <span class="co"># Exponentiated sum of logs</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Bayesian calibration requires a prior distribution over the parameters. Here, we define a simple uniform prior over beta and gamma.</p>
-<div id="d9403717" class="cell" data-execution_count="5">
+<div id="c3fd4aff" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sample_from_prior(size<span class="op">=</span><span class="dv">1</span>):</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Sample beta and gamma from a uniform prior.</span></span>
@@ -932,7 +932,7 @@ window.Quarto = {
 <section id="generate-synthetic-data-for-reidentification" class="level3">
 <h3 class="anchored" data-anchor-id="generate-synthetic-data-for-reidentification">Generate synthetic data for reidentification</h3>
 <p>That set the basic machinery of the SIR simulation model. Next, we’ll create some synthetic data to use as calibration targets. Because the model is stochastic, we’ll average over several replicates.</p>
-<div id="5fef2c8b" class="cell" data-execution_count="6">
+<div id="b366ec16" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>n_reps <span class="op">=</span> <span class="dv">25</span> <span class="co"># Average over 25 repetitions to reduce stochastic noise</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># These are the true parameters the optimizer will later try to identify</span></span>
@@ -1026,7 +1026,7 @@ window.Quarto = {
 <h1>Likelihood maximization using the optuna package as integrated with Starsim</h1>
 <p><a id="optimization"></a></p>
 <p>Starsim provides built-in integration with <a href="https://optuna.org/">Optuna</a> to make advanced model calibration easier. We demonstrate that linkage below using a Beta-binomial likelihood function.</p>
-<div id="37067380" class="cell" data-execution_count="7">
+<div id="263a1953" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim() <span class="co"># Begin by making a single "base" simulation with default parameters</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># This example will use a single calibration component. We choose a</span></span>
@@ -1077,19 +1077,19 @@ window.Quarto = {
 <div class="ansi-escaped-output">
 <pre><span class="ansi-blue-fg">The best parameters identified by the optimization are:
 
-    * {'beta': 0.0651509941745568, 'gamma': 0.03310591953872491, 'rand_seed': 766459}
+    * {'beta': 0.06176018677915894, 'gamma': 0.033279496017172075, 'rand_seed': 824635}
 
     These parameters should be close to the true parameters:
 
     * {'beta': {'value': 0.05}, 'gamma': {'value': 0.03}}
 
-    The best parameters resulted in a loss of 3.779377900786102.</span>
+    The best parameters resulted in a loss of 3.7702487090418515.</span>
 </pre>
 </div>
 </div>
 </div>
 <p>It seems like the best parameter values are pretty close to the right values, so that’s good. We can look at all the results and easily create a DataFrame containing the top K runs.</p>
-<div id="fa75fb75" class="cell" data-execution_count="8">
+<div id="3364eec8" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> calib.to_df(top_k<span class="op">=</span><span class="dv">10</span>)</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>display(df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
@@ -1123,113 +1123,113 @@ window.Quarto = {
 </thead>
 <tbody>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">93</th>
-<td>3.779378</td>
-<td>2026-04-02 02:57:43.030546</td>
-<td>2026-04-02 02:57:43.441972</td>
-<td>0 days 00:00:00.411426</td>
-<td>0.065151</td>
-<td>0.033106</td>
-<td>766459</td>
+<th data-quarto-table-cell-role="th">66</th>
+<td>3.770249</td>
+<td>2026-04-04 05:16:55.675561</td>
+<td>2026-04-04 05:16:56.101700</td>
+<td>0 days 00:00:00.426139</td>
+<td>0.061760</td>
+<td>0.033279</td>
+<td>824635</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">90</th>
-<td>4.111423</td>
-<td>2026-04-02 02:57:42.802842</td>
-<td>2026-04-02 02:57:43.226088</td>
-<td>0 days 00:00:00.423246</td>
-<td>0.066550</td>
-<td>0.033369</td>
-<td>772790</td>
+<th data-quarto-table-cell-role="th">99</th>
+<td>3.779983</td>
+<td>2026-04-04 05:16:59.231589</td>
+<td>2026-04-04 05:16:59.552008</td>
+<td>0 days 00:00:00.320419</td>
+<td>0.065664</td>
+<td>0.031274</td>
+<td>908990</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">43</th>
-<td>6.629044</td>
-<td>2026-04-02 02:57:37.823742</td>
-<td>2026-04-02 02:57:38.234136</td>
-<td>0 days 00:00:00.410394</td>
-<td>0.066772</td>
-<td>0.027867</td>
-<td>639080</td>
+<th data-quarto-table-cell-role="th">63</th>
+<td>3.786013</td>
+<td>2026-04-04 05:16:55.309689</td>
+<td>2026-04-04 05:16:55.734405</td>
+<td>0 days 00:00:00.424716</td>
+<td>0.061504</td>
+<td>0.033488</td>
+<td>819568</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">96</th>
-<td>6.771823</td>
-<td>2026-04-02 02:57:43.417636</td>
-<td>2026-04-02 02:57:43.856279</td>
-<td>0 days 00:00:00.438643</td>
-<td>0.065255</td>
-<td>0.037601</td>
-<td>874585</td>
+<th data-quarto-table-cell-role="th">64</th>
+<td>3.800493</td>
+<td>2026-04-04 05:16:55.448477</td>
+<td>2026-04-04 05:16:55.873019</td>
+<td>0 days 00:00:00.424542</td>
+<td>0.062594</td>
+<td>0.033768</td>
+<td>822103</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">89</th>
-<td>7.238526</td>
-<td>2026-04-02 02:57:42.603865</td>
-<td>2026-04-02 02:57:43.018214</td>
-<td>0 days 00:00:00.414349</td>
-<td>0.065759</td>
-<td>0.037213</td>
-<td>525232</td>
+<th data-quarto-table-cell-role="th">58</th>
+<td>3.883333</td>
+<td>2026-04-04 05:16:54.798497</td>
+<td>2026-04-04 05:16:55.222500</td>
+<td>0 days 00:00:00.424003</td>
+<td>0.065371</td>
+<td>0.033329</td>
+<td>790638</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">87</th>
-<td>7.342234</td>
-<td>2026-04-02 02:57:42.527408</td>
-<td>2026-04-02 02:57:42.962232</td>
-<td>0 days 00:00:00.434824</td>
-<td>0.065763</td>
-<td>0.037497</td>
-<td>665506</td>
+<th data-quarto-table-cell-role="th">62</th>
+<td>4.060737</td>
+<td>2026-04-04 05:16:55.234793</td>
+<td>2026-04-04 05:16:55.664616</td>
+<td>0 days 00:00:00.429823</td>
+<td>0.064550</td>
+<td>0.034031</td>
+<td>851884</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">95</th>
-<td>7.466490</td>
-<td>2026-04-02 02:57:43.401877</td>
-<td>2026-04-02 02:57:43.810946</td>
-<td>0 days 00:00:00.409069</td>
-<td>0.066690</td>
-<td>0.037295</td>
-<td>767989</td>
+<th data-quarto-table-cell-role="th">60</th>
+<td>4.171662</td>
+<td>2026-04-04 05:16:55.008019</td>
+<td>2026-04-04 05:16:55.433242</td>
+<td>0 days 00:00:00.425223</td>
+<td>0.065796</td>
+<td>0.033815</td>
+<td>784337</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">98</th>
-<td>7.466490</td>
-<td>2026-04-02 02:57:43.670551</td>
-<td>2026-04-02 02:57:44.018539</td>
-<td>0 days 00:00:00.347988</td>
-<td>0.066646</td>
-<td>0.037469</td>
-<td>893741</td>
+<th data-quarto-table-cell-role="th">84</th>
+<td>4.253874</td>
+<td>2026-04-04 05:16:57.609879</td>
+<td>2026-04-04 05:16:58.038944</td>
+<td>0 days 00:00:00.429065</td>
+<td>0.059462</td>
+<td>0.033387</td>
+<td>842525</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">91</th>
-<td>7.562892</td>
-<td>2026-04-02 02:57:42.973801</td>
-<td>2026-04-02 02:57:43.407560</td>
-<td>0 days 00:00:00.433759</td>
-<td>0.067325</td>
-<td>0.037256</td>
-<td>770654</td>
+<th data-quarto-table-cell-role="th">65</th>
+<td>4.306383</td>
+<td>2026-04-04 05:16:55.592761</td>
+<td>2026-04-04 05:16:56.013493</td>
+<td>0 days 00:00:00.420732</td>
+<td>0.065032</td>
+<td>0.034454</td>
+<td>811732</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">97</th>
-<td>8.031270</td>
-<td>2026-04-02 02:57:43.457014</td>
-<td>2026-04-02 02:57:43.852316</td>
-<td>0 days 00:00:00.395302</td>
-<td>0.065426</td>
-<td>0.038380</td>
-<td>846032</td>
+<th data-quarto-table-cell-role="th">85</th>
+<td>4.334273</td>
+<td>2026-04-04 05:16:57.738081</td>
+<td>2026-04-04 05:16:58.169951</td>
+<td>0 days 00:00:00.431870</td>
+<td>0.059689</td>
+<td>0.032998</td>
+<td>836003</td>
 <td>COMPLETE</td>
 </tr>
 </tbody>
@@ -1238,7 +1238,7 @@ window.Quarto = {
 </div>
 </div>
 </div>
-<div id="e84609dd" class="cell" data-execution_count="9">
+<div id="53360a73" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the results</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>figs <span class="op">=</span> calib.plot_optuna([<span class="st">'plot_optimization_history'</span>, <span class="st">'plot_contour'</span>])</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">0</span>].axes.set_yscale(<span class="st">'log'</span>)</span>
@@ -1262,7 +1262,7 @@ window.Quarto = {
 </div>
 </div>
 <p>Finally, let’s run some simulations with the best parameters and compare to the calibration data. From a mathemtatical perspective, this is not the right thing to do. We have found the maximum-likelihood estimate (MLE) parameters, <span class="math inline">\(\theta\)</span>, and are now running simulations <span class="math inline">\(X \mid \theta\)</span>. These latent state trajectories represent the intrinsic noise in the model, but do not represent uncertainty. For that, additional methods are required or use a Bayesian approach, as illustrated below.</p>
-<div id="76b99d8e" class="cell" data-execution_count="10">
+<div id="dfd6b6a4" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>n_reps <span class="op">=</span> <span class="dv">10</span> <span class="co"># Number of repetitions to run</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co"># These are the best parameters found, the MLE estimate</span></span>
@@ -1297,7 +1297,7 @@ window.Quarto = {
 <h1>Bayesian calibration using sampling-importance resampling (SIR)</h1>
 <p><a id="sampling"></a></p>
 <p>Now let’s use a Bayesian calibration approach to see if the results are any different. We’ll use a simple ABC rejection sampling with a beta-binomial likelihood. A key difference is that we’re learning a posterior distribution over both parameters and trajectories rather than just a point estimate of the parameters.</p>
-<div id="2482f967" class="cell" data-execution_count="11">
+<div id="7fb04a84" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>N <span class="op">=</span> <span class="dv">100</span>  <span class="co"># Number of prior samples (more is better, but slower)</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co"># For Beta-Binomial, the concentration parameter. Lower kappa --&gt; broader</span></span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="co"># posterior and higher effective sample size (ESS) for the same N. But not a</span></span>
@@ -1327,7 +1327,7 @@ window.Quarto = {
 <span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
 <span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>    .set_index([<span class="st">'rand_seed'</span>, <span class="st">'Time'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="0f3d5369" class="cell" data-execution_count="12">
+<div id="c76e33cd" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute likelihoods for each sample</span></span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>likelihoods <span class="op">=</span> []</span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> rand_seed, sim_result <span class="kw">in</span> trajectories.groupby(<span class="st">'rand_seed'</span>):</span>
@@ -1339,7 +1339,7 @@ window.Quarto = {
 <span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.concat([prior_samples, results], axis<span class="op">=</span><span class="dv">1</span>).set_index(<span class="st">'rand_seed'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Within a Bayesian workflow, there are two ways to proceed from this point. 1. Use all samples, weighted by their likelihood. For this approach, there is no resampling step. 2. Resample <span class="math inline">\(K \leq N\)</span> samples with probability proportional to their likelihood (with replacement). This is sampling-importance resampling (SIR), not to be confused with the susceptible-infected-recovered (SIR) model. Ideally, we would choose <span class="math inline">\(K=N\)</span> resamples, but if using these samples for further analysis, it may be useful to choose <span class="math inline">\(K &lt; N\)</span> to reduce computational cost. It’s generally recommended to choose <span class="math inline">\(K\)</span> as one to two times the effective sample size (ESS).</p>
-<div id="ac903708" class="cell" data-execution_count="13">
+<div id="11a45ad5" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>results[<span class="st">'weight'</span>] <span class="op">=</span> results[<span class="st">'likelihood'</span>] <span class="op">/</span> np.<span class="bu">sum</span>(results[<span class="st">'likelihood'</span>])</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Importance resampling</span></span>
@@ -1364,7 +1364,7 @@ window.Quarto = {
 <span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>display(posterior_pars.head())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>============================================================
-Effective Sample Size (ESS) = 5.3 out of 100
+Effective Sample Size (ESS) = 5.2 out of 100
 WARNING: ESS is below 30, consider increasing N
 ============================================================
 Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></pre>
@@ -1388,29 +1388,29 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
 </thead>
 <tbody>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">318737</th>
-<td>0.039162</td>
-<td>0.032947</td>
+<th data-quarto-table-cell-role="th">107796</th>
+<td>0.037624</td>
+<td>0.020102</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">318737</th>
-<td>0.039162</td>
-<td>0.032947</td>
+<th data-quarto-table-cell-role="th">184584</th>
+<td>0.048722</td>
+<td>0.023662</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">364548</th>
-<td>0.040511</td>
-<td>0.020291</td>
+<th data-quarto-table-cell-role="th">184584</th>
+<td>0.048722</td>
+<td>0.023662</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">318737</th>
-<td>0.039162</td>
-<td>0.032947</td>
+<th data-quarto-table-cell-role="th">184584</th>
+<td>0.048722</td>
+<td>0.023662</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">272178</th>
-<td>0.057072</td>
-<td>0.021137</td>
+<th data-quarto-table-cell-role="th">184584</th>
+<td>0.048722</td>
+<td>0.023662</td>
 </tr>
 </tbody>
 </table>
@@ -1419,7 +1419,7 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
 </div>
 </div>
 <p>Let’s look at the parameters, full (weighted) posterior mean, and posterior mean from the resample.</p>
-<div id="89832ad6" class="cell" data-execution_count="14">
+<div id="61e18161" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">7</span>, <span class="dv">6</span>))</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Scatter all prior samples, colored by likelihood</span></span>
@@ -1461,7 +1461,7 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
 </div>
 </div>
 <p>View latent trajectories based on <em>all</em> <span class="math inline">\(N\)</span> samples, weighted by their likelihood. Takes some code to incorporate the weights into the plotting…</p>
-<div id="5ed6b085" class="cell" data-execution_count="15">
+<div id="c2802f31" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Use ALL samples, with weights, to compute mean and quantiles</span></span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> combined <span class="op">\</span></span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
@@ -1525,7 +1525,7 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
 </div>
 </div>
 </div>
-<div id="fbb9e66e" class="cell" data-execution_count="16">
+<div id="b5308e86" class="cell" data-execution_count="16">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the resampled trajectories. Should be similar to the weighted posterior over latent trajectories shown above.</span></span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> selected <span class="op">\</span></span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
@@ -1993,7 +1993,7 @@ Resampling K = 8 samples from the weighted ensemble of N = 100 samples</code></p
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

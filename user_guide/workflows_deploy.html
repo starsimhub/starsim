@@ -691,7 +691,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="virtual-machine" class="level2">
 <h2 class="anchored" data-anchor-id="virtual-machine">Virtual machine</h2>
 <p>One of the most common approaches is to run Starsim on a single large virtual machine (VM). By default, <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim</code></a> (and <a href="../api/run.html#starsim.run.parallel" title="0"><code>ss.parallel()</code></a>) will use all available cores. If your script already makes use of these, then you don’t need to make any more changes:</p>
-<div id="724c0b14" class="cell" data-execution_count="1">
+<div id="039d8c5b" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
@@ -732,7 +732,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 <p>Note that this example uses <code>sc.objdict()</code> rather than <a href="https://docs.python.org/3/library/stdtypes.html#dict" title="1"><code>dict()</code></a> – either work, but it means you can use <code>pars.diseases.beta</code> rather than <code>pars['diseases']['beta']</code>. You could also create full Starsim objects (e.g.&nbsp;<code>diseases = ss.SIS()</code> and then modify <code>pars.diseases.pars.beta</code>).</p>
 <p>In some cases, creating the sim is itself a time-consuming step (especially if hundreds or thousands are being generated). In this case, you can write a <code>make_sim()</code> function and parallelize that too:</p>
-<div id="c25ecb12" class="cell" data-execution_count="2">
+<div id="98da60e0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim(i, pars):</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    pars.diseases.beta <span class="op">*=</span> sc.perturb() <span class="co"># Don't need to copy pars since implicitly copied via the pickling process</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    pars.rand_seed <span class="op">=</span> i</span>
@@ -761,7 +761,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="dask-and-coiled" class="level2">
 <h2 class="anchored" data-anchor-id="dask-and-coiled">Dask and Coiled</h2>
 <p>Adapting the examples above, we can fairly easily make Starsim simulations run using other popular tools such as <a href="https://docs.dask.org/">Dask</a> and <a href="https://joblib.readthedocs.io/">Joblib</a>. Here’s a Dask example:</p>
-<div id="9213bf66" class="cell" data-execution_count="3">
+<div id="c8eb4777" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dask</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dask.distributed <span class="im">as</span> dd</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -1311,7 +1311,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

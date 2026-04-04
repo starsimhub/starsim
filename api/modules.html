@@ -575,6 +575,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
   <ul class="collapse">
   <li><a href="#starsim.modules.find_modules" id="toc-starsim.modules.find_modules" class="nav-link" data-scroll-target="#starsim.modules.find_modules">find_modules</a></li>
+  <li><a href="#starsim.modules.is_module" id="toc-starsim.modules.is_module" class="nav-link" data-scroll-target="#starsim.modules.is_module">is_module</a></li>
   <li><a href="#starsim.modules.module_map" id="toc-starsim.modules.module_map" class="nav-link" data-scroll-target="#starsim.modules.module_map">module_map</a></li>
   <li><a href="#starsim.modules.module_types" id="toc-starsim.modules.module_types" class="nav-link" data-scroll-target="#starsim.modules.module_types">module_types</a></li>
   <li><a href="#starsim.modules.register_modules" id="toc-starsim.modules.register_modules" class="nav-link" data-scroll-target="#starsim.modules.register_modules">register_modules</a></li>
@@ -707,7 +708,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>The main base class for all Starsim modules: diseases, networks, interventions, etc.</p>
 <p>By convention, keyword arguments to modules are assigned to “_“, which is an alias for None. These are then populated with defaults by <code>mod.define_pars()</code>, which are then updated with <code>mod.update_pars()</code>, which inspects the <code>__init__</code> function to get these arguments.</p>
 <p>Note that there is no <em>functional</em> difference between specifying arguments this way rather than simply via <code>**kwargs</code>, but having the arguments shown in the function signature can make it easier to read, and “_” is a convetion to indicate that the default is specified below.</p>
-<p>It is also of course OK to specify the actual values rather than “_“; however module arguments are often complex objects (e.g.&nbsp;<code>ss.bernoulli</code>) that can’t be easily specified in the function signature.</p>
+<p>It is also of course OK to specify the actual values rather than “_“; however module arguments are often complex objects (e.g.&nbsp;<a href="../api/distributions.html#starsim.distributions.bernoulli" title="0"><code>ss.bernoulli</code></a>) that can’t be easily specified in the function signature.</p>
 <p>Finally, note that you can (and should) call <code>super().__init__()</code> with no arguments: the name, label, and time arguments get correctly updated via <code>self.update_pars()</code>.</p>
 <section id="parameters-1" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h4>
@@ -1099,18 +1100,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Find all subclasses of Module present in Starsim, divided by type</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.modules.is_module">is_module</a></td>
+<td>Check whether something is a Starsim module</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.modules.module_map">module_map</a></td>
 <td>Map modules to standard types</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.module_types">module_types</a></td>
 <td>Return a list of known module types; based on <a href="../api/modules.html#starsim.modules.module_map" title="0"><code>module_map()</code></a></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.register_modules">register_modules</a></td>
 <td>Register custom modules with Starsim so they can be referred to by string.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.required">required</a></td>
 <td>Decorator to mark module methods as required.</td>
 </tr>
@@ -1121,20 +1126,25 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>modules.find_modules(key<span class="op">=</span><span class="va">None</span>, flat<span class="op">=</span><span class="va">False</span>, verbose<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Find all subclasses of Module present in Starsim, divided by type</p>
 </section>
+<section id="starsim.modules.is_module" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.modules.is_module">is_module</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>modules.is_module(obj)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Check whether something is a Starsim module</p>
+</section>
 <section id="starsim.modules.module_map" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.module_map">module_map</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>modules.module_map(key<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>modules.module_map(key<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Map modules to standard types</p>
 <p>This is the source of truth about module types. Modules with types that do not map to anything in the module_map are treated as custom modules.</p>
 </section>
 <section id="starsim.modules.module_types" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.module_types">module_types</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>modules.module_types()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>modules.module_types()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return a list of known module types; based on <a href="../api/modules.html#starsim.modules.module_map" title="0"><code>module_map()</code></a></p>
 </section>
 <section id="starsim.modules.register_modules" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.register_modules">register_modules</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>modules.register_modules(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>modules.register_modules(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Register custom modules with Starsim so they can be referred to by string.</p>
 <p>Note: “modules” here refers to Starsim modules. But this function registers Starsim “modules” (e.g.&nbsp;<a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a>) that are found within Python “modules” (e.g.&nbsp;<code>starsim</code>).</p>
 <section id="parameters-4" class="level4 doc-section doc-section-parameters">
@@ -1171,7 +1181,7 @@ ss.Sim(diseases='mydisease', networks='mynetwork').run()</code></pre>
 </section>
 <section id="starsim.modules.required" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.required">required</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>modules.required(val<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>modules.required(val<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Decorator to mark module methods as required.</p>
 <p>A common gotcha in Starsim is to forget to call super(), or to mistype a method name so it’s never called. This decorator lets you mark methods (of Modules only) to be sure that they are called either on sim initialization or on sim run.</p>
 <section id="parameters-5" class="level4 doc-section doc-section-parameters">
@@ -1645,7 +1655,7 @@ ss.Sim(diseases='mydisease', networks='mynetwork').run()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

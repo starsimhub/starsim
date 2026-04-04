@@ -732,7 +732,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li><code>values</code>: Contains data for active agents only (indexed by position in auids)</li>
 </ul>
 <p>Let’s see this in action:</p>
-<div id="7agla6ao1iu" class="cell" data-execution_count="1">
+<div id="87da0e5d" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -758,15 +758,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.25 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.26 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.27 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.28 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.29 s)  ••••••••••••———————— 61%
+  Running 2030.01.01 (30/51) (0.30 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.31 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.32 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.33 s)  •••••••••••••••••••• 100%
+  Running 2050.01.01 (50/51) (0.34 s)  •••••••••••••••••••• 100%
 
 Number of agents: 6
 UIDs: &lt;IndexArr "uid", len=6, [2 3 4 5 6 9]&gt;
@@ -792,7 +792,7 @@ Ages (raw): [25.152369    4.9882936  58.149414    0.13023734 43.819874   42.6909
 </ul></li>
 </ul>
 <p>Let’s demonstrate this:</p>
-<div id="q2b7sb0xewr" class="cell" data-execution_count="2">
+<div id="f51e5bfb" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"After simulation:"</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Total agents ever created: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.uid.raw)<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Active agents: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.auids)<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -821,7 +821,7 @@ Mean age (all agents, including dead): 31.61</code></pre>
 <p>Here are examples of correct and incorrect ways to index Starsim arrays:</p>
 <section id="correct-indexing-patterns" class="level3">
 <h3 class="anchored" data-anchor-id="correct-indexing-patterns">Correct indexing patterns</h3>
-<div id="4owgvspvnmx" class="cell" data-execution_count="3">
+<div id="398c8394" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using integer indices (works on active agents)</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>age_of_first_active <span class="op">=</span> sim.people.age[<span class="dv">0</span>]</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Age of first active agent: </span><span class="sc">{</span>age_of_first_active<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -853,7 +853,7 @@ Dead UIDs: []</code></pre>
 <section id="incorrect-indexing-patterns" class="level3">
 <h3 class="anchored" data-anchor-id="incorrect-indexing-patterns">Incorrect indexing patterns</h3>
 <p>These examples show what <strong>NOT</strong> to do:</p>
-<div id="2pxcnpsmrgh" class="cell" data-execution_count="4">
+<div id="bd9d6b89" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># ❌ Don't index with raw lists of integers - this is ambiguous!</span></span>
@@ -1343,7 +1343,7 @@ Mean age (raw): 31.613348</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

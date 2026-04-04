@@ -991,7 +991,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tbody>
 </table>
 <p>Let’s compare a simple SIR model configured with transmission using a single Mixing Pool to a similar model using a contact network. Mixing pools are not the same as contact networks, so the results are not expected to be identical.</p>
-<div id="0fe5b776" class="cell" data-execution_count="1">
+<div id="c9ba9a02" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1026,7 +1026,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Ultimately, the acquisition probability for each susceptible agent in <code>dst_uids</code> is computed as</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="va">self</span>.pars.beta <span class="op">*</span> trans <span class="op">*</span> acq</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>You can see the <code>beta</code> parameter here, which is another pool parameter and should use <code>ss.timeprob()</code> to automatically adjust for time units. Mixing pools do not currently use the <code>beta</code> parameters configured in individual disease modules.</p>
-<div id="e98e700a" class="cell" data-execution_count="2">
+<div id="be8b7fbb" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sir'</span>, <span class="co"># Use this pool only for SIR, not other diseases (HIV in this example)</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> <span class="kw">lambda</span> sim: sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>, <span class="co"># Infection sources will be agents under age 15</span></span>
@@ -1062,7 +1062,7 @@ Figure(896x672)</code></pre>
 </div>
 </div>
 <p><a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> (plural) allows you to configure multiple individual <a href="../api/networks.html#starsim.networks.MixingPool" title="0"><code>MixingPool</code></a> pools. This first example shows how to do age mixing. Like <a href="../api/networks.html#starsim.networks.MixingPool" title="0"><code>MixingPool</code></a>, <a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> also takes <code>src</code> and <code>dst</code>, however each of these parameters must be a dictionary with key specifying the name of each group and value as in the singlular mixing pool proving the uids by a callable function or list of uids.</p>
-<div id="c4037c42" class="cell" data-execution_count="3">
+<div id="862fede8" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -1138,7 +1138,7 @@ The second axis (columns) of the contact matrix is the DESTINATION group
 </div>
 </div>
 <p>Mixing pools work well with properties other than age. Here’s an example that mixes by socio-economic status (SES).</p>
-<div id="291469a2" class="cell" data-execution_count="4">
+<div id="596ddf4a" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define SES states</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ses <span class="op">=</span> sc.objdict(low<span class="op">=</span><span class="dv">0</span>, mid<span class="op">=</span><span class="dv">1</span>, high<span class="op">=</span><span class="dv">2</span>)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1639,7 +1639,7 @@ The second axis (columns) of the contact matrix is the DESTINATION group
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

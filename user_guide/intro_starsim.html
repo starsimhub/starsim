@@ -669,7 +669,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="types-of-disease-modeling" class="level2">
 <h2 class="anchored" data-anchor-id="types-of-disease-modeling">Types of disease modeling</h2>
-<p>Starsim is an agent-based model (ABM). ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:</p>
+<p>Starsim is primarily an agent-based model (ABM), although it can also be used for compartmental and metapopulation modeling. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:</p>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
 <p><img src="assets/types_of_model.png" class="img-fluid figure-img"></p>
@@ -754,11 +754,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li><em>Example</em>: You know and love your HIV model, but you want to see what the impact would be of including syphilis co-transmission or a different type of MSM network</li>
 </ul></li>
 </ul>
-<p>However, there are other cases where Starsim is <strong>not</strong> suitable. These include:</p>
+<p>However, there are other cases where Starsim may not be suitable. These include:</p>
 <ul>
-<li>If compartmental models are sufficient for your questions, you should probably stick with them (for R, consider <a href="https://epiverse-trace.r-universe.dev/epidemics">Epidemics</a>; for Python, consider <a href="https://atomica.tools">Atomica</a> or <a href="https://www.epydemix.org/">Epydemix</a>)</li>
-<li>If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile (but we are working on AI tools to translate other disease models automatically)</li>
-<li>If you are modeling malaria or other spatial simulations, Starsim doesn’t currently support spatial interactions natively (but we are considering adding it in future)</li>
+<li>If compartmental models are sufficient for your questions, you should probably stick with them. Starsim can do compartmental modeling, but this is most powerful if used in a hybrid manner with agents (for example, modeling malaria as agent-based humans and compartmental mosquitoes). Other options for compartmental models are <a href="https://epiverse-trace.r-universe.dev/epidemics">Epidemics</a> for R, and <a href="https://atomica.tools">Atomica</a> or <a href="https://www.epydemix.org/">Epydemix</a> for Python. Note that it is relatively easy to switch between modeling frameworks; the user guide includes an example of an <a href="https://docs.starsim.org/user_guide/advanced_nonstandard.html#epiverse-epidemics-school-closure-model">Epidemics school closure model</a> reimplemented in Starsim. <a href="https://ai.starsim.org">Starsim-AI</a> includes tools for automatically translating different types of models into Starsim format.</li>
+<li>If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile (though as noted, AI tools have made this much easier than it used to be, so get in touch if this is of interest to you).</li>
 </ul>
 
 
@@ -1197,7 +1196,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

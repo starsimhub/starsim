@@ -528,7 +528,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="dur_pregnancy-is-now-a-distribution-not-a-fixed-duration" class="level3">
 <h3 class="anchored" data-anchor-id="dur_pregnancy-is-now-a-distribution-not-a-fixed-duration">11. <code>dur_pregnancy</code> is now a distribution, not a fixed duration</h3>
-<p>Previously, <code>dur_pregnancy</code> was a fixed value (default <code>ss.years(0.75)</code>). It is now an <code>ss.choice</code> distribution that draws from gestational weeks 32-42, and duration is assigned per-agent.</p>
+<p>Previously, <code>dur_pregnancy</code> was a fixed value (default <code>ss.years(0.75)</code>). It is now an <a href="../api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice</code></a> distribution that draws from gestational weeks 32-42, and duration is assigned per-agent.</p>
 <p><strong>What to change</strong>: If you were relying on a fixed pregnancy duration or accessing <code>self.pars.dur_pregnancy.years</code>, update accordingly.</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># v3.0</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>pregnancy <span class="op">=</span> ss.Pregnancy(dur_pregnancy<span class="op">=</span>ss.years(<span class="fl">0.75</span>))</span>
@@ -1136,7 +1136,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

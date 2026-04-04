@@ -687,11 +687,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<div class="alert alert-info">
-<p>An interactive version of this notebook is available on <a href="https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/demographics.ipynb">Google Colab</a> or <a href="https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Fdemographics.ipynb">Binder</a>.</p>
-</div>
 <p>There are a few basic ways to add vital dynamics to your model, e.g.&nbsp;</p>
-<div id="7dc8b21a" class="cell" data-execution_count="2">
+<div id="d704e1da" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -704,7 +701,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(pars)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>This will apply annual birth and death rates as specified in the <code>pars</code> dict. Alternatively, we can make demographic components, which achieves the same thing:</p>
-<div id="acfa0a44" class="cell" data-execution_count="3">
+<div id="c2087517" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
@@ -712,22 +709,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(demographics<span class="op">=</span>demographics)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>You can even simply set <code>demographics=True</code> to use default rates:</p>
-<div id="3b914207" class="cell" data-execution_count="4">
+<div id="028c7d09" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>ss.Sim(demographics<span class="op">=</span><span class="va">True</span>).run().plot()<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
 
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.29 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.31 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.04 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.32 s)  ••••••••••••———————— 61%
+  Running 2030.01.01 (30/51) (0.06 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.34 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.08 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.36 s)  •••••••••••••••••••• 100%
+  Running 2050.01.01 (50/51) (0.10 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -743,7 +740,7 @@ Figure(768x576)</code></pre>
 <section id="scaling-results-to-whole-populations" class="level2">
 <h2 class="anchored" data-anchor-id="scaling-results-to-whole-populations">Scaling results to whole populations</h2>
 <p>Even though we’ve been simulating populations of a few thousand agents, we can also use the <code>total_pop</code> parameter to scale our results so that they reflect a much larger population. You can think of this as a kind of statistical sampling approximation. If we want to model the population of Nigeria, for example, it would be much too computationally intensive to simulate 200 million agents. However, we could simulate 50,000 agents and then say that each agent represents 4,000 people. Again, we can do this by passing <code>total_pop=200e6</code> to the sim or in the <code>pars</code> dictionary. Here’s an example:</p>
-<div id="753528fa" class="cell" data-execution_count="5">
+<div id="027d589d" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> [</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    ss.Births(birth_rate<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    ss.Deaths(death_rate<span class="op">=</span>ss.peryear(<span class="dv">15</span>))</span>
@@ -754,7 +751,7 @@ Figure(768x576)</code></pre>
 <section id="using-realistic-vital-demographics" class="level2">
 <h2 class="anchored" data-anchor-id="using-realistic-vital-demographics">Using realistic vital demographics</h2>
 <p>For more realistic demographics, we can also pass in a file that has birth or death rates over time and by age/sex. There are examples of these files in the <code>test_data</code> folder. Here’s how we would read them in and construct realistic vital dynamics for Nigeria:</p>
-<div id="4bf3309e" class="cell" data-execution_count="6">
+<div id="38d65b34" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -795,15 +792,15 @@ Figure(768x576)</code></pre>
 
   Running 1995.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2005.01.01 (10/51) (1.39 s)  ••••———————————————— 22%
+  Running 2005.01.01 (10/51) (0.39 s)  ••••———————————————— 22%
 
-  Running 2015.01.01 (20/51) (1.54 s)  ••••••••———————————— 41%
+  Running 2015.01.01 (20/51) (0.55 s)  ••••••••———————————— 41%
 
-  Running 2025.01.01 (30/51) (1.72 s)  ••••••••••••———————— 61%
+  Running 2025.01.01 (30/51) (0.73 s)  ••••••••••••———————— 61%
 
-  Running 2035.01.01 (40/51) (1.90 s)  ••••••••••••••••———— 80%
+  Running 2035.01.01 (40/51) (0.92 s)  ••••••••••••••••———— 80%
 
-  Running 2045.01.01 (50/51) (2.10 s)  •••••••••••••••••••• 100%
+  Running 2045.01.01 (50/51) (1.12 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1259,7 +1256,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

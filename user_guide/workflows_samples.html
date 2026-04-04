@@ -723,11 +723,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>A collection of scalar outputs (e.g., cumulative infections, total deaths)</li>
 <li>A dataframe of time-varying outputs (e.g., new diagnoses per day, number of people on treatment each day)</li>
 </ul>
-<p>then the classes <code>Dataset</code> and <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> manage collections of these results. In particular, the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class manages different random samples of the same parameters, and the <code>Dataset</code> class manages a collection of <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a>.</p>
+<p>then the classes <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> and <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> manage collections of these results. In particular, the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class manages different random samples of the same parameters, and the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> class manages a collection of <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a>.</p>
 <div class="alert alert-block alert-info">
 <p>These classes are particularly designed to facilitate working with tens of thousands of simulation runs, where other approaches such as those based on the MultiSim class may not be feasible.</p>
 </div>
-<div id="3" class="cell" data-execution_count="1">
+<div id="348ddad9" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -739,7 +739,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="obtaining-simulation-output" class="level2">
 <h2 class="anchored" data-anchor-id="obtaining-simulation-output">Obtaining simulation output</h2>
 <p>To demonstrate usage of this class, we will first consider constructing the kinds of output that the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class stores. We begin by running a basic simulation using the SIR model:</p>
-<div id="6" class="cell" data-execution_count="2">
+<div id="df82085c" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">5000</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.ndict(ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>)))</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
@@ -750,9 +750,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.28 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.27 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.32 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.31 s)  ••••••••———————————— 41%
 
   Running 2030.01.01 (30/51) (0.35 s)  ••••••••••••———————— 61%
 
@@ -773,7 +773,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="alert alert-block alert-info">
 <p>In real-world use, it is often helpful to write your own function to extract a dataframe of simulation outputs, because typically some of the outputs need to be extracted from custom Analyzers.</p>
 </div>
-<div id="8" class="cell" data-execution_count="3">
+<div id="7f5844c7" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>sim.to_df()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="3">
 <div>
@@ -1625,7 +1625,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="scalarsummary-outputs" class="level3">
 <h3 class="anchored" data-anchor-id="scalarsummary-outputs">Scalar/summary outputs</h3>
 <p>We can also consider extracting a summary dictionary of scalar values. For example:</p>
-<div id="10" class="cell" data-execution_count="4">
+<div id="1e197d9a" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> {}</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">'seed'</span>] <span class="op">=</span> sim.pars[<span class="st">'rand_seed'</span>]</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">'p_death'</span>] <span class="op">=</span> sim.diseases[<span class="dv">0</span>].pars.p_death.pars.p</span>
@@ -1643,7 +1643,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="running-the-model" class="level3">
 <h3 class="anchored" data-anchor-id="running-the-model">Running the model</h3>
 <p>For usage at scale, the steps of creating a simulation, running it and producing these outputs are usually encapsulated in functions:</p>
-<div id="13" class="cell" data-execution_count="5">
+<div id="6f969173" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_sim(seed, p_death):</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">5000</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>))</span>
@@ -1669,7 +1669,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>The functions above could be combined into a single function. However, in real world usage it is often convenient to be able to construct a simulation independently of running it (e.g., for diagnostic purposes or to allow running the sim in a range of different ways). The suggested structure above, with a <code>get_sim()</code> function and a <code>run_sim()</code> function are recommended as standard practice.</p>
 </div>
 <p>Now running a simulation for a given beta/seed value and returning the processed outputs can be done in a single step:</p>
-<div id="16" class="cell" data-execution_count="6">
+<div id="12c56c47" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scalar output</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>df, summary <span class="op">=</span> run_sim(<span class="dv">0</span>, <span class="fl">0.2</span>)<span class="op">;</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1678,7 +1678,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>We can produce all of the samples associated with a scenario by iterating over the input seed values. This is being done in a basic loop here, but could be done in more sophistical ways to leverage parallel computing (e.g., with <code>sc.parallelize</code> for single host parallelization, or with <code>celery</code> for distributed computation).</p>
-<div id="18" class="cell" data-execution_count="7">
+<div id="507c1e9f" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run a collection of sims</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">20</span></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> np.arange(n)</span>
@@ -1689,7 +1689,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="saving-and-loading-the-samples" class="level2">
 <h2 class="anchored" data-anchor-id="saving-and-loading-the-samples">Saving and loading the samples</h2>
 <p>We have now produced simulation outputs (dataframes and summary statistics) for 20 simulation runs. The <code>outputs</code> here are a list of tuples, containing the dataframe and dictionary outputs for each sample. This list can be passed to the <code>cvv.Samples</code> class to produce a single compressed file on disk:</p>
-<div id="21" class="cell" data-execution_count="8">
+<div id="f5938a8b" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>resultsdir <span class="op">=</span> Path(<span class="st">'results'</span>)</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>resultsdir.mkdir(exist_ok<span class="op">=</span><span class="va">True</span>, parents<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>ss.Samples.new(resultsdir, outputs, identifiers<span class="op">=</span>[<span class="st">"p_death"</span>])</span>
@@ -1706,7 +1706,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>The <code>Samples</code> file internally contains metadata recording the identifiers. When <code>Samples</code> are accessed using the <code>Dataset</code> class, they can be accessed via the internal metadata. Therefore for a typical workflow, the file name largely doesn’t matter, and it usually doesn’t need to be manually specified.</p>
 </div>
 <p>The saved file can be loaded and accessed via the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class. <strong>Importantly, individual files can be extracted from a <code>.zip</code> file without decompressing the entire archive</strong>. This means that loading the summary dataframe and using it to selectively load the full outputs for individual runs can be done efficiently. For example, loading retrieving a single result from a <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> file would take a similar amount of time regardless of whether the file contained 10 samples or 100000 samples.</p>
-<div id="24" class="cell" data-execution_count="9">
+<div id="ccc061db" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the samples</span></span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>)</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>res.summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1857,7 +1857,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>When the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> file was created, a dictionary of scalars was provided for each result. These are automatically used to populate a ‘summary’ dataframe, where each identifier (and the seed) are used as the index, and the remaining keys appear as columns, as shown above. As a shortcut, columns of the summary dataframe can be accessed by indexing the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object directly, without having to access the <code>.summary</code> attribute e.g.,</p>
-<div id="26" class="cell" data-execution_count="10">
+<div id="be1ffc0f" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>res[<span class="st">'cum_infections'</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="10">
 <pre><code>seed  p_death
@@ -1885,7 +1885,7 @@ Name: cum_infections, dtype: float64</code></pre>
 </div>
 </div>
 <p>Each simulation is uniquely identified by its seed, and the time series dataframe for each simulation can be accessed by indexing the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object with the seed:</p>
-<div id="28" class="cell" data-execution_count="11">
+<div id="deb8c51b" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="11">
 <div>
@@ -2757,7 +2757,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <section id="plotting-summary-quantities" class="level3">
 <h3 class="anchored" data-anchor-id="plotting-summary-quantities">Plotting summary quantities</h3>
 <p>Often it’s useful to be able plot distributions of summary quantities, such as the total infections. This can be performed by directly indexing the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object and then using the appropriate plotting command:</p>
-<div id="31" class="cell" data-execution_count="12">
+<div id="a423c041" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>plt.hist(res[<span class="st">'cum_infections'</span>], density<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Total infections'</span>)</span>
@@ -2777,7 +2777,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <section id="plotting-time-series" class="level3">
 <h3 class="anchored" data-anchor-id="plotting-time-series">Plotting time series</h3>
 <p>Time series plots can be obtained by accessing the dataframes associated with each seed, and then plotting quantities from those. For convenience, iterating over the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object will automatically iterate over all of the dataframes associated with each seed. For example:</p>
-<div id="33" class="cell" data-execution_count="13">
+<div id="8d6eef42" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    plt.plot(df[<span class="st">'sir_new_infections'</span>], color<span class="op">=</span><span class="st">'b'</span>, alpha<span class="op">=</span><span class="fl">0.1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
@@ -2799,7 +2799,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <li><code>for df in res</code> - iterate over time series dataframes</li>
 </ul>
 <p>Sometimes it is useful to have access to both the summary dictionary and the time series dataframe associated with a single sample. These can be accessed using the <code>get</code> method, which takes in a seed, and returns both outputs for that seed together:</p>
-<div id="35" class="cell" data-execution_count="14">
+<div id="2b943da3" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>res.get(<span class="dv">0</span>) <span class="co"># Retrieve both summary quantities and dataframes</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="14">
 <pre><code>(#0. 'p_death':        0.2
@@ -3023,7 +3023,7 @@ Name: cum_infections, dtype: float64</code></pre>
 </div>
 </div>
 <p>In the same way that it is possible to index the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object directly in order to retrieve columns from the summary dataframe, it is also possible to directly index the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object to get a column of the time series dataframe. In this case, pass a tuple of items to the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object, where the first item is the seed, and the second is a column from the time series dataframe. For example:</p>
-<div id="37" class="cell" data-execution_count="15">
+<div id="5a0bfc60" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>,<span class="st">'sir_n_infected'</span>] <span class="co"># Equivalent to `res[0]['sir.n_infected']`</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="15">
 <pre><code>timevec
@@ -3085,7 +3085,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <section id="filtering-results" class="level3">
 <h3 class="anchored" data-anchor-id="filtering-results">Filtering results</h3>
 <p>The <code>.seeds</code> attribute contains a listing of seeds, which can be helpful for iteration:</p>
-<div id="40" class="cell" data-execution_count="16">
+<div id="4f870e44" class="cell" data-execution_count="16">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>res.seeds</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="16">
 <pre><code>array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
@@ -3093,7 +3093,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
 <p>The seeds are drawn from the summary dataframe, which defines which seeds are accessible via the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object. Therefore, you can drop rows from the summary dataframe to filter the results. For example, suppose we only wanted to analyze simulations with over 4900 deaths. We could retrieve a copy of the summary dataframe that only contains matching simulations:</p>
-<div id="42" class="cell" data-execution_count="17">
+<div id="f175dac0" class="cell" data-execution_count="17">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>res.summary.loc[res[<span class="st">'cum_infections'</span>]<span class="op">&gt;</span><span class="dv">4900</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="17">
 <div>
@@ -3122,7 +3122,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
 <p>We can then make a copy of the results and write the reduced summary dataframe back to that object:</p>
-<div id="44" class="cell" data-execution_count="18">
+<div id="998907ce" class="cell" data-execution_count="18">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>res2 <span class="op">=</span> res.copy()</span>
 <span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>res2.summary <span class="op">=</span> res.summary.loc[res[<span class="st">'cum_infections'</span>]<span class="op">&gt;</span><span class="dv">4900</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
@@ -3130,25 +3130,25 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <p>Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only deep copies the summary dataframe. It does not duplicate the time series dataframes or the cache. For <code>Samples</code> objects, it is therefore generally preferable to use <code>.copy()</code>.</p>
 </div>
 <p>Now notice that there are fewer samples, and the seeds have been filtered:</p>
-<div id="46" class="cell" data-execution_count="19">
+<div id="515a8ca4" class="cell" data-execution_count="19">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="19">
 <pre><code>20</code></pre>
 </div>
 </div>
-<div id="47" class="cell" data-execution_count="20">
+<div id="314a5a9d" class="cell" data-execution_count="20">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(res2)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="20">
 <pre><code>0</code></pre>
 </div>
 </div>
-<div id="48" class="cell" data-execution_count="21">
+<div id="ab1db923" class="cell" data-execution_count="21">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>res2.seeds</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="21">
 <pre><code>array([], dtype=int64)</code></pre>
 </div>
 </div>
-<div id="49" class="cell" data-execution_count="22">
+<div id="6c22b6a6" class="cell" data-execution_count="22">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>plt.hist(res2[<span class="st">'cum_infections'</span>], density<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Total infections'</span>)</span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Probability density'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -3171,7 +3171,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <section id="applying-functions-and-transformations" class="level3">
 <h3 class="anchored" data-anchor-id="applying-functions-and-transformations">Applying functions and transformations</h3>
 <p>Sometimes it might be necessary to calculate quantities that are derived from the time series dataframes. These could be simple scalar values, such as totals or averages that had not been computed ahead of time, or extracting values from each simulation at a particular point in time. As an alternative to writing a loop that iterates over the seeds, the <code>.apply()</code> method takes in a function and maps it to every dataframe. This makes it quick to construct lists or arrays with scalar values extracted from the time series. For example, suppose we wanted to extract the peak number of people infected from each simulation:</p>
-<div id="52" class="cell" data-execution_count="23">
+<div id="a5bb4580" class="cell" data-execution_count="23">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>peak_infections <span class="op">=</span> <span class="kw">lambda</span> df: df[<span class="st">'sir_n_infected'</span>].<span class="bu">max</span>()</span>
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">apply</span>(peak_infections)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="23">
@@ -3209,16 +3209,16 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <section id="implementation-details" class="level3">
 <h3 class="anchored" data-anchor-id="implementation-details">Implementation details</h3>
 <p>If the file is loaded from a memory buffer, the <code>._zipfile</code> attribute will be populated. A helper property <code>.zipfile</code> is used to access the buffer, so if caching is not used, <code>.zipfile</code> returns the actual file on disk rather than the buffer:</p>
-<div id="56" class="cell" data-execution_count="24">
+<div id="0b851faa" class="cell" data-execution_count="24">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, memory_buffer<span class="op">=</span><span class="va">True</span>) <span class="co"># Copy the entire file into memory</span></span>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f7df0d21bc0&gt; mode='r'&gt;
-&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f7df0d21bc0&gt; mode='r'&gt;</code></pre>
+<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7fab9fdb6ac0&gt; mode='r'&gt;
+&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7fab9fdb6ac0&gt; mode='r'&gt;</code></pre>
 </div>
 </div>
-<div id="57" class="cell" data-execution_count="25">
+<div id="e914bbf1" class="cell" data-execution_count="25">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, memory_buffer<span class="op">=</span><span class="va">False</span>) <span class="co"># Copy the entire file into memory</span></span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -3228,14 +3228,14 @@ Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
 <p>The dataframes associated with the individual dataframes are cached on access, so <a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_csv.html#pd.read_csv" title="1"><code>pd.read_csv()</code></a> only needs to be called once. The cache starts out empty:</p>
-<div id="59" class="cell" data-execution_count="26">
+<div id="66959655" class="cell" data-execution_count="26">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>res._cache</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="26">
 <pre><code>{}</code></pre>
 </div>
 </div>
 <p>When a dataframe is accessed, it is automatically stored in the cache:</p>
-<div id="61" class="cell" data-execution_count="27">
+<div id="caa2f355" class="cell" data-execution_count="27">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>]</span>
 <span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a>res._cache.keys()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="27">
@@ -3243,44 +3243,44 @@ Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
 <p>This means that iterating through the dataframes the first time can be slow (but in general, iterating over all dataframes is avoided in favour of either only using summary outputs, or accessing a subset of the runs):</p>
-<div id="63" class="cell" data-execution_count="28">
+<div id="0f357bab" class="cell" data-execution_count="28">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 30.3 ms</code></pre>
+<pre><code>Elapsed time: 30.1 ms</code></pre>
 </div>
 </div>
-<div id="64" class="cell" data-execution_count="29">
+<div id="7c760ff9" class="cell" data-execution_count="29">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb50"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 5.47 ms</code></pre>
+<pre><code>Elapsed time: 5.73 ms</code></pre>
 </div>
 </div>
 <p>The <code>preload</code> option populates the entire cache in advance. This makes creating the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.</p>
-<div id="66" class="cell" data-execution_count="30">
+<div id="04aeee77" class="cell" data-execution_count="30">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>    res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, preload<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 30.8 ms</code></pre>
+<pre><code>Elapsed time: 30.7 ms</code></pre>
 </div>
 </div>
-<div id="67" class="cell" data-execution_count="31">
+<div id="33b50468" class="cell" data-execution_count="31">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 6.07 ms</code></pre>
+<pre><code>Elapsed time: 5.44 ms</code></pre>
 </div>
 </div>
-<div id="68" class="cell" data-execution_count="32">
+<div id="1ff6adfd" class="cell" data-execution_count="32">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb56"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 5.31 ms</code></pre>
+<pre><code>Elapsed time: 5.27 ms</code></pre>
 </div>
 </div>
 <p>Together, these options provide some flexibility in terms of memory and time demands to suit analyses at various different scales.</p>
@@ -3289,12 +3289,12 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <section id="running-scenarios" class="level2">
 <h2 class="anchored" data-anchor-id="running-scenarios">Running scenarios</h2>
 <p>Suppose we wanted to compare a range of different <code>p_death</code> values and <code>initial</code> values (initial number of infections). We might define these runs as:</p>
-<div id="72" class="cell" data-execution_count="33">
+<div id="e3b17a1f" class="cell" data-execution_count="33">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>initials <span class="op">=</span> np.arange(<span class="dv">1</span>,<span class="dv">4</span>)</span>
 <span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>p_deaths <span class="op">=</span> np.arange(<span class="dv">0</span>,<span class="dv">1</span>,<span class="fl">0.25</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Recall that our <code>run_sim()</code> function had an argument for <code>p_death</code>. We can extend this to include the <code>initial</code> parameter too. We can actually generalize this further by passing the parameters as keyword arguments to avoid needing to hard-code all of them. Note that we also need to add the <code>initial</code> value to the summary outputs:</p>
-<div id="74" class="cell" data-execution_count="34">
+<div id="d9158302" class="cell" data-execution_count="34">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb59"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_sim(seed, <span class="op">**</span>kwargs):</span>
 <span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">1000</span>)</span>
 <span id="cb59-3"><a href="#cb59-3" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>))</span>
@@ -3319,12 +3319,12 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <span id="cb59-22"><a href="#cb59-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> df, summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>We can now easily run a set of scenarios with different values of <code>p_death</code> and save each one to a separate <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object. Note that when we create the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> objects now, we also want to specify that <code>'init_prev'</code> is one of the identifiers for the scenarios:</p>
-<div id="76" class="cell" data-execution_count="35">
+<div id="c73dfdfe" class="cell" data-execution_count="35">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Clear the existing results</span></span>
 <span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> file_path <span class="kw">in</span> resultsdir.glob(<span class="st">'*'</span>):</span>
 <span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a>    file_path.unlink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="77" class="cell" data-execution_count="36">
+<div id="3bece0d4" class="cell" data-execution_count="36">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the sweep over initial and p_death</span></span>
 <span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">10</span></span>
 <span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> np.arange(n)</span>
@@ -3348,7 +3348,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>The results folder now contains a collection of saved <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> objects. Notice how the automatically selected file names now contain both the <code>p_death</code> value and the <code>initial</code> value, because they were both specified as identifiers. We can load one of these objects in to see how these identifiers are stored and accessed inside the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class:</p>
-<div id="79" class="cell" data-execution_count="37">
+<div id="edde8e60" class="cell" data-execution_count="37">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="bu">list</span>(resultsdir.iterdir())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="37">
 <pre><code>[PosixPath('results/0.75-3.zip'),
@@ -3365,18 +3365,18 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
  PosixPath('results/0.0-1.zip')]</code></pre>
 </div>
 </div>
-<div id="80" class="cell" data-execution_count="38">
+<div id="6bebda37" class="cell" data-execution_count="38">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb65"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.25-2.zip'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The ‘id’ of a <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object is a dictionary of the identifiers, which makes it easy to access the input parameters associated with a set of scenario runs:</p>
-<div id="82" class="cell" data-execution_count="39">
+<div id="ba8e55a0" class="cell" data-execution_count="39">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb66"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">id</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="39">
 <pre><code>{'p_death': 0.25, 'initial': 2}</code></pre>
 </div>
 </div>
 <p>The ‘identifier’ is a tuple of these values, which is suitable for use as a dictionary key. This can be useful for accumulating and comparing variables across scenarios:</p>
-<div id="84" class="cell" data-execution_count="40">
+<div id="554aa8ef" class="cell" data-execution_count="40">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb68"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>res.identifier</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="40">
 <pre><code>(0.25, 2)</code></pre>
@@ -3384,8 +3384,8 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 <section id="loading-multiple-scenarios" class="level3">
 <h3 class="anchored" data-anchor-id="loading-multiple-scenarios">Loading multiple scenarios</h3>
-<p>We saw above that we now have a directory full of <code>.zip</code> files corresponding to the various scenario runs. These can be accessed using the <code>Dataset</code> class, which facilitates accessing multiple instances of <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a>. We can pass the folder containing the results to the <code>Dataset</code> constructor to load them all:</p>
-<div id="86" class="cell" data-execution_count="41">
+<p>We saw above that we now have a directory full of <code>.zip</code> files corresponding to the various scenario runs. These can be accessed using the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> class, which facilitates accessing multiple instances of <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a>. We can pass the folder containing the results to the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> constructor to load them all:</p>
+<div id="0f0a52db" class="cell" data-execution_count="41">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb70"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> ss.Dataset(resultsdir)</span>
 <span id="cb70-2"><a href="#cb70-2" aria-hidden="true" tabindex="-1"></a>results</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="41">
@@ -3396,28 +3396,28 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>The <code>.ids</code> attribute lists all of the values available across scenarios in the results folder:</p>
-<div id="88" class="cell" data-execution_count="42">
+<div id="ea2e2551" class="cell" data-execution_count="42">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb72"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb72-1"><a href="#cb72-1" aria-hidden="true" tabindex="-1"></a>results.ids</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="42">
 <pre><code>{'p_death': [0.0, 0.25, 0.5, 0.75], 'initial': [1, 2, 3]}</code></pre>
 </div>
 </div>
-<p>The individual results can be accessed by indexing the <code>Dataset</code> instance using the values of the identifiers. For example:</p>
-<div id="90" class="cell" data-execution_count="43">
+<p>The individual results can be accessed by indexing the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> instance using the values of the identifiers. For example:</p>
+<div id="c4805053" class="cell" data-execution_count="43">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb74"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb74-1"><a href="#cb74-1" aria-hidden="true" tabindex="-1"></a>results[<span class="fl">0.25</span>,<span class="dv">2</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="43">
 <pre><code>&lt;Samples 0.25-2, 10 seeds&gt;</code></pre>
 </div>
 </div>
 <p>This indexing operation is sensitive to the order in which the identifiers are specified. The <code>.get()</code> method allows you to specify them as key-value pairs:</p>
-<div id="92" class="cell" data-execution_count="44">
+<div id="53add76f" class="cell" data-execution_count="44">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb76"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a>results.get(initial<span class="op">=</span><span class="dv">2</span>, p_death<span class="op">=</span><span class="fl">0.25</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="44">
 <pre><code>&lt;Samples 0.25-2, 10 seeds&gt;</code></pre>
 </div>
 </div>
-<p>Iterating over the <code>Dataset</code> will iterate over the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> instances contained within it:</p>
-<div id="94" class="cell" data-execution_count="45">
+<p>Iterating over the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> will iterate over the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> instances contained within it:</p>
+<div id="3ef73926" class="cell" data-execution_count="45">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb78"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb78-1"><a href="#cb78-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results:</span>
 <span id="cb78-2"><a href="#cb78-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -3436,7 +3436,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>This can be used to extract and compare values across scenarios. For example, we could consider the use case of making a plot that compares total deaths across scenarios:</p>
-<div id="96" class="cell" data-execution_count="46">
+<div id="da752c56" class="cell" data-execution_count="46">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb80"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb80-1"><a href="#cb80-1" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> []</span>
 <span id="cb80-2"><a href="#cb80-2" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> []</span>
 <span id="cb80-3"><a href="#cb80-3" aria-hidden="true" tabindex="-1"></a>yerr <span class="op">=</span> []</span>
@@ -3462,8 +3462,8 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </section>
 <section id="filtering-scenarios" class="level3">
 <h3 class="anchored" data-anchor-id="filtering-scenarios">Filtering scenarios</h3>
-<p>Often plots need to be generated for a subset of scenarios e.g., for sensitivity analysis or to otherwise compare specific scenarios. <code>Dataset.filter</code> returns a new <code>Dataset</code> containing a subset of the results:</p>
-<div id="98" class="cell" data-execution_count="47">
+<p>Often plots need to be generated for a subset of scenarios e.g., for sensitivity analysis or to otherwise compare specific scenarios. <a href="../api/samples.html#starsim.samples.Dataset.filter" title="0"><code>Dataset.filter</code></a> returns a new <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> containing a subset of the results:</p>
+<div id="989ad310" class="cell" data-execution_count="47">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb82"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb82-1"><a href="#cb82-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results.<span class="bu">filter</span>(initial<span class="op">=</span><span class="dv">2</span>):</span>
 <span id="cb82-2"><a href="#cb82-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -3473,7 +3473,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 &lt;Samples 0.75-2, 10 seeds&gt;</code></pre>
 </div>
 </div>
-<div id="99" class="cell" data-execution_count="48">
+<div id="640c79f2" class="cell" data-execution_count="48">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb84"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb84-1"><a href="#cb84-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results.<span class="bu">filter</span>(p_death<span class="op">=</span><span class="fl">0.25</span>):</span>
 <span id="cb84-2"><a href="#cb84-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -3483,7 +3483,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>This is also a quick and efficient operation, so you can easily embed filtering commands inside the analysis to select subsets of the scenarios for plotting and other output generation. For instance:</p>
-<div id="101" class="cell" data-execution_count="49">
+<div id="240ccec7" class="cell" data-execution_count="49">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb86"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb86-1"><a href="#cb86-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res, color <span class="kw">in</span> <span class="bu">zip</span>(results.<span class="bu">filter</span>(initial<span class="op">=</span><span class="dv">2</span>), sc.gridcolors(<span class="dv">4</span>)):</span>
 <span id="cb86-2"><a href="#cb86-2" aria-hidden="true" tabindex="-1"></a>    plt.plot(res[<span class="dv">0</span>].index, np.median([df[<span class="st">'new_deaths'</span>] <span class="cf">for</span> df <span class="kw">in</span> res], axis<span class="op">=</span><span class="dv">0</span>), color<span class="op">=</span>color, label<span class="op">=</span><span class="ss">f'p_death = </span><span class="sc">{</span>res<span class="sc">.</span><span class="bu">id</span>[<span class="st">"p_death"</span>]<span class="sc">}</span><span class="ss">'</span>)</span>
 <span id="cb86-3"><a href="#cb86-3" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
@@ -3501,7 +3501,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 </div>
-<div id="102" class="cell" data-execution_count="50">
+<div id="93b9be14" class="cell" data-execution_count="50">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb88"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb88-1"><a href="#cb88-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res, color <span class="kw">in</span> <span class="bu">zip</span>(results.<span class="bu">filter</span>(p_death<span class="op">=</span><span class="fl">0.25</span>), sc.gridcolors(<span class="dv">3</span>)):</span>
 <span id="cb88-2"><a href="#cb88-2" aria-hidden="true" tabindex="-1"></a>    plt.plot(res[<span class="dv">0</span>].index, np.median([df[<span class="st">'new_deaths'</span>] <span class="cf">for</span> df <span class="kw">in</span> res], axis<span class="op">=</span><span class="dv">0</span>), color<span class="op">=</span>color, label<span class="op">=</span><span class="ss">f'initial = </span><span class="sc">{</span>res<span class="sc">.</span><span class="bu">id</span>[<span class="st">"initial"</span>]<span class="sc">}</span><span class="ss">'</span>)</span>
 <span id="cb88-3"><a href="#cb88-3" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
@@ -3961,7 +3961,7 @@ Raw values: [0.00000000e+00 2.31481481e-11 4.62962963e-11 6.94444444e-11
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

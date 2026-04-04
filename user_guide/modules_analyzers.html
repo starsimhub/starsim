@@ -695,7 +695,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="simple-usage" class="level2">
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>For simple reporting, it’s possible to use a single function as an analyzer. In this case, the function receives a single argument, <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>, which it has full access to. For example, if you wanted to know the number of connections in the network on each timestep, you could write a small analyzer as follows:</p>
-<div id="306a385e" class="cell" data-execution_count="1">
+<div id="80d0aa00" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -745,7 +745,7 @@ Number of edges for network mfnet on step 7: 3548
 Number of edges for network mfnet on step 8: 3593
 Number of edges for network mfnet on step 9: 3618
 
-  Running 2010.01.01 (10/51) (0.30 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.31 s)  ••••———————————————— 22%
 Number of edges for network mfnet on step 10: 3634
 Number of edges for network mfnet on step 11: 3682
 Number of edges for network mfnet on step 12: 3713
@@ -757,7 +757,7 @@ Number of edges for network mfnet on step 17: 3896
 Number of edges for network mfnet on step 18: 3945
 Number of edges for network mfnet on step 19: 3987
 
-  Running 2020.01.01 (20/51) (0.37 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.39 s)  ••••••••———————————— 41%
 Number of edges for network mfnet on step 20: 4010
 Number of edges for network mfnet on step 21: 4048
 Number of edges for network mfnet on step 22: 4085
@@ -769,7 +769,7 @@ Number of edges for network mfnet on step 27: 4250
 Number of edges for network mfnet on step 28: 4299
 Number of edges for network mfnet on step 29: 4314
 
-  Running 2030.01.01 (30/51) (0.45 s)  ••••••••••••———————— 61%
+  Running 2030.01.01 (30/51) (0.46 s)  ••••••••••••———————— 61%
 Number of edges for network mfnet on step 30: 4346
 Number of edges for network mfnet on step 31: 4373
 Number of edges for network mfnet on step 32: 4409
@@ -781,7 +781,7 @@ Number of edges for network mfnet on step 37: 4642
 Number of edges for network mfnet on step 38: 4694
 Number of edges for network mfnet on step 39: 4742
 
-  Running 2040.01.01 (40/51) (0.52 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.54 s)  ••••••••••••••••———— 80%
 Number of edges for network mfnet on step 40: 4768
 Number of edges for network mfnet on step 41: 4830
 Number of edges for network mfnet on step 42: 4887
@@ -793,7 +793,7 @@ Number of edges for network mfnet on step 47: 5165
 Number of edges for network mfnet on step 48: 5216
 Number of edges for network mfnet on step 49: 5259
 
-  Running 2050.01.01 (50/51) (0.60 s)  •••••••••••••••••••• 100%
+  Running 2050.01.01 (50/51) (0.63 s)  •••••••••••••••••••• 100%
 
 Number of edges for network mfnet on step 50: 5283
 Figure(896x672)</code></pre>
@@ -817,7 +817,7 @@ Figure(896x672)</code></pre>
 <section id="advanced-usage" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage">Advanced usage</h2>
 <p>Suppose we wanted to create an analyzer that would report on the number of new HIV infections in pregnant women:</p>
-<div id="639d87f1" class="cell" data-execution_count="2">
+<div id="514c7682" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim_examples <span class="im">as</span> sse</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
@@ -853,22 +853,22 @@ Figure(896x672)</code></pre>
 
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.15 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.16 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.34 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.35 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.57 s)  ••••••••••••———————— 61%
+  Running 2030.01.01 (30/51) (0.59 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.81 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.85 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (1.08 s)  •••••••••••••••••••• 100%
+  Running 2050.01.01 (50/51) (1.13 s)  •••••••••••••••••••• 100%
 
 Total infections among pregnant women: 164.0</code></pre>
 </div>
 </div>
 <p>Analyzers are ideal for adding custom results, and because they get added to the sim in the same way as any other result, they also get automatically exported in the same format, e.g.&nbsp;using <code>sim.to_df()</code>.</p>
 <p>Here’s a plot of the results from our HIV in pregnancy analyzer:</p>
-<div id="29072323" class="cell" data-execution_count="3">
+<div id="4fd264b7" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.hiv_preg</span>
@@ -892,7 +892,7 @@ Total infections among pregnant women: 164.0</code></pre>
 <section id="infection-log" class="level3">
 <h3 class="anchored" data-anchor-id="infection-log">Infection log</h3>
 <p>The infection log produces a line list of infections. It’s integrated into the logic of <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a> in order to track infection sources and targets, which are not kept beyond this (for memory reasons).</p>
-<div id="3833d9bc" class="cell" data-execution_count="4">
+<div id="17cfd995" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Demonstrate infection log</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dt<span class="op">=</span><span class="fl">0.2</span>, dur<span class="op">=</span><span class="dv">15</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span><span class="st">'infection_log'</span>)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -927,7 +927,7 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>You can see how this raster plot aligns with the peak of infections:</p>
-<div id="5842768b" class="cell" data-execution_count="5">
+<div id="9f6191f1" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(672x480)</code></pre>
@@ -945,7 +945,7 @@ Figure(672x480)</code></pre>
 <section id="dynamics-by-age" class="level3">
 <h3 class="anchored" data-anchor-id="dynamics-by-age">Dynamics by age</h3>
 <p>This analyzer illustrates how you could track infections by age. Since it illustrates some additional key principles of building analyzers, here it is in full:</p>
-<div id="7d104b43" class="cell" data-execution_count="6">
+<div id="0c43a0a5" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> dynamics_by_age(ss.Analyzer):</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, state, age_bins<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">20</span>, <span class="dv">40</span>, <span class="dv">100</span>)):</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -998,9 +998,9 @@ Figure(672x480)</code></pre>
 
   Running 2030.01.01 (30/51) (0.15 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.20 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.21 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.25 s)  •••••••••••••••••••• 100%
+  Running 2050.01.01 (50/51) (0.26 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -1451,7 +1451,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

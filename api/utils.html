@@ -569,11 +569,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#classes" id="toc-classes" class="nav-link" data-scroll-target="#classes">Classes</a>
   <ul class="collapse">
   <li><a href="#starsim.utils.ndict" id="toc-starsim.utils.ndict" class="nav-link" data-scroll-target="#starsim.utils.ndict">ndict</a></li>
+  <li><a href="#starsim.utils.shrink" id="toc-starsim.utils.shrink" class="nav-link" data-scroll-target="#starsim.utils.shrink">shrink</a></li>
   </ul></li>
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
   <ul class="collapse">
+  <li><a href="#starsim.utils.combine_rands" id="toc-starsim.utils.combine_rands" class="nav-link" data-scroll-target="#starsim.utils.combine_rands">combine_rands</a></li>
   <li><a href="#starsim.utils.find_contacts" id="toc-starsim.utils.find_contacts" class="nav-link" data-scroll-target="#starsim.utils.find_contacts">find_contacts</a></li>
+  <li><a href="#starsim.utils.format_axes" id="toc-starsim.utils.format_axes" class="nav-link" data-scroll-target="#starsim.utils.format_axes">format_axes</a></li>
+  <li><a href="#starsim.utils.get_result_plot_label" id="toc-starsim.utils.get_result_plot_label" class="nav-link" data-scroll-target="#starsim.utils.get_result_plot_label">get_result_plot_label</a></li>
   <li><a href="#starsim.utils.load" id="toc-starsim.utils.load" class="nav-link" data-scroll-target="#starsim.utils.load">load</a></li>
+  <li><a href="#starsim.utils.match_result_keys" id="toc-starsim.utils.match_result_keys" class="nav-link" data-scroll-target="#starsim.utils.match_result_keys">match_result_keys</a></li>
+  <li><a href="#starsim.utils.nlist_to_dict" id="toc-starsim.utils.nlist_to_dict" class="nav-link" data-scroll-target="#starsim.utils.nlist_to_dict">nlist_to_dict</a></li>
   <li><a href="#starsim.utils.parse_age_range" id="toc-starsim.utils.parse_age_range" class="nav-link" data-scroll-target="#starsim.utils.parse_age_range">parse_age_range</a></li>
   <li><a href="#starsim.utils.plot_args" id="toc-starsim.utils.plot_args" class="nav-link" data-scroll-target="#starsim.utils.plot_args">plot_args</a></li>
   <li><a href="#starsim.utils.return_fig" id="toc-starsim.utils.return_fig" class="nav-link" data-scroll-target="#starsim.utils.return_fig">return_fig</a></li>
@@ -612,6 +618,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tr class="odd">
 <td><a href="#starsim.utils.ndict">ndict</a></td>
 <td>A dictionary-like class that provides additional functionalities for handling named items.</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.utils.shrink">shrink</a></td>
+<td>Define a class to indicate an object has been shrunken</td>
 </tr>
 </tbody>
 </table>
@@ -758,6 +768,11 @@ sim.diseases.get(ss.SIR)</code></pre>
 </section>
 </section>
 </section>
+<section id="starsim.utils.shrink" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.shrink">shrink</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>utils.shrink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Define a class to indicate an object has been shrunken</p>
+</section>
 </section>
 <section id="functions" class="level2">
 <h2 class="anchored" data-anchor-id="functions">Functions</h2>
@@ -770,64 +785,151 @@ sim.diseases.get(ss.SIR)</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.utils.combine_rands">combine_rands</a></td>
+<td>Efficient algorithm for combining two arrays of random integers into an array</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.utils.find_contacts">find_contacts</a></td>
 <td>Variation on Network.find_contacts() that avoids sorting.</td>
 </tr>
+<tr class="odd">
+<td><a href="#starsim.utils.format_axes">format_axes</a></td>
+<td>Standard formatting for axis results; not for the user</td>
+</tr>
 <tr class="even">
+<td><a href="#starsim.utils.get_result_plot_label">get_result_plot_label</a></td>
+<td>Helper function for getting the label to plot for a result; not for the user</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.utils.load">load</a></td>
 <td>Alias to Sciris <code>sc.loadany()</code></td>
 </tr>
+<tr class="even">
+<td><a href="#starsim.utils.match_result_keys">match_result_keys</a></td>
+<td>Ensure that the user-provided keys match available ones, and raise an exception if not</td>
+</tr>
 <tr class="odd">
+<td><a href="#starsim.utils.nlist_to_dict">nlist_to_dict</a></td>
+<td>Convert a list of named items (e.g.&nbsp;modules, states) to a dictionary; not for the user</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.utils.parse_age_range">parse_age_range</a></td>
 <td>Parse an age range string into lower and upper bounds</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.plot_args">plot_args</a></td>
 <td>Process known plotting kwargs.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.utils.return_fig">return_fig</a></td>
 <td>Do postprocessing on the figure: by default, don’t return if in Jupyter, but show instead; not for the user</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.save">save</a></td>
 <td>Alias to Sciris <code>sc.save()</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.utils.show">show</a></td>
 <td>Shortcut for matplotlib.pyplot.show()</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.standardize_data">standardize_data</a></td>
 <td>Standardize formats of input data</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.utils.standardize_netkey">standardize_netkey</a></td>
 <td>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.validate_sim_data">validate_sim_data</a></td>
 <td>Validate data intended to be compared to the sim outputs, e.g.&nbsp;for calibration</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.utils.warn">warn</a></td>
 <td>Helper function to handle warnings – shortcut to warnings.warn</td>
 </tr>
 </tbody>
 </table>
+<section id="starsim.utils.combine_rands" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.combine_rands">combine_rands</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>utils.combine_rands(a, b)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Efficient algorithm for combining two arrays of random integers into an array of floats.</p>
+<p>See ss.multi_random() for the user-facing version.</p>
+<section id="parameters-2" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>a</td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>b</td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>ditto, same size as a</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="returns" class="level4 doc-section doc-section-returns">
+<h4 class="doc-section doc-section-returns anchored" data-anchor-id="returns">Returns</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 77%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td></td>
+<td></td>
+<td>A new array of random numbers the same size as a and b</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
 <section id="starsim.utils.find_contacts" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.find_contacts">find_contacts</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>utils.find_contacts(p1, p2, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>utils.find_contacts(p1, p2, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Variation on Network.find_contacts() that avoids sorting.</p>
 <p>A set is returned here rather than a sorted array so that custom tracing interventions can efficiently add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be an int64 array since this is what’s returned by true() etc. functions by default.</p>
 </section>
+<section id="starsim.utils.format_axes" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.format_axes">format_axes</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>utils.format_axes(ax, res, n_ticks<span class="op">=</span><span class="va">None</span>, show_module<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Standard formatting for axis results; not for the user</p>
+</section>
+<section id="starsim.utils.get_result_plot_label" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.get_result_plot_label">get_result_plot_label</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>utils.get_result_plot_label(res, show_module<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Helper function for getting the label to plot for a result; not for the user</p>
+</section>
 <section id="starsim.utils.load" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.load">load</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>utils.load(filename, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>utils.load(filename, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias to Sciris <code>sc.loadany()</code></p>
 <p>Since Starsim uses Sciris for saving objects, they can be loaded back using this function. This can also be used to load other objects of known type (e.g.&nbsp;JSON), although this usage is discouraged.</p>
-<section id="parameters-2" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
+<section id="parameters-3" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -853,8 +955,8 @@ sim.diseases.get(ss.SIR)</code></pre>
 </tbody>
 </table>
 </section>
-<section id="returns" class="level4 doc-section doc-section-returns">
-<h4 class="doc-section doc-section-returns anchored" data-anchor-id="returns">Returns</h4>
+<section id="returns-1" class="level4 doc-section doc-section-returns">
+<h4 class="doc-section doc-section-returns anchored" data-anchor-id="returns-1">Returns</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -873,9 +975,19 @@ sim.diseases.get(ss.SIR)</code></pre>
 </table>
 </section>
 </section>
+<section id="starsim.utils.match_result_keys" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.match_result_keys">match_result_keys</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>utils.match_result_keys(results, key, show_skipped<span class="op">=</span><span class="va">False</span>, flattened<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Ensure that the user-provided keys match available ones, and raise an exception if not</p>
+</section>
+<section id="starsim.utils.nlist_to_dict" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.nlist_to_dict">nlist_to_dict</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>utils.nlist_to_dict(nlist, die<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Convert a list of named items (e.g.&nbsp;modules, states) to a dictionary; not for the user</p>
+</section>
 <section id="starsim.utils.parse_age_range" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.parse_age_range">parse_age_range</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>utils.parse_age_range(age_string)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>utils.parse_age_range(age_string)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Parse an age range string into lower and upper bounds</p>
 <p>Example usage:</p>
 <pre><code>&gt;&gt;&gt; ss.parse_age_range("5-9")
@@ -885,12 +997,12 @@ sim.diseases.get(ss.SIR)</code></pre>
 </section>
 <section id="starsim.utils.plot_args" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.plot_args">plot_args</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>utils.plot_args(kwargs<span class="op">=</span><span class="va">None</span>, _debug<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>defaults)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>utils.plot_args(kwargs<span class="op">=</span><span class="va">None</span>, _debug<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>defaults)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Process known plotting kwargs.</p>
 <p>This function handles arguments to <code>sim.plot()</code> and other plotting functions by splitting known kwargs among all the different aspects of the plot.</p>
 <p>Note: the kwargs supplied to the parent function should be supplied as the first argument of this function; keyword arguments to this function are treated as default values that will be overwritten by user-supplied values in <code>kwargs</code>. The argument “_debug” is used internally to print debugging output, but is not typically set by the user.</p>
-<section id="parameters-3" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h4>
+<section id="parameters-4" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -934,8 +1046,8 @@ sim.diseases.get(ss.SIR)</code></pre>
 </tbody>
 </table>
 </section>
-<section id="returns-1" class="level4 doc-section doc-section-returns">
-<h4 class="doc-section doc-section-returns anchored" data-anchor-id="returns-1">Returns</h4>
+<section id="returns-2" class="level4 doc-section doc-section-returns">
+<h4 class="doc-section doc-section-returns anchored" data-anchor-id="returns-2">Returns</h4>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 8%">
@@ -970,16 +1082,16 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.return_fig" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.return_fig">return_fig</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>utils.return_fig(fig, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>utils.return_fig(fig, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Do postprocessing on the figure: by default, don’t return if in Jupyter, but show instead; not for the user</p>
 </section>
 <section id="starsim.utils.save" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.save">save</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>utils.save(filename, obj, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>utils.save(filename, obj, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias to Sciris <code>sc.save()</code></p>
 <p>While some Starsim objects have their own save methods, this function can be used to save any arbitrary object. It can then be loaded with ss.load().</p>
-<section id="parameters-4" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h4>
+<section id="parameters-5" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1014,19 +1126,19 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.show" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.show">show</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>utils.show(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>utils.show(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shortcut for matplotlib.pyplot.show()</p>
 </section>
 <section id="starsim.utils.standardize_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_data">standardize_data</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_data(</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    min_year<span class="op">=</span><span class="dv">1800</span>,</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    out_of_range<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    default_age<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    default_year<span class="op">=</span><span class="dv">2024</span>,</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_data(</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    min_year<span class="op">=</span><span class="dv">1800</span>,</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    out_of_range<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>    default_age<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    default_year<span class="op">=</span><span class="dv">2024</span>,</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Standardize formats of input data</p>
 <p>Input data can arrive in many different forms. This function accepts a variety of data structures, and converts them into a Pandas Series containing one variable, based on specified metadata, or an <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> if the data is already an <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> object.</p>
 <p>The metadata is a dictionary that defines columns of the dataframe or keys of the dictionary to use as indices in the output Series. It should contain:</p>
@@ -1037,8 +1149,8 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 <li><code>metadata['data_cols'][&lt;arbitrary&gt;]</code> optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.</li>
 </ul>
 <p>If a <code>sex</code> column is part of the index, the metadata can also optionally specify a string mapping to convert the sex labels in the input data into the ‘m’/‘f’ labels used by Starsim. In that case, the metadata can contain an additional key like <code>metadata['sex_keys'] = {'Female':'f','Male':'m'}</code> which in this case would map the strings ‘Female’ and ‘Male’ in the original data into ‘m’/‘f’ for Starsim.</p>
-<section id="parameters-5" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h4>
+<section id="parameters-6" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1084,15 +1196,15 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.standardize_netkey" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_netkey">standardize_netkey</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</p>
 </section>
 <section id="starsim.utils.validate_sim_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.validate_sim_data">validate_sim_data</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>utils.validate_sim_data(data<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>utils.validate_sim_data(data<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate data intended to be compared to the sim outputs, e.g.&nbsp;for calibration</p>
-<section id="parameters-6" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h4>
+<section id="parameters-7" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1121,7 +1233,7 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
 </section>
 <section id="starsim.utils.warn" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.warn">warn</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>utils.warn(msg, category<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>utils.warn(msg, category<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to handle warnings – shortcut to warnings.warn</p>
 
 
@@ -1559,7 +1671,7 @@ kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword</code>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

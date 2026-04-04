@@ -573,10 +573,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.arrays.BaseArr" id="toc-starsim.arrays.BaseArr" class="nav-link" data-scroll-target="#starsim.arrays.BaseArr">BaseArr</a></li>
   <li><a href="#starsim.arrays.BoolArr" id="toc-starsim.arrays.BoolArr" class="nav-link" data-scroll-target="#starsim.arrays.BoolArr">BoolArr</a></li>
   <li><a href="#starsim.arrays.BoolState" id="toc-starsim.arrays.BoolState" class="nav-link" data-scroll-target="#starsim.arrays.BoolState">BoolState</a></li>
+  <li><a href="#starsim.arrays.BooleanOperationError" id="toc-starsim.arrays.BooleanOperationError" class="nav-link" data-scroll-target="#starsim.arrays.BooleanOperationError">BooleanOperationError</a></li>
   <li><a href="#starsim.arrays.FloatArr" id="toc-starsim.arrays.FloatArr" class="nav-link" data-scroll-target="#starsim.arrays.FloatArr">FloatArr</a></li>
   <li><a href="#starsim.arrays.IndexArr" id="toc-starsim.arrays.IndexArr" class="nav-link" data-scroll-target="#starsim.arrays.IndexArr">IndexArr</a></li>
   <li><a href="#starsim.arrays.IntArr" id="toc-starsim.arrays.IntArr" class="nav-link" data-scroll-target="#starsim.arrays.IntArr">IntArr</a></li>
   <li><a href="#starsim.arrays.uids" id="toc-starsim.arrays.uids" class="nav-link" data-scroll-target="#starsim.arrays.uids">uids</a></li>
+  </ul></li>
+  <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
+  <ul class="collapse">
+  <li><a href="#starsim.arrays.nb_indexer" id="toc-starsim.arrays.nb_indexer" class="nav-link" data-scroll-target="#starsim.arrays.nb_indexer">nb_indexer</a></li>
+  <li><a href="#starsim.arrays.np_indexer" id="toc-starsim.arrays.np_indexer" class="nav-link" data-scroll-target="#starsim.arrays.np_indexer">np_indexer</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -620,18 +626,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>A boolean array being used as a state.</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.arrays.BooleanOperationError">BooleanOperationError</a></td>
+<td>Raised when a logical operation is performed on a non-logical array</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.arrays.FloatArr">FloatArr</a></td>
 <td>Subclass of <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> with defaults for floats and ints.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.arrays.IndexArr">IndexArr</a></td>
 <td>A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr)</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.arrays.IntArr">IntArr</a></td>
 <td>Subclass of <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> with defaults for ints.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.arrays.uids">uids</a></td>
 <td>Class to specify that integers should be interpreted as UIDs.</td>
 </tr>
@@ -1013,15 +1023,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>BoolStates are typically used to keep track of externally-facing variables (e.g. <code>disease.susceptible</code>), while BoolArrs can be used to keep track of internal ones (e.g.&nbsp;<code>disease.has_immunity</code>). A BoolState named “susceptible” will automatically generate a result named “n_susceptible”, for example.</p>
 <p>Note on terminology: the term “states” is often used to refer to <em>all</em> <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> objects, (e.g.&nbsp;in <code>module.define_states()</code>, whether or not they are BoolStates.</p>
 </section>
+<section id="starsim.arrays.BooleanOperationError" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.arrays.BooleanOperationError">BooleanOperationError</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>arrays.BooleanOperationError(arr)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Raised when a logical operation is performed on a non-logical array</p>
+</section>
 <section id="starsim.arrays.FloatArr" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.arrays.FloatArr">FloatArr</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>arrays.FloatArr(name<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>arrays.FloatArr(name<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Subclass of <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> with defaults for floats and ints.</p>
 <p>Note: Starsim does not support integer arrays by default since they introduce ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.</p>
 </section>
 <section id="starsim.arrays.IndexArr" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.arrays.IndexArr">IndexArr</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>arrays.IndexArr(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>arrays.IndexArr(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr)</p>
 <section id="attributes-2" class="level4">
 <h4 class="anchored" data-anchor-id="attributes-2">Attributes</h4>
@@ -1058,20 +1073,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.arrays.IndexArr.grow" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.IndexArr.grow">grow</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>arrays.IndexArr.grow(new_uids<span class="op">=</span><span class="va">None</span>, new_vals<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>arrays.IndexArr.grow(new_uids<span class="op">=</span><span class="va">None</span>, new_vals<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Change the size of the array</p>
 </section>
 </section>
 </section>
 <section id="starsim.arrays.IntArr" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.arrays.IntArr">IntArr</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>arrays.IntArr(name<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>arrays.IntArr(name<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Subclass of <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> with defaults for ints.</p>
 <p>Note: Because integer arrays do not handle NaN values natively, users are recommended to use <a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>ss.FloatArr()</code></a> in most cases instead.</p>
 </section>
 <section id="starsim.arrays.uids" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.arrays.uids">uids</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>arrays.uids()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>arrays.uids()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Class to specify that integers should be interpreted as UIDs.</p>
 <p>For all practical purposes, behaves like a NumPy integer array. However, has additional methods <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a>, <a href="../api/arrays.html#starsim.arrays.uids.remove" title="0"><code>uids.remove()</code></a>, and <a href="../api/arrays.html#starsim.arrays.uids.intersect" title="0"><code>uids.intersect()</code></a> to simplify common UID operations.</p>
 <p>The following operators are supported:</p>
@@ -1133,17 +1148,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.arrays.uids.cat" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.cat">cat</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.cat(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.cat(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Deprecated — use <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a> instead</p>
 </section>
 <section id="starsim.arrays.uids.concat" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.concat">concat</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concat(other)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concat(other)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Deprecated — use <a href="../api/arrays.html#starsim.arrays.uids.concatenate" title="0"><code>uids.concatenate()</code></a> instead</p>
 </section>
 <section id="starsim.arrays.uids.concatenate" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.concatenate">concatenate</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concatenate(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.concatenate(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Concatenate uids into a single instance</p>
 <p>Can be called as either an instance method or an unbound class method::</p>
 <pre><code>x.concatenate(y)               # instance method
@@ -1155,37 +1170,68 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
 </section>
 <section id="starsim.arrays.uids.intersect" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.intersect">intersect</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.intersect(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.intersect(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Keep only UIDs that are also present in the other array</p>
 </section>
 <section id="starsim.arrays.uids.remove" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.remove">remove</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.remove(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.remove(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Remove provided UIDs from current array</p>
 </section>
 <section id="starsim.arrays.uids.to_numpy" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.to_numpy">to_numpy</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.to_numpy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.to_numpy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return a view as maia standard NumPy array</p>
 </section>
 <section id="starsim.arrays.uids.union" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.union">union</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.union(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.union(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return all UIDs present in both arrays</p>
 </section>
 <section id="starsim.arrays.uids.unique" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.unique">unique</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.unique(return_index<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.unique(return_index<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return unique UIDs; equivalent to np.unique()</p>
 </section>
 <section id="starsim.arrays.uids.xor" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.uids.xor">xor</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.xor(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>arrays.uids.xor(other, <span class="op">**</span>kw)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return UIDs present in only one of the arrays</p>
-
-
 </section>
 </section>
+</section>
+</section>
+<section id="functions" class="level2">
+<h2 class="anchored" data-anchor-id="functions">Functions</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.arrays.nb_indexer">nb_indexer</a></td>
+<td>Roughly 30% faster than NumPy for large numbers of indices (&gt;10k)</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.arrays.np_indexer">np_indexer</a></td>
+<td>Much faster than Numba for small numbers of indices (&lt;1k)</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.arrays.nb_indexer" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.arrays.nb_indexer">nb_indexer</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>arrays.nb_indexer(arr, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Roughly 30% faster than NumPy for large numbers of indices (&gt;10k)</p>
+</section>
+<section id="starsim.arrays.np_indexer" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.arrays.np_indexer">np_indexer</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>arrays.np_indexer(arr, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Much faster than Numba for small numbers of indices (&lt;1k)</p>
+
+
 </section>
 </section>
 </section>
@@ -1623,7 +1669,7 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -567,8 +567,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#starsim.settings" id="toc-starsim.settings" class="nav-link active" data-scroll-target="#starsim.settings">settings</a>
   <ul class="collapse">
+  <li><a href="#classes" id="toc-classes" class="nav-link" data-scroll-target="#classes">Classes</a>
+  <ul class="collapse">
+  <li><a href="#starsim.settings.Options" id="toc-starsim.settings.Options" class="nav-link" data-scroll-target="#starsim.settings.Options">Options</a></li>
+  </ul></li>
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
   <ul class="collapse">
+  <li><a href="#starsim.settings.load_fonts" id="toc-starsim.settings.load_fonts" class="nav-link" data-scroll-target="#starsim.settings.load_fonts">load_fonts</a></li>
   <li><a href="#starsim.settings.style" id="toc-starsim.settings.style" class="nav-link" data-scroll-target="#starsim.settings.style">style</a></li>
   </ul></li>
   </ul></li>
@@ -587,6 +592,261 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p><a href="../api/settings.html#starsim.settings" title="0"><code>settings</code></a></p>
 <p>Define options for Starsim. All options should be set using set() or directly, e.g.:</p>
 <pre><code>ss.options(verbose=False)</code></pre>
+<section id="classes" class="level2">
+<h2 class="anchored" data-anchor-id="classes">Classes</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.settings.Options">Options</a></td>
+<td>Set options for Starsim.</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.settings.Options" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.settings.Options">Options</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>settings.Options()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Set options for Starsim.</p>
+<p>Use <code>ss.options.set('defaults')</code> to reset all values to default, or <code>ss.options.set(dpi='default')</code> to reset one parameter to default. See <code>ss.options.help(detailed=True)</code> for more information.</p>
+<p>Options can also be saved and loaded using <code>ss.options.save()</code> and <code>ss.options.load()</code>. See <code>ss.options.context()</code> and <code>ss.options.with_style()</code> to set options temporarily.</p>
+<p>Common options are (see also <code>ss.options.help(detailed=True)</code>):</p>
+<pre><code>- verbose:        default verbosity for simulations to use
+- warnings:       how to handle warnings (e.g. print, raise as errors, ignore)</code></pre>
+<p><strong>Examples</strong>:</p>
+<pre><code>ss.options(verbose=True) # Set more verbosity
+ss.options(warnings='error') # Be more strict about warnings</code></pre>
+<section id="attributes" class="level4">
+<h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.is_jupyter">is_jupyter</a></td>
+<td>Check if we’re in an Jupyter environment</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="methods" class="level4">
+<h4 class="anchored" data-anchor-id="methods">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.changed">changed</a></td>
+<td>Check if current setting has been changed from default</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.settings.Options.context">context</a></td>
+<td>Alias to set(), for use in a “with” block.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.disp">disp</a></td>
+<td>Detailed representation</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.settings.Options.get_default">get_default</a></td>
+<td>Helper function to get the original default options</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.get_orig_options">get_orig_options</a></td>
+<td>Set the default options for Starsim – not to be called by the user, use</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.settings.Options.help">help</a></td>
+<td>Print information about options.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.refresh_references">refresh_references</a></td>
+<td>Many modules copy settings into them for speed; here we refresh those</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.settings.Options.set">set</a></td>
+<td>Actually change the style. See <code>ss.options.help()</code> for more information.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.set_jupyter">set_jupyter</a></td>
+<td>Set Sciris’ Jupyter settings as well</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.settings.Options.set_precision">set_precision</a></td>
+<td>Change the arithmetic precision used by Starsim/NumPy</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.settings.Options.set_style">set_style</a></td>
+<td>Change the plotting style</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.settings.Options.to_dict">to_dict</a></td>
+<td>Pull out only the settings from the options object</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.settings.Options.changed" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.changed">changed</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>settings.Options.changed(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Check if current setting has been changed from default</p>
+</section>
+<section id="starsim.settings.Options.context" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.context">context</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>settings.Options.context(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Alias to set(), for use in a “with” block.</p>
+<p><strong>Examples</strong>:</p>
+<pre><code># Silence all output
+with ss.options.context(verbose=0):
+    ss.Sim().run()
+
+# Convert warnings to errors
+with ss.options.context(warnings='error'):
+    ss.Sim(location='not a location').init()
+
+# Use with_style(), not context(), for plotting options
+with ss.options.with_style(dpi=50):
+    ss.Sim().run().plot()</code></pre>
+</section>
+<section id="starsim.settings.Options.disp" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.disp">disp</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>settings.Options.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Detailed representation</p>
+</section>
+<section id="starsim.settings.Options.get_default" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.get_default">get_default</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>settings.Options.get_default(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Helper function to get the original default options</p>
+</section>
+<section id="starsim.settings.Options.get_orig_options" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.get_orig_options">get_orig_options</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>settings.Options.get_orig_options()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Set the default options for Starsim – not to be called by the user, use <code>ss.options.set('defaults')</code> instead.</p>
+</section>
+<section id="starsim.settings.Options.help" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.help">help</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>settings.Options.<span class="bu">help</span>(<span class="op">*</span>args, detailed<span class="op">=</span><span class="va">False</span>, output<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Print information about options.</p>
+<section id="parameters" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>*args</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td>if provided, print out detailed help on one or more specific options</td>
+<td><code>()</code></td>
+</tr>
+<tr class="even">
+<td>detailed</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to print out full help</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+<tr class="odd">
+<td>output</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to return a list of the options</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>:</p>
+<pre><code>ss.options.help(detailed=True)</code></pre>
+</section>
+</section>
+<section id="starsim.settings.Options.refresh_references" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.refresh_references">refresh_references</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>settings.Options.refresh_references()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Many modules copy settings into them for speed; here we refresh those</p>
+</section>
+<section id="starsim.settings.Options.set" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.set">set</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>settings.Options.<span class="bu">set</span>(key<span class="op">=</span><span class="va">None</span>, value<span class="op">=</span><span class="va">None</span>, use<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Actually change the style. See <code>ss.options.help()</code> for more information.</p>
+<section id="parameters-1" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>key</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the parameter to modify, or ‘defaults’ to reset everything to default</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+<tr class="even">
+<td>value</td>
+<td><code>varies</code></td>
+<td>the value to specify; use None or ‘default’ to reset to default</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+<tr class="odd">
+<td>use</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to use the chosen style</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+<tr class="even">
+<td>kwargs</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>if supplied, set multiple key-value pairs</td>
+<td><code>{}</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>: ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)</p>
+</section>
+</section>
+<section id="starsim.settings.Options.set_jupyter" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.set_jupyter">set_jupyter</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_jupyter()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Set Sciris’ Jupyter settings as well</p>
+</section>
+<section id="starsim.settings.Options.set_precision" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.set_precision">set_precision</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_precision()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Change the arithmetic precision used by Starsim/NumPy</p>
+</section>
+<section id="starsim.settings.Options.set_style" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.set_style">set_style</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_style()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Change the plotting style</p>
+</section>
+<section id="starsim.settings.Options.to_dict" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.settings.Options.to_dict">to_dict</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>settings.Options.to_dict()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Pull out only the settings from the options object</p>
+</section>
+</section>
+</section>
+</section>
 <section id="functions" class="level2">
 <h2 class="anchored" data-anchor-id="functions">Functions</h2>
 <table class="caption-top table">
@@ -598,18 +858,73 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.settings.load_fonts">load_fonts</a></td>
+<td>Helper function to load custom fonts for plotting – (usually) not for the user.</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.settings.style">style</a></td>
 <td>Set the style in a with block.</td>
 </tr>
 </tbody>
 </table>
+<section id="starsim.settings.load_fonts" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.settings.load_fonts">load_fonts</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>settings.load_fonts(</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    folder<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="st">'Mulish'</span>,</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    rebuild<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Helper function to load custom fonts for plotting – (usually) not for the user.</p>
+<p>Note: if fonts don’t load, try running <code>ss.settings.load_fonts(rebuild=True)</code>, and/or rebooting the system.</p>
+<section id="parameters-2" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>folder</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the folder to add fonts from</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+<tr class="even">
+<td>name</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the name of the font to load</td>
+<td><code>'Mulish'</code></td>
+</tr>
+<tr class="odd">
+<td>rebuild</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to rebuild the font cache</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+<tr class="even">
+<td>verbose</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>whether to print out progress/errors</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
 <section id="starsim.settings.style" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.settings.style">style</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>settings.style(style<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>settings.style(style<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Set the style in a with block.</p>
 <p>Note: Starsim comes bundled with three fonts: Mulish (default), Raleway, and Rosario. Use <code>font='sans-serif'</code> to use the Matplotlib default font.</p>
-<section id="parameters" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
+<section id="parameters-3" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1086,7 +1401,7 @@ with ss.style(font='Rosario'):
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -694,9 +694,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
-<div class="alert alert-info">
-<p>An interactive version of this notebook is available on <a href="https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/transmission.ipynb">Google Colab</a> or <a href="https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Ftransmission.ipynb">Binder</a>.</p>
-</div>
 <p>Many infectious diseases transmit when people come into contact with one another. In the basic SIR example that we covered in the first two tutorials, we used a ‘random’ contact network, which creates random pairings of people. Generally speaking, the structure of network that you use depends on what disease you’re modeling.</p>
 <p>Starsim contains two different approaches to disease transmission.</p>
 <p><strong>Contact network:</strong> Disease transmits on individual person-to-person relationships. These are networks in the sense that each agent (person) can be viewed as a node and each contact is an edge. Networks are undirected in the sense that an edge will allow transmission in both directions, however you can make transmission stronger one way (p1–&gt;p2) than the other (p2–&gt;p1). The framework includes several pre-built contact network algorithms, each of which manages a list of edges that can change on each simulation step. In addition to the ‘random’ network, the framework include algorithms representing basic sexual networks for modeling sexually transmitted infections (STIs) and a ‘maternal’ network for modeling mother-to-child transmission.</p>
@@ -706,7 +703,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="overview-of-starsims-contact-network-structure" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-starsims-contact-network-structure">Overview of Starsim’s contact network structure</h2>
 <p>Starsim’s networks are stored in the <code>networks.py</code> file. At the top of this file you’ll see the <a href="../api/networks.html#starsim.networks.Network" title="0"><code>Network</code></a> class, which provides the template for all the other networks. At a high level, all you need to know is that network stores various <em>parameters</em> that determine how pairs of people form and dissolve, and a collection of all the <em>edges</em> that exist at a given point in time. Let’s look at a simple example of the <a href="https://docs.python.org/3/library/random.html#module-random" title="1"><code>random</code></a> network:</p>
-<div id="04b07551" class="cell" data-tags="[]" data-execution_count="2">
+<div id="b524a870" class="cell" data-tags="[]" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -719,7 +716,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 <p>The network we just made stores two very important things: the list of contacts (found in <code>random.edges</code>) and the parameters (<code>random.pars</code>).</p>
 <p>If we just make a network on its own like this, it’s not very interesting. Like all components of Starsim, it needs to be initialized within a <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> before the database of contacts gets populated:</p>
-<div id="f2b1686b" class="cell" data-execution_count="3">
+<div id="4a47d2ae" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">50</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span>net) <span class="co"># Decreasing n_agents so we can plot the network below</span></span>
@@ -732,14 +729,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>We can easily take a look at the list of edges between agents. All networks are stored in <code>sim.networks</code>, and individual networks can be found at their class name after conversion to lower case. So for this example, <code>sim.networks.randomnet.edges</code> has all the information about which agents (referenced by their UID) are paired with which other agents as well as a per-edge transmission multiplier called <code>beta</code> and a per-edge duration, <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a>.</p>
-<div id="a835439d" class="cell" data-execution_count="4">
+<div id="1741841e" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim.networks.randomnet</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="4">
 <pre><code>randomnet(n_edges=250; pars=[n_contacts, dur, beta]; states=[participant])</code></pre>
 </div>
 </div>
 <p>Networks provide some basic functionality, for example to identify contacts. Additionally, the edge list can be quickly converted to a <a href="https://pandas.pydata.org/pandas-docs/stable/index.html#module-pandas" title="1"><code>pandas</code></a> dataframe or <code>networkx</code> graph for further analysis and manipulation:</p>
-<div id="09da79de" class="cell" data-execution_count="5">
+<div id="e41f74a7" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> sim.networks.randomnet</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use the "find_contacts" function to find all contacts of agent with uid 0</span></span>
@@ -864,7 +861,7 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <section id="sexual-networks" class="level2">
 <h2 class="anchored" data-anchor-id="sexual-networks">Sexual networks</h2>
 <p>Starsim contains a few basic sexual networks, including an <code>mf</code> network for modeling heterosexual partnerships and an <code>msm</code> network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here’s an example modeling syphilis:</p>
-<div id="dd802fdd" class="cell" data-execution_count="6">
+<div id="77f0ca48" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the disease</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> sse.Syphilis(</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>]},    <span class="co"># See notes below </span></span>
@@ -886,7 +883,7 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <section id="maternal-networks" class="level2">
 <h2 class="anchored" data-anchor-id="maternal-networks">Maternal networks</h2>
 <p>Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the maternal network. Here’s an example showing how you would do this for syphilis:</p>
-<div id="860b879b" class="cell" data-execution_count="7">
+<div id="be4a368f" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>syph <span class="op">=</span> sse.Syphilis(</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.25</span>, <span class="fl">0.15</span>], <span class="st">'maternal'</span>: [<span class="fl">0.99</span>, <span class="dv">0</span>]}</span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>)</span>
@@ -912,23 +909,23 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 
   Running 2002.07.02 (30/121) (0.83 s)  •••••——————————————— 26%
 
-  Running 2003.05.03 (40/121) (1.02 s)  ••••••—————————————— 34%
+  Running 2003.05.03 (40/121) (1.03 s)  ••••••—————————————— 34%
 
   Running 2004.03.02 (50/121) (1.22 s)  ••••••••———————————— 42%
 
   Running 2005.01.01 (60/121) (1.41 s)  ••••••••••—————————— 50%
 
-  Running 2005.11.01 (70/121) (1.60 s)  •••••••••••————————— 59%
+  Running 2005.11.01 (70/121) (1.61 s)  •••••••••••————————— 59%
 
-  Running 2006.09.01 (80/121) (1.79 s)  •••••••••••••——————— 67%
+  Running 2006.09.01 (80/121) (1.80 s)  •••••••••••••——————— 67%
 
-  Running 2007.07.02 (90/121) (1.99 s)  •••••••••••••••————— 75%
+  Running 2007.07.02 (90/121) (2.00 s)  •••••••••••••••————— 75%
 
-  Running 2008.05.02 (100/121) (2.18 s)  ••••••••••••••••———— 83%
+  Running 2008.05.02 (100/121) (2.20 s)  ••••••••••••••••———— 83%
 
-  Running 2009.03.03 (110/121) (2.37 s)  ••••••••••••••••••—— 92%
+  Running 2009.03.03 (110/121) (2.39 s)  ••••••••••••••••••—— 92%
 
-  Running 2010.01.01 (120/121) (2.56 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (120/121) (2.58 s)  •••••••••••••••••••• 100%
 
 Figure(1152x864)</code></pre>
 </div>
@@ -944,7 +941,7 @@ Figure(1152x864)</code></pre>
 <section id="making-your-own-contact-network" class="level2">
 <h2 class="anchored" data-anchor-id="making-your-own-contact-network">Making your own contact network</h2>
 <p>If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make an <code>mf</code> network that has more age structure, you could do something like this:</p>
-<div id="90ebaea5" class="cell" data-execution_count="8">
+<div id="e6ac2088" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> age_mf(ss.MFNet):</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> add_pairs(<span class="va">self</span>, people, ti<span class="op">=</span><span class="va">None</span>):</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom code to select pairs based on age</span></span>
@@ -956,7 +953,7 @@ Figure(1152x864)</code></pre>
 <h2 class="anchored" data-anchor-id="introduction-to-mixing-pools">Introduction to mixing pools</h2>
 <p>While contact networks model individual relationships, mixing pools model group-level transmission. This is useful for: - Large populations where individual contacts are impractical - Age-structured mixing (like school, work, household contacts) - When you have contact matrices from epidemiological studies</p>
 <p>Here’s a simple comparison:</p>
-<div id="67c881d2" class="cell" data-execution_count="9">
+<div id="c25b9619" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple mixing pool example</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>sir_mp <span class="op">=</span> ss.SIR()</span>
@@ -1431,7 +1428,7 @@ Figure(1152x864)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

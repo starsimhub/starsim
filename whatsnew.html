@@ -625,6 +625,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul class="collapse">
+  <li><a href="#version-3.3.2-2026-04-04" id="toc-version-3.3.2-2026-04-04" class="nav-link" data-scroll-target="#version-3.3.2-2026-04-04">Version 3.3.2 (2026-04-04)</a></li>
   <li><a href="#version-3.3.1-2026-04-02" id="toc-version-3.3.1-2026-04-02" class="nav-link" data-scroll-target="#version-3.3.1-2026-04-02">Version 3.3.1 (2026-04-02)</a></li>
   <li><a href="#version-3.3.0-2026-03-27" id="toc-version-3.3.0-2026-03-27" class="nav-link" data-scroll-target="#version-3.3.0-2026-03-27">Version 3.3.0 (2026-03-27)</a>
   <ul class="collapse">
@@ -755,6 +756,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms “Migration” or “Regression”.</p>
+<section id="version-3.3.2-2026-04-04" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.3.2-2026-04-04">Version 3.3.2 (2026-04-04)</h2>
+<ul>
+<li>Added a <code>copy_sim</code> argument to <a href="./api/run.html#starsim.run.MultiSim.run" title="0"><code>ss.MultiSim.run()</code></a> to handle large parallel runs of a single sim (e.g.&nbsp;<code>ss.MultiSim(sim, n_runs=100)</code>), where multiprocess pickling isn’t guaranteed to implicitly copy the sim.</li>
+<li>Removed (unused) <code>_locked</code> attribute from <a href="./api/time.html#starsim.time.TimePar" title="0"><code>ss.TimePar</code></a>.</li>
+<li>Converted tutorials and user guide from Jupyter notebook (JSON) to Quarto notebook (Markdown) format.</li>
+<li>Added GitHub Actions workflows for test coverage, docs build, and linting.</li>
+<li>Changed from implicit (<code>*</code>) to explicit imports in <code>__init__.py</code>, and removed <code>__all__</code> from individual modules.</li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1293">1293</a></li>
+</ul>
+</section>
 <section id="version-3.3.1-2026-04-02" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.3.1-2026-04-02">Version 3.3.1 (2026-04-02)</h2>
 <ul>
@@ -888,7 +900,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Add support for creating an <a href="./api/time.html#starsim.time.dur" title="0"><code>ss.dur</code></a> from an <a href="./api/arrays.html#starsim.arrays.BaseArr" title="0"><code>ss.BaseArr</code></a></li>
 <li>Changed date plotting to convert <a href="./api/time.html#starsim.time.date" title="0"><code>ss.date</code></a> and <a href="./api/time.html#starsim.time.DateArray" title="0"><code>ss.DateArray</code></a> values to years internally. This facilitates adding extra data to plots when the data is in years.</li>
 <li>Added <a href="./api/utils.html#starsim.utils.parse_age_range" title="0"><code>ss.parse_age_range</code></a> utility function to standardize formats for age ranges in data/input files.</li>
-<li>Implemented <code>__bool__</code> for <code>ss.bernoulli</code> which returns <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a> if there is no possibility of returning any <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> values.</li>
+<li>Implemented <code>__bool__</code> for <a href="./api/distributions.html#starsim.distributions.bernoulli" title="0"><code>ss.bernoulli</code></a> which returns <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a> if there is no possibility of returning any <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> values.</li>
 <li>Added automatic result creation for <a href="./api/arrays.html#starsim.arrays.BoolState" title="0"><code>ss.BoolState</code></a> instances in <a href="./api/people.html#starsim.people.People" title="0"><code>People</code></a>, matching the behavior already present in modules. <a href="./api/people.html#starsim.people.People" title="0"><code>People</code></a> now has <code>auto_state_list</code> property and <code>init_results()</code> method.</li>
 <li>Implemented operators for <a href="./api/arrays.html#starsim.arrays.BoolArr" title="0"><code>ss.BoolArr</code></a> and <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a> where the latter is treated as a <a href="./api/arrays.html#starsim.arrays.BoolArr" title="0"><code>BoolArr</code></a>. This makes operations like <code>people.sir.infected &amp; people.female</code> and <code>people.sir.infected &amp; people.female.uids</code> equivalent.</li>
 <li>Implemented in-place operators for <a href="./api/arrays.html#starsim.arrays.BoolArr" title="0"><code>ss.BoolArr</code></a> and <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a>. The former are true in-place operations that reuse existing memory and preserve references, and thus they can be safely used with <a href="./api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a> instances in modules directly.</li>
@@ -975,10 +987,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="distributions" class="level3">
 <h3 class="anchored" data-anchor-id="distributions">Distributions</h3>
 <ul>
-<li>Distributions now have a <code>scale_type</code> attribute, which determines how they scale with time: some distributions, like <code>ss.normal()</code>, can be scaled either before or after random numbers are drawn; others, like <code>ss.poisson()</code>, can only be scaled before. See <a href="./api/distributions.html#starsim.distributions.scale_types" title="0"><code>ss.scale_types</code></a> for details.</li>
+<li>Distributions now have a <code>scale_type</code> attribute, which determines how they scale with time: some distributions, like <a href="./api/distributions.html#starsim.distributions.normal" title="0"><code>ss.normal()</code></a>, can be scaled either before or after random numbers are drawn; others, like <a href="./api/distributions.html#starsim.distributions.poisson" title="0"><code>ss.poisson()</code></a>, can only be scaled before. See <a href="./api/distributions.html#starsim.distributions.scale_types" title="0"><code>ss.scale_types</code></a> for details.</li>
 <li>Distributions that can be scaled post-draw now take an <code>unit</code> argument, e.g.&nbsp;<code>ss.normal(mean=5, std=2, unit=ss.years(1))</code>. This is equivalent to <code>ss.years(ss.normal(mean=5, std=2))</code> or <code>ss.normal(mean=ss.years(5), std=ss.years(2))</code>. Note that not all distributions can be scaled this way (you will get an error if you try to scale a non-scalable distribution.)</li>
 <li>Distributions now have a random-number-safe <code>randround()</code> method</li>
-<li>There are two new distributions, <code>ss.beta_dist()</code> and <code>ss.beta_mean()</code> (not called <code>ss.beta()</code> to distinguish from the beta transmissibility parameter).</li>
+<li>There are two new distributions, <a href="./api/distributions.html#starsim.distributions.beta_dist" title="0"><code>ss.beta_dist()</code></a> and <a href="./api/distributions.html#starsim.distributions.beta_mean" title="0"><code>ss.beta_mean()</code></a> (not called <code>ss.beta()</code> to distinguish from the beta transmissibility parameter).</li>
 </ul>
 </section>
 <section id="sim-and-people-changes" class="level3">
@@ -1146,7 +1158,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <ul>
 <li>Starsim is now available for R! See <a href="https://r.starsim.org" class="uri">https://r.starsim.org</a> for details.</li>
 <li>The <a href="./api/calibration.html#starsim.calibration.Calibration" title="0"><code>Calibration</code></a> class has been completely rewritten. See the calibration tutorial for more information.</li>
-<li>A negative binomial distribution is now available as <code>ss.nbinom()</code>.</li>
+<li>A negative binomial distribution is now available as <a href="./api/distributions.html#starsim.distributions.nbinom" title="0"><code>ss.nbinom()</code></a>.</li>
 <li><a href="./api/demographics.html#starsim.demographics.Births" title="0"><code>ss.Births()</code></a> now uses a binomial draw of births per timestep, rather than the expected value.</li>
 <li>Added <a href="./api/utils.html#starsim.utils.load" title="0"><code>ss.load()</code></a> and <a href="./api/utils.html#starsim.utils.save" title="0"><code>ss.save()</code></a> functions, and removed <code>ss.Sim.load()</code>.</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/778">778</a></li>
@@ -1258,7 +1270,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <ul>
 <li>There have been several performance improvements. The default float type is now <a href="https://numpy.org/doc/stable/reference/arrays.scalars.html#np.float32" title="1"><code>np.float32</code></a>. Transmission is now handled by a specialized <a href="./api/diseases.html#starsim.diseases.Infection.compute_transmission" title="0"><code>Infection.compute_transmission()</code></a> method. Several additional functions now use Numba, including <code>fastmath=True</code>, which leverages Intel’s short vector math library.</li>
 <li>A new <a href="./api/distributions.html#starsim.distributions.multi_random" title="0"><code>ss.multi_random()</code></a> distribution class has been added, that allows random numbers to be generated by two (or more) agents. It largely replaces <code>ss.combine_rands()</code> and is 5-10x faster.</li>
-<li>A new <code>ss.gamma()</code> distribution has also been added.</li>
+<li>A new <a href="./api/distributions.html#starsim.distributions.gamma" title="0"><code>ss.gamma()</code></a> distribution has also been added.</li>
 <li>Distributions have a new <code>jump_dt</code> method that jumps by much more than a single state update.</li>
 <li><a href="./api/run.html#starsim.run.parallel" title="0"><code>ss.parallel()</code></a> and <a href="./api/run.html#starsim.run.MultiSim.run" title="0"><code>ss.MultiSim.run()</code></a> now modify simulations in place by default. Instead of <code>sims = ss.parallel(sim1, sim2).sims; sims[0].plot()</code>, you can now simply do <code>ss.parallel(sim1, sim2); sim1.plot()</code>.</li>
 </ul>
@@ -1329,7 +1341,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="version-1.0.1-2024-07-22" class="level2">
 <h2 class="anchored" data-anchor-id="version-1.0.1-2024-07-22">Version 1.0.1 (2024-07-22)</h2>
 <ul>
-<li>Adds a new distribution, <code>ss.rand_raw()</code>, that samples raw integers from the random number bit generator, for use with calculating transmission. This version is roughly 20-30% faster than the previous implementation.</li>
+<li>Adds a new distribution, <a href="./api/distributions.html#starsim.distributions.rand_raw" title="0"><code>ss.rand_raw()</code></a>, that samples raw integers from the random number bit generator, for use with calculating transmission. This version is roughly 20-30% faster than the previous implementation.</li>
 <li>Adds interpolation to age-standardized fertility rate (ASFR) data.</li>
 <li>Adds flexibility to ART initiation.</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/593">593</a></li>
@@ -1344,7 +1356,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Adds <code>low</code> and <code>high</code> attributes to <a href="./api/results.html#starsim.results.Result" title="0"><code>Result</code></a> objects.</li>
 <li>Adds a <code>flatten()</code> method to <a href="./api/results.html#starsim.results.Results" title="0"><code>Results</code></a>, allowing nested <a href="./api/results.html#starsim.results.Results" title="0"><code>Results</code></a> objects to be turned into flat dictionaries.</li>
 <li>Removes duplicate UIDs among new infections, and adds a <code>unique()</code> method to <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a>.</li>
-<li>Fixes a bug that prevented <code>ss.lognorm_im()</code> from using callable parameters.</li>
+<li>Fixes a bug that prevented <a href="./api/distributions.html#starsim.distributions.lognorm_im" title="0"><code>ss.lognorm_im()</code></a> from using callable parameters.</li>
 <li>Updates the default <a href="./api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> string representation to be a single line; the more verbose version is available via <code>sim.disp()</code>.</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/581">581</a></li>
 </ul>
@@ -1359,7 +1371,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="version-0.5.9-2024-06-30" class="level2">
 <h2 class="anchored" data-anchor-id="version-0.5.9-2024-06-30">Version 0.5.9 (2024-06-30)</h2>
 <ul>
-<li>Added a <code>ss.histogram()</code> distribution, which allows generating new random values from an empirical histogram.</li>
+<li>Added a <a href="./api/distributions.html#starsim.distributions.histogram" title="0"><code>ss.histogram()</code></a> distribution, which allows generating new random values from an empirical histogram.</li>
 <li>When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages</li>
 <li>Initial age data is now accepted as a <a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html#pd.Series" title="1"><code>pd.Series</code></a> rather than a <a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pd.DataFrame" title="1"><code>pd.DataFrame</code></a> where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/572">572</a></li>
@@ -1387,7 +1399,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>If a <a href="./api/people.html#starsim.people.People" title="0"><code>People</code></a> object is provided to the <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> constructor, the arrays will be pre-initialized to index the current UIDs in the <a href="./api/people.html#starsim.people.People" title="0"><code>People</code></a> object. This enables construction of temporary <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> instances that can be used to perform intermediate calculations (e.g., inside <code>Intervention.apply()</code> or within a module update step)</li>
 <li>Deprecated <code>Arr(raw=...)</code> argument to simplify initialization, as in practice the <code>raw</code> variable is not directly set, and this update also introduces a new pathway for initializating the <span class="title-ref">raw</span> attribute</li>
 <li><a href="./api/arrays.html#starsim.arrays.uids.to_numpy" title="0"><code>ss.uids.to_numpy()</code></a> now returns a view rather than a copy</li>
-<li><code>ss.bernoulli.filter()</code> now supports <a href="./api/arrays.html#starsim.arrays.BoolArr" title="0"><code>ss.BoolArr</code></a> as an input, where the filtering will operate on the <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> returned by <a href="./api/arrays.html#starsim.arrays.BoolArr.uids" title="0"><code>ss.BoolArr.uids</code></a></li>
+<li><a href="./api/distributions.html#starsim.distributions.bernoulli.filter" title="0"><code>ss.bernoulli.filter()</code></a> now supports <a href="./api/arrays.html#starsim.arrays.BoolArr" title="0"><code>ss.BoolArr</code></a> as an input, where the filtering will operate on the <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> returned by <a href="./api/arrays.html#starsim.arrays.BoolArr.uids" title="0"><code>ss.BoolArr.uids</code></a></li>
 <li><a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids()</code></a> supports construction from <a href="https://docs.python.org/3/library/stdtypes.html#set" title="1"><code>set</code></a> objects (via <a href="https://numpy.org/doc/stable/reference/generated/numpy.fromiter.html#np.fromiter" title="1"><code>np.fromiter()</code></a>)</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/555">565</a></li>
 </ul>
@@ -1426,9 +1438,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <ul>
 <li>Renames <code>network.contacts</code> to <code>network.edges</code>.</li>
 <li>For modules (including diseases, networks, etc.), renames <code>initialize()</code> to <code>init_pre()</code> and <code>init_vals()</code> to <code>init_post()</code>.</li>
-<li>Renames <code>ss.delta()</code> to <code>ss.constant()</code>.</li>
+<li>Renames <code>ss.delta()</code> to <a href="./api/distributions.html#starsim.distributions.constant" title="0"><code>ss.constant()</code></a>.</li>
 <li>Allows <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> objects to be indexed by integer (which are assumed to be UIDs).</li>
-<li>Fixes bug when using callable parameters with <code>ss.lognorm_ex()</code> and <code>ss.lognorm_im()</code>.</li>
+<li>Fixes bug when using callable parameters with <a href="./api/distributions.html#starsim.distributions.lognorm_ex" title="0"><code>ss.lognorm_ex()</code></a> and <a href="./api/distributions.html#starsim.distributions.lognorm_im" title="0"><code>ss.lognorm_im()</code></a>.</li>
 <li>Fixes bug when initializing <a href="./api/networks.html#starsim.networks.StaticNet" title="0"><code>ss.StaticNet()</code></a>.</li>
 <li>Updates default birth rate from 0 to 30 (so <code>demographics=True</code> is meaningful).</li>
 <li>Adds <code>min_age</code> and <code>max_age</code> parameters to the <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module (with defaults 15 and 50 years).</li>
@@ -1528,7 +1540,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="other-changes-4" class="level3">
 <h3 class="anchored" data-anchor-id="other-changes-4">Other changes</h3>
 <ul>
-<li>Boolean arrays have new methods <code>true()</code>, <code>false()</code>, and <code>split()</code>, which return the UIDs for the <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> values (alias to <code>arr.uids</code>), <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a> values, and both sets of values, respectively. <code>ss.bernoulli.split()</code> has been added as an alias of <code>ss.bernoulli.filter(both=True)</code>.</li>
+<li>Boolean arrays have new methods <code>true()</code>, <code>false()</code>, and <code>split()</code>, which return the UIDs for the <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> values (alias to <code>arr.uids</code>), <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a> values, and both sets of values, respectively. <a href="./api/distributions.html#starsim.distributions.bernoulli.split" title="0"><code>ss.bernoulli.split()</code></a> has been added as an alias of <code>ss.bernoulli.filter(both=True)</code>.</li>
 <li>All inputs to a sim are now copied by default. To disable, use <code>ss.Sim(..., copy_inputs=False)</code>.</li>
 <li>There is a new <code>Plugin</code> class, which contains shared logic for Interventions and Analyzers. It has a <code>from_func()</code>, which will generate an intervention/analyzer from a function.</li>
 <li>Diseases no longer have a default value of <code>beta=1</code> assigned; beta must be defined explicitly if being used.</li>
@@ -1598,11 +1610,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="new-rngs-distributions" class="level3">
 <h3 class="anchored" data-anchor-id="new-rngs-distributions">New RNGs &amp; distributions</h3>
 <ul>
-<li>Replaces <code>ss.SingleRNG()</code>, <code>ss.MultiRNG()</code>, <code>ss.ScipyDistribution()</code>, and <code>ss.ScipyHistogram()</code> with a single <a href="./api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist()</code></a> class. The <code>starsim.random</code> and <a href="./api/distributions.html#starsim.distributions" title="0"><code>starsim.distributions</code></a> submodules have been removed, and <code>starsim.dists</code> has been added.</li>
+<li>Replaces <code>ss.SingleRNG()</code>, <code>ss.MultiRNG()</code>, <code>ss.ScipyDistribution()</code>, and <code>ss.ScipyHistogram()</code> with a single <a href="./api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist()</code></a> class. The <a href="./api/distributions.html#starsim.distributions.random" title="0"><code>starsim.random</code></a> and <a href="./api/distributions.html#starsim.distributions" title="0"><code>starsim.distributions</code></a> submodules have been removed, and <code>starsim.dists</code> has been added.</li>
 <li>The <a href="./api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> class uses <a href="https://numpy.org/doc/stable/reference/random/generator.html#np.random.default_rng" title="1"><code>np.random.default_rng()</code></a> rather than <a href="https://docs.scipy.org/doc/scipy/reference/stats.html#module-scipy.stats" title="1"><code>scipy.stats</code></a> by default, although a <a href="https://docs.scipy.org/doc/scipy/reference/stats.html#module-scipy.stats" title="1"><code>scipy.stats</code></a> distribution can be supplied as an alternative. This is up to 4x faster (including, critically, for Bernoulli distributions).</li>
 <li>Also removes <code>ss.options.multirng</code> (the new version is equivalent to it being always on).</li>
 <li>Removes duplicate logic for transmission (<code>make_new_cases()</code>)</li>
-<li>Adds new custom distributions such as <code>ss.choice()</code> and <code>ss.delta()</code>.</li>
+<li>Adds new custom distributions such as <a href="./api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice()</code></a> and <code>ss.delta()</code>.</li>
 <li>These distributions can be called directly, e.g.&nbsp;<code>dist = ss.weibull(c=2); dist(5)</code> will return 5 random variates from a Weibull distribution.</li>
 <li>Instead of being manually initialized based on the name, the <a href="./api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> object is parsed and all distributions will be initialized with a unique identifier based on their place in the object (e.g.&nbsp;<code>sim.diseases.sir.pars.dur_inf</code>), which is used to set their unique seed.</li>
 </ul>
@@ -1610,7 +1622,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="other-changes-5" class="level3">
 <h3 class="anchored" data-anchor-id="other-changes-5">Other changes</h3>
 <ul>
-<li>This PR also fixes bugs with lognormal parameters, and makes it clear whether the parameters are for the <em>implicit</em> normal distribution (<code>ss.lognorm_im()</code>, the NumPy/SciPy default, equivalent to <code>ss.lognorm_mean()</code> previously) or the “explicit” lognormal distribution (<code>ss.lognorm_ex()</code>, equivalent to <code>ss.lognorm()</code> previously).</li>
+<li>This PR also fixes bugs with lognormal parameters, and makes it clear whether the parameters are for the <em>implicit</em> normal distribution (<a href="./api/distributions.html#starsim.distributions.lognorm_im" title="0"><code>ss.lognorm_im()</code></a>, the NumPy/SciPy default, equivalent to <code>ss.lognorm_mean()</code> previously) or the “explicit” lognormal distribution (<a href="./api/distributions.html#starsim.distributions.lognorm_ex" title="0"><code>ss.lognorm_ex()</code></a>, equivalent to <code>ss.lognorm()</code> previously).</li>
 <li>Renames <code>ss.dx</code>, <code>ss.tx</code>, <code>ss.vx</code> to<a href="./api/products.html#starsim.products.Dx" title="0"><code>ss.Dx</code></a>, <a href="./api/products.html#starsim.products.Tx" title="0"><code>ss.Tx</code></a>, <a href="./api/products.html#starsim.products.Vx" title="0"><code>ss.Vx</code></a>.</li>
 <li>Removed <code>set_numba_seed()</code> as a duplicate of <code>set_seed()</code>.</li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/amath-idm/stisim/pull/392">392</a></li>
@@ -2260,7 +2272,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

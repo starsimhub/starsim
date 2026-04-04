@@ -698,7 +698,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="understanding-common-random-numbers-crn">Understanding Common Random Numbers (CRN)</h2>
 <p>Common Random Numbers (CRN) is a sophisticated technique that enables noise-free accounting of the effects of different parameters or interventions on outcomes like infections averted or lives saved. Starsim is the first and only simulation framework that fully supports CRN, including agent-agent interactions like disease transmission and vital dynamics including births.</p>
 <p>To understand CRN, you first have to know a little about where random numbers come from. As discussed in the <a href="../user_guide/advanced_distributions.html">Advanced Distributions guide</a>, random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the <a href="https://numpy.org/doc/stable/reference/index.html#module-numpy" title="1"><code>numpy</code></a> library:</p>
-<div id="bcaa704e" class="cell" data-execution_count="1">
+<div id="c3b69700" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">42</span>) <span class="co"># Set the seed to 42</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>draws1 <span class="op">=</span> np.random.random(size<span class="op">=</span><span class="dv">10</span>) <span class="co"># Draw 10 realizations</span></span>
@@ -734,7 +734,7 @@ Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
 <p>Both simulations will use the same random number seed. Because the agents do not interact (they’re not actually competing for the same fish!), the only difference in outcomes should be that agent 0 does not go fishing and therefore will never catch a fish. However, because of the way random numbers are generated, the two simulations will use the same random numbers for different purposes. This means that banning agent 0 from fishing will <em>change which other agents go fishing and catch fish</em>!</p>
 <p><strong>NOTE:</strong> We have to specifically disable Starsim’s CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the <code>single_rng</code> option to <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> in this example.</p>
 <p>As a first step, we will create a Fishing module:</p>
-<div id="918c0ff8" class="cell" data-execution_count="2">
+<div id="3a9adb10" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -768,7 +768,7 @@ Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
 <span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Now we can build and run the two simulations to compare the results:</p>
-<div id="64ca7217" class="cell" data-execution_count="3">
+<div id="0a2a0fc2" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co">: For this example, we configure the simulation to be centralized!</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">True</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -812,7 +812,7 @@ Time step 1:
 <p>In simulation A, agents 16 and 18 catch fish on the first time step, but in simulation B, agents 17 and 19 catch fish. Then on the second timestep, we can see that different agents go fishing and that 1, 15, and 19 catch fish in A but only 3 is lucky in B – what?! All we did was to ban agent 0 from fishing. The agents do not interact, so there should not have been a difference!</p>
 <p>What we are seeing here is a simple example of the stochastic branching problem. This “random number noise” could easily make it look like banning agent 0 could result in more fish being caught, which should be physically impossible as there are fewer agents fishing.</p>
 <p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>single_rng</code> option to its default value of <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 1 from fishing:</p>
-<div id="2334bf58" class="cell" data-execution_count="4">
+<div id="a4bd2255" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the single_rng option to False (this is the default, so you don't have to do this)</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ss.options.single_rng <span class="op">=</span> <span class="va">False</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1348,7 +1348,7 @@ Time step 1:
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

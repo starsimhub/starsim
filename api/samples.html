@@ -569,6 +569,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#classes" id="toc-classes" class="nav-link" data-scroll-target="#classes">Classes</a>
   <ul class="collapse">
+  <li><a href="#starsim.samples.Dataset" id="toc-starsim.samples.Dataset" class="nav-link" data-scroll-target="#starsim.samples.Dataset">Dataset</a></li>
   <li><a href="#starsim.samples.Samples" id="toc-starsim.samples.Samples" class="nav-link" data-scroll-target="#starsim.samples.Samples">Samples</a></li>
   </ul></li>
   </ul></li>
@@ -598,18 +599,75 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.samples.Dataset">Dataset</a></td>
+<td>Store the results and provide options for filtering</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.samples.Samples">Samples</a></td>
 <td>Stores CSV outputs and summary dataframes</td>
 </tr>
 </tbody>
 </table>
-<section id="starsim.samples.Samples" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.samples.Samples">Samples</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>samples.Samples(fname, memory_buffer<span class="op">=</span><span class="va">True</span>, preload<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Stores CSV outputs and summary dataframes</p>
-<p>To construct, use <a href="../api/samples.html#starsim.samples.Samples.new" title="0"><code>Samples.new()</code></a>. To read an existing one, use <code>Samples(fname)</code>. The sample files are just ZIP archives with plain text CSV and TXT files so they can be easily accessed externally as well.</p>
+<section id="starsim.samples.Dataset" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.samples.Dataset">Dataset</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>samples.Dataset(folder<span class="op">=</span><span class="va">None</span>, results<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Store the results and provide options for filtering</p>
 <section id="attributes" class="level4">
 <h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.samples.Dataset.ids">ids</a></td>
+<td>Return dictionary of parameters across results</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="methods" class="level4">
+<h4 class="anchored" data-anchor-id="methods">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.samples.Dataset.filter">filter</a></td>
+<td>Return results matching particular ids</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.samples.Dataset.get">get</a></td>
+<td>Retrieve a single result from a filter operation</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.samples.Dataset.filter" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.samples.Dataset.filter">filter</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>samples.Dataset.<span class="bu">filter</span>(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return results matching particular ids kwargs: key-value pairs, that should be present in Sample.id, to filter results on Can specify a list/set of values to match multiple items</p>
+</section>
+<section id="starsim.samples.Dataset.get" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.samples.Dataset.get">get</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>samples.Dataset.get(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Retrieve a single result from a filter operation e.g.&nbsp;<code>res = Dataset.get(scenario='foo')</code> instead of <code>res = Dataset.filter(scenario='foo')[0]</code> instead of assuming that the arguments result in only 1 result being selected</p>
+</section>
+</section>
+</section>
+<section id="starsim.samples.Samples" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.samples.Samples">Samples</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>samples.Samples(fname, memory_buffer<span class="op">=</span><span class="va">True</span>, preload<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Stores CSV outputs and summary dataframes</p>
+<p>To construct, use <a href="../api/samples.html#starsim.samples.Samples.new" title="0"><code>Samples.new()</code></a>. To read an existing one, use <code>Samples(fname)</code>. The sample files are just ZIP archives with plain text CSV and TXT files so they can be easily accessed externally as well.</p>
+<section id="attributes-1" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-1">Attributes</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -641,8 +699,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tbody>
 </table>
 </section>
-<section id="methods" class="level4">
-<h4 class="anchored" data-anchor-id="methods">Methods</h4>
+<section id="methods-1" class="level4">
+<h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -679,7 +737,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.samples.Samples.apply" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.apply">apply</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.<span class="bu">apply</span>(fcn, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.<span class="bu">apply</span>(fcn, <span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Apply/map function to every dataframe</p>
 <p>The function will be applied to every individual dataframe in the collection.</p>
 <section id="parameters" class="level6 doc-section doc-section-parameters">
@@ -725,19 +783,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.samples.Samples.copy" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.copy">copy</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.copy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.copy()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shallow copy - shared cache, copied summary</p>
 <p>This allows efficient filtering of seeds within runs by removing rows from the copy’s summary, while not reloading or duplicating any of the dataframes in memory</p>
 </section>
 <section id="starsim.samples.Samples.get" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.get">get</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.get(seed)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.get(seed)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Retrieve dataframe and summary row</p>
 <p>Use <code>Samples[seed]</code> to read only the dataframe. Use <code>Samples.get(seed)</code> to read both the dataframe and summary row</p>
 </section>
 <section id="starsim.samples.Samples.items" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.items">items</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.items()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.items()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Iterate over seeds and dataframes</p>
 <p>Example usage</p>
 <blockquote class="blockquote">
@@ -779,7 +837,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.samples.Samples.new" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.new">new</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.new(folder, outputs, identifiers<span class="op">=</span><span class="va">None</span>, fname<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.new(folder, outputs, identifiers<span class="op">=</span><span class="va">None</span>, fname<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
 <table class="caption-top table">
@@ -816,7 +874,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.samples.Samples.preload" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.preload">preload</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.preload()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.preload()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Load all dataframes into cache</p>
 <p>This is done based on the seeds in self.seeds, therefore if some of the seeds are removed prior to preloading, then those dataframes will not be loaded</p>
 
@@ -1260,7 +1318,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

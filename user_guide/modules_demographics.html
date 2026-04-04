@@ -692,7 +692,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="simple-usage" class="level2">
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>Let’s start by comparing two identical simulations, one with demographics enabled and one without:</p>
-<div id="050a676e" class="cell" data-execution_count="1">
+<div id="a7752d14" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -729,7 +729,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Maternal and neonatal mortality</li>
 <li>Mother-to-child transmission pathways</li>
 </ul>
-<div id="b3a58be0" class="cell" data-execution_count="2">
+<div id="d67c279a" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -793,10 +793,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(sim1, sim2)</span>
 <span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>msim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:446: RuntimeWarning: 
+<pre><code>/home/runner/work/starsim/starsim/starsim/run.py:445: RuntimeWarning: 
 Sim "Pregnancy" has different results keys:
-Extra: pregnancy_n_breastfeeding, pregnancy_n_infertile, pregnancy_pregnancies, pregnancy_n_fertile, pregnancy_births, pregnancy_n_breastfed, pregnancy_n_susceptible, pregnancy_n_pregnant, pregnancy_cbr, pregnancy_n_fecund, pregnancy_n_carrying_multiple, pregnancy_tfr
-Missing: births_cbr, births_new, births_cumulative
+Extra: pregnancy_n_breastfed, pregnancy_n_susceptible, pregnancy_births, pregnancy_cbr, pregnancy_n_fecund, pregnancy_pregnancies, pregnancy_n_carrying_multiple, pregnancy_n_fertile, pregnancy_n_infertile, pregnancy_tfr, pregnancy_n_pregnant, pregnancy_n_breastfeeding
+Missing: births_cumulative, births_new, births_cbr
 Results may not plot correctly (i.e. axes titles may not be correct for all sims)
   ss.warn(warnmsg)</code></pre>
 </div>
@@ -1274,7 +1274,7 @@ Results may not plot correctly (i.e. axes titles may not be correct for all sims
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>The docs were built for Starsim v3.3.1 (2026-04-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.2 (2026-04-04).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
