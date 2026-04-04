@@ -767,14 +767,6 @@ class TimePar:
             cls.factor_vals = factors[cls.base].unit_values
         return
 
-    def __setattrr__(self, attr, value):
-        if object.__getattribute__(self, '_locked'):
-            errormsg = f'Cannot set attributes of {self}; object is read-only'
-            raise AttributeError(errormsg)
-        else:
-            super().__setattrr__(self, attr, value)
-            return
-
     def __iter__(self):
         """ Iteration over array TimePars; raises TypeError for scalars so np.iterable() returns False """
         if self.is_array:
@@ -2050,8 +2042,6 @@ year = years(1)
 month = months(1)
 week = weeks(1)
 day = days(1)
-for obj in [year, month, week, day]:
-    object.__setattr__(obj, '_locked', True) # Make immutable
 
 # per
 class perday(per):   base = 'days'
