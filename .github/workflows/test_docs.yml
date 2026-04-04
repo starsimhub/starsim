@@ -1,7 +1,7 @@
 # Test that docs build successfully on pushes to main
 # and PRs targeting main.
 
-name: Test docs
+name: Docs
 
 on:
   push:
@@ -14,7 +14,7 @@ on:
 
 jobs:
   test:
-    name: Install Starsim and test docs build
+    name: Test build
     runs-on: ubuntu-latest
 
     steps:
