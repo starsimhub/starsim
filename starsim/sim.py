@@ -500,7 +500,6 @@ class Sim(ss.Base):
         errormsg = None
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
-        if errormsg:
             raise AlreadyRunError(errormsg)
 
         # Main simulation loop -- just one line!!!
@@ -978,7 +977,13 @@ class Sim(ss.Base):
 
 class AlreadyRunError(RuntimeError):
     """ Raised if trying to re-run an already-run sim without re-initializing """
-    pass
+    def __init__(self, *args, **kwargs):
+        default = 'Did you mean to copy the sim before running it?'
+        if args:
+            args = (f'{args[0]}\n{default}',) + args[1:]
+        else:
+            args = (default,)
+        super().__init__(*args, **kwargs)
 
 
 def demo(run=True, plot=True, summary=True, show=True, **kwargs):
