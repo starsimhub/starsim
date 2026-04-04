@@ -57,6 +57,6 @@ To run these tutorials locally:
 1. Clone the Starsim repository
 2. Install Starsim and its dependencies
 3. Navigate to the `docs/tutorials` directory
-4. Convert to Jupyter: `quarto convert *.qmd`
+4. Convert to Jupyter: `./convert_notebooks.sh` (or just open them directly if `jupytext` is installed)
 5. Launch Jupyter: `jupyter lab`
 :::
