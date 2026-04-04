@@ -7,6 +7,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Added a `copy_sim` argument to `ss.MultiSim.run()` to handle large parallel runs of a single sim (e.g. `ss.MultiSim(sim, n_runs=100)`), where multiprocess pickling isn't guaranteed to implicitly copy the sim.
 - Removed (unused) `_locked` attribute from `ss.TimePar`.
 - Converted tutorials and user guide from Jupyter notebook (JSON) to Quarto notebook (Markdown) format.
+- Added GitHub Actions workflows for test coverage, docs build, and linting.
 - Changed from implicit (`*`) to explicit imports in `__init__.py`, and removed `__all__` from individual modules.
 - *GitHub info*: PR [1293](https://github.com/starsimhub/starsim/pull/1293)
 
