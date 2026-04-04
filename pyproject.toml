@@ -57,6 +57,7 @@ dev = [
     "pytest-xdist",
     "quartodoc",
     "jupyter",
+    "jupyter-cache",
     "jupytext",
     "dask[complete]",
 ]
