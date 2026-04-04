@@ -163,9 +163,10 @@ format:
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
+    code-line-numbers: true
     toc: true
     toc-depth: 3
-    highlight-style: github
+    syntax-highlighting: github
 
 filters:
   - interlinks
