@@ -1,12 +1,7 @@
 project:
   type: website
-  pre-render:
-    - python pre_render.py
-    - python -m quartodoc build
-    - python -c "import quarto_utils as qu; qu.customize_aliases()"
-    - python -m quartodoc interlinks
-  post-render:
-    - python clean_outputs.py
+  pre-render: python quarto_utils.py pre
+  post-render: python quarto_utils.py post
   output-dir: _site
   title: "Starsim"
   execute-dir: file
@@ -24,7 +19,7 @@ website:
     type: overlay
 
   page-footer:
-    center: "The docs were built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2026, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
+    center: "Docs built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2026, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
     right:
       - icon: github
         href: https://github.com/starsimhub/starsim

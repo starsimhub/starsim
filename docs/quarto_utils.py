@@ -3,9 +3,11 @@ Utilities for processing docs (notebooks mostly)
 """
 
 import os
+import sys
 import importlib
 import subprocess
 import sciris as sc
+import starsim as ss
 
 default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
 temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed
@@ -83,7 +85,7 @@ def customize_aliases(mod_name='starsim', json_path='objects.json'):
 
 @sc.timer('Build interlinks')
 def build_interlinks():
-    sc.heading('4/6 Building docs links...')
+    sc.heading('Building docs links...')
     return run('python -m quartodoc interlinks')
 
 
@@ -198,7 +200,7 @@ def execute_notebook(path, tidy=True):
 
 
 
-@sc.timer('Executed notebooks')
+@sc.timer('Execute notebooks')
 def execute_notebooks(*args, folders=None, tidy=True, debug=False):
     """ Execute notebooks in parallel and print which succeeded / failed """
     T = sc.timer()
@@ -276,11 +278,11 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
     return
 
 
-
+# Process arguments (called by _quarto.yml)
 if __name__ == '__main__':
 
     if 'pre' in sys.argv:
-        sc.heading(f'Starting Quarto docs build', divider='★')
+        sc.heading('Starting Quarto docs build', divider='★')
         update_version()
         build_api_docs()
         customize_aliases()
@@ -291,4 +293,4 @@ if __name__ == '__main__':
 
     elif len(sys.argv) > 1:
         errormsg = f'Argument must be "pre" or "post", not {sys.argv}'
-        raise ValueError(errormsg
+        raise ValueError(errormsg)
