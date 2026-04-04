@@ -92,7 +92,7 @@ def build_sim(sim, calib_pars, n_reps=1, **kwargs):
 
     for k, pars in calib_pars.items(): # Loop over the calibration parameters
         if k == 'rand_seed':
-            sim.pars.rand_seed = v
+            sim.pars.rand_seed = pars # Special case for random seed; not a dict, just a value 
             continue
 
         # Each item in calib_pars is a dictionary with keys like 'low', 'high',
