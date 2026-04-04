@@ -55,6 +55,7 @@ dev = [
     "pytest-cov",
     "pytest-env", 
     "pytest-xdist",
+    "pylint",
     "quartodoc",
     "jupyter",
     "jupyter-cache",
