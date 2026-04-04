@@ -2,22 +2,22 @@
 
 [![PyPI version](https://badgen.net/pypi/v/starsim/?color=blue)](https://pypi.org/project/starsim)
 [![Downloads](https://static.pepy.tech/personalized-badge/starsim?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/starsim)
-[![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/starsimhub/starsim/actions/workflows/tests.yaml)
+[![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/starsimhub/starsim/actions/workflows/tests.yml)
 
-[Starsim](https://starsim.org) is an agent-based modeling framework designed for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Additionally, users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. To enable the study of birth-related diseases, Starsim allows detailed modeling of mother-child relationships starting from conception. Finally, Starsim lets users compare different intervention strategies, such as vaccines or treatments, to examine their impact through various delivery methods such as mass campaigns or targeted outreach.
+[Starsim](https://starsim.org) is an agent-based modeling framework for simulating disease spread through dynamic transmission networks. It supports modeling multiple co-transmitting diseases, including infectious and non-infectious diseases plus other health states (such as pregnancy and birth), and captures their biological and behavioral interactions. It lets users compare intervention strategies, such as vaccines or treatments, across delivery methods like mass campaigns or targeted outreach. It also includes built-in tools for scenario analyses and calibrating models to data.
 
-Examples of systems that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as malnutrition).
+Starsim builds on our previous suite of disease-specific models, which included [Covasim](https://covasim.org), [HPVsim](https://hpvsim.org), and [FPsim](https://fpsim.org). It can model different levels of detail, including agent-based, metapopulation, and compartmental modeling. It is designed to be simple and fast enough to enable rapid or exploratory analyses (from project start to calibrated model and scenario analyses in days to weeks), while also being flexible enough to support complex, long-term research projects (such as intrahost immunity, data-driven spatial network transmission, and health economics optimization).
 
-Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included [Covasim](https://covasim.org), [HPVsim](https://hpvsim.org), and [FPsim](https://fpsim.org). In cases where a distinction needs to be made, Starsim is also known as "the Starsim framework" or "Starsim Core," while this collection of other models is known as the "Starsim suite."
+Examples of health areas that have already been [modeled using Starsim](https://docs.starsim.org/user_guide/intro_models.html) include [sexually transmitted infections](https://stisim.org) (HIV, HPV, and syphilis, including co-transmission), respiratory infections ([tuberculosis](https://starsim.org/tbsim) and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as [family planning](https://fpsim.org) and malnutrition). 
 
-For more information about Starsim, please see the [documentation](https://docs.starsim.org). Information about Starsim for R is available at [r.starsim.org](https://r.starsim.org).
+For more information, see the [documentation](https://docs.starsim.org). For Starsim for R, see [r.starsim.org](https://r.starsim.org). For Starsim's AI tools, see [ai.starsim.org](https://ai.starsim.org).
 
 
 ## Requirements
 
 Python 3.10-3.14 or R.
 
-We recommend, but do not require, installing Starsim in a virtual environment, such as [Miniconda](https://docs.anaconda.com/miniconda/).
+We recommend, but do not require, installing Starsim in a virtual environment, such as [uv](https://github.com/astral-sh/uv) or [Miniconda](https://docs.anaconda.com/miniconda/).
 
 
 ## Installation
@@ -41,12 +41,10 @@ Starsim can also be installed locally (including optional dependencies for testi
 pip install -e .[dev]
 ```
 
-(Note: if after doing this, Starsim works, but you see "Import could not be resolved" in your editor, use `pip install -e . --config-settings editable_mode=strict` instead; more info [here](https://docs.basedpyright.com/v1.29.2/usage/import-resolution/#editable-installs).)
-
 
 ### R
 
-R-Starsim is still under development. You can install it with:
+R-Starsim can be installed with:
 
 ```R
 # install.packages("devtools")
@@ -94,11 +92,31 @@ sim.plot() # Plot all the sim results
 sim.diseases.sir.plot() # Plot the standard SIR curves
 ```
 
+Or from R:
+
+```R
+library(starsim)
+load_starsim()
+
+# Define the parameters
+pars <- list(
+    n_agents = 5000,
+    networks = list(type = 'random'),
+    diseases = list(type = 'sir', beta = 0.1)
+)
+
+# Create, run, and plot the simulation
+sim <- ss$Sim(pars)
+sim$run()
+sim$diseases$sir$plot()
+```
+
 More usage examples are available in the tutorials, as well as the `tests` folder.
+
 
 ## AI integration
 
-Starsim includes a [model context protocol](https://en.wikipedia.org/wiki/Model_Context_Protocol) (MCP) server that ensures your favorite AI-enabled editor/tool is Starsim-aware. For details, see the [Starsim AI](https://github.com/starsimhub/starsim_ai) project.
+Starsim-AI includes AI agents, skills, plugins, and MCP servers that ensure your favorite AI-enabled editor/tool is Starsim-aware. These include skills trained on different components of Starsim, as well as general software engineering and debugging skills. For details, see the [Starsim-AI](https://github.com/starsimhub/starsim_ai) project.
 
 
 ## Starsim structure
