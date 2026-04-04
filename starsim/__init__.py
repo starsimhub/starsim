@@ -23,7 +23,7 @@ root = sc.thispath(__file__).parent
 # Start imports: version and settings
 t('settings') # SLow since import Numba
 from .version import __version__, __versiondate__, __license__
-from .settings import dtypes, options, style
+from .settings import dtypes, options, style, load_fonts
 
 # Optionally print the license
 t('license')
@@ -159,14 +159,14 @@ def _load_fonts(debug=debug):
                 if debug: print('Checking write permissions...')
                 test_file.touch()  # Mark that fonts were installed
                 if debug: print('Rebuilding fonts...')
-                settings.load_fonts(rebuild=True)
+                load_fonts(rebuild=True)
                 if options.verbose:
                     print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
             except Exception as E: # Not writable or something else went wrong; ignore
                 if debug: print(f'File not writable or another error: {E}')
         else:
             if debug: print(f'File {test_file} exists, loading fonts...')
-            settings.load_fonts(rebuild=False)
+            load_fonts(rebuild=False)
     return
 
 # Try loading fonts

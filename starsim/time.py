@@ -391,8 +391,8 @@ class date(pd.Timestamp):
         return days < 1.0
 
     def round(self, to='d'):
-        """ Round to a given interval (by default a day """
-        timestamp = self.round(to)
+        """ Round to a given interval (by default a day) """
+        timestamp = super().round(to)
         self._reset_class(timestamp)
         return
 
@@ -402,7 +402,7 @@ class date(pd.Timestamp):
 
     def _timestamp_add(self, other):
         """ Uses pd.Timestamp's __add__ and avoids creating duplicate objects """
-        orig_class = self.__class__
+        orig_class = self.__class__  # pylint: disable=access-member-before-definition
         self.__class__ = pd.Timestamp
         out = orig_class._reset_class(self + other)
         orig_class._reset_class(self)
@@ -827,15 +827,17 @@ class TimePar:
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
 
-        if len(inputs) == 2: # Handle most operations: addition, multiplication, etc.
-            arg1,arg2 = inputs # Expect self,other as order of inputs, but can change
-            is_tp1 = isinstance(arg1, ss.TimePar)
-            is_tp2 = isinstance(arg2, ss.TimePar)
-            use_left = is_tp1 or not is_tp2 # Use left unless arg1 isn't a timepar and arg2 is
-            if use_left: # For operations where order doesn't matter
-                tp_arg,o_arg = arg1,arg2 # Timepar argument and other argument (which may or may not be a timepar)
-            else:
-                tp_arg,o_arg = arg2,arg1
+        if len(inputs) != 2: # Only 1- and 2-input ufuncs are supported; 1-input handled above
+            return NotImplemented
+
+        arg1,arg2 = inputs # Expect self,other as order of inputs, but can change
+        is_tp1 = isinstance(arg1, ss.TimePar)
+        is_tp2 = isinstance(arg2, ss.TimePar)
+        use_left = is_tp1 or not is_tp2 # Use left unless arg1 isn't a timepar and arg2 is
+        if use_left: # For operations where order doesn't matter
+            tp_arg,o_arg = arg1,arg2 # Timepar argument and other argument (which may or may not be a timepar)
+        else:
+            tp_arg,o_arg = arg2,arg1
 
         # Commutative operations
         if   ufunc == np.add:      return tp_arg.__add__(o_arg)
@@ -1945,7 +1947,7 @@ class per(Rate):
     def __init__(self, value, unit=None):
         if sc.isnumber(value):
             assert value >= 0, f'Value must be >= 0, not {value}'
-        return super().__init__(value, unit)
+        super().__init__(value, unit)
 
     @property
     def rate(self):

@@ -867,7 +867,7 @@ class uids(np.ndarray):
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
-    def concatenate(*args):
+    def concatenate(*args):  # pylint: disable=no-self-argument
         """
         Concatenate uids into a single instance
 
