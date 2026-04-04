@@ -1,0 +1,68 @@
+---
+title: Model structure
+jupyter: python3
+---
+
+Starsim models are designed to capture disease dynamics within a population of agents, which typically represent people (but may represent animals or other things). In keeping with this, the basic ingredients of a Starsim model are the `People` class, which store all the relevant attributes about people, a collection of `Modules` that determine what happens to people on each time step, and the `Sim` class, which pulls all the components together, runs the simulation, and stores the `Results`. 
+
+## Overview of People
+More details on the `People` class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the `People` class can be easily exported to a dataframe, e.g.:
+
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+sim = ss.Sim(n_agents=10)
+sim.init()
+df = sim.people.to_df()
+print(df)
+```
+
+ When a module is added to a sim, this can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. For example:
+
+```{python}
+import starsim as ss
+
+sim = ss.Sim(n_agents=20, diseases=dict(type='sis', init_prev=0.2), networks='random')
+sim.run()
+df = sim.people.to_df()
+df.disp()
+```
+
+We can see even in this very simple example with only one disease and 20 agents, a lot of data is generated!
+
+
+## Overview of Modules
+Starsim contains the following kinds of modules, listed below in the order that they are typically updated:
+
+* Demographics
+* Diseases
+* Connectors
+* Networks
+* Interventions
+* Analyzers
+
+Modules typically store _parameters_ (e.g. the transmission probability), _states_ of people (e.g. whether they are susceptible, infected, or recovered), and _results_ (e.g. the number of people infected at each point in time). 
+
+## Overview of a Sim
+The `Sim` object is responsible for storing assembling, initializing, and running the model. The `Sim` class contains some top-level parameters (including the number of agents in the simulation, the start and stop times, and the random seed) and results (e.g. the population size over time), but almost all other parameters and results are specific to modules and stored within them. There are more details on the `Sim` on the linked page.
+
+## What happens when you add a module?
+When you add a module to a `Sim`, the module's parameters, states, and results will be added to the centralized collections of parameters, states, and results that are maintained within the `Sim`. To illustrate this, let's create a `Sim` with an SIR disease module and a random contact network:
+
+```{python}
+import starsim as ss 
+sir = ss.SIR(dur_inf=10, beta=0.2, init_prev=0.4, p_death=0.2)
+sim = ss.Sim(diseases=sir, networks='random')
+sim.init()  # Initialize the sim to create 
+```
+
+The call to `sim.init()` means that the `SIR` module gets added to `sim.diseases` and the `RandomNet` network gets added to `sim.networks`. In addition, the following updates are made:
+* the parameters of the modules are added to the sim's centralized parameter dictionary, so you can access them via either `sim.pars.sir.init_prev` or `sim.diseases.sir.pars.init_prev`
+* the states specific to each module are added to `People`, so you can access them via `sim.diseases.sir.infected` or `sim.people.sir.infected`
+* the results specific to each module are added to the centralized Results dictionary of the `Sim`, so you can access them via `sim.diseases.sir.results.n_infected` or `sim.results.sir.n_infected`.
+
+## Overview of Results
+Once you've run a `Sim`, all the results are stored under `sim.results`. This is structured similarly to a nested dictionary, with results specific to each module stored in their own dictionaries, like the `sim.results.sir.n_infected` example above. 
+

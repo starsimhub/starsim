@@ -7,7 +7,6 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['Result', 'Results']
 
 
 class Result(ss.BaseArr):

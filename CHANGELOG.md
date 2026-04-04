@@ -3,6 +3,15 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.3.2 (2026-04-04)
+- Added a `copy_sim` argument to `ss.MultiSim.run()` to handle large parallel runs of a single sim (e.g. `ss.MultiSim(sim, n_runs=100)`), where multiprocess pickling isn't guaranteed to implicitly copy the sim.
+- Removed (unused) `_locked` attribute from `ss.TimePar`.
+- Converted tutorials and user guide from Jupyter notebook (JSON) to Quarto notebook (Markdown) format.
+- Added GitHub Actions workflows for test coverage, docs build, and linting.
+- Changed from implicit (`*`) to explicit imports in `__init__.py`, and removed `__all__` from individual modules.
+- *GitHub info*: PR [1293](https://github.com/starsimhub/starsim/pull/1293)
+
+
 ## Version 3.3.1 (2026-04-02)
 - Added `uids.concatenate()`, which unifies `uids.concat()` and `uids.cat()` into a single method that works as both an instance method (`x.concatenate(y)`) and an unbound class method (`ss.uids.concatenate(x, y)` or `ss.uids.concatenate([x, y])`). `None` values are silently filtered. 
 - `uids.concat()` and `uids.cat()` are deprecated but provide a `DeprecationWarning` for backwards compatibility, to be removed in a future release.

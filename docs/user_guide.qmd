@@ -23,37 +23,37 @@ To run these tutorials locally:
 
 ## Introduction
 
-- [Introduction to Starsim](user_guide/intro_starsim.ipynb)
-- [Starsim models](user_guide/intro_models.ipynb)
+- [Introduction to Starsim](user_guide/intro_starsim.qmd)
+- [Starsim models](user_guide/intro_models.qmd)
 
 ## Basics
 
-- [Understanding the model](user_guide/basics_model.ipynb)
-- [The Sim object](user_guide/basics_sim.ipynb)
-- [Parameter configuration](user_guide/basics_parameters.ipynb)
+- [Understanding the model](user_guide/basics_model.qmd)
+- [The Sim object](user_guide/basics_sim.qmd)
+- [Parameter configuration](user_guide/basics_parameters.qmd)
 
 ## Modules
 
-- [Diseases](user_guide/modules_diseases.ipynb)
-- [Networks](user_guide/modules_networks.ipynb)
-- [Demographics](user_guide/modules_demographics.ipynb)
-- [Interventions](user_guide/modules_interventions.ipynb)
-- [Analyzers](user_guide/modules_analyzers.ipynb)
-- [Connectors](user_guide/modules_connectors.ipynb)
+- [Diseases](user_guide/modules_diseases.qmd)
+- [Networks](user_guide/modules_networks.qmd)
+- [Demographics](user_guide/modules_demographics.qmd)
+- [Interventions](user_guide/modules_interventions.qmd)
+- [Analyzers](user_guide/modules_analyzers.qmd)
+- [Connectors](user_guide/modules_connectors.qmd)
 
 ## Workflows
 
-- [Running simulations](user_guide/workflows_run.ipynb)
-- [SIR Calibration](user_guide/workflows_sir_calibration.ipynb)
-- [Calibration](user_guide/workflows_calibration.ipynb)
-- [Deployment](user_guide/workflows_deploy.ipynb)
-- [Working with samples](user_guide/workflows_samples.ipynb)
+- [Running simulations](user_guide/workflows_run.qmd)
+- [SIR Calibration](user_guide/workflows_sir_calibration.qmd)
+- [Calibration](user_guide/workflows_calibration.qmd)
+- [Deployment](user_guide/workflows_deploy.qmd)
+- [Working with samples](user_guide/workflows_samples.qmd)
 
 ## Advanced topics
 
-- [Time handling](user_guide/advanced_time.ipynb)
-- [Indexing and arrays](user_guide/advanced_indexing.ipynb)
-- [Probability distributions](user_guide/advanced_distributions.ipynb)
-- [Random number generation](user_guide/advanced_random.ipynb)
-- [Profiling and optimization](user_guide/advanced_profiling.ipynb)
-- [Nonstandard usage](user_guide/advanced_nonstandard.ipynb)
+- [Time handling](user_guide/advanced_time.qmd)
+- [Indexing and arrays](user_guide/advanced_indexing.qmd)
+- [Probability distributions](user_guide/advanced_distributions.qmd)
+- [Random number generation](user_guide/advanced_random.qmd)
+- [Profiling and optimization](user_guide/advanced_profiling.qmd)
+- [Nonstandard usage](user_guide/advanced_nonstandard.qmd)

@@ -1,0 +1,176 @@
+---
+title: Analyzers
+jupyter: python3
+---
+
+
+
+Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.pregnant`, and the `ss.HIV` module adds results like `sim.results.hiv.new_infections`. If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
+
+## Simple usage
+
+For simple reporting, it's possible to use a single function as an analyzer. In this case, the function receives a single argument, `sim`, which it has full access to. For example, if you wanted to know the number of connections in the network on each timestep, you could write a small analyzer as follows:
+
+```{python}
+import numpy as np
+import starsim as ss
+import matplotlib.pyplot as plt
+ss.options(jupyter=True)
+
+# Store the number of edges
+n_edges = []
+
+def count_edges(sim):
+    """ Print out the number of edges in the network on each timestep """
+    network = sim.networks[0] # Get the first network
+    n = len(network)
+    n_edges.append(n)
+    print(f'Number of edges for network {network.name} on step {sim.ti}: {n}')
+    return
+
+# Create the sim
+pars = dict(
+    diseases = 'sis',
+    networks = 'mf',
+    analyzers = count_edges,
+    demographics = True,
+)
+
+# Run the sim
+sim = ss.Sim(pars).run()
+sim.plot()
+
+# Plot the number of edges
+plt.figure()
+plt.plot(sim.timevec, n_edges)
+plt.title('Number of edges over time')
+plt.ylim(bottom=0)
+plt.show()
+```
+
+## Advanced usage
+
+Suppose we wanted to create an analyzer that would report on the number of new HIV infections in pregnant women:
+
+```{python}
+import starsim as ss
+import starsim_examples as sse
+import pandas as pd
+
+class HIV_preg(ss.Analyzer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        return
+    
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('new_infections_pregnancy'),
+        )
+        return
+
+    def step(self):
+        sim = self.sim
+        ti = sim.ti
+        hiv = sim.diseases.hiv
+        pregnant = sim.demographics.pregnancy.pregnant
+        newly_infected = hiv.ti_infected == ti
+        self.results['new_infections_pregnancy'][ti] = len((newly_infected & pregnant).uids)
+        return
+
+pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv('test_data/nigeria_asfr.csv'))
+hiv = sse.HIV(beta={'mfnet':[0.5,0.25]})
+sim = ss.Sim(diseases=hiv, networks='mfnet', demographics=pregnancy, analyzers=HIV_preg())
+sim.run()
+print(f'Total infections among pregnant women: {sim.results.hiv_preg.new_infections_pregnancy.sum()}')
+```
+
+Analyzers are ideal for adding custom results, and because they get added to the sim in the same way as any other result, they also get automatically exported in the same format, e.g. using `sim.to_df()`.
+
+Here's a plot of the results from our HIV in pregnancy analyzer:
+
+```{python}
+import matplotlib.pyplot as plt
+
+res = sim.results.hiv_preg
+
+plt.figure()
+plt.bar(res.timevec.years, res.new_infections_pregnancy)
+plt.title('HIV infections acquired during pregnancy')
+plt.show()
+```
+
+## Built-in analyzers
+
+Starsim comes with two built-in analyzers, an infection log and an age analyzer.
+
+### Infection log
+
+The infection log produces a line list of infections. It's integrated into the logic of `ss.Disease` in order to track infection sources and targets, which are not kept beyond this (for memory reasons).
+
+```{python}
+# Demonstrate infection log
+sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
+sim.run()
+infection_log = sim.analyzers[0]
+infection_log.plot()
+```
+
+You can see how this raster plot aligns with the peak of infections:
+
+```{python}
+sim.diseases.sir.plot()
+```
+
+(Note: `ss.infection_log()` also has an `.animate()` method, which we will leave for you to try out!)
+
+### Dynamics by age
+
+This analyzer illustrates how you could track infections by age. Since it illustrates some additional key principles of building analyzers, here it is in full:
+
+```{python}
+class dynamics_by_age(ss.Analyzer):
+    def __init__(self, state, age_bins=(0, 20, 40, 100)):
+        super().__init__()
+        self.state = state
+        self.age_bins = age_bins
+        self.mins = age_bins[:-1]
+        self.maxes = age_bins[1:]
+        self.hist = {k: [] for k in self.mins}
+        return
+
+    def step(self):
+        people = self.sim.people
+        for min, max in zip(self.mins, self.maxes):
+            mask = (people.age >= min) & (people.age < max)
+            self.hist[min].append(people.states[self.state][mask].sum())
+        return
+
+    def finalize_results(self):
+        """ Convert to an array """
+        super().finalize_results()
+        for k,hist in self.hist.items():
+            self.hist[k] = np.array(hist)
+        return
+
+    def plot(self, **kwargs):
+        kw = ss.plot_args(kwargs)
+        with ss.style(**kw.style):
+            fig = plt.figure(**kw.fig)
+            for minage, maxage in zip(self.mins, self.maxes):
+                plt.plot(self.sim.t.timevec, self.hist[minage], label=f'Age {minage}-{maxage}', **kw.plot)
+            plt.legend(**kw.legend)
+            plt.xlabel('Model time')
+            plt.ylabel('Count')
+            plt.ylim(bottom=0)
+        return ss.return_fig(fig, **kw.return_fig)
+
+# Demonstrate
+by_age = dynamics_by_age('sis.infected', age_bins=(0, 10, 30, 100))
+sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
+sim.run()
+by_age.plot()
+```
+
+Since we are using a random network, we wouldn't expect any differences in transission by age, so what you're seeing here is the difference in age bin size.
+

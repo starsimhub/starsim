@@ -11,9 +11,8 @@ import zipfile
 import sciris as sc
 
 
-__all__ = ['Dataset', 'Samples']
-
 class Dataset:
+    """ Store the results and provide options for filtering """
     def __init__(self, folder=None, results=None, *args, **kwargs):
         # Note that results are not deep copied, to save memory
         if folder is not None:
@@ -29,9 +28,7 @@ class Dataset:
 
     @property
     def ids(self):
-        """
-        Return dictionary of parameters across results
-        """
+        """ Return dictionary of parameters across results """
         ids = sc.ddict(set)
         for res in self.results.values():
             for k, v in res.id.items():
@@ -46,7 +43,7 @@ class Dataset:
         return s
 
     def __getitem__(self, item):
-        # Dict-like access for results
+        """ Dict-like access for results """
         return self.results[item]
 
     def __iter__(self):
@@ -60,13 +57,15 @@ class Dataset:
         return len(self.results) > 0
 
     def filter(self, **kwargs):
-        # Return results matching particular ids
-        # kwargs: key-value pairs, that should be present in Sample.id, to filter results on
-        # Can specify a list/set of values to match multiple items
+        """
+        Return results matching particular ids
+        kwargs: key-value pairs, that should be present in Sample.id, to filter results on
+        Can specify a list/set of values to match multiple items
+        """
         results = sc.odict()
         for res in self:
             for k, v in kwargs.items():
-                if isinstance(v, list) or isinstance(v, set):
+                if isinstance(v, (list, set)):
                     if res.id[k] not in v:
                         break
                 elif res.id[k] != v:
@@ -77,10 +76,12 @@ class Dataset:
         return Dataset(results=results)
 
     def get(self, **kwargs):
-        # Retrieve a single result from a filter operation
-        # e.g. `res = Dataset.get(scenario='foo')` instead of
-        # `res = Dataset.filter(scenario='foo')[0]` instead of
-        # assuming that the arguments result in only 1 result being selected
+        """
+        Retrieve a single result from a filter operation
+        e.g. `res = Dataset.get(scenario='foo')` instead of
+        `res = Dataset.filter(scenario='foo')[0]` instead of
+        assuming that the arguments result in only 1 result being selected
+        """
         ds = self.filter(**kwargs)
         if len(ds) == 0:
             raise KeyError("No matching results were found")

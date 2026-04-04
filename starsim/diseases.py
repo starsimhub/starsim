@@ -13,7 +13,6 @@ ss_int = ss.dtypes.int
 ss_float = ss.dtypes.float
 _ = None # For function signatures
 
-__all__ = ['Disease', 'Infection', 'InfectionLog', 'NCD', 'SIR', 'SIS']
 
 
 class Disease(ss.Module):

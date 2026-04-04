@@ -1,5 +1,6 @@
 quartodoc
 jupyter
 jupyter-cache
+jupytext
 dask
 distribute

@@ -26,7 +26,6 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
-import datetime
 import numbers
 import collections
 import matplotlib
@@ -38,8 +37,6 @@ import pandas as pd
 import starsim as ss
 ss_float = ss.dtypes.float
 
-# General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -197,6 +194,7 @@ class DateArray(np.ndarray):
 
         if inplace:
             self[:] = vals
+            return
         else:
             return ss.DateArray(vals, unit=ss.date)
 
@@ -393,8 +391,8 @@ class date(pd.Timestamp):
         return days < 1.0
 
     def round(self, to='d'):
-        """ Round to a given interval (by default a day """
-        timestamp = self.round(to)
+        """ Round to a given interval (by default a day) """
+        timestamp = super().round(to)
         self._reset_class(timestamp)
         return
 
@@ -404,7 +402,7 @@ class date(pd.Timestamp):
 
     def _timestamp_add(self, other):
         """ Uses pd.Timestamp's __add__ and avoids creating duplicate objects """
-        orig_class = self.__class__
+        orig_class = self.__class__  # pylint: disable=access-member-before-definition
         self.__class__ = pd.Timestamp
         out = orig_class._reset_class(self + other)
         orig_class._reset_class(self)
@@ -767,14 +765,6 @@ class TimePar:
             cls.factor_vals = factors[cls.base].unit_values
         return
 
-    def __setattrr__(self, attr, value):
-        if object.__getattribute__(self, '_locked'):
-            errormsg = f'Cannot set attributes of {self}; object is read-only'
-            raise AttributeError(errormsg)
-        else:
-            super().__setattrr__(self, attr, value)
-            return
-
     def __iter__(self):
         """ Iteration over array TimePars; raises TypeError for scalars so np.iterable() returns False """
         if self.is_array:
@@ -837,15 +827,17 @@ class TimePar:
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
 
-        if len(inputs) == 2: # Handle most operations: addition, multiplication, etc.
-            arg1,arg2 = inputs # Expect self,other as order of inputs, but can change
-            is_tp1 = isinstance(arg1, ss.TimePar)
-            is_tp2 = isinstance(arg2, ss.TimePar)
-            use_left = is_tp1 or not is_tp2 # Use left unless arg1 isn't a timepar and arg2 is
-            if use_left: # For operations where order doesn't matter
-                tp_arg,o_arg = arg1,arg2 # Timepar argument and other argument (which may or may not be a timepar)
-            else:
-                tp_arg,o_arg = arg2,arg1
+        if len(inputs) != 2: # Only 1- and 2-input ufuncs are supported; 1-input handled above
+            return NotImplemented
+
+        arg1,arg2 = inputs # Expect self,other as order of inputs, but can change
+        is_tp1 = isinstance(arg1, ss.TimePar)
+        is_tp2 = isinstance(arg2, ss.TimePar)
+        use_left = is_tp1 or not is_tp2 # Use left unless arg1 isn't a timepar and arg2 is
+        if use_left: # For operations where order doesn't matter
+            tp_arg,o_arg = arg1,arg2 # Timepar argument and other argument (which may or may not be a timepar)
+        else:
+            tp_arg,o_arg = arg2,arg1
 
         # Commutative operations
         if   ufunc == np.add:      return tp_arg.__add__(o_arg)
@@ -1955,7 +1947,7 @@ class per(Rate):
     def __init__(self, value, unit=None):
         if sc.isnumber(value):
             assert value >= 0, f'Value must be >= 0, not {value}'
-        return super().__init__(value, unit)
+        super().__init__(value, unit)
 
     @property
     def rate(self):
@@ -2015,10 +2007,7 @@ class freq(Rate):
 
 
 #%% Convenience classes
-__all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
-            'perday', 'perweek', 'permonth', 'peryear', # probs
-            'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
-            'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear'] # Rates
+
 
 
 # Value at which to switch over from interpreting a value from a year duration to a calendar year
@@ -2050,8 +2039,6 @@ year = years(1)
 month = months(1)
 week = weeks(1)
 day = days(1)
-for obj in [year, month, week, day]:
-    object.__setattr__(obj, '_locked', True) # Make immutable
 
 # per
 class perday(per):   base = 'days'
@@ -2146,7 +2133,7 @@ def get_timepar_class(unit):
 
 #%% Backwards compatibility functions
 
-__all__ += ['rate', 'time_prob', 'rate_prob']
+
 
 def warn_deprecation(old=None, value=None, unit=None, with_s=False, output=False):
     msg = 'The subclasses of ss.Rate() are: '
@@ -2351,7 +2338,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def _convert_single(v):
         if isinstance(v, ss.date):
             return v.years
-        elif isinstance(v, (pd.Timestamp, datetime.date, datetime.datetime)):
+        elif isinstance(v, (pd.Timestamp, dt.date, dt.datetime)):
             return ss.date(v).years
         else:
             return v

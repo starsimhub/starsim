@@ -18,7 +18,6 @@ ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
 numba_indexing = ss.options.numba_indexing
 
-__all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
 def np_indexer(arr, inds):
@@ -868,7 +867,7 @@ class uids(np.ndarray):
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
-    def concatenate(*args):
+    def concatenate(*args):  # pylint: disable=no-self-argument
         """
         Concatenate uids into a single instance
 

@@ -10,7 +10,6 @@ import starsim as ss
 import matplotlib.pyplot as plt
 ss_int_ = ss.dtypes.int
 
-__all__ = ['link_dists', 'make_dist', 'dist_list', 'scale_types', 'Dists', 'Dist']
 
 
 def str2int(string, modulo=1_000_000_000):
@@ -1007,8 +1006,7 @@ class Dist:
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
              'poisson', 'nbinom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
              'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
-__all__ += dist_list
-__all__ += ['multi_random'] # Not a dist in the same sense as the others (e.g. same tests would fail)
+
 
 
 class random(Dist):
