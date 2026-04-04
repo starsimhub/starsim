@@ -31,3 +31,8 @@ p:has(+ ul) {
   margin-top: 0;
   padding-top: 0 !important;
 }
+
+/* Prevent API doc table name columns from wrapping */
+table td:first-child a {
+  white-space: nowrap;
+}

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Render full site
+
+SECONDS=0
+
+# Do the render!
+quarto render $@
+
+echo -e "Done: docs built in ${SECONDS} s"
+echo -e "Index: $(pwd)/_site/index.html"

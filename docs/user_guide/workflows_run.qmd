@@ -1,0 +1,177 @@
+---
+title: Multiple runs
+jupyter: python3
+---
+
+
+Let's be honest, there isn't much you can do with a single sim run. So 99.9% of the time, you'll be wanting to run multiple simulations and compare them.
+
+The easiest way to do this is with `ss.parallel()`, which, as the name suggests, runs the sim in parallel on your computer using all available cores. Let's say we want to see what difference swapping the network makes:
+
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # Improve plot resolution
+
+sim1 = ss.Sim(label='random', diseases='sis', networks='random')
+sim2 = ss.Sim(label='randomsafe', diseases='sis', networks='randomsafe')
+msim = ss.parallel(sim1, sim2)
+msim.plot()
+```
+
+`ss.parallel()` is just a wrapper for `ss.MultiSim().run()` (and note how we can pass arguments to all of the sims, e.g. `verbose=0` here):
+
+```{python}
+sim1 = ss.Sim(diseases='sis', networks='random')
+sim2 = ss.Sim(diseases='sis', networks='randomsafe')
+msim = ss.MultiSim(sims=[sim1, sim2]).run(verbose=0)
+msim.plot()
+```
+
+In most cases, this is the most efficient workflow: make some sims (potentially via a loop), and then run them. But there are some other common workflows as well. One is to run the same simulation with different random seeds. This is what happens by default if you call `ss.MultiSim()` with a single sim:
+
+```{python}
+sim = ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0)
+msim = ss.MultiSim(sim).run()
+msim.plot()
+```
+
+In addition to plotting the individual sims, we can quickly compute stats on the sim by calling `msim.mean()` or `msim.median()` (or more generally, `msim.reduce()` if we want to specify e.g. quantiles):
+
+```{python}
+msim.mean()
+msim.plot()
+```
+
+This looks a little wonky because the error bounds shown are ±2 standard deviations, but we know things like deaths can't go negative. In cases like this, we get more reasonable results with `median()`, which by default shows the 10th and 90th quantiles:
+
+```{python}
+msim.median()
+msim.plot()
+```
+
+## Copies
+
+Both `ss.Sim` and `ss.MultiSim` objects let you control whether or not the objects passed into them are copied. By default, sims _do_ copy inputs and multisims _don't_. Let's look at a few examples.
+
+Sims copy inputs by default because it's common to want to reuse a module between sims, which wouldn't be allowed if it wasn't copied (since it's modified in place during run). For example:
+
+```{python}
+sis = ss.SIS(beta=0.1)
+
+s1 = ss.Sim(label='Low contacts', diseases=sis, networks=ss.RandomNet(n_contacts=5))
+s2 = ss.Sim(label='High contacts', diseases=sis, networks=ss.RandomNet(n_contacts=10))
+ss.parallel(s1, s2).plot()
+```
+
+But this can be confusing, because it means the `sis` in the simulation is a different object than the `sis` you created. If you want to keep it the same, set `copy_inputs=False`, for example, to use it directly afterwards:
+
+```{python}
+sir = ss.SIR(beta=0.035)
+sim = ss.Sim(diseases=sir, networks='random', copy_inputs=False)
+sim.run()
+sir.plot() # This wouldn't work without copy_inputs=False
+```
+
+Conversely, `ss.MultiSim()` by default does _not_ copy the input sims, so they are modified in place:
+
+```{python}
+s1 = ss.Sim(diseases='sis', networks='random')
+s2 = ss.Sim(diseases='sir', networks='random')
+ss.parallel(s1, s2, verbose=0)
+
+s1.plot() # This also works, because it was run in place
+```
+
+If you want to copy the sims before run, then set `inplace=False`:
+
+```{python}
+s1 = ss.Sim(diseases='sis', networks='random')
+s2 = ss.Sim(diseases='sir', networks='random')
+ss.parallel(s1, s2, verbose=0, inplace=False)
+
+s1.run().plot() # This now works, because the sim was *not* run in place
+```
+
+## Advanced workflows
+
+A common pattern for more complex workflows is to write `make_sim()`. The example below, based on an STIsim application, shows how complex a `make_sim()` function can get (this is, after all, where most of the science happens!):
+
+```py
+def make_sim(seed=1, n_agents=None, start=1990, stop=2030, debug=False, add_stis=True, scenario='treat'):
+
+    total_pop = {1970: 5.203e6, 1980: 7.05e6, 1985: 8.691e6, 1990: 9980999, 2000: 11.83e6}[start]
+    if n_agents is None: n_agents = [int(10e3), int(5e2)][debug]
+    if dt is None: dt = [1/12, 1][debug]
+
+    # Demographic modules
+    fertility_data = pd.read_csv(f'data/asfr.csv')
+    pregnancy = ss.Pregnancy(dt='month', fertility_rate=fertility_data)
+    death_data = pd.read_csv(f'data/deaths.csv')
+    death = ss.Deaths(death_rate=death_data, rate_units=1)
+
+    # People and networks
+    ppl = ss.People(n_agents, age_data=pd.read_csv(f'data/age_dist_{start}.csv', index_col='age')['value'])
+    sexual = sti.FastStructuredSexual(
+        prop_f0=0.79,
+        prop_m0=0.83,
+        f1_conc=0.16,
+        m1_conc=0.11,
+        p_pair_form=0.58,
+        condom_data=pd.read_csv(f'data/condom_use.csv'),
+    )
+    maternal = ss.MaternalNet(dt='month')
+
+    # Diseases
+    hiv = make_hiv()
+    diseases = [hiv]
+    if add_stis:
+        ng, ct, tv, bv = make_stis()
+        stis = [ng, ct, tv, bv]
+        diseases += stis  # Add the STIs to the list of diseases
+
+    # Interventions and analyzers
+    intvs = make_hiv_intvs()
+    if add_stis:
+        intvs += make_testing(ng, ct, tv, bv, scenario=scenario, poc=poc, stop=stop)
+        connectors = [sti.hiv_ng(hiv, ng), sti.hiv_ct(hiv, ct), sti.hiv_tv(hiv, tv)]
+    else:
+        connectors = []
+
+    if analyzers is None:
+        analyzers = [sti.sw_stats(diseases=['ng', 'ct', 'tv']), ts()]
+
+    # Actually create the sim
+    sim = ss.Sim(
+        dt=dt,
+        rand_seed=seed,
+        total_pop=total_pop,
+        start=start,
+        stop=stop,
+        people=ppl,
+        diseases=diseases,
+        networks=[sexual, maternal],
+        demographics=[pregnancy, death],
+        interventions=intvs,
+        analyzers=analyzers,
+        connectors=connectors,
+    )
+
+    # Store scenario
+    sim.scenario = scenario
+    return sim
+```
+
+If your `make_sim()` function is computationally expensive, you can parallelize it using `sc.parallelize()`, e.g.
+
+```py
+# Make the arguments
+iterkwargs = []
+for seed in range(100):
+    for n_agents in [1e3, 2e3, 5e3, 10e3]:
+        iterkwargs.append(dict(seed=seed, n_agents=n_agents))
+
+# Make the sims
+sims = sc.parallelize(make_sim, iterkwargs=iterkwargs)
+```
+

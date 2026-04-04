@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Preview site with live reloading
 
 quarto preview

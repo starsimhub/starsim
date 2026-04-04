@@ -1,0 +1,120 @@
+---
+title: Profiling and debugging
+jupyter: python3
+---
+
+
+## Profiling
+
+One of the main reasons people don't use ABMs is because they can be very slow. While "vanilla Starsim" is quite fast (10,000 agents running for 100 timesteps should take about a second), custom modules, if not properly written, can be quite slow.
+
+The first step of fixing a slow module is to identify the problem. To do this, Starsim includes some built-in profiling tools.
+
+Let's look at a simple simulation:
+
+
+```{python}
+import sciris as sc
+import starsim as ss
+ss.options(jupyter=True)
+sc.options(jupyter=True)
+
+pars = dict(
+    start = '2000-01-01',
+    stop = '2020-01-01',
+    diseases = 'sis',
+    networks = 'random'
+)
+
+# Profile sim
+sim = ss.Sim(pars)
+prof = sim.profile()
+```
+
+This graph (which is a shortcut to `sim.loop.plot_cpu()`) shows us how much time each step in the integration loop takes. We can get line-by-line detail of where each function is taking time, though:
+
+```{python}
+prof.disp(maxentries=5)
+```
+
+(Note that the names of the functions here refer to the *actual* functions called, which may not match the graph above. That's because, for example, `ss.SIS` does not define its own `step()` method, but instead inherits `step()` from `Infection`. In the graph, this is shown as `sis.step()`, but is listed in the table as `Infection.step()`. This is because it's referring to the actual code being run, so refers to where those lines of code exist in the codebase; there is no code corresponding to `SIS.step()` since it's just inherited from `Infection.step()`.)
+
+If you want more detail, you can also define custom functions to follow. For example, we can see that `ss.SIS.infect()` takes the most time in `ss.SIS.step()`, so let's profile that:
+
+```{python}
+prof = sim.profile(follow=ss.SIS.infect, plot=False)
+prof.disp()
+```
+
+(Note: you can only follow functions that are called as part of `sim.run()` this way. To follow other functions, such as those run by `sim.init()`, you can use `sc.profile()` directly.)
+
+## Debugging
+
+When figuring out what your sim is doing -- whether it's doing something it shouldn't be, or not doing something it should -- `sim.loop` is your friend. It shows everything that will happen in the sim, and in what order:
+
+```{python}
+import starsim as ss
+
+sim = ss.Sim(
+    start = 2000,
+    stop = 2002,
+    diseases = 'sis',
+    networks = 'random',
+    verbose = 0,
+)
+sim.run()
+sim.loop.df.disp()
+# %%
+```
+
+As you can see, it's a lot -- this is only three timesteps and two modules, and it's already 41 steps.
+
+The typical way to do debugging is to insert breakpoints or print statements into your modules for custom debugging (e.g., to print a value), or to use analyzers for heavier-lift debugging. Starsim also lets you manually modify the loop by inserting "probes" or other arbitrary functions. For example, if you wanted to check the population size after each time the `People` object is updated:
+
+```{python}
+def check_pop_size(sim):
+    print(f'Population size is {len(sim.people)}')
+
+sim = ss.Sim(diseases='sir', networks='random', demographics=True, dur=10)
+sim.init()
+sim.loop.insert(check_pop_size, label='people.finish_step')
+sim.run()
+```
+
+In this case, you get the same output as using an analyzer:
+
+```{python}
+def check_pop_size(sim):
+    print(f'Population size is {len(sim.people)}')
+
+sim = ss.Sim(diseases='sir', networks='random', demographics=True, dur=10, analyzers=check_pop_size)
+sim.run()
+```
+
+However, inserting functions directly in the loop gives you more control over their exact placement, whereas analyzers are always executed last in the timestep.
+
+The loop also has methods for visualizing itself. You can get a simple representation of the loop with `loop.plot()`:
+
+```{python}
+sim.loop.plot()
+```
+
+Or a slightly more detailed one with `loop.plot_step_order()`:
+
+```{python}
+sim.loop.plot_step_order()
+```
+
+This is especially useful if your simulation has modules with different timesteps, e.g.:
+
+```{python}
+sis = ss.SIS(dt=0.1)
+net = ss.RandomNet(dt=0.5)
+births = ss.Births(dt=1)
+sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
+sim.init()
+sim.loop.plot_step_order()
+```
+
+(Note: this is a 3D plot, so it helps if you can plot it in a separate window interactively to be able to move it around, rather than just in a notebook.)
+
