@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Render full site
+set -euo pipefail # Fail fast if needed
 
 SECONDS=0
 
