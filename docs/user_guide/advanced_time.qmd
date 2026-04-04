@@ -119,55 +119,6 @@ print(t.to_dict())
 
 `tvec` is what the `ss.Timeline` object uses internally as "canonical" simulation time. `timevec` is the "most-human-friendly" representation of the time, and is what is e.g. stored in results to help with plotting.
 
-### Plotting with dates
-
-Plotting with dates is hard. Consider this example (from the interventions tutorial):
-
-```{python}
-# Define the parameters
-start = 2015
-vax = ss.routine_vx(start_year=start, prob=0.8, product=ss.simple_vx(efficacy=0.9))
-pars = dict(diseases='sis', networks='random', n_agents=5000)
-
-# Create and run the sims
-s1 = ss.Sim(pars)
-s2 = ss.Sim(pars, interventions=vax)
-ss.parallel(s1, s2) # Run the sims
-r1 = s1.results
-r2 = s2.results
-
-# Use Matplotlib to plot the results
-plt.figure()
-plt.plot(r1.timevec, r1.sis.prevalence, label='Baseline')
-plt.plot(r2.timevec, r2.sis.prevalence, label='With vaccine')
-plt.axvline(start, color='k', label='Intervention')
-plt.legend()
-```
-
-What the heck! The vertical line is in totally the wrong place. That's because the x-axis is plotting using `ss.date`, which underneath is `pd.Timestamp`, and underneath _that_ is `np.datetime64[ns]`, which interprets "2015" as `'1970-01-01T00:00:00.000002015'` (i.e., 2,015 _nanoseconds_ after the "start of the epoch", which is defined as January 1st, 1970).
-
-We have two ways of fixing this. The first is to simply remember to convert to a date:
-
-```{python}
-plt.figure()
-plt.plot(r1.timevec, r1.sis.prevalence, label='Baseline')
-plt.plot(r2.timevec, r2.sis.prevalence, label='With vaccine')
-plt.axvline(ss.date(start), color='k', label='Intervention')  # Fix by converting to a date
-plt.legend()
-```
-
-(Are you wondering why the lines diverge _before_ the intervention starts? It's because the vaccine takes effect immediately, so by the start year there's already a difference in the number of infections, and Matplotlib is interpolating the lines.)
-
-The second is by using the `.years` property of `timevec`, so we don't have to worry about dates at all:
-
-```{python}
-plt.figure()
-years = r1.timevec.years # Fix by using floating-point years
-plt.scatter(years, r1.sis.prevalence, label='Baseline')
-plt.scatter(years, r2.sis.prevalence, label='With vaccine')
-plt.axvline(start, color='k', label='Intervention')
-plt.legend()
-```
 
 ## Timepars
 
