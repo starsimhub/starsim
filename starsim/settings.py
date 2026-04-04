@@ -10,7 +10,6 @@ import sciris as sc
 import matplotlib.font_manager as fm
 import starsim as ss # Only used to set references
 
-__all__ = ['dtypes', 'options', 'style']
 
 # Define Starsim-default data types
 dtypes = sc.dictobj(

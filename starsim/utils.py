@@ -10,9 +10,6 @@ import starsim as ss
 
 # %% Helper functions
 
-# What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'standardize_netkey', 'parse_age_range', 'standardize_data',
-           'validate_sim_data', 'load', 'save', 'plot_args', 'show', 'return_fig']
 
 class ndict(sc.objdict):
     """

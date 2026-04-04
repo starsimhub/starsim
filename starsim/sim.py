@@ -7,7 +7,6 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
 class Sim(ss.Base):

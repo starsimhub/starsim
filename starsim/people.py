@@ -8,7 +8,6 @@ import starsim as ss
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-__all__ = ['People', 'Person']
 
 
 class People:

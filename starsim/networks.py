@@ -13,8 +13,6 @@ ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None
 
-# Specify all externally visible functions this file defines; see also more definitions below
-__all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork']
 
 
 # %% General network classes
@@ -456,9 +454,7 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'RandomSafeNet', 'MFNet', 'MSMNet',
-            'MaternalNet', 'PrenatalNet', 'PostnatalNet', 'BreastfeedingNet',
-            'HouseholdNet']
+
 
 
 class StaticNet(Network):
@@ -1303,7 +1299,7 @@ class HouseholdNet(Network):
 
 #%% Mixing pools
 
-__all__ += ['AgeGroup', 'MixingPools', 'MixingPool']
+
 
 class AgeGroup(sc.prettyobj):
     """ A simple age-based filter that returns uids of agents that match the criteria """
