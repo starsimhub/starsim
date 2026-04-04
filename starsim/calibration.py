@@ -16,7 +16,6 @@ op = sc.importbyname('optuna', lazy=True)
 sns = sc.importbyname('seaborn', lazy=True)
 vis = sc.importbyname('optuna.visualization.matplotlib', lazy=True)
 
-__all__ = ['Calibration']
 
 
 class Calibration(sc.prettyobj):
@@ -448,9 +447,7 @@ class Calibration(sc.prettyobj):
 
 #%% Calibration components
 
-__all__ += ['linear_interp', 'linear_accum', 'step_containing'] # Conformers
-__all__ += ['CalibComponent'] # Calib component base class
-__all__ += ['BetaBinomial', 'Binomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal'] # Specific calib components
+
 
 def linear_interp(expected, actual):
     """

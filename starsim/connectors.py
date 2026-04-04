@@ -8,7 +8,6 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['Connector', 'seasonality']
 
 class Connector(ss.Module):
     """

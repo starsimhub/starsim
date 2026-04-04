@@ -38,8 +38,6 @@ import pandas as pd
 import starsim as ss
 ss_float = ss.dtypes.float
 
-# General classes; specific classes are listed below
-__all__ = ['DateArray', 'date', 'TimePar', 'dur', 'datedur', 'Rate', 'prob', 'per', 'freq']
 
 def approx_compare(a, op='==', b=None, **kwargs):
     """ Floating-point issues are common working with dates, so allow approximate matching
@@ -766,14 +764,6 @@ class TimePar:
             cls.factor_keys = factors[cls.base].unit_keys
             cls.factor_vals = factors[cls.base].unit_values
         return
-
-    def __setattrr__(self, attr, value):
-        if object.__getattribute__(self, '_locked'):
-            errormsg = f'Cannot set attributes of {self}; object is read-only'
-            raise AttributeError(errormsg)
-        else:
-            super().__setattrr__(self, attr, value)
-            return
 
     def __iter__(self):
         """ Iteration over array TimePars; raises TypeError for scalars so np.iterable() returns False """
@@ -2015,10 +2005,7 @@ class freq(Rate):
 
 
 #%% Convenience classes
-__all__ += ['years', 'months', 'weeks', 'days', 'year', 'month', 'week', 'day', # Durations
-            'perday', 'perweek', 'permonth', 'peryear', # probs
-            'probperday', 'probperweek', 'probpermonth', 'probperyear', # prob aliases
-            'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear'] # Rates
+
 
 
 # Value at which to switch over from interpreting a value from a year duration to a calendar year
@@ -2050,8 +2037,6 @@ year = years(1)
 month = months(1)
 week = weeks(1)
 day = days(1)
-for obj in [year, month, week, day]:
-    object.__setattr__(obj, '_locked', True) # Make immutable
 
 # per
 class perday(per):   base = 'days'
@@ -2146,7 +2131,7 @@ def get_timepar_class(unit):
 
 #%% Backwards compatibility functions
 
-__all__ += ['rate', 'time_prob', 'rate_prob']
+
 
 def warn_deprecation(old=None, value=None, unit=None, with_s=False, output=False):
     msg = 'The subclasses of ss.Rate() are: '

@@ -9,7 +9,6 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['Analyzer', 'infection_log', 'dynamics_by_age']
 
 
 class Analyzer(ss.Module):

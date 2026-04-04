@@ -11,7 +11,6 @@ import zipfile
 import sciris as sc
 
 
-__all__ = ['Dataset', 'Samples']
 
 class Dataset:
     def __init__(self, folder=None, results=None, *args, **kwargs):
