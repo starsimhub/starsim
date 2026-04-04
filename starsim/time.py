@@ -26,7 +26,6 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 """
-import datetime
 import numbers
 import collections
 import matplotlib
@@ -195,6 +194,7 @@ class DateArray(np.ndarray):
 
         if inplace:
             self[:] = vals
+            return
         else:
             return ss.DateArray(vals, unit=ss.date)
 
@@ -2336,7 +2336,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def _convert_single(v):
         if isinstance(v, ss.date):
             return v.years
-        elif isinstance(v, (pd.Timestamp, datetime.date, datetime.datetime)):
+        elif isinstance(v, (pd.Timestamp, dt.date, dt.datetime)):
             return ss.date(v).years
         else:
             return v

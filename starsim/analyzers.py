@@ -10,7 +10,6 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 
-
 class Analyzer(ss.Module):
     """
     Base class for Analyzers. Analyzers are used to provide more detailed information
@@ -141,9 +140,9 @@ class dynamics_by_age(Analyzer):
 
     def step(self):
         people = self.sim.people
-        for min, max in zip(self.mins, self.maxes):
-            mask = (people.age >= min) & (people.age < max)
-            self.hist[min].append(people.states[self.state][mask].sum())
+        for min_age, max_age in zip(self.mins, self.maxes):
+            mask = (people.age >= min_age) & (people.age < max_age)
+            self.hist[min_age].append(people.states[self.state][mask].sum())
         return
 
     def finalize_results(self):

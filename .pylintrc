@@ -87,24 +87,44 @@ disable=raw-checker-failed,
         deprecated-pragma,
         use-symbolic-message-instead,
         C0103, # Starsim: allow lowercase constants
+        C0115, # Starsim: one-line subclasses don't need class docstrings
+        C0116, # Starsim: simple methods don't need docstrings
         C0321, # Starsim: multiple statements on a line
         C0325, # Starsim: allow parentheses in if
         C0411, # Starsim: allow different import order
         C0412, # Starsim: allow ungrouped imports
         C0413, # Starsim: allow imports not at the top
+        C1802, # Starsim: if len(x) is idiomatic Python
+        C2401, # Starsim: Greek letters (β) for mathematical notation
+        C3001, # Starsim: lambdas acceptable for simple expressions
         E1101, # Starsim: don't check class membership (dynamic classes)
+        E1120, # Starsim: false positive with numpy subclassing
+        E1121, # Starsim: false positive with numpy subclassing
+        E1126, # Starsim: false positive with objdict indexing
+        E1130, # Starsim: false positive with dynamic types/None guards
+        E1134, # Starsim: false positive, sc.objdict supports ** unpacking
+        E1136, # Starsim: false positive, dynamic types are subscriptable at runtime
+        I1101, # Starsim: false positive with numpy C-extensions
+        R0401, # Starsim: lazy imports handle cyclic dependencies correctly
+        R1704, # Starsim: argument reassignment in loops
         R1705, # Starsim: allow else-return
+        R1710, # Starsim: return-or-raise pattern is valid
         R1711, # Starsim: empty return
         R1720, # Starsim: allow else after raise
         R1735, # Starsim: dict literal
+        W0107, # Starsim: explicit pass in base classes is intentional
+        W0201, # Starsim: multi-phase init (init_pre/init_post) is core architecture
+        W0212, # Starsim: internal framework classes access each other's internals
+        W0221, # Starsim: intentional signature refinement in subclasses
+        W0223, # Starsim: minimal subclasses use class vars, not method overrides
+        W0231, # Starsim: Sciris base classes don't need parent init
+        W0237, # Starsim: intentional parameter renames for API clarity
+        W0613, # Starsim: unused args in base class interfaces (OOP pattern)
+        W0621, # Starsim: local variable shadowing is pervasive and intentional
         W0702, # Starsim: allow bare except
-        W0718 # Starsim: allow general exception
-
-# Enable the message, report, category or checker with the given id(s). You can
-# either give multiple identifier separated by comma (,) or put this option
-# multiple time (only on the command line, not in the configuration file where
-# it should appear only once). See also the "--disable" option for examples.
-enable=c-extension-no-member
+        W0718, # Starsim: allow catching general exception
+        W0719, # Starsim: allow raising general exception
+        W1113  # Starsim: keyword-only arg pattern is intentional
 
 
 [MISCELLANEOUS]
