@@ -1188,40 +1188,48 @@ class HouseholdNet(Network):
         if not self.dynamic:
             return
 
+        self.add_births()
+
         if np.mod(self.ti, self.pars.update_freq):
             return
 
-        self.add_births()
         self.create_new_households()
         return
 
     def add_births(self):
         sim = self.sim
-        birth_uids = ss.uids((sim.people.age < self.pars.update_freq * self.sim.t.dt_year))
+        ppl = sim.people
+
+        # Find agents born during the sim (have a parent), already delivered
+        # (age >= 0), and not yet assigned to a household (household_ids is NaN).
+        # The isnan guard ensures each newborn is processed exactly once.
+        candidates = ss.uids(ppl.parent.notnan & (ppl.age >= 0))
+        if len(candidates) == 0:
+            return 0
+        birth_uids = candidates[np.isnan(self.household_ids[candidates])]
         if len(birth_uids) == 0:
             return 0
 
-        mat_uids = sim.people.parent[birth_uids]
-        keep = mat_uids != sim.people.parent.nan
-        birth_uids = birth_uids[keep]
-        mat_uids = mat_uids[keep]
-        if len(birth_uids) == 0:
-            return 0
+        mat_uids = ppl.parent[birth_uids]
+
+        # Assign household IDs before creating edges so the newborn is
+        # included when looking up household members
+        self.household_ids[birth_uids] = self.household_ids[mat_uids]
 
         p1 = []
         p2 = []
         for new_uid, mat_uid in zip(birth_uids, mat_uids):
             hh_contacts = ss.uids(self.household_ids == self.household_ids[mat_uid])
+            hh_contacts = hh_contacts[hh_contacts != new_uid]  # Exclude self-loops
             p1.append(hh_contacts)
             p2.append([new_uid] * len(hh_contacts))
 
-        p1 = ss.uids.concatenate(p1)
-        p2 = ss.uids.concatenate(p2)
+        if p1:
+            p1 = ss.uids.concatenate(p1)
+            p2 = ss.uids.concatenate(p2)
+            beta = np.ones(len(p1), dtype=ss.dtypes.float)
+            self.append(p1=p1, p2=p2, beta=beta)
 
-        beta = np.ones(len(p1), dtype=ss.dtypes.float)
-        self.append(p1=p1, p2=p2, beta=beta)
-
-        self.household_ids[birth_uids] = self.household_ids[mat_uids]
         return len(birth_uids)
 
     def create_new_households(self):
