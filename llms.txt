@@ -13,7 +13,7 @@ The framework follows a modular design with these key components:
 - **Sim**: Main simulation class that orchestrates all modules and runs simulations (`starsim/sim.py`)
 - **People**: Manages individual agents and their state updates (`starsim/people.py`)
 - **Networks**: Defines how agents interact with each other (`starsim/networks.py`)
-- **Diseases**: Models disease transmission and progression (`starsim/disease.py` + `starsim/diseases/`)
+- **Diseases**: Models disease transmission and progression (`starsim/diseases.py`)
 - **Interventions**: Implements prevention/treatment strategies (`starsim/interventions.py`)
 - **Demographics**: Handles population dynamics like births/deaths (`starsim/demographics.py`)
 - **Results**: Analyzes and stores simulation outputs (`starsim/results.py`)
@@ -43,15 +43,10 @@ cd tests && ./check_style
 ### Documentation
 ```bash
 # Build documentation (requires quarto)
-cd docs && ./build_docs
+cd docs && ./render
 
-# Execute tutorials only
-./run_tutorials
-
-# Build with different execution modes:
-./build_docs jupyter  # Default: parallel execution with jcache
-./build_docs quarto   # Serial execution with quarto
-./build_docs quarto --cache-refresh  # Refresh cache
+# Build and publish to GitHub Pages
+cd docs && ./publish
 ```
 
 ### Installation
@@ -71,7 +66,7 @@ uv add starsim[dev]  # With dev dependencies
 
 ### Core Modules (`starsim/`)
 - `arrays.py`: State management arrays for people/networks
-- `calibration.py` & `calib_components.py`: Model calibration to data
+- `calibration.py`: Model calibration to data
 - `distributions.py`: Statistical distributions and random number generation
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
@@ -81,19 +76,18 @@ uv add starsim[dev]  # With dev dependencies
 - `time.py`: Time coordination between modules
 - `utils.py`: Helper functions
 
-### Disease Models (`starsim/diseases/`)
-Pre-implemented disease models including HIV, syphilis, gonorrhea, cholera, Ebola, measles, and SIR/SIS models.
+### Example Disease Models (`starsim_examples/diseases/`)
+Pre-implemented example disease models including HIV, syphilis, gonorrhea, cholera, Ebola, and measles. Core disease base classes (Disease, Infection, NCD, SIR, SIS) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
 - `test_*.py`: Main test files
-- `devtests/`: Development testing scripts
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration
 
 ### Documentation (`docs/`)
-- `tutorials/`: Jupyter notebook tutorials
-- `user_guide/`: User guide notebooks  
-- `api/`: API documentation source files
+- `tutorials/`: Quarto tutorial notebooks (`.qmd`)
+- `user_guide/`: Quarto user guide notebooks (`.qmd`)
+- `api/`: API documentation source files (`.qmd`)
 - Quarto-based documentation system
 
 ## Key Conventions
@@ -129,7 +123,7 @@ The framework uses a modular architecture where all components inherit from base
 - Use Sciris where possible to shorten commands
 - When creating a multiline dictionary, put a space around the equals for arguments (as if it were a class)
 - Set `SCIRIS_BACKEND='agg'` environment variable when running tests to prevent figure display
-- The framework requires Python 3.9-3.13
+- The framework requires Python 3.10+
 - Uses Numba for performance-critical code sections
 - All modules inherit from base classes in `modules.py`
 - Parameter handling is centralized through `parameters.py` and `SimPars` class
