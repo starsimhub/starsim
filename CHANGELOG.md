@@ -3,6 +3,13 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.3.3 (2026-04-08)
+- Fixed `HouseholdNet.add_births()` to assign household IDs exactly once at delivery, rather than using an age-window heuristic tied to `update_freq`. Newborns are now identified by having a parent, age >= 0, and no household ID yet assigned.
+- Moved HouseholdNet's `add_births()` call before the `update_freq` gate so it runs every timestep, ensuring correct behavior with any update frequency or when the network timestep exceeds gestation.
+- Fixed self-loops in household edge creation for newborns.
+- *GitHub info*: PR [TBD](https://github.com/starsimhub/starsim/pull/TBD)
+
+
 ## Version 3.3.2 (2026-04-04)
 - Added a `copy_sim` argument to `ss.MultiSim.run()` to handle large parallel runs of a single sim (e.g. `ss.MultiSim(sim, n_runs=100)`), where multiprocess pickling isn't guaranteed to implicitly copy the sim.
 - Removed (unused) `_locked` attribute from `ss.TimePar`.
