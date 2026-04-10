@@ -245,45 +245,120 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
 
 def parse_age_range(age_string) -> tuple:
     """
-    Parse an age range string into lower and upper bounds
+    Parse an age range string into lower and upper bounds.
 
-    Example usage:
+    Extracts the numeric bounds from a variety of age range formats. Note that
+    bracket/interval notation (e.g. ``[15,25)`` vs ``(15,25]``) is accepted but
+    the brackets are stripped — all formats return a plain ``(lower, upper)``
+    tuple. To get a boolean mask that respects bracket semantics (inclusive vs
+    exclusive bounds), use :func:`apply_age_range` instead.
 
-        >>> ss.parse_age_range("5-9")
-        (5.0,9.0)
+    Example usage::
 
-    Supported formats are
-        - '5-9'
-        - '5 to 9'
-        - '<5' - which returns (0.0, 5.0)
-        - '95+' - which returns (95.0, np.inf)
-        - '>95' - which returns (95.0, np.inf)
+        >>> ss.parse_age_range('5-9')
+        (5.0, 9.0)
+        >>> ss.parse_age_range('[15,25)')
+        (15.0, 25.0)
+        >>> ss.parse_age_range('(15,25]')
+        (15.0, 25.0)
 
-    :param age_string: A string specifying an age range (e.g., '5-9', '5 to 9', '95+')
-    :return: A tuple with (lower, upper) bound values.
+    Supported formats:
+        - ``'5-9'`` or ``'5 to 9'``
+        - ``'<5'`` — returns ``(0.0, 5.0)``
+        - ``'95+'`` — returns ``(95.0, np.inf)``
+        - ``'>95'`` — returns ``(95.0, np.inf)``
+        - ``'[15,25)'``, ``'(15,25]'``, ``'[15,25]'``, ``'(15,25)'`` — bracket
+          notation; brackets are stripped, returns ``(15.0, 25.0)`` in all cases
+
+    Args:
+        age_string: a string specifying an age range
+
+    Returns:
+        A tuple ``(lower, upper)`` as floats.
     """
-    age_string = age_string.strip().lower()
+    s = str(age_string).strip()
 
-    if "+" in age_string:  # Handle "95+"
-        age_lower = float(age_string.split("+")[0])
-        age_upper = np.inf
-    elif "-" in age_string:  # Handle "5-9"
-        age_lower = float(age_string.split("-")[0])
-        age_upper = float(age_string.split("-")[1])
-    elif age_string.startswith('<'):
-        age_upper = float(age_string[1:])
-        age_lower = 0.0
-    elif age_string.startswith('>'):
-        age_upper = np.inf
-        age_lower = float(age_string[1:])
-    else:  # Handle "5 to 9"
-        age_lower = float(age_string.split("to")[0])
-        age_upper = float(age_string.split("to")[1])
+    # Bracket/interval notation: [15,25) or (15,25] etc.
+    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
+        inner = s[1:-1]
+        parts = inner.split(',', 1)
+        age_lower = float(parts[0].strip())
+        age_upper = float(parts[1].strip())
+    else:
+        s = s.lower()
+        if '+' in s:
+            age_lower = float(s.split('+')[0])
+            age_upper = np.inf
+        elif '-' in s:
+            age_lower = float(s.split('-')[0])
+            age_upper = float(s.split('-')[1])
+        elif s.startswith('<'):
+            age_lower = 0.0
+            age_upper = float(s[1:])
+        elif s.startswith('>'):
+            age_lower = float(s[1:])
+            age_upper = np.inf
+        elif 'to' in s:
+            age_lower = float(s.split('to')[0])
+            age_upper = float(s.split('to')[1])
+        else:
+            raise ValueError(f'Cannot parse age range: {age_string!r}')
 
     if age_lower < 0 or age_upper < 0:
-        raise Exception('Age bounds cannot be negative')
+        raise ValueError('Age bounds cannot be negative')
+    if age_lower >= age_upper:
+        raise ValueError(f'Lower bound ({age_lower}) must be less than upper bound ({age_upper}): {age_string!r}')
 
     return age_lower, age_upper
+
+
+def apply_age_range(age_string, arr):
+    """
+    Return a boolean mask for values in ``arr`` that fall within the age range.
+
+    For bracket/interval notation, respects inclusive ``[`` ``]`` vs exclusive
+    ``(`` ``)`` bounds. For other formats, uses standard conventions:
+
+        - ``'5-9'``, ``'5 to 9'`` → ``[5, 9)`` (inclusive lower, exclusive upper)
+        - ``'<5'`` → ``[0, 5)``
+        - ``'>95'`` → ``(95, inf)``
+        - ``'95+'`` → ``[95, inf)``
+        - ``'[15,25)'`` → ``>= 15`` and ``< 25``
+        - ``'(15,25]'`` → ``> 15`` and ``<= 25``
+
+    Example usage::
+
+        >>> import numpy as np
+        >>> ages = np.array([14, 15, 20, 24, 25])
+        >>> ss.apply_age_range('[15,25)', ages)
+        array([False,  True,  True,  True, False])
+
+    Args:
+        age_string: a string specifying an age range
+        arr: a numeric array to filter
+
+    Returns:
+        A boolean array of the same shape as ``arr``.
+    """
+    s = str(age_string).strip()
+
+    # Bracket/interval notation — respect the brackets
+    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
+        lo_inc = s[0] == '['
+        hi_inc = s[-1] == ']'
+        lo, hi = parse_age_range(s)
+        left  = (arr >= lo) if lo_inc else (arr > lo)
+        right = (arr <= hi) if hi_inc else (arr < hi)
+        return left & right
+
+    # Non-bracket formats — use conventional semantics
+    lo, hi = parse_age_range(s)
+    s_lower = s.lower()
+    if s_lower.startswith('>'):
+        return arr > lo  # Exclusive lower, no upper
+    else:
+        # '5-9', '5 to 9', '<5', '95+' all use [lo, hi)
+        return (arr >= lo) & (arr < hi)
 
 
 def standardize_netkey(key):

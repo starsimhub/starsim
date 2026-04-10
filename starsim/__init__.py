@@ -39,7 +39,7 @@ sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
 # Finish imports
 t('utils')
 from .utils import (
-    ndict, warn, find_contacts, standardize_netkey, parse_age_range,
+    ndict, warn, find_contacts, standardize_netkey, parse_age_range, apply_age_range,
     standardize_data, validate_sim_data, load, save, plot_args, show,
     return_fig,
 )
