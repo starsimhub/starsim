@@ -28,9 +28,16 @@ class Sim(ss.Base):
         analyzers (str/Analyzer/list): as above, for analyzers
         custom (Module/list): as above, for any custom user-created modules not matching one of the above types
         modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
-        copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
+        copy_inputs (bool): if True (default), copy modules as they're inserted into the sim, allowing
+            the same module objects to be reused across multiple sims. Set to False if you want external
+            references to the module objects to reflect state changes after sim.run().
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
+
+    Note:
+        Modules can be supplied either via individual keyword arguments (``diseases``, ``networks``, etc.)
+        or all together via the ``modules`` argument. When using ``modules``, Starsim automatically sorts
+        them by type. The individual kwargs and ``modules`` can be mixed; they are merged together.
 
     **Examples**:
 

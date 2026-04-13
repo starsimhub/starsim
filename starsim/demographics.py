@@ -260,7 +260,7 @@ class Deaths(Demographics):
         p_death = death_rate.to_prob(self.t.dt)  # Convert to probability per timestep
 
         if sc.isnumber(drd) or isinstance(drd, ss.Rate):
-            p_death = p_death[0] # TODO: what???
+            p_death = p_death[0] # to_prob() returns an array; extract the scalar when the input was scalar/Rate
         return p_death
 
     def init_results(self):

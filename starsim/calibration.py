@@ -16,6 +16,9 @@ op = sc.importbyname('optuna', lazy=True)
 sns = sc.importbyname('seaborn', lazy=True)
 vis = sc.importbyname('optuna.visualization.matplotlib', lazy=True)
 
+# Defaults
+default_n_boot = 1000 # Default number of bootstrap samples for plot_facet_bootstrap()
+
 
 
 class Calibration(sc.prettyobj):
@@ -737,7 +740,7 @@ class BetaBinomial(CalibComponent):
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
 
-        n_boot = kwargs.get('n_boot', 1000)
+        n_boot = kwargs.get('n_boot', default_n_boot)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
@@ -819,7 +822,7 @@ class Binomial(CalibComponent):
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
 
-        n_boot = kwargs.get('n_boot', 1000)
+        n_boot = kwargs.get('n_boot', default_n_boot)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
@@ -993,7 +996,7 @@ class GammaPoisson(CalibComponent):
         expected = self.expected.loc[[t]]
         e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
 
-        n_boot = kwargs.get('n_boot', 1000)
+        n_boot = kwargs.get('n_boot', default_n_boot)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)
@@ -1111,7 +1114,7 @@ class Normal(CalibComponent):
         expected = self.expected.loc[[t]] # Gracefully handle Series and DataFrame, if 't1' in index
         e_x = expected['x'].values.flatten()[0] # Due to possible presence of 't1' in the index
 
-        n_boot = kwargs.get('n_boot', 1000)
+        n_boot = kwargs.get('n_boot', default_n_boot)
         seeds = data['rand_seed'].unique()
         boot_size = len(seeds)
         means = np.zeros(n_boot)

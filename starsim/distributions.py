@@ -1176,9 +1176,13 @@ class expon(Dist):
         return
 
 
-class poisson(Dist): # TODO: does not currently scale correctly with dt
+class poisson(Dist):
     """
     Poisson distribution
+
+    Note: unlike rate-based distributions, the Poisson lambda parameter is not
+    automatically scaled by dt. If using this distribution in a context where
+    dt != 1, you may need to scale lambda manually (e.g., lam*dt).
 
     Args:
         lam (float): the scale of the distribution (default 1.0)
