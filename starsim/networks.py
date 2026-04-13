@@ -673,7 +673,7 @@ class RandomSafeNet(DynamicNetwork):
         n_agents = len(uids)
         n_conn = self.pars.n_edges
         r_list = []
-        for i in range(n_conn):
+        for i in range(n_conn): # Necessary loop; not possible to vectorize given the behavior of the random number generator
             r = self.dist.rvs(uids)
             r_list.append(r)
         r_arr = np.array(r_list).flatten()
