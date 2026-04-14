@@ -22,6 +22,7 @@ class Route(ss.Module):
     A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
     """
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
+        """ Compute transmission probabilities along this route (must be overridden by subclasses). """
         errormsg = 'compute_transmission() must be defined by Route subclasses'
         raise NotImplementedError(errormsg)
 
@@ -416,6 +417,7 @@ class DynamicNetwork(Network):
         return
 
     def end_pairs(self):
+        """ Remove partnerships whose duration has expired or whose members have died. """
         people = self.sim.people
         self.edges.dur = self.edges.dur - 1 # Assume that the edge duration is in units of self.t.dt
 
@@ -435,13 +437,13 @@ class SexualNetwork(DynamicNetwork):
         return
 
     def active(self, people):
-        # Exclude people who are not alive
+        """ Return boolean array of agents who are alive, participating, and past sexual debut. """
         valid_age = people.age > self.debut
         active = self.participant & valid_age & people.alive
         return active
 
     def available(self, people, sex):
-        # Currently assumes unpartnered people are available
+        """ Return UIDs of active agents of the given sex who are not currently partnered. """
         # Could modify this to account for concurrency
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
@@ -452,6 +454,7 @@ class SexualNetwork(DynamicNetwork):
         return available.uids
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
+        """ Compute per-edge transmission probability accounting for number of sex acts. """
         if inds is None: inds = Ellipsis
         return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds]))
 
@@ -1359,7 +1362,7 @@ class MixingPools(Route):
             beta = 0.1,
             src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
-            n_contacts = [[2.4, 0.49], [0.91, 0.16]],
+            n_contacts = [[2.4, 0.49], [0.91, 0.16]],  # Illustrative contact matrix
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
