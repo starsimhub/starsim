@@ -1,8 +1,5 @@
 """
 Test connectors for coverage improvement.
-
-Tests the seasonality connector, susceptibility/transmissibility modification
-patterns, multiple connectors, and scientific correctness of connector effects.
 """
 
 import sciris as sc
@@ -15,453 +12,184 @@ do_plot = False
 sc.options(interactive=False)
 
 
-#%% Helper classes
-
 class SusModifier(ss.Connector):
-    """ Connector that modifies susceptibility based on co-infection status """
-    def __init__(self, disease_a='sir_a', disease_b='sir_b', rel_sus=2.0, **kwargs):
+    """ Connector that modifies susceptibility based on co-infection """
+    def __init__(self, rel_sus=2.0, **kwargs):
         super().__init__()
-        self.define_pars(
-            disease_a = disease_a,
-            disease_b = disease_b,
-            rel_sus = rel_sus,
-        )
+        self.define_pars(rel_sus=rel_sus)
         self.update_pars(**kwargs)
-        return
 
     def step(self):
-        """ People infected with disease_a have increased susceptibility to disease_b """
-        p = self.pars
-        disease_a = self.sim.diseases[p.disease_a]
-        disease_b = self.sim.diseases[p.disease_b]
-        # Reset baseline
-        disease_b.rel_sus[:] = 1.0
-        # Increase susceptibility for those infected with disease_a
-        disease_b.rel_sus[disease_a.infected] = p.rel_sus
-        return
+        a, b = self.sim.diseases.sir_a, self.sim.diseases.sir_b
+        b.rel_sus[:] = 1.0
+        b.rel_sus[a.infected] = self.pars.rel_sus
 
 
 class TransModifier(ss.Connector):
-    """ Connector that modifies transmissibility based on co-infection status """
-    def __init__(self, disease_a='sir_a', disease_b='sir_b', rel_trans=2.0, **kwargs):
+    """ Connector that modifies transmissibility based on co-infection """
+    def __init__(self, rel_trans=2.0, **kwargs):
         super().__init__()
-        self.define_pars(
-            disease_a = disease_a,
-            disease_b = disease_b,
-            rel_trans = rel_trans,
-        )
+        self.define_pars(rel_trans=rel_trans)
         self.update_pars(**kwargs)
-        return
 
     def step(self):
-        """ People infected with disease_a are more transmissible of disease_b """
-        p = self.pars
-        disease_a = self.sim.diseases[p.disease_a]
-        disease_b = self.sim.diseases[p.disease_b]
-        # Reset baseline
-        disease_b.rel_trans[:] = 1.0
-        # Increase transmissibility for those infected with disease_a
-        disease_b.rel_trans[disease_a.infected] = p.rel_trans
-        return
+        a, b = self.sim.diseases.sir_a, self.sim.diseases.sir_b
+        b.rel_trans[:] = 1.0
+        b.rel_trans[a.infected] = self.pars.rel_trans
 
 
 class ProtectiveConnector(ss.Connector):
-    """ Connector where infection with disease_a protects against disease_b """
-    def __init__(self, disease_a='sir_a', disease_b='sir_b', **kwargs):
-        super().__init__()
-        self.define_pars(
-            disease_a = disease_a,
-            disease_b = disease_b,
-        )
-        self.update_pars(**kwargs)
-        return
-
+    """ Connector where infection with disease_a blocks disease_b """
     def step(self):
-        """ People infected with disease_a cannot acquire disease_b """
-        p = self.pars
-        disease_a = self.sim.diseases[p.disease_a]
-        disease_b = self.sim.diseases[p.disease_b]
-        # Reset to baseline
-        disease_b.rel_sus[:] = 1.0
-        # Block susceptibility for those with disease_a
-        disease_b.rel_sus[disease_a.infected] = 0.0
-        return
+        a, b = self.sim.diseases.sir_a, self.sim.diseases.sir_b
+        b.rel_sus[:] = 1.0
+        b.rel_sus[a.infected] = 0.0
 
-
-#%% Helper functions
 
 def make_two_disease_sim(connectors=None, n=n_agents):
-    """ Create a sim with two SIR diseases on the same network """
-    sir_a = ss.SIR(
-        name = 'sir_a',
-        beta = 0.05,
-        dur_inf = 10,
-        init_prev = 0.05,
+    """ Create a sim with two SIR diseases """
+    return ss.Sim(
+        n_agents=n, dur=60, verbose=0,
+        diseases=[ss.SIR(name='sir_a', beta=0.05, dur_inf=10, init_prev=0.05),
+                  ss.SIR(name='sir_b', beta=0.05, dur_inf=10, init_prev=0.05)],
+        networks=ss.RandomNet(n_contacts=4), connectors=connectors,
     )
-    sir_b = ss.SIR(
-        name = 'sir_b',
-        beta = 0.05,
-        dur_inf = 10,
-        init_prev = 0.05,
-    )
-    net = ss.RandomNet(n_contacts=4)
-    sim = ss.Sim(
-        n_agents = n,
-        diseases = [sir_a, sir_b],
-        networks = net,
-        connectors = connectors,
-        dur = 60,
-        verbose = 0,
-    )
-    return sim
 
-
-def make_sis_sim(connectors=None, n=n_agents, dur=365):
+def make_sis_sim(connectors=None, dur=365):
     """ Create an SIS sim for seasonality testing """
-    sis = ss.SIS(
-        beta = 0.05,
-        dur_inf = 10,
-        waning = 0.01,
-        init_prev = 0.1,
+    return ss.Sim(
+        n_agents=n_agents, start='2020-01-01', dur=dur, dt=ss.days(1), verbose=0,
+        diseases=ss.SIS(beta=0.05, dur_inf=10, waning=0.01, init_prev=0.1),
+        networks=ss.RandomNet(n_contacts=4), connectors=connectors,
     )
-    net = ss.RandomNet(n_contacts=4)
-    sim = ss.Sim(
-        n_agents = n,
-        start = '2020-01-01',
-        dur = dur,
-        dt = ss.days(1),
-        diseases = sis,
-        networks = net,
-        connectors = connectors,
-        verbose = 0,
-    )
-    return sim
 
-
-#%% Tests for the seasonality connector
 
 @sc.timer()
-def test_seasonality_default(do_plot=do_plot):
-    """ Test that seasonality connector runs with default parameters """
-    sc.heading('Testing seasonality default...')
+def test_seasonality(do_plot=do_plot):
+    """ Test seasonality: default, scale variation, shift, disease targeting, and plot """
+    sc.heading('Testing seasonality...')
 
+    # Default params
     sim = make_sis_sim(connectors=ss.seasonality())
     sim.run()
-
-    conn = sim.connectors[0]  # Access from sim (connector is copied)
-    assert len(conn.factors) > 0, 'Expected seasonality factors to be recorded'
-
-    # Check that factors are within expected range (1 ± scale)
+    conn = sim.connectors[0]
     factors = np.array([f[1] for f in conn.factors])
-    assert np.all(factors >= 0), 'Expected all factors to be non-negative'
-    assert np.max(factors) <= 1.2 + 0.01, f'Expected max factor <= 1.2 for default scale=0.2, got {np.max(factors)}'
-    assert np.min(factors) >= 0.8 - 0.01, f'Expected min factor >= 0.8 for default scale=0.2, got {np.min(factors)}'
+    assert len(factors) > 0, 'Expected factors to be recorded'
+    assert np.all(factors >= 0), 'Expected non-negative factors'
+    assert np.max(factors) <= 1.21 and np.min(factors) >= 0.79, \
+        f'Factors out of range for scale=0.2: [{np.min(factors):.3f}, {np.max(factors):.3f}]'
+
+    # Higher scale = wider range
+    sim_lo = make_sis_sim(connectors=ss.seasonality(scale=0.1), dur=365); sim_lo.run()
+    sim_hi = make_sis_sim(connectors=ss.seasonality(scale=0.5), dur=365); sim_hi.run()
+    f_lo = np.array([f[1] for f in sim_lo.connectors[0].factors])
+    f_hi = np.array([f[1] for f in sim_hi.connectors[0].factors])
+    assert np.ptp(f_hi) > np.ptp(f_lo), 'Higher scale should produce wider factor range'
+
+    # Shift moves peak
+    sim1 = make_sis_sim(connectors=ss.seasonality(scale=0.5, shift=0.0), dur=365); sim1.run()
+    sim2 = make_sis_sim(connectors=ss.seasonality(scale=0.5, shift=0.5), dur=365); sim2.run()
+    f1 = np.array([f[1] for f in sim1.connectors[0].factors])
+    f2 = np.array([f[1] for f in sim2.connectors[0].factors])
+    assert np.argmax(f1) != np.argmax(f2), 'Shift should move peak position'
+
+    # Target specific disease
+    sim3 = ss.Sim(n_agents=n_agents, start='2020-01-01', dur=365, dt=ss.days(1), verbose=0,
+        diseases=[ss.SIR(name='sir_a', beta=0.05, dur_inf=10, init_prev=0.05),
+                  ss.SIR(name='sir_b', beta=0.05, dur_inf=10, init_prev=0.05)],
+        networks=ss.RandomNet(n_contacts=4), connectors=ss.seasonality(diseases='sir_a', scale=0.5))
+    sim3.run()
+    assert len(sim3.connectors[0].factors) > 0, 'Targeted seasonality should record factors'
 
     if do_plot:
         plt.figure()
         conn.plot()
-
     return sim
 
 
 @sc.timer()
-def test_seasonality_scale(do_plot=do_plot):
-    """ Test that increasing seasonality scale increases transmission variation """
-    sc.heading('Testing seasonality scale...')
-
-    # Low scale
-    sim_low = make_sis_sim(connectors=ss.seasonality(scale=0.1), dur=365)
-    sim_low.run()
-
-    # High scale
-    sim_high = make_sis_sim(connectors=ss.seasonality(scale=0.5), dur=365)
-    sim_high.run()
-
-    factors_low = np.array([f[1] for f in sim_low.connectors[0].factors])
-    factors_high = np.array([f[1] for f in sim_high.connectors[0].factors])
-
-    range_low = np.max(factors_low) - np.min(factors_low)
-    range_high = np.max(factors_high) - np.min(factors_high)
-
-    assert range_high > range_low, \
-        f'Expected higher scale to produce wider factor range, got low={range_low:.3f} vs high={range_high:.3f}'
-
-    return sim_low, sim_high
-
-
-@sc.timer()
-def test_seasonality_shift(do_plot=do_plot):
-    """ Test that shift parameter offsets the seasonality peak """
-    sc.heading('Testing seasonality shift...')
-
-    sim1 = make_sis_sim(connectors=ss.seasonality(scale=0.5, shift=0.0), dur=365)
-    sim1.run()
-
-    sim2 = make_sis_sim(connectors=ss.seasonality(scale=0.5, shift=0.5), dur=365)
-    sim2.run()
-
-    factors1 = np.array([f[1] for f in sim1.connectors[0].factors])
-    factors2 = np.array([f[1] for f in sim2.connectors[0].factors])
-
-    # The peaks should be at different positions
-    peak1 = np.argmax(factors1)
-    peak2 = np.argmax(factors2)
-    assert peak1 != peak2, \
-        f'Expected shift=0.5 to move peak position, but both peak at index {peak1}'
-
-    return sim1, sim2
-
-
-@sc.timer()
-def test_seasonality_specific_diseases(do_plot=do_plot):
-    """ Test that seasonality can target specific diseases """
-    sc.heading('Testing seasonality targeting specific diseases...')
-
-    sir_a = ss.SIR(name='sir_a', beta=0.05, dur_inf=10, init_prev=0.05)
-    sir_b = ss.SIR(name='sir_b', beta=0.05, dur_inf=10, init_prev=0.05)
-    net = ss.RandomNet(n_contacts=4)
-
-    sim = ss.Sim(
-        n_agents = n_agents,
-        start = '2020-01-01',
-        dur = 365,
-        dt = ss.days(1),
-        diseases = [sir_a, sir_b],
-        networks = net,
-        connectors = ss.seasonality(diseases='sir_a', scale=0.5),
-        verbose = 0,
-    )
-    sim.run()
-
-    assert len(sim.connectors[0].factors) > 0, 'Expected seasonality factors to be recorded'
-    return sim
-
-
-@sc.timer()
-def test_seasonality_plot(do_plot=do_plot):
-    """ Test that seasonality.plot() runs without error """
-    sc.heading('Testing seasonality plot...')
-
-    sim = make_sis_sim(connectors=ss.seasonality(scale=0.3), dur=365)
-    sim.run()
-
-    conn = sim.connectors[0]
-    if do_plot:
-        plt.figure()
-        fig = conn.plot()
-        return fig
-
-    return conn
-
-
-#%% Tests for susceptibility modification pattern
-
-@sc.timer()
-def test_sus_modifier_increases_infections(do_plot=do_plot):
-    """ Test that increasing susceptibility via connector increases infections """
-    sc.heading('Testing susceptibility modifier increases infections...')
-
-    # Without connector
-    sim_base = make_two_disease_sim(connectors=None)
-    sim_base.run()
-
-    # With susceptibility modifier (disease_a infection increases sus to disease_b)
-    conn = SusModifier(disease_a='sir_a', disease_b='sir_b', rel_sus=5.0)
-    sim_conn = make_two_disease_sim(connectors=conn)
-    sim_conn.run()
-
+def test_sus_modifier(do_plot=do_plot):
+    """ Test that susceptibility modification increases infections """
+    sc.heading('Testing susceptibility modifier...')
+    sim_base = make_two_disease_sim(); sim_base.run()
+    sim_conn = make_two_disease_sim(connectors=SusModifier(rel_sus=5.0)); sim_conn.run()
     base_b = sim_base.results.sir_b.cum_infections[-1]
     conn_b = sim_conn.results.sir_b.cum_infections[-1]
-
-    # With generous tolerance for stochastic sim
-    assert conn_b >= base_b * 0.8, \
-        f'Expected connector to increase sir_b infections, got base={base_b} vs connector={conn_b}'
+    assert conn_b >= base_b * 0.8, f'Expected more sir_b infections with connector: base={base_b}, conn={conn_b}'
 
     if do_plot:
         plt.figure()
-        plt.plot(sim_base.results.sir_b.n_infected, label='Without connector')
-        plt.plot(sim_conn.results.sir_b.n_infected, label='With sus modifier')
-        plt.legend()
-        plt.title('Susceptibility modification effect')
-
+        plt.plot(sim_base.results.sir_b.n_infected, label='Baseline')
+        plt.plot(sim_conn.results.sir_b.n_infected, label='Sus modifier')
+        plt.legend(); plt.title('Susceptibility modification')
     return sim_base, sim_conn
 
 
 @sc.timer()
-def test_trans_modifier_increases_infections(do_plot=do_plot):
-    """ Test that increasing transmissibility via connector increases infections """
-    sc.heading('Testing transmissibility modifier increases infections...')
-
-    # Without connector
-    sim_base = make_two_disease_sim(connectors=None)
-    sim_base.run()
-
-    # With transmissibility modifier
-    conn = TransModifier(disease_a='sir_a', disease_b='sir_b', rel_trans=5.0)
-    sim_conn = make_two_disease_sim(connectors=conn)
-    sim_conn.run()
-
-    base_b = sim_base.results.sir_b.cum_infections[-1]
-    conn_b = sim_conn.results.sir_b.cum_infections[-1]
-
-    # With generous tolerance for stochastic sim
-    assert conn_b >= base_b * 0.8, \
-        f'Expected connector to increase sir_b infections, got base={base_b} vs connector={conn_b}'
-
+def test_trans_modifier(do_plot=do_plot):
+    """ Test that transmissibility modification increases infections """
+    sc.heading('Testing transmissibility modifier...')
+    sim_base = make_two_disease_sim(); sim_base.run()
+    sim_conn = make_two_disease_sim(connectors=TransModifier(rel_trans=5.0)); sim_conn.run()
+    assert sim_conn.results.sir_b.cum_infections[-1] >= sim_base.results.sir_b.cum_infections[-1] * 0.8, \
+        'Expected more infections with transmissibility modifier'
     return sim_base, sim_conn
 
 
 @sc.timer()
 def test_protective_connector(do_plot=do_plot):
-    """ Test that a protective connector reduces infections in the target disease """
+    """ Test that a protective connector reduces infections """
     sc.heading('Testing protective connector...')
-
-    # Without connector
-    sim_base = make_two_disease_sim(connectors=None, n=2_000)
-    sim_base.run()
-
-    # With protective connector (disease_a protects against disease_b)
-    conn = ProtectiveConnector(disease_a='sir_a', disease_b='sir_b')
-    sim_prot = make_two_disease_sim(connectors=conn, n=2_000)
-    sim_prot.run()
-
-    base_b = sim_base.results.sir_b.cum_infections[-1]
-    prot_b = sim_prot.results.sir_b.cum_infections[-1]
-
-    assert prot_b <= base_b * 1.2, \
-        f'Expected protective connector to reduce sir_b infections, got base={base_b} vs protected={prot_b}'
-
-    if do_plot:
-        plt.figure()
-        plt.plot(sim_base.results.sir_b.n_infected, label='Without connector')
-        plt.plot(sim_prot.results.sir_b.n_infected, label='With protection')
-        plt.legend()
-        plt.title('Protective connector effect')
-
+    sim_base = make_two_disease_sim(n=2_000); sim_base.run()
+    sim_prot = make_two_disease_sim(connectors=ProtectiveConnector(), n=2_000); sim_prot.run()
+    assert sim_prot.results.sir_b.cum_infections[-1] <= sim_base.results.sir_b.cum_infections[-1] * 1.2, \
+        'Expected fewer sir_b infections with protective connector'
     return sim_base, sim_prot
 
 
-#%% Tests for multiple connectors
-
 @sc.timer()
 def test_multiple_connectors(do_plot=do_plot):
-    """ Test that multiple connectors can run simultaneously """
+    """ Test multiple connectors and mixed types run together """
     sc.heading('Testing multiple connectors...')
-
-    # Two connectors: one modifies sus, one modifies trans
-    conn_sus = SusModifier(disease_a='sir_a', disease_b='sir_b', rel_sus=2.0)
-    conn_trans = TransModifier(disease_a='sir_b', disease_b='sir_a', rel_trans=2.0)
-
-    sim = make_two_disease_sim(connectors=[conn_sus, conn_trans])
+    sim = make_two_disease_sim(connectors=[SusModifier(rel_sus=2.0), TransModifier(rel_trans=2.0)])
     sim.run()
+    assert sim.results.sir_a.cum_infections[-1] > 0, 'Expected sir_a infections'
+    assert sim.results.sir_b.cum_infections[-1] > 0, 'Expected sir_b infections'
 
-    # Both diseases should have infections
-    a_inf = sim.results.sir_a.cum_infections[-1]
-    b_inf = sim.results.sir_b.cum_infections[-1]
-
-    assert a_inf > 0, f'Expected sir_a infections > 0 with connectors, got {a_inf}'
-    assert b_inf > 0, f'Expected sir_b infections > 0 with connectors, got {b_inf}'
-
+    # Mix seasonality + custom
+    sim2 = ss.Sim(n_agents=n_agents, start='2020-01-01', dur=180, dt=ss.days(1), verbose=0,
+        diseases=[ss.SIR(name='sir_a', beta=0.05, dur_inf=10, init_prev=0.05),
+                  ss.SIR(name='sir_b', beta=0.05, dur_inf=10, init_prev=0.05)],
+        networks=ss.RandomNet(n_contacts=4),
+        connectors=[ss.seasonality(diseases='sir_a', scale=0.3), SusModifier(rel_sus=3.0)])
+    sim2.run()
+    assert len(sim2.connectors[0].factors) > 0, 'Seasonality should record factors'
     return sim
 
 
 @sc.timer()
-def test_connector_with_seasonality_and_custom(do_plot=do_plot):
-    """ Test mixing seasonality and custom connectors """
-    sc.heading('Testing seasonality with custom connector...')
-
-    sir_a = ss.SIR(name='sir_a', beta=0.05, dur_inf=10, init_prev=0.05)
-    sir_b = ss.SIR(name='sir_b', beta=0.05, dur_inf=10, init_prev=0.05)
-    net = ss.RandomNet(n_contacts=4)
-
-    sim = ss.Sim(
-        n_agents = n_agents,
-        start = '2020-01-01',
-        dur = 180,
-        dt = ss.days(1),
-        diseases = [sir_a, sir_b],
-        networks = net,
-        connectors = [ss.seasonality(diseases='sir_a', scale=0.3), SusModifier(disease_a='sir_a', disease_b='sir_b', rel_sus=3.0)],
-        verbose = 0,
-    )
-    sim.run()
-
-    assert len(sim.connectors[0].factors) > 0, 'Expected seasonality factors to be recorded'
-    return sim
-
-
-#%% Scientific correctness: vary connector strength
-
-@sc.timer()
-def test_sus_modifier_dose_response(do_plot=do_plot):
-    """ Test that higher rel_sus leads to more infections (dose-response) """
-    sc.heading('Testing susceptibility modifier dose-response...')
-
-    rel_sus_values = [1.0, 3.0, 10.0]
-    cum_infections = []
-
-    for rel_sus in rel_sus_values:
-        conn = SusModifier(disease_a='sir_a', disease_b='sir_b', rel_sus=rel_sus)
-        sim = make_two_disease_sim(connectors=conn, n=2_000)
+def test_dose_response_and_base_class(do_plot=do_plot):
+    """ Test dose-response (higher rel_sus -> more infections) and base class """
+    sc.heading('Testing dose-response and base class...')
+    assert isinstance(ss.Connector(), ss.Module), 'Connector should be a Module subclass'
+    results = []
+    for rel_sus in [1.0, 3.0, 10.0]:
+        sim = make_two_disease_sim(connectors=SusModifier(rel_sus=rel_sus), n=2_000)
         sim.run()
-        cum_infections.append(sim.results.sir_b.cum_infections[-1])
-
-    # With generous tolerance: higher rel_sus should generally lead to more infections
-    # We check that the highest is >= the lowest (allowing stochastic variation)
-    assert cum_infections[2] >= cum_infections[0] * 0.7, \
-        f'Expected highest rel_sus to produce at least as many infections: ' \
-        f'rel_sus=1.0 -> {cum_infections[0]}, rel_sus=10.0 -> {cum_infections[2]}'
-
-    if do_plot:
-        plt.figure()
-        plt.bar(range(len(rel_sus_values)), cum_infections, tick_label=[str(v) for v in rel_sus_values])
-        plt.xlabel('rel_sus')
-        plt.ylabel('Cumulative sir_b infections')
-        plt.title('Susceptibility modifier dose-response')
-
-    return cum_infections
+        results.append(sim.results.sir_b.cum_infections[-1])
+    assert results[2] >= results[0] * 0.7, f'Expected dose-response: rel_sus=1->{results[0]}, rel_sus=10->{results[2]}'
+    return results
 
 
-@sc.timer()
-def test_connector_base_class(do_plot=do_plot):
-    """ Test that the Connector base class can be instantiated and is a Module """
-    sc.heading('Testing Connector base class...')
-
-    conn = ss.Connector()
-    assert isinstance(conn, ss.Module), 'Expected Connector to be a Module subclass'
-
-    return conn
-
-
-#%% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
     T = sc.timer()
-
-    # Seasonality tests
-    test_seasonality_default(do_plot=do_plot)
-    test_seasonality_scale(do_plot=do_plot)
-    test_seasonality_shift(do_plot=do_plot)
-    test_seasonality_specific_diseases(do_plot=do_plot)
-    test_seasonality_plot(do_plot=do_plot)
-
-    # Connector pattern tests
-    test_sus_modifier_increases_infections(do_plot=do_plot)
-    test_trans_modifier_increases_infections(do_plot=do_plot)
+    test_seasonality(do_plot=do_plot)
+    test_sus_modifier(do_plot=do_plot)
+    test_trans_modifier(do_plot=do_plot)
     test_protective_connector(do_plot=do_plot)
-
-    # Multiple connectors
     test_multiple_connectors(do_plot=do_plot)
-    test_connector_with_seasonality_and_custom(do_plot=do_plot)
-
-    # Scientific correctness
-    test_sus_modifier_dose_response(do_plot=do_plot)
-
-    # Base class
-    test_connector_base_class(do_plot=do_plot)
-
+    test_dose_response_and_base_class(do_plot=do_plot)
     T.toc()
-
-    if do_plot:
-        plt.show()
+    if do_plot: plt.show()
