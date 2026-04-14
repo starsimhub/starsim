@@ -16,7 +16,15 @@ _ = None # For function signatures
 
 
 class Disease(ss.Module):
-    """ Base module class for diseases """
+    """
+    Base module class for diseases.
+
+    Diseases define how agents become infected, progress through health states, and
+    potentially die. They are transmitted via `ss.Network` objects and can be modified
+    by `ss.Intervention` and `ss.Connector` modules. See `ss.Infection` for the
+    standard base class for infectious diseases, and `ss.SIR`/`ss.SIS` for common
+    compartmental patterns.
+    """
 
     def __init__(self, pars=None, **kwargs):
         super().__init__()

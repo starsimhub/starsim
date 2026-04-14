@@ -14,7 +14,9 @@ class Sim(ss.Base):
     The Sim object
 
     All Starsim simulations run via the Sim class. It is responsible for initializing
-    and running all modules and generating results.
+    and running all modules and generating results. The sim orchestrates `ss.People`,
+    `ss.Network`, `ss.Disease`, `ss.Intervention`, `ss.Demographics`, and other
+    modules via the `ss.Loop` integration loop.
 
     Args:
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments

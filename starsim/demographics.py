@@ -15,9 +15,14 @@ _ = None
 
 class Demographics(ss.Module):
     """
+    Base class for demographic modules.
+
     A demographic module typically handles births/deaths/migration and takes
     place at the start of the timestep, before networks are updated and before
-    any disease modules are executed.
+    any disease modules are executed. See `ss.Births`, `ss.Deaths`, and
+    `ss.Pregnancy` for built-in implementations. Demographic modules modify
+    the `ss.People` population and can interact with `ss.Network` objects
+    (e.g. to add newborns to contact networks).
     """
     pass
 

@@ -29,7 +29,10 @@ class Route(ss.Module):
 class Network(Route):
     """
     A class holding a single network of contact edges (connections) between people
-    as well as methods for updating these.
+    as well as methods for updating these. Networks mediate disease transmission
+    between agents in `ss.People`; see `ss.Disease` for how transmission uses
+    network edges, and `ss.RandomNet`, `ss.MFNet`, `ss.MaternalNet` for
+    built-in network types.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
