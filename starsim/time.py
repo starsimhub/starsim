@@ -1085,6 +1085,7 @@ class dur(TimePar):
         return -1*self
 
     def _compare_args(self, other):
+        """ Normalize arguments for comparison: use years for date/dur types, raw value for numbers """
         if isinstance(other, (ss.dur, ss.date)):
             return self.years, other.years, True
         elif sc.isnumber(other) or isinstance(other, np.ndarray):
@@ -2336,6 +2337,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
 
     @staticmethod
     def _convert_single(v):
+        """ Convert a single date-like value to years; pass through numeric values unchanged """
         if isinstance(v, ss.date):
             return v.years
         elif isinstance(v, (pd.Timestamp, dt.date, dt.datetime)):

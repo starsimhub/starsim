@@ -592,6 +592,7 @@ class CalibComponent(sc.prettyobj):
         return conform_
 
     def _combine_reps_nll(self, expected, actual, **kwargs):
+        """ Aggregate replicates (if combine_reps is set) and compute negative log likelihood """
         if self.combine_reps is None:
             nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
         else:

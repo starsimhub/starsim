@@ -187,7 +187,7 @@ class Deaths(Demographics):
         super().__init__()
         self.define_pars(
             rel_death = 1,
-            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(10),  # Default = a fixed rate of 1%/year (10 per 1000), overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
