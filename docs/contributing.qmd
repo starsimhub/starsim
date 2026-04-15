@@ -2,4 +2,4 @@
 pagetitle: "Contributing"
 ---
 
-{{< include ../contributing.md >}}
+{{< include ../CONTRIBUTING.md >}}
