@@ -3,6 +3,11 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.3.4 (2026-04-XX)
+- TBC
+- *GitHub info*: PR [TBC](https://github.com/starsimhub/starsim/pull/TBC)
+
+
 ## Version 3.3.3 (2026-04-15)
 - Added `ss.parse_age_range()` and `ss.apply_age_range()` to parse age range specifications like `'[5, 10), [10, 15)'`.
 - Optimized `ss.RandomNet()` performance.
