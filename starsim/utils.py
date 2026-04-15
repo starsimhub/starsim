@@ -74,6 +74,7 @@ class ndict(sc.objdict):
         return self
 
     def _check_key(self, key, overwrite=None):
+        """ Validate that a key can be added; raise ValueError or warn if it already exists """
         if overwrite is None: overwrite = self._overwrite
         if key in self:
             if not overwrite:
