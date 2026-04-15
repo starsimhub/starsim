@@ -9,9 +9,6 @@ pytest -v test_*.py -n auto --cov=../starsim --cov-config=.coveragerc --cov-cont
 echo 'Creating HTML report...'
 coverage html
 
-echo 'Creating JSON ...'
-coverage json
-
 echo 'Printing report...'
 coverage report
 
