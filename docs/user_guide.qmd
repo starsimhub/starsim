@@ -7,13 +7,13 @@ pagetitle: "User guide"
 These user guides provide a more in-depth look at each topic compared to the corresponding tutorials.
 
 :::{.callout-note}
-You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+You can download these user guides as Jupyter notebooks to run them locally. Look for the download button at the top of each page.
 :::
 
 ::: {.callout-tip}
-## Running tutorials locally
+## Running user guides locally
 
-To run these tutorials locally:
+To run these user guides locally:
 
 1. Clone the Starsim repository
 2. Install Starsim and its dependencies

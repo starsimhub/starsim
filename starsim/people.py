@@ -735,6 +735,7 @@ class Filter(sc.prettyobj):
             return self._uids
 
     def _func(self, obj, op):
+        """ Apply a comparison operator to the stale filter's state array and return a filtered result """
         if not self.stale:
             errormsg = "To use logical operations on a Filter object, call first, e.g. filt('age') > 5"
             raise RuntimeError(errormsg)

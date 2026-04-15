@@ -14,7 +14,9 @@ class Intervention(ss.Module):
     Base class for interventions.
 
     The key method of the intervention is `step()`, which is called with the sim
-    on each timestep.
+    on each timestep. Interventions can modify disease states (e.g. treating or vaccinating
+    agents) and typically interact with `ss.Disease` and `ss.Product` objects.
+    See `ss.BaseVaccine` and `ss.BaseTreatment` for common patterns.
     """
 
     def __init__(self, *args, eligibility=None, **kwargs):

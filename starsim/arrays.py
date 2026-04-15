@@ -163,7 +163,7 @@ class Arr(BaseArr):
     is equal to `sim.people.age.values.mean()`, not `sim.people.age.raw.mean()`.
 
     If indexing by an int or slice, `Arr.values` is used. If indexing by an
-    [`ss.uids`](`starsim.arrays.uids`) object, `Arr.raw` is used. `Arr` objects can't be directly
+    `ss.uids` object, `Arr.raw` is used. `Arr` objects can't be directly
     indexed by a list or array of ints, as this would be ambiguous about whether
     `values` or `raw` is intended. For example, if there are 1000 people in a
     simulation and 100 of them have died, `sim.people.age[999]` will return
@@ -185,8 +185,19 @@ class Arr(BaseArr):
         label (str): The human-readable name for the state
         raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
-        people ([`ss.People`](`starsim.people.People`)): Optionally specify an initialized People object, used to construct temporary Arr instances
+        people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
         mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
+
+    **Examples**::
+
+        # Create a standalone Arr for quick testing
+        age = ss.Arr('age', default=0, mock=5) # 5 = length if not supplying a real People object
+        age[:] = [20, 30, 40, 50, 60]
+        age.mean()  # Returns 40.0
+
+        # Use within a simulation
+        sim = ss.Sim(n_agents=100).init()
+        sim.people.age.mean()  # Mean age of active agents
     """
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
         # Set attributes
@@ -476,6 +487,7 @@ class Arr(BaseArr):
             return uids(np.arange(len(self.raw)))
 
     def count(self):
+        """ Count the number of nonzero (truthy) values among active agents. """
         return np.count_nonzero(self.values)
 
     @property
@@ -696,7 +708,17 @@ class IntArr(Arr):
 
 
 class BoolArr(Arr):
-    """ Subclass of `ss.Arr` with defaults for booleans """
+    """
+    Subclass of `ss.Arr` with defaults for booleans.
+
+    **Examples**::
+
+        # Create a standalone BoolArr
+        infected = ss.BoolArr('infected', mock=5)
+        infected[[0, 2, 4]] = True
+        infected.count()  # Returns 3
+        infected.uids     # Returns ss.uids([0, 2, 4])
+    """
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
@@ -777,10 +799,12 @@ class BoolArr(Arr):
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
     def isnan(self):
+        """ Always False for BoolArr (booleans cannot be NaN). """
         return self.asnew(np.full_like(self.values, fill_value=False), cls=BoolArr)
 
     @property
     def notnan(self):
+        """ Always True for BoolArr (booleans cannot be NaN). """
         return self.asnew(np.full_like(self.values, fill_value=True), cls=BoolArr)
 
     @property
@@ -853,6 +877,15 @@ class uids(np.ndarray):
     (``+=`` with a ``uids`` RHS, ``-=``, ``|=``, ``&=``, ``^=``) must return a new array and rebind
     the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
     and preserves ``id(self)``.
+
+    **Examples**::
+
+        a = ss.uids([1, 2, 3])
+        b = ss.uids([3, 4, 5])
+        a + b   # Concatenate: uids([1, 2, 3, 3, 4, 5])
+        a | b   # Union:       uids([1, 2, 3, 4, 5])
+        a & b   # Intersect:   uids([3])
+        a - b   # Difference:  uids([1, 2])
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array

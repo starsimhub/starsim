@@ -16,7 +16,15 @@ _ = None # For function signatures
 
 
 class Disease(ss.Module):
-    """ Base module class for diseases """
+    """
+    Base module class for diseases.
+
+    Diseases define how agents become infected, progress through health states, and
+    potentially die. They are transmitted via `ss.Network` objects and can be modified
+    by `ss.Intervention` and `ss.Connector` modules. See `ss.Infection` for the
+    standard base class for infectious diseases, and `ss.SIR`/`ss.SIS` for common
+    compartmental patterns.
+    """
 
     def __init__(self, pars=None, **kwargs):
         super().__init__()
@@ -282,6 +290,14 @@ class Infection(Disease):
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):
+        """
+        Route newly infected agents to congenital or postnatal prognosis
+        assignment based on age (age <= 0 is treated as in-utero).
+
+        Args:
+            uids (UIDs):    UIDs of newly infected agents.
+            sources (UIDs): UIDs of the agents who transmitted to them (optional).
+        """
         sim = self.sim
         congenital = sim.people.age[uids] <= 0
         if np.count_nonzero(congenital):
@@ -305,7 +321,7 @@ class Infection(Disease):
 
             self.define_pars(
                 birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
-                birth_outcomes     = sc.objdict(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),
+                birth_outcomes     = sc.objdict(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
             )
 
         Each outcome name needs a matching ``ti_<name>`` FloatArr state; non-lethal
@@ -385,6 +401,7 @@ class Infection(Disease):
         return
 
     def update_results(self):
+        """ Update new_infections and prevalence for the current timestep. """
         super().update_results()
         res = self.results
         ti = self.ti
@@ -400,6 +417,7 @@ class Infection(Disease):
         return
 
     def finalize_results(self):
+        """ Compute cumulative infections from the new-infections timeseries. """
         res = self.results
         res.cum_infections[:] = np.cumsum(res.new_infections[:])
         super().finalize_results() # Called after to scale the results
@@ -535,6 +553,7 @@ class NCD(Disease):
 
     @property
     def not_at_risk(self):
+        """ Boolean array of agents not currently at risk. """
         return ~self.at_risk
 
     def init_post(self):
@@ -726,6 +745,7 @@ class SIS(Infection):
         return
 
     def update_immunity(self):
+        """ Apply exponential waning to immunity and update relative susceptibility. """
         waning = self.pars.waning.to_prob() # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)
         has_imm = (self.immunity > 0).uids
         self.immunity[has_imm] *= (1-waning)

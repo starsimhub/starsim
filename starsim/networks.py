@@ -22,6 +22,7 @@ class Route(ss.Module):
     A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
     """
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
+        """ Compute transmission probabilities along this route (must be overridden by subclasses). """
         errormsg = 'compute_transmission() must be defined by Route subclasses'
         raise NotImplementedError(errormsg)
 
@@ -29,7 +30,10 @@ class Route(ss.Module):
 class Network(Route):
     """
     A class holding a single network of contact edges (connections) between people
-    as well as methods for updating these.
+    as well as methods for updating these. Networks mediate disease transmission
+    between agents in `ss.People`; see `ss.Disease` for how transmission uses
+    network edges, and `ss.RandomNet`, `ss.MFNet`, `ss.MaternalNet` for
+    built-in network types.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
@@ -413,6 +417,7 @@ class DynamicNetwork(Network):
         return
 
     def end_pairs(self):
+        """ Remove partnerships whose duration has expired or whose members have died. """
         people = self.sim.people
         self.edges.dur = self.edges.dur - 1 # Assume that the edge duration is in units of self.t.dt
 
@@ -432,13 +437,13 @@ class SexualNetwork(DynamicNetwork):
         return
 
     def active(self, people):
-        # Exclude people who are not alive
+        """ Return boolean array of agents who are alive, participating, and past sexual debut. """
         valid_age = people.age > self.debut
         active = self.participant & valid_age & people.alive
         return active
 
     def available(self, people, sex):
-        # Currently assumes unpartnered people are available
+        """ Return UIDs of active agents of the given sex who are not currently partnered. """
         # Could modify this to account for concurrency
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
@@ -449,6 +454,7 @@ class SexualNetwork(DynamicNetwork):
         return available.uids
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
+        """ Compute per-edge transmission probability accounting for number of sex acts. """
         if inds is None: inds = Ellipsis
         return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds]))
 
@@ -562,19 +568,6 @@ class RandomNet(DynamicNetwork):
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
-    def get_source(inds, n_contacts):
-        """ Optimized helper function for getting contacts """
-        n_half_edges = np.sum(n_contacts)
-        count = 0
-        source = np.zeros((n_half_edges,), dtype=ss_int)
-        for i, person_id in enumerate(inds):
-            n = n_contacts[i]
-            source[count: count + n] = person_id
-            count += n
-        return source
-
     def get_edges(self, inds, n_contacts):
         """
         Efficiently find edges
@@ -596,7 +589,7 @@ class RandomNet(DynamicNetwork):
         Returns:
             Two arrays, for source and target
         """
-        source = self.get_source(inds, n_contacts)
+        source = np.repeat(inds, n_contacts)
         target = self.dist.rng.permutation(source)
         self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
@@ -623,16 +616,26 @@ class RandomNet(DynamicNetwork):
 
             # Get the new edges -- the key step
             p1, p2 = self.get_edges(uids, n_conn)
-            beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
+            n = len(p1)
+            beta = np.full(n, self.pars.beta, dtype=ss_float)
 
             if isinstance(p.dur, ss.Dist):
                 dur = p.dur.rvs(p1)
             elif p.dur == 0:
-                dur = np.zeros(len(p1))
+                dur = np.zeros(n)
             else:
-                dur = np.ones(len(p1))*(p.dur/self.t.dt) # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+                dur = np.ones(n)*(p.dur/self.t.dt)
 
-            self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+            # Use zero-copy view for UIDs and skip concatenation when network is empty
+            p1 = p1.view(ss.uids)
+            p2 = p2.view(ss.uids)
+            if current == 0:
+                self.edges.p1 = p1
+                self.edges.p2 = p2
+                self.edges.beta = beta
+                self.edges.dur = dur
+            else:
+                self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
 
@@ -673,7 +676,7 @@ class RandomSafeNet(DynamicNetwork):
         n_agents = len(uids)
         n_conn = self.pars.n_edges
         r_list = []
-        for i in range(n_conn):
+        for i in range(n_conn): # Necessary loop; not possible to vectorize given the behavior of the random number generator
             r = self.dist.rvs(uids)
             r_list.append(r)
         r_arr = np.array(r_list).flatten()
@@ -1188,40 +1191,48 @@ class HouseholdNet(Network):
         if not self.dynamic:
             return
 
+        self.add_births()
+
         if np.mod(self.ti, self.pars.update_freq):
             return
 
-        self.add_births()
         self.create_new_households()
         return
 
     def add_births(self):
         sim = self.sim
-        birth_uids = ss.uids((sim.people.age < self.pars.update_freq * self.sim.t.dt_year))
+        ppl = sim.people
+
+        # Find agents born during the sim (have a parent), already delivered
+        # (age >= 0), and not yet assigned to a household (household_ids is NaN).
+        # The isnan guard ensures each newborn is processed exactly once.
+        candidates = ss.uids(ppl.parent.notnan & (ppl.age >= 0))
+        if len(candidates) == 0:
+            return 0
+        birth_uids = candidates[np.isnan(self.household_ids[candidates])]
         if len(birth_uids) == 0:
             return 0
 
-        mat_uids = sim.people.parent[birth_uids]
-        keep = mat_uids != sim.people.parent.nan
-        birth_uids = birth_uids[keep]
-        mat_uids = mat_uids[keep]
-        if len(birth_uids) == 0:
-            return 0
+        mat_uids = ppl.parent[birth_uids]
+
+        # Assign household IDs before creating edges so the newborn is
+        # included when looking up household members
+        self.household_ids[birth_uids] = self.household_ids[mat_uids]
 
         p1 = []
         p2 = []
         for new_uid, mat_uid in zip(birth_uids, mat_uids):
             hh_contacts = ss.uids(self.household_ids == self.household_ids[mat_uid])
+            hh_contacts = hh_contacts[hh_contacts != new_uid]  # Exclude self-loops
             p1.append(hh_contacts)
             p2.append([new_uid] * len(hh_contacts))
 
-        p1 = ss.uids.concatenate(p1)
-        p2 = ss.uids.concatenate(p2)
+        if p1:
+            p1 = ss.uids.concatenate(p1)
+            p2 = ss.uids.concatenate(p2)
+            beta = np.ones(len(p1), dtype=ss.dtypes.float)
+            self.append(p1=p1, p2=p2, beta=beta)
 
-        beta = np.ones(len(p1), dtype=ss.dtypes.float)
-        self.append(p1=p1, p2=p2, beta=beta)
-
-        self.household_ids[birth_uids] = self.household_ids[mat_uids]
         return len(birth_uids)
 
     def create_new_households(self):
@@ -1348,7 +1359,7 @@ class MixingPools(Route):
             beta = 0.1,
             src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
-            n_contacts = [[2.4, 0.49], [0.91, 0.16]],
+            n_contacts = [[2.4, 0.49], [0.91, 0.16]],  # Illustrative contact matrix
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()

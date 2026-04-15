@@ -3,6 +3,15 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.3.3 (2026-04-15)
+- Added `ss.parse_age_range()` and `ss.apply_age_range()` to parse age range specifications like `'[5, 10), [10, 15)'`.
+- Optimized `ss.RandomNet()` performance.
+- Fixed `ss.HouseholdNet.add_births()` to assign household IDs exactly once at delivery, rather than using an age-window heuristic tied to `update_freq`. Newborns are now identified by having a parent, age >= 0, and no household ID yet assigned. Moved HouseholdNet's `add_births()` call before the `update_freq` gate so it runs every timestep, ensuring correct behavior with any update frequency or when the network timestep exceeds gestation.
+- Inspired by [Starsim.jl](http://epirecip.es/Starsim.jl/dev/), added examples of Starsim models translated into pure Python, Numba, Jax, Julia, and Rust in `starsim_examples/translations`. (Thanks to [Simon Frost](https://github.com/sdwfrost) for the Julia conversion.)
+- Added code coverage, linting, and performance benchmarks to CI/CD.
+- *GitHub info*: PR [1308](https://github.com/starsimhub/starsim/pull/1308)
+
+
 ## Version 3.3.2 (2026-04-04)
 - Added a `copy_sim` argument to `ss.MultiSim.run()` to handle large parallel runs of a single sim (e.g. `ss.MultiSim(sim, n_runs=100)`), where multiprocess pickling isn't guaranteed to implicitly copy the sim.
 - Removed (unused) `_locked` attribute from `ss.TimePar`.

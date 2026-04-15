@@ -15,9 +15,14 @@ _ = None
 
 class Demographics(ss.Module):
     """
+    Base class for demographic modules.
+
     A demographic module typically handles births/deaths/migration and takes
     place at the start of the timestep, before networks are updated and before
-    any disease modules are executed.
+    any disease modules are executed. See `ss.Births`, `ss.Deaths`, and
+    `ss.Pregnancy` for built-in implementations. Demographic modules modify
+    the `ss.People` population and can interact with `ss.Network` objects
+    (e.g. to add newborns to contact networks).
     """
     pass
 
@@ -182,7 +187,7 @@ class Deaths(Demographics):
         super().__init__()
         self.define_pars(
             rel_death = 1,
-            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(10),  # Default = a fixed rate of 1%/year (10 per 1000), overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -260,7 +265,7 @@ class Deaths(Demographics):
         p_death = death_rate.to_prob(self.t.dt)  # Convert to probability per timestep
 
         if sc.isnumber(drd) or isinstance(drd, ss.Rate):
-            p_death = p_death[0] # TODO: what???
+            p_death = p_death[0] # to_prob() returns an array; extract the scalar when the input was scalar/Rate
         return p_death
 
     def init_results(self):
