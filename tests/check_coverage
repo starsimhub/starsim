@@ -4,10 +4,13 @@
 export SCIRIS_BACKEND='agg' # Don't open up figures
 
 echo 'Running tests...'
-pytest -v test_*.py -n auto --cov-config=.coveragerc --cov=../starsim --durations=0
+pytest -v test_*.py -n auto --cov=../starsim --cov-config=.coveragerc --cov-context=test --durations=0
 
 echo 'Creating HTML report...'
 coverage html
+
+echo 'Creating JSON ...'
+coverage json
 
 echo 'Printing report...'
 coverage report
