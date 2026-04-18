@@ -89,6 +89,33 @@ def build_interlinks():
     return run('python -m quartodoc interlinks')
 
 
+@sc.timer('Build objects.inv')
+def build_objects_inv(json_path='objects.json', inv_path='objects.inv'):
+    """
+    Convert the quartodoc JSON inventory into a Sphinx-compatible objects.inv,
+    so other projects can resolve Starsim references via intersphinx.
+    """
+    import sphobjinv as soi
+    sc.heading('Building Sphinx objects.inv ...')
+    data = sc.loadjson(json_path)
+    inv = soi.Inventory()
+    inv.project = data.get('project', 'starsim')
+    inv.version = str(data.get('version', ss.__version__))
+    for item in data['items']:
+        inv.objects.append(soi.DataObjStr(
+            name=item['name'],
+            domain=item['domain'],
+            role=item['role'],
+            priority=str(item.get('priority', '1')),
+            uri=item['uri'],
+            dispname=item.get('dispname', '-') or '-',
+        ))
+    with open(inv_path, 'wb') as f:
+        f.write(soi.compress(inv.data_file()))
+    print(f'  Wrote {len(inv.objects)} entries to {inv_path}')
+    return
+
+
 def qmd2py(qmd_path, py_path=None, keep_text=True):
     """
     Convert a .qmd file to a .py file by extracting Python code cells.
@@ -287,6 +314,7 @@ if __name__ == '__main__':
         build_api_docs()
         customize_aliases()
         build_interlinks()
+        build_objects_inv()
 
     elif 'post' in sys.argv:
         clean_outputs()

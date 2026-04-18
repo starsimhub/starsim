@@ -26,6 +26,7 @@ rm -rvf user_guide/.ipynb_checkpoints/
 rm -rvf user_guide/.jupyter_cache/
 rm -rvf user_guide/.virtual_documents/
 rm -vf objects.json
+rm -vf objects.inv
 
 duration=$(( SECONDS - start ))
 echo "Cleaned after $duration seconds."
