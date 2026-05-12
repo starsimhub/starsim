@@ -1,7 +1,7 @@
 # Run downstream tests on Starsim models.
 #
-# Note: this test only runs on pushes/merges
-# to main, not on all PRs.
+# Note: this test runs on pushes/merges to main
+# and on PRs targeting main.
 #
 # Current supported models are:
 #   1. STIsim
@@ -18,6 +18,9 @@ on:
   workflow_call:
   workflow_dispatch:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
 

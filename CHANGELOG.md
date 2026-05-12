@@ -20,6 +20,35 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
 
 
+## Version 3.3.3 (2026-04-15)
+- Added `ss.parse_age_range()` and `ss.apply_age_range()` to parse age range specifications like `'[5, 10), [10, 15)'`.
+- Optimized `ss.RandomNet()` performance.
+- Fixed `ss.HouseholdNet.add_births()` to assign household IDs exactly once at delivery, rather than using an age-window heuristic tied to `update_freq`. Newborns are now identified by having a parent, age >= 0, and no household ID yet assigned. Moved HouseholdNet's `add_births()` call before the `update_freq` gate so it runs every timestep, ensuring correct behavior with any update frequency or when the network timestep exceeds gestation.
+- Inspired by [Starsim.jl](http://epirecip.es/Starsim.jl/dev/), added examples of Starsim models translated into pure Python, Numba, Jax, Julia, and Rust in `starsim_examples/translations`. (Thanks to [Simon Frost](https://github.com/sdwfrost) for the Julia conversion.)
+- Added code coverage, linting, and performance benchmarks to CI/CD.
+- *GitHub info*: PR [1308](https://github.com/starsimhub/starsim/pull/1308)
+
+
+## Version 3.3.2 (2026-04-04)
+- Added a `copy_sim` argument to `ss.MultiSim.run()` to handle large parallel runs of a single sim (e.g. `ss.MultiSim(sim, n_runs=100)`), where multiprocess pickling isn't guaranteed to implicitly copy the sim.
+- Removed (unused) `_locked` attribute from `ss.TimePar`.
+- Converted tutorials and user guide from Jupyter notebook (JSON) to Quarto notebook (Markdown) format.
+- Added GitHub Actions workflows for test coverage, docs build, and linting.
+- Changed from implicit (`*`) to explicit imports in `__init__.py`, and removed `__all__` from individual modules.
+- *GitHub info*: PR [1293](https://github.com/starsimhub/starsim/pull/1293)
+
+
+## Version 3.3.1 (2026-04-02)
+- Added `uids.concatenate()`, which unifies `uids.concat()` and `uids.cat()` into a single method that works as both an instance method (`x.concatenate(y)`) and an unbound class method (`ss.uids.concatenate(x, y)` or `ss.uids.concatenate([x, y])`). `None` values are silently filtered. 
+- `uids.concat()` and `uids.cat()` are deprecated but provide a `DeprecationWarning` for backwards compatibility, to be removed in a future release.
+- Added `+` and `+=` operators to `ss.uids` for concatenation (e.g. `a + b` is equivalent to `a.concatenate(b)`). Note that `+` preserves duplicates, unlike `|` which deduplicates.
+- Comparison operations on `ss.uids` (e.g. `a == b`) now correctly return a plain `np.ndarray` instead of a `uids` instance.
+- Scalar reductions on `ss.uids` (e.g. `x.max()`, `x.min()`) now return a plain Python `int`, consistent with element indexing (`x[0]`).
+- Numeric aggregation operations that are not meaningful for UID arrays (`sum()`, `mean()`, `std()`, `var()`, `prod()`, `cumsum()`, `cumprod()`) now raise `TypeError`.
+- Added `ndim` to `ss.TimePar`, fixing a bug when trying to assign scalar TimePars (e.g. `ss.years(1990)`) to `pandas` dataframes.
+- *GitHub info*: PR [1279](https://github.com/starsimhub/starsim/pull/1279)
+
+
 ## Version 3.3.0 (2026-03-27)
 - Made scalar time parameters behave more consistently by removing the ability to index them if they are scalars, and also having `np.iterable()` return `False` for such parameters
 - **Backwards-compatibility notes:** This change may cause simulation results to be numerically different, as it will cause distributions to use a more efficient sampling method for affected scalar parameters (in such cases, there is likely to be a performance increase)

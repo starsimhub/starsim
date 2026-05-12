@@ -1,0 +1,156 @@
+---
+title: Array indexing
+jupyter: python3
+---
+
+
+This guide covers array indexing concepts in Starsim, including universal identifiers (UIDs), active UIDs (auids), and proper array operations.
+
+## Overview
+
+Starsim uses an indexing system built on NumPy arrays to efficiently manage agents throughout their lifecycle, including when they die or are removed from the simulation. Understanding this system is crucial for writing correct and efficient code.
+
+## Key concepts
+
+### Universal identifiers (UIDs)
+
+Every agent in Starsim has a unique identifier called a **universal identifier** or **UID**. UIDs are integers that:
+
+- Are assigned sequentially starting from 0
+- Never change during an agent's lifetime
+- Are not reused when agents die
+- Can be used to index any agent, whether alive or dead
+
+### Active UIDs (auids)
+
+The simulation also maintains a list of **active UIDs** (auids), which are the UIDs of agents who are currently alive and active in the simulation. This is a dynamic subset of all UIDs.
+
+### Array structure
+
+Starsim arrays have two main components:
+
+- `raw`: Contains data for all agents ever created (indexed by UID)
+- `values`: Contains data for active agents only (indexed by position in auids)
+
+Let's see this in action:
+
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+# Create a simple simulation to demonstrate indexing
+pars = dict(
+    n_agents=10,
+    diseases=dict(type='sir', init_prev=0.5, p_death=0.2),
+    networks='random',
+)
+
+sim = ss.Sim(pars)
+sim.run()
+
+print(f"Number of agents: {len(sim.people)}")
+print(f"UIDs: {sim.people.uid}")
+print(f"Active UIDs (auids): {sim.people.auids}")
+print(f"All UIDs: {sim.people.uid.raw}")
+print(f"Alive: {sim.people.alive.raw}")
+print(f"Ages (values): {sim.people.age}")
+print(f"Ages (raw): {sim.people.age.raw}")
+```
+
+## Operations on active vs all agents
+
+This is a crucial distinction in Starsim:
+
+- **Statistical operations** (like `.mean()`, `.sum()`, `.std()`) operate on **active agents only**
+- **Indexing operations** depend on what type of index you use:
+  - `int` or `slice`: operates on active agents (`values`)
+  - `ss.uids()`: operates on all agents (`raw`)
+
+Let's demonstrate this:
+
+```{python}
+print(f"After simulation:")
+print(f"Total agents ever created: {len(sim.people.uid.raw)}")
+print(f"Active agents: {len(sim.people.auids)}")
+print(f"Active UIDs: {sim.people.auids}")
+
+# Statistical operations work on active agents only
+print(f"\nMean age (active agents): {sim.people.age.mean():.2f}")
+print(f"Mean age (manual calculation): {sim.people.age.values.mean():.2f}")
+
+# This would be different if we included all agents (including dead ones)
+print(f"Mean age (all agents, including dead): {sim.people.age.raw[sim.people.age.raw != sim.people.age.nan].mean():.2f}")
+```
+
+## Proper indexing examples
+
+Here are examples of correct and incorrect ways to index Starsim arrays:
+
+### Correct indexing patterns
+
+```{python}
+# ✅ Using integer indices (works on active agents)
+age_of_first_active = sim.people.age[0]
+print(f"Age of first active agent: {age_of_first_active}")
+
+# ✅ Using ss.uids() for specific UIDs
+specific_uids = ss.uids([0, 1, 2])
+ages_by_uid = sim.people.age[specific_uids]
+print(f"Ages of UIDs {specific_uids}: {ages_by_uid}")
+
+# ✅ Using boolean arrays from states
+female_uids = sim.people.female.uids  # This gets UIDs of female agents
+female_ages = sim.people.age[female_uids]
+print(f"Ages of female agents: {female_ages}")
+
+# ✅ Using .true() and .false() methods
+alive_uids = sim.people.alive.true()
+dead_uids = sim.people.alive.false()
+print(f"Alive UIDs: {alive_uids}")
+print(f"Dead UIDs: {dead_uids}")
+```
+
+### Incorrect indexing patterns
+
+These examples show what **NOT** to do:
+
+```{python}
+import sciris as sc
+
+# ❌ Don't index with raw lists of integers - this is ambiguous!
+with sc.tryexcept() as tc:
+    print('This raises an error:')
+    sim.people.age[[0, 1, 2]]  # This would raise an error
+
+# ❌ Don't mix up .values and .raw
+age = sim.people.age
+print('Mean age:', age.mean())
+print('Mean age (values):', age.values.mean()) # <- same as above
+print('Mean age (raw):', age.raw.mean()) # <- different since includes dead agents
+```
+
+## Best practices and common pitfalls
+
+### Do:
+
+1. **Use `ss.uids()` when you need to index by specific UIDs**
+2. **Use statistical methods (`.mean()`, `.sum()`, etc.) directly on arrays** - they automatically work on active agents
+3. **Use `.uids` property of boolean arrays** to get UIDs of agents matching criteria
+4. **Use `.true()` and `.false()` methods** for cleaner boolean array handling
+5. **Remember that integer indexing works on active agents**, not UIDs
+
+### Don't:
+
+1. **Don't index with raw lists of integers** - use `ss.uids()` instead
+2. **Don't use `.raw` arrays for statistics** unless you specifically need to include dead agents
+3. **Don't use boolean operators (`&`, `|`) on non-boolean arrays** - use comparison operators instead
+4. **Don't forget to check if UID arrays are empty** before performing operations on them
+
+### Performance tips:
+
+1. **Boolean indexing is efficient** - use it to filter large populations
+2. **UID operations are optimized** - use set operations like `.intersect()` and `.union()` when appropriate
+3. **Statistical operations on arrays are fast** - they use NumPy under the hood
+4. **Avoid loops when possible** - vectorized operations are much faster
+

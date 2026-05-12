@@ -8,7 +8,6 @@ import functools as ft
 import sciris as sc
 import starsim as ss
 
-__all__ = ['module_map', 'module_types', 'register_modules', 'find_modules', 'required', 'Base', 'Module']
 
 module_args = ['name', 'label']  # Define allowable module arguments
 

@@ -8,8 +8,6 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-# What classes are externally visible
-__all__ = ['Loop']
 
 
 #%% Loop class

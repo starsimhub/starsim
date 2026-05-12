@@ -2,4 +2,4 @@
 pagetitle: "Code of conduct"
 ---
 
-{{< include ../code_of_conduct.md >}}
+{{< include ../CODE_OF_CONDUCT.md >}}

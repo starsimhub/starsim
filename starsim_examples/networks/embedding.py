@@ -49,7 +49,7 @@ class EmbeddingNet(ss.MFNet):
                 print('No pairs to add')
             return 0
 
-        available = ss.uids.cat(available_m, available_f)
+        available = ss.uids.concatenate(available_m, available_f)
         loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]

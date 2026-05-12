@@ -5,7 +5,6 @@ import sciris as sc
 import numpy as np
 import starsim as ss
 
-__all__ = ['Timeline']
 
 
 class Timeline:

@@ -7,7 +7,6 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
-__all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
 class Sim(ss.Base):
@@ -15,7 +14,9 @@ class Sim(ss.Base):
     The Sim object
 
     All Starsim simulations run via the Sim class. It is responsible for initializing
-    and running all modules and generating results.
+    and running all modules and generating results. The sim orchestrates `ss.People`,
+    `ss.Network`, `ss.Disease`, `ss.Intervention`, `ss.Demographics`, and other
+    modules via the `ss.Loop` integration loop.
 
     Args:
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
@@ -29,9 +30,16 @@ class Sim(ss.Base):
         analyzers (str/Analyzer/list): as above, for analyzers
         custom (Module/list): as above, for any custom user-created modules not matching one of the above types
         modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
-        copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
+        copy_inputs (bool): if True (default), copy modules as they're inserted into the sim, allowing
+            the same module objects to be reused across multiple sims. Set to False if you want external
+            references to the module objects to reflect state changes after sim.run().
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
+
+    Note:
+        Modules can be supplied either via individual keyword arguments (``diseases``, ``networks``, etc.)
+        or all together via the ``modules`` argument. When using ``modules``, Starsim automatically sorts
+        them by type. The individual kwargs and ``modules`` can be mixed; they are merged together.
 
     **Examples**:
 
@@ -501,7 +509,6 @@ class Sim(ss.Base):
         errormsg = None
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
-        if errormsg:
             raise AlreadyRunError(errormsg)
 
         # Main simulation loop -- just one line!!!
@@ -979,7 +986,13 @@ class Sim(ss.Base):
 
 class AlreadyRunError(RuntimeError):
     """ Raised if trying to re-run an already-run sim without re-initializing """
-    pass
+    def __init__(self, *args, **kwargs):
+        default = 'Did you mean to copy the sim before running it?'
+        if args:
+            args = (f'{args[0]}\n{default}',) + args[1:]
+        else:
+            args = (default,)
+        super().__init__(*args, **kwargs)
 
 
 def demo(run=True, plot=True, summary=True, show=True, **kwargs):

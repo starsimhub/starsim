@@ -1,6 +1,0 @@
-#!/usr/bin/env python
-"""
-Run tutorials
-"""
-import docutils as ut
-ut.execute_notebooks(folders='tutorials')

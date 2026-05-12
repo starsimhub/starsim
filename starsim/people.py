@@ -8,7 +8,6 @@ import starsim as ss
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-__all__ = ['People', 'Person']
 
 
 class People:
@@ -377,7 +376,7 @@ class People:
             state.grow(new_uids)
 
         # Finally, update the alive indices
-        self.auids = self.auids.concat(new_uids)
+        self.auids = self.auids.concatenate(new_uids)
         return new_uids
 
     def filter(self, criteria=None, uids=None, split=False):
@@ -736,6 +735,7 @@ class Filter(sc.prettyobj):
             return self._uids
 
     def _func(self, obj, op):
+        """ Apply a comparison operator to the stale filter's state array and return a filtered result """
         if not self.stale:
             errormsg = "To use logical operations on a Filter object, call first, e.g. filt('age') > 5"
             raise RuntimeError(errormsg)

@@ -1,0 +1,270 @@
+---
+title: Solutions
+jupyter: python3
+---
+
+
+These are the solutions to the problems from each of the tutorials. (Note: Some solutions are still pending, but [email us](mailto:info@starsim.org) if you're impatient!)
+
+
+<div class="alert alert-info">
+    
+An interactive version of this notebook is available on [Google Colab](https://colab.research.google.com/github/starsimhub/starsim/blob/main/docs/tutorials/solutions.ipynb) or [Binder](https://mybinder.org/v2/gh/starsimhub/starsim/HEAD?labpath=docs%2Ftutorials%2Fsolutions.ipynb).
+    
+</div>
+
+```{python}
+#| tags: [hide-cell]
+%pip install -q starsim # Install Starsim if required
+```
+
+
+Let's start with the simplest version of a Starsim model. We'll make a version of a [classic SIR model](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology). Here's how our code would look:
+
+## T1 Solutions
+
+### Question 1
+
+**Q: To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?**
+
+A: We would simply change `'sir'` to `'sis'`:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+import sciris as sc
+
+# Define the parameters
+pars = sc.objdict( # We use objdict to allow "." access
+    n_agents = 10_000,
+    networks = sc.objdict(
+        type = 'random',
+        n_contacts = 10,
+    ),
+    diseases = sc.objdict(
+        type = 'sis', # <-- change this
+        init_prev = 0.01,
+        beta = 0.05,
+    )
+)
+
+# Make the sim, run and plot
+sim = ss.Sim(pars)
+sim.run()
+sim.plot()
+sim.diseases.sis.plot() # <-- change this
+```
+
+### Question 2
+
+**Q: How do the results change if we increase/decrease `beta`?**
+
+Increasing `beta` makes the curves steeper:
+
+```{python}
+pars.diseases.type = 'sir' # Switch back to SIR
+pars2 = sc.dcp(pars) # copy to new dictionary
+pars2.diseases.beta = 0.10
+sim2 = ss.Sim(pars2).run()
+sim2.diseases.sir.plot()
+```
+
+Decreasing `beta` makes the curves shallower:
+
+```{python}
+pars3 = sc.dcp(pars)
+pars3.diseases.beta = 0.02
+sim3 = ss.Sim(pars3).run()
+sim3.diseases.sir.plot()
+```
+
+### Question 3
+
+**Q: How do the results change if we reduce the number of agents to 200?**
+
+We get a similar result as before, except less smooth, since random effects are more important with small numbers of agents:
+
+```{python}
+pars4 = sc.dcp(pars)
+pars4.n_agents = 200
+sim4 = ss.Sim(pars4).run()
+sim4.diseases.sir.plot()
+```
+
+## T2 Solutions
+
+### Question 1
+
+**Q: How would you model an outbreak of an SIR-like disease within a refugee camp of 2,000 people? Suppose you were interested in the cumulative number of people who got infected over 1 year - how would you find this out?**
+
+The answer obviously depends on the disease parameters. However, we can make some simple assumptions and use `cum_infections` to determine the total number of infections:
+
+```{python}
+import starsim as ss
+import sciris as sc
+
+pars = sc.objdict(
+    n_agents = 2_000,
+    start = '2025-01-01',
+    dur = 365,
+    dt = 'day',
+    verbose = 1/30, # Print every month
+)
+sir = ss.SIR(
+    dur_inf = ss.days(14),
+    beta = ss.perday(0.02),
+    init_prev = 0.001,
+)
+net = ss.RandomNet(n_contacts=4)
+
+sim = ss.Sim(pars, diseases=sir, networks=net)
+sim.init()
+sim.run()
+sim.plot()
+
+answer = sim.results.sir.cum_infections[-1]
+print(f'Cumulative infections over one year: {answer}')
+```
+
+## Question 2
+
+Solution pending.
+
+## T3 Solutions
+
+### Question 1
+
+**Q: In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with a total population of 24 million in 2020, how many people will there be in 2040? (You do not need to include any diseases in your model.)**
+
+A: We can build our simple demographic model with these parameters, then run it and plot the results:
+
+```{python}
+import starsim as ss
+import sciris as sc
+
+pars = sc.objdict(
+    start = 2020,
+    stop = 2040,
+    total_pop = 24e6,
+    birth_rate = 45,
+    death_rate = 9,
+)
+sim = ss.Sim(pars)
+sim.run()
+sim.plot('n_alive')
+
+answer = sim.results.n_alive[-1]/1e6
+print(f'Population size in year {pars.stop}: {answer} million')
+```
+
+## T4 Solutions
+
+### Question 1
+
+Solution pending.
+
+## T5 Solutions
+
+### Question 1
+
+Solution pending.
+
+## T6 Solutions
+
+### Question 1
+
+**Q: If we change the disease from SIR to SIS and set coverage to 100%, what minimum efficacy of vaccine is required to eradicate the disease by 2050?**
+
+A: There are many ways we could solve this, including with formal numerical optimization packages. However, since we are only varying a single parameter, we can also just use a simple binay search or grid search. This solution illustrates both approaches.
+
+```{python}
+import numpy as np
+import sciris as sc
+import starsim as ss
+
+pars = dict(
+    n_agents = 5_000,
+    birth_rate = 20,
+    death_rate = 15,
+    networks = dict(
+        type = 'random',
+        n_contacts = 4
+    ),
+    diseases = dict(
+        type = 'sis',
+        dur_inf = 10,
+        beta = 0.1,
+    ),
+    verbose = False,
+)
+
+class sis_vaccine(ss.Vx):
+    """ A simple vaccine against "SIS" """
+    def __init__(self, efficacy=1.0, **kwargs):
+        super().__init__()
+        self.define_pars(efficacy=efficacy)
+        self.update_pars(**kwargs)
+        return
+
+    def administer(self, people, uids):
+        people.sis.rel_sus[uids] *= 1-self.pars.efficacy
+        return
+    
+def run_sim(efficacy):
+    """ Run a simulation with a given vaccine efficacy """
+    # Create the vaccine product
+    product = sis_vaccine(efficacy=efficacy)
+
+    # Create the intervention
+    intervention = ss.routine_vx(
+        start_year=2015, # Begin vaccination in 2015
+        prob=1.0,        # 100% coverage
+        product=product  # Use the SIS vaccine
+    )
+
+    # Now create two sims: a baseline sim and one with the intervention
+    sim = ss.Sim(pars=pars, interventions=intervention)
+    sim.run()
+    return sim
+
+def objective(efficacy, penalty=10, boolean=False, verbose=False):
+    """ Calculate the objective from the simulation """
+    sim = run_sim(efficacy=efficacy)
+    transmission = sim.results.sis.new_infections[-1] > 0
+    if boolean:
+        return not transmission
+    else:
+        loss = efficacy + penalty*transmission
+        if verbose:
+            print(f'Trial: {efficacy=}, {transmission=}, {loss=}')
+        return loss
+
+def grid_search(n=5, reps=2):
+    """ Perform a grid search over the objective function """
+    sc.heading('Performing grid search ...')
+    lb = 0 # Lower bound for efficacy
+    ub = 1 # Upper bound for efficacy
+    for rep in range(reps):
+        print(f'Grid search {rep+1} of {reps}...')
+        efficacy = np.linspace(lb, ub, n)
+        transmission = sc.parallelize(objective, efficacy, boolean=True)
+        lb = efficacy[sc.findlast(transmission, False)]
+        ub = efficacy[sc.findfirst(transmission, True)]
+        print(f'  Trials: {dict(zip(efficacy, transmission))}')
+        print(f'  Results: lower={lb}, upper={ub}')
+    mid = (lb+ub)/2
+    print(sc.ansi.bold(f'Result: {mid}'))
+    return mid, lb, ub
+
+def auto_search(efficacy=1.0):
+    """ Perform automatic search """
+    sc.heading('Performing automatic search...')
+    out = sc.asd(objective, x=efficacy, xmin=0, xmax=1, maxiters=10, verbose=True)
+    print(sc.ansi.bold(f'Result: {out.x}'))
+    return out
+
+# Run both optimizations
+mid, lb, ub = grid_search()
+out = auto_search()
+```
+

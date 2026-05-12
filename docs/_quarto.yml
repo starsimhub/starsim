@@ -1,5 +1,7 @@
 project:
   type: website
+  pre-render: python quarto_utils.py pre
+  post-render: python quarto_utils.py post
   output-dir: _site
   title: "Starsim"
   execute-dir: file
@@ -17,7 +19,7 @@ website:
     type: overlay
 
   page-footer:
-    center: "The docs were built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2026, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
+    center: "Docs built for Starsim v{{< var version >}} ({{< var versiondate >}}).<br>© 2023–2026, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
     right:
       - icon: github
         href: https://github.com/starsimhub/starsim
@@ -70,48 +72,48 @@ website:
           text: "**API reference**"
         - section: "**Tutorials**"
           contents:
-            - tutorials/t1_intro.ipynb
-            - tutorials/t2_model.ipynb
-            - tutorials/t3_demographics.ipynb
-            - tutorials/t4_diseases.ipynb
-            - tutorials/t5_networks.ipynb
-            - tutorials/t6_interventions.ipynb
-            - tutorials/solutions.ipynb
+            - tutorials/t1_intro.qmd
+            - tutorials/t2_model.qmd
+            - tutorials/t3_demographics.qmd
+            - tutorials/t4_diseases.qmd
+            - tutorials/t5_networks.qmd
+            - tutorials/t6_interventions.qmd
+            - tutorials/solutions.qmd
         - section: "**User guide**"
           contents:
           - section: "Introduction"
             contents:
-            - user_guide/intro_starsim.ipynb
-            - user_guide/intro_models.ipynb
+            - user_guide/intro_starsim.qmd
+            - user_guide/intro_models.qmd
           - section: "Basic concepts"
             contents:
-            - user_guide/basics_model.ipynb
-            - user_guide/basics_sim.ipynb
-            - user_guide/basics_people.ipynb
-            - user_guide/basics_parameters.ipynb
+            - user_guide/basics_model.qmd
+            - user_guide/basics_sim.qmd
+            - user_guide/basics_people.qmd
+            - user_guide/basics_parameters.qmd
           - section: "Modules"
             contents:
-            - user_guide/modules_diseases.ipynb
-            - user_guide/modules_networks.ipynb
-            - user_guide/modules_demographics.ipynb
-            - user_guide/modules_interventions.ipynb
-            - user_guide/modules_analyzers.ipynb
-            - user_guide/modules_connectors.ipynb
+            - user_guide/modules_diseases.qmd
+            - user_guide/modules_networks.qmd
+            - user_guide/modules_demographics.qmd
+            - user_guide/modules_interventions.qmd
+            - user_guide/modules_analyzers.qmd
+            - user_guide/modules_connectors.qmd
           - section: "Workflows"
             contents:
-            - user_guide/workflows_run.ipynb
-            - user_guide/workflows_sir_calibration.ipynb
-            - user_guide/workflows_calibration.ipynb
-            - user_guide/workflows_deploy.ipynb
-            - user_guide/workflows_samples.ipynb
+            - user_guide/workflows_run.qmd
+            - user_guide/workflows_sir_calibration.qmd
+            - user_guide/workflows_calibration.qmd
+            - user_guide/workflows_deploy.qmd
+            - user_guide/workflows_samples.qmd
           - section: "Advanced topics"
             contents:
-            - user_guide/advanced_time.ipynb
-            - user_guide/advanced_indexing.ipynb
-            - user_guide/advanced_distributions.ipynb
-            - user_guide/advanced_random.ipynb
-            - user_guide/advanced_profiling.ipynb
-            - user_guide/advanced_nonstandard.ipynb
+            - user_guide/advanced_time.qmd
+            - user_guide/advanced_indexing.qmd
+            - user_guide/advanced_distributions.qmd
+            - user_guide/advanced_random.qmd
+            - user_guide/advanced_profiling.qmd
+            - user_guide/advanced_nonstandard.qmd
         - href: conduct.qmd
           text: "**Code of conduct**"
         - href: contributing.qmd
@@ -226,13 +228,9 @@ quartodoc:
         - timeline
         - utils
 
-jupyter: python3
 execute:
-  enabled: false # NB, this is controlled via build_docs
-  daemon: false  # Use Jupyter daemon mode
-  cache: false   # Cache execution results
-  freeze: false # Use caching rather than freezing to store results
-  error: true # Do not continue if an error is encountered
+  freeze: auto # Only re-execute notebooks that have changed
+  cache: true # NB, not sure if this is needed for Quarto notebooks
+  error: false # Do not continue if an error is encountered
   echo: true
   warning: true
-  kernel: python3

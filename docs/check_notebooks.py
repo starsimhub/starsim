@@ -7,5 +7,5 @@ It will execute all notebooks in parallel, print out any errors
 encountered, and print a summary of results.
 """
 import sys
-import docutils as ut
-results = ut.execute_notebooks(*sys.argv[1:])
+import quarto_utils as qu
+results = qu.execute_notebooks(*sys.argv[1:])

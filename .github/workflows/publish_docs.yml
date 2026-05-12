@@ -1,7 +1,7 @@
 # Note: this test only runs manually or on pushes to
 # tagged versions.
 
-name: Publish Starsim docs
+name: Publish docs
 
 on:
   push:
@@ -11,7 +11,8 @@ on:
 
 jobs:
   publish:
-    name: Install Starsim and publish docs
+    name: Quarto
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     permissions:
       contents: write

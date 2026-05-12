@@ -18,7 +18,6 @@ ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
 numba_indexing = ss.options.numba_indexing
 
-__all__ = ['BaseArr', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'BoolState', 'IndexArr', 'uids']
 
 
 def np_indexer(arr, inds):
@@ -164,7 +163,7 @@ class Arr(BaseArr):
     is equal to `sim.people.age.values.mean()`, not `sim.people.age.raw.mean()`.
 
     If indexing by an int or slice, `Arr.values` is used. If indexing by an
-    [`ss.uids`](`starsim.arrays.uids`) object, `Arr.raw` is used. `Arr` objects can't be directly
+    `ss.uids` object, `Arr.raw` is used. `Arr` objects can't be directly
     indexed by a list or array of ints, as this would be ambiguous about whether
     `values` or `raw` is intended. For example, if there are 1000 people in a
     simulation and 100 of them have died, `sim.people.age[999]` will return
@@ -186,8 +185,19 @@ class Arr(BaseArr):
         label (str): The human-readable name for the state
         raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
-        people ([`ss.People`](`starsim.people.People`)): Optionally specify an initialized People object, used to construct temporary Arr instances
+        people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
         mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
+
+    **Examples**::
+
+        # Create a standalone Arr for quick testing
+        age = ss.Arr('age', default=0, mock=5) # 5 = length if not supplying a real People object
+        age[:] = [20, 30, 40, 50, 60]
+        age.mean()  # Returns 40.0
+
+        # Use within a simulation
+        sim = ss.Sim(n_agents=100).init()
+        sim.people.age.mean()  # Mean age of active agents
     """
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
         # Set attributes
@@ -477,6 +487,7 @@ class Arr(BaseArr):
             return uids(np.arange(len(self.raw)))
 
     def count(self):
+        """ Count the number of nonzero (truthy) values among active agents. """
         return np.count_nonzero(self.values)
 
     @property
@@ -697,7 +708,17 @@ class IntArr(Arr):
 
 
 class BoolArr(Arr):
-    """ Subclass of `ss.Arr` with defaults for booleans """
+    """
+    Subclass of `ss.Arr` with defaults for booleans.
+
+    **Examples**::
+
+        # Create a standalone BoolArr
+        infected = ss.BoolArr('infected', mock=5)
+        infected[[0, 2, 4]] = True
+        infected.count()  # Returns 3
+        infected.uids     # Returns ss.uids([0, 2, 4])
+    """
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
@@ -778,10 +799,12 @@ class BoolArr(Arr):
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
     def isnan(self):
+        """ Always False for BoolArr (booleans cannot be NaN). """
         return self.asnew(np.full_like(self.values, fill_value=False), cls=BoolArr)
 
     @property
     def notnan(self):
+        """ Always True for BoolArr (booleans cannot be NaN). """
         return self.asnew(np.full_like(self.values, fill_value=True), cls=BoolArr)
 
     @property
@@ -839,9 +862,30 @@ class uids(np.ndarray):
     """ Class to specify that integers should be interpreted as UIDs.
 
     For all practical purposes, behaves like a NumPy integer array. However,
-    has additional methods `uids.concat()` (instance method), [`ss.uids.cat()`](`starsim.arrays.uids.cat`)
-    (class method), `uids.remove()`, and `uids.intersect()` to simplify common
-    UID operations.
+    has additional methods `uids.concatenate()`, `uids.remove()`, and
+    `uids.intersect()` to simplify common UID operations.
+
+    The following operators are supported:
+
+    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
+    - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
+    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use ``+`` instead to keep them).
+    - ``&`` / ``&=``: intersection
+    - ``^`` / ``^=``: symmetric difference
+
+    Note: because `uids` is a subclass of `np.ndarray`, set-like in-place operators
+    (``+=`` with a ``uids`` RHS, ``-=``, ``|=``, ``&=``, ``^=``) must return a new array and rebind
+    the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
+    and preserves ``id(self)``.
+
+    **Examples**::
+
+        a = ss.uids([1, 2, 3])
+        b = ss.uids([3, 4, 5])
+        a + b   # Concatenate: uids([1, 2, 3, 3, 4, 5])
+        a | b   # Union:       uids([1, 2, 3, 4, 5])
+        a & b   # Intersect:   uids([3])
+        a - b   # Difference:  uids([1, 2])
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
@@ -856,17 +900,47 @@ class uids(np.ndarray):
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
-    def concat(self, other, **kw): # Class and instance methods can't share a name
-        """ Equivalent to np.concatenate(), but return correct type """
-        return np.concatenate([self, other], **kw).view(self.__class__)
+    def concatenate(*args):  # pylint: disable=no-self-argument
+        """
+        Concatenate uids into a single instance
+
+        Can be called as either an instance method or an unbound class method::
+
+            x.concatenate(y)               # instance method
+            x.concatenate(None)            # None is treated as empty
+            ss.uids.concatenate(x, y)      # unbound; identical to instance call
+            ss.uids.concatenate([x, y])    # single iterable of arrays
+            ss.uids.concatenate([None, x]) # None elements are filtered out
+            ss.uids.concatenate()          # returns empty ss.uids()
+        """
+        # Handle a single input argument: my_uids.concatenate([uids1, uids2])
+        if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))):
+            arrays = list(args[0]) if not isinstance(args[0], list) else args[0] # Handle corner case of [[]]
+        
+        # Handle multiple input arguments: my_uids.concatenate(uids1, uids2)
+        else:
+            arrays = list(args)
+        
+        # Remove any None values
+        valid = [a for a in arrays if a is not None]
+
+        # If non-empty arrays remain, concatenate, always using int type
+        if valid:
+            out = np.concatenate(valid).astype(ss_int).view(uids)
+        else:
+            out = uids()
+        return out
+
+    def concat(self, other):
+        """ Deprecated — use ``uids.concatenate()`` instead """
+        ss.warn('uids.concat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
+        return self.concatenate(other)
 
     @classmethod
-    def cat(cls, *args, **kw):
-        """ Equivalent to np.concatenate(), but return correct type """
-        if len(args) == 0 or (len(args) == 1 and (args[0] is None or not len(args[0]))):
-            return uids()
-        arrs = args[0] if len(args) == 1 else args # TODO: handle one-array case
-        return np.concatenate(arrs, **kw).view(cls)
+    def cat(cls, *args):
+        """ Deprecated — use ``uids.concatenate()`` instead """
+        ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
+        return uids.concatenate(*args)
 
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
@@ -893,7 +967,7 @@ class uids(np.ndarray):
         return np.setxor1d(self, other, **kw).view(self.__class__)
 
     def to_numpy(self):
-        """ Return a view as a standard NumPy array """
+        """ Return a view as maia standard NumPy array """
         return self.view(np.ndarray)
 
     def unique(self, return_index=False):
@@ -905,15 +979,53 @@ class uids(np.ndarray):
             arr = np.unique(self).view(self.__class__)
             return arr
 
-    # Implement collection of operators
-    def __and__(self, other): return self.intersect(other)
-    def __or__(self, other) : return self.union(other)
-    def __sub__(self, other): return self.remove(other)
-    def __xor__(self, other): return self.xor(other)
-    def __invert__(self)    : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+    def __array_wrap__(self, out_arr, context=None, return_scalar=False):
+        # Guard 1: non-integer dtype → return a plain ndarray.
+        # Example: `uids_a == uids_b` produces a bool array. A boolean uids should
+        # never exist — uids are integer indices only — and returning one would cause
+        # `~(a == b)` to hit our __invert__ guard instead of doing a normal bitwise NOT.
+        if out_arr.dtype.kind not in ('i', 'u'):
+            return out_arr.view(np.ndarray)
+        # Guard 2: scalar reductions → return a plain Python int.
+        # Example: `uids.max()` should behave like `uids[0]` (a bare integer), not
+        # return a 0-d uids whose subsequent use in arithmetic (e.g. `max + 1`) would
+        # incorrectly route through our __add__ concatenation operator.
+        if return_scalar:
+            return out_arr.item()
+        return super().__array_wrap__(out_arr, context, return_scalar)
 
-    # As the size of a set might change, in-place operations must necessarily return a copy
-    # that gets reassigned to the original variable (the same as inplace operations on an immutable type)
+    def _uid_op_error(self, name):
+        msg = f'{name}() is not meaningful for {self.__class__.__name__}: UIDs are identifiers, not numeric values'
+        raise TypeError(msg)
+
+    def sum(self, *args, **kwargs):     self._uid_op_error('sum')
+    def mean(self, *args, **kwargs):    self._uid_op_error('mean')
+    def std(self, *args, **kwargs):     self._uid_op_error('std')
+    def var(self, *args, **kwargs):     self._uid_op_error('var')
+    def prod(self, *args, **kwargs):    self._uid_op_error('prod')
+    def cumsum(self, *args, **kwargs):  self._uid_op_error('cumsum')
+    def cumprod(self, *args, **kwargs): self._uid_op_error('cumprod')
+
+    # Implement collection of operators
+    def __add__(self, other):
+        if isinstance(other, uids):
+            return self.concatenate(other)   # concatenation: uids([1,2]) + uids([3]) → uids([1,2,3])
+        return super().__add__(other)   # element-wise:  uids([1,2]) + 1        → uids([2,3])
+    def __and__(self, other) : return self.intersect(other)
+    def __or__(self, other)  : return self.union(other)
+    def __sub__(self, other) : return self.remove(other)
+    def __xor__(self, other) : return self.xor(other)
+    def __invert__(self)     : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+
+    # For set-like operations (uids RHS) the size changes, so in-place must return a new object
+    # and rebind the variable — same semantics as in-place operations on an immutable type.
+    # For scalar/array RHS (element-wise arithmetic) the size is unchanged, so we can modify
+    # in-place and preserve id(self).
+    def __iadd__(self, other):
+        if isinstance(other, uids):
+            return self.__add__(other)   # new object — size changes
+        np.add(self, other, out=self)    # in-place — size unchanged, id preserved
+        return self
     def __iand__(self, other): return self.__and__(other)
     def __ior__(self, other) : return self.__or__(other)
     def __isub__(self, other): return self.__sub__(other)

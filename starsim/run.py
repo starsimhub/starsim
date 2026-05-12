@@ -5,7 +5,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
 
 
 class MultiSim:
@@ -491,7 +490,7 @@ class MultiSim:
 
 
 def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,
-               verbose=None, do_run=True, **kwargs):
+               verbose=None, do_run=True, copy_sim=False, **kwargs):
     """
     Convenience function to perform a single simulation run. Mostly used for
     parallelization, but can also be used directly.
@@ -507,6 +506,7 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
         sim_args    (dict)  : extra parameters to pass to the sim, e.g. 'n_infected'
         verbose     (int)   : detail to print
         do_run      (bool)  : whether to actually run the sim (if not, just initialize it)
+        copy_sim    (bool)  : whether to explicitly copy the sim before running (default: False)
         kwargs      (dict)  : also passed to the sim
 
     Returns:
@@ -524,6 +524,9 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
     run_args = sc.mergedicts({'verbose': verbose}, run_args)
     if verbose is None:
         verbose = sim.pars['verbose']
+
+    if copy_sim:
+        sim = sim.copy() # Make a copy to avoid modifying the original sim (typically done by default via pickling with multi_run)
 
     if not sim.label:
         sim.label = f'Sim {ind}'
@@ -552,7 +555,7 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
 
 def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=None, sim_args=None,
-              par_args=None, do_run=True, parallel=True, n_cpus=None, verbose=None, **kwargs):
+              par_args=None, do_run=True, parallel=True, n_cpus=None, copy_sim=False, verbose=None, **kwargs):
     """
     For running multiple sims in parallel. If the first argument is a list of sims
     rather than a single sim, exactly these will be run and most other arguments
@@ -574,6 +577,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         do_run      (bool)  : whether to actually run the sim (if not, just initialize it)
         parallel    (bool)  : whether to run in parallel using multiprocessing (else, just run in a loop)
         n_cpus      (int)   : the number of CPUs to run on (if blank, set automatically; otherwise, passed to par_args, and use all cores)
+        copy_sim    (bool)  : whether to explicitly copy the sim before running (default: False)
         verbose     (int)   : detail to print
         kwargs      (dict)  : also passed to the sim
 
@@ -610,12 +614,12 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         iterkwargs = dict(ind=np.arange(n_runs))
         iterkwargs.update(iterpars)
         kwargs = dict(sim=sim, reseed=reseed, verbose=verbose, shrink=shrink,
-                      sim_args=sim_args, run_args=run_args, do_run=do_run)
+                      sim_args=sim_args, run_args=run_args, do_run=do_run, copy_sim=copy_sim)
     elif isinstance(sim, (list, tuple)):  # List of sims
         if reseed is None: reseed = False
         iterkwargs = dict(sim=sim, ind=np.arange(len(sim)))
         kwargs = dict(reseed=reseed, verbose=verbose, shrink=shrink, sim_args=sim_args, run_args=run_args,
-                      do_run=do_run)
+                      do_run=do_run, copy_sim=copy_sim)
     else:
         errormsg = f'Must be Sim object or list/tuple, not {type(sim)}'
         raise TypeError(errormsg)
@@ -629,7 +633,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         for s in range(n_sims):
             this_iter = {k: v[s] for k, v in iterkwargs.items()}  # Pull out items specific to this iteration
             this_iter.update(kwargs)  # Merge with the kwargs
-            this_iter['sim'] = this_iter['sim'].copy()  # Ensure we have a fresh sim; this happens implicitly on pickling with multiprocessing
+            this_iter['copy_sim'] = True  # Ensure we have a fresh sim; this happens implicitly on pickling with multiprocessing but must be done explicitly here
             sim = single_run(**this_iter)  # Run in series
             sims.append(sim)
 

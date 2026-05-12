@@ -292,8 +292,16 @@ def test_dynamic_household():
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
 
-    # Check that household_ids are assigned
-    assert np.all(np.isfinite(household.household_ids[:]))
+    # All delivered agents should have household IDs; undelivered embryos should not.
+    # Agents born in the sim with age >= dt have been through at least one full step
+    # after delivery, so add_births() must have assigned them a household ID.
+    # Agents with age < dt at the end may be undelivered embryos whose age crossed
+    # zero only due to the end-of-step aging in finish_step.
+    ppl = sim.people
+    hids = household.household_ids[:]
+    born_in_sim = ppl.parent.notnan
+    delivered = ~born_in_sim | (ppl.age >= sim.t.dt_year)
+    assert np.all(np.isfinite(hids[delivered.uids])), 'Some delivered agents are missing household IDs'
 
     return sim
 

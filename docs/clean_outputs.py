@@ -2,5 +2,5 @@
 """
 Remove auto-generated files
 """
-import docutils as ut
-ut.clean_outputs()
+import quarto_utils as qu
+qu.clean_outputs()
