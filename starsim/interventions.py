@@ -107,8 +107,8 @@ class RoutineDelivery(Intervention):
         # More validation
         # TODO: Refactor to be more agnostic about the types - leverage just doing direct comparisons and don't privilege year units
         yearvec = sim.t.yearvec
-        start_year = self.start_year.years if hasattr(self.start_year, 'years') else self.start_year
-        end_year = self.end_year.years if hasattr(self.end_year, 'years') else self.end_year
+        start_year = self.start_year.years if isinstance(self.start_year, ss.TimePar) else self.start_year
+        end_year = self.end_year.years if isinstance(self.end_year, ss.TimePar) else self.end_year
 
         if not(any(np.isclose(start_year, yearvec)) and any(np.isclose(end_year, yearvec))):
             errormsg = 'Years must be within simulation start and end dates.'
@@ -161,7 +161,7 @@ class CampaignDelivery(Intervention):
 
         # Compare against the float yearvec, since sim.timevec may contain ss.date objects
         # whose subtraction yields datedur (which sc.findnearest's np.argmin can't process).
-        years_float = np.array([y.years if hasattr(y, 'years') else float(y) for y in self.years])
+        years_float = np.array([y.years if isinstance(y, ss.TimePar) else float(y) for y in self.years]) # TODO: handle array timepars natively; skip if already an array
         self.timepoints = sc.findnearest(sim.t.yearvec, years_float)
 
         if len(self.prob) == 1:
