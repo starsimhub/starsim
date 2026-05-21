@@ -153,7 +153,7 @@ class CampaignDelivery(Intervention):
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
-        self.coverage_dist = ss.bernoulli(p=0)  # Placeholder - matches RoutineDelivery
+        self.coverage_dist = ss.bernoulli(p=0)
         return
 
     def init_pre(self, sim):
