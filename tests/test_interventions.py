@@ -4,6 +4,32 @@ Run tests of vaccines and products
 import sciris as sc
 import numpy as np
 import starsim as ss
+import pytest
+
+
+def make_delivery_pars(n_agents=2_000, start=2000, stop=2020):
+    """ Lightweight SIS sim params shared across delivery tests """
+    return sc.objdict(
+        n_agents = n_agents,
+        start    = start,
+        stop     = stop,
+        diseases = 'sis',
+        networks = 'random',
+    )
+
+
+def make_dx():
+    """ Minimal diagnostic product used by delivery tests """
+    dx_data = sc.dataframe(
+        columns = ['disease', 'state', 'result', 'probability'],
+        data = [
+            ['sis', 'susceptible', 'positive', 0.01],
+            ['sis', 'susceptible', 'negative', 0.99],
+            ['sis', 'infected',    'positive', 0.95],
+            ['sis', 'infected',    'negative', 0.05],
+        ],
+    )
+    return ss.Dx(df=dx_data)
 
 
 def run_sir_vaccine(efficacy, leaky=True):
@@ -196,6 +222,157 @@ def test_two_products():
 
 
 
+@sc.timer()
+def test_routine_delivery_window():
+    """ RoutineDelivery should only deliver between start_year and end_year """
+    sc.heading('Testing RoutineDelivery start/end window...')
+
+    pars = make_delivery_pars(start=2000, stop=2020)
+    start_year, end_year = 2008, 2012
+    screening = ss.routine_screening(
+        product    = make_dx(),
+        prob       = 1.0,
+        start_year = start_year,
+        end_year   = end_year,
+    )
+    sim = ss.Sim(pars, interventions=screening).run()
+
+    n_screened = sim.results.routine_screening.n_screened
+    years      = sim.t.yearvec
+    pre        = years < start_year
+    post       = years > end_year
+
+    assert n_screened[pre].sum() == 0, \
+        f'Expected zero screenings before {start_year}, got {n_screened[pre].sum()}'
+    assert n_screened[post].sum() == 0, \
+        f'Expected zero screenings after {end_year}, got {n_screened[post].sum()}'
+    in_window = (years >= start_year) & (years <= end_year)
+    assert n_screened[in_window].sum() > 0, \
+        f'Expected nonzero screenings inside [{start_year}, {end_year}]'
+
+    return sim
+
+
+@sc.timer()
+def test_routine_delivery_prob_array():
+    """ RoutineDelivery should accept a per-year prob array matching the year window """
+    sc.heading('Testing RoutineDelivery prob-array scaling...')
+
+    pars = make_delivery_pars(start=2000, stop=2020)
+    years = np.arange(2005, 2016)               # 11 entries: 2005..2015
+    probs = np.linspace(0.05, 0.95, len(years)) # matching ramp 0.05 -> 0.95
+    screening = ss.routine_screening(
+        product = make_dx(),
+        prob    = probs,
+        years   = years,
+    )
+    sim = ss.Sim(pars, interventions=screening).run()
+
+    n_screened = sim.results.routine_screening.n_screened
+    yearvec    = sim.t.yearvec
+    early_mask = (yearvec >= 2005) & (yearvec <= 2007)
+    late_mask  = (yearvec >= 2013) & (yearvec <= 2015)
+    early_mean = n_screened[early_mask].mean()
+    late_mean  = n_screened[late_mask].mean()
+
+    assert late_mean > early_mean, \
+        f'Expected screening to scale up with prob array; got early={early_mean}, late={late_mean}'
+    # Late prob is ~19x early prob; require at least 3x to allow stochastic slack
+    assert late_mean > 3 * early_mean, \
+        f'Expected late screening >> early screening; got early={early_mean}, late={late_mean}'
+
+    return sim
+
+
+@sc.timer()
+def test_routine_delivery_default_years():
+    """ Omitting start/end_year should default to sim start/stop """
+    sc.heading('Testing RoutineDelivery default year handling...')
+
+    pars = make_delivery_pars(start=2010, stop=2014)
+    screening = ss.routine_screening(product=make_dx(), prob=0.5)
+    sim = ss.Sim(pars, interventions=screening).run()
+
+    n_screened = sim.results.routine_screening.n_screened
+    assert n_screened.sum() > 0, 'Expected screening to occur when no window specified'
+
+    return sim
+
+
+@sc.timer()
+def test_campaign_delivery_single_year():
+    """ CampaignDelivery should only deliver at the specified year """
+    sc.heading('Testing CampaignDelivery single year...')
+
+    pars = make_delivery_pars(start=2000, stop=2020)
+    campaign_year = 2010
+    screening = ss.campaign_screening(
+        product = make_dx(),
+        prob    = 0.5,
+        years   = campaign_year,
+    )
+    sim = ss.Sim(pars, interventions=screening).run()
+
+    n_screened = sim.results.campaign_screening.n_screened
+    yearvec    = sim.t.yearvec
+    on_year    = np.isclose(yearvec, campaign_year)
+    off_year   = ~on_year
+
+    assert n_screened[on_year].sum() > 0, \
+        f'Expected screenings on {campaign_year}, got 0'
+    assert n_screened[off_year].sum() == 0, \
+        f'Expected no screenings off-year, got {n_screened[off_year].sum()}'
+
+    return sim
+
+
+@sc.timer()
+def test_campaign_delivery_multi_year():
+    """ CampaignDelivery should deliver at each specified year and nowhere else """
+    sc.heading('Testing CampaignDelivery multi year...')
+
+    pars = make_delivery_pars(start=2000, stop=2020)
+    campaign_years = [2005, 2010, 2015]
+    probs = [0.3, 0.5, 0.7]
+    screening = ss.campaign_screening(
+        product = make_dx(),
+        prob    = probs,
+        years   = campaign_years,
+    )
+    sim = ss.Sim(pars, interventions=screening).run()
+
+    n_screened = sim.results.campaign_screening.n_screened
+    yearvec    = sim.t.yearvec
+    on_mask    = np.zeros_like(yearvec, dtype=bool)
+    for y in campaign_years:
+        on_mask |= np.isclose(yearvec, y)
+
+    assert n_screened[~on_mask].sum() == 0, \
+        f'Expected no screenings outside campaign years, got {n_screened[~on_mask].sum()}'
+    for y in campaign_years:
+        n_y = n_screened[np.isclose(yearvec, y)].sum()
+        assert n_y > 0, f'Expected screenings in {y}, got {n_y}'
+
+    return sim
+
+
+@sc.timer()
+def test_campaign_delivery_prob_length_mismatch():
+    """ CampaignDelivery should reject prob/years length mismatch """
+    sc.heading('Testing CampaignDelivery prob/years length validation...')
+
+    pars = make_delivery_pars(start=2000, stop=2020)
+    screening = ss.campaign_screening(
+        product = make_dx(),
+        prob    = [0.1, 0.2],  # length 2, but 3 years
+        years   = [2005, 2010, 2015],
+    )
+    with pytest.raises(ValueError):
+        ss.Sim(pars, interventions=screening).init()
+
+    return screening
+
+
 if __name__ == '__main__':
     T = sc.timer()
     do_plot = True
@@ -203,6 +380,13 @@ if __name__ == '__main__':
     leaky  = test_sir_vaccine_leaky()
     a_or_n = test_sir_vaccine_all_or_nothing()
     prod   = test_products(do_plot=do_plot)
-    prod2   = test_two_products()
+    prod2  = test_two_products()
+
+    s_win    = test_routine_delivery_window()
+    s_parr   = test_routine_delivery_prob_array()
+    s_def    = test_routine_delivery_default_years()
+    s_csing  = test_campaign_delivery_single_year()
+    s_cmulti = test_campaign_delivery_multi_year()
+    s_cmm    = test_campaign_delivery_prob_length_mismatch()
 
     T.toc()

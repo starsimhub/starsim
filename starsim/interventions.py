@@ -107,23 +107,25 @@ class RoutineDelivery(Intervention):
         # More validation
         # TODO: Refactor to be more agnostic about the types - leverage just doing direct comparisons and don't privilege year units
         yearvec = sim.t.yearvec
-        start_year = self.start_year.years if hasattr(self.start_year, 'years') else self.start_year
-        end_year = self.end_year.years if hasattr(self.end_year, 'years') else self.end_year
+        start_year = self.start_year.years if isinstance(self.start_year, ss.TimePar) else self.start_year
+        end_year = self.end_year.years if isinstance(self.end_year, ss.TimePar) else self.end_year
 
         if not(any(np.isclose(start_year, yearvec)) and any(np.isclose(end_year, yearvec))):
             errormsg = 'Years must be within simulation start and end dates.'
             raise ValueError(errormsg)
 
-        # Adjustment to get the right end point
+        # Number of sub-year sim timesteps to include past end_year so the intervention
+        # covers the full end_year. For dt=1 this is 0; for dt=0.5 it's 1; for dt=0.1 it's 9.
         dt = sim.t.dt.years if isinstance(sim.t.dt, ss.dur) else sim.t.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
-        adj_factor = int(1/dt) - 1 if dt < 1 else 1
+        adj_factor = int(round(1/dt)) - 1 if dt < 1 else 0
 
-        # Determine the timepoints at which the intervention will be applied
+        # Determine the timepoints at which the intervention will be applied.
+        # self.yearvec is sliced from sim.t.yearvec so it stays length-aligned with self.timepoints.
         self.start_point = sc.findfirst(yearvec, start_year)
         self.end_point   = sc.findfirst(yearvec, end_year) + adj_factor
         self.years       = sc.inclusiverange(start_year, end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec     = np.arange(start_year, end_year + adj_factor, dt) # TODO: integrate with self.t
+        self.yearvec     = yearvec[self.start_point:self.end_point + 1]
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):
@@ -151,13 +153,16 @@ class CampaignDelivery(Intervention):
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
+        self.coverage_dist = ss.bernoulli(p=0)
         return
 
     def init_pre(self, sim):
         super().init_pre(sim)
 
-        # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
-        self.timepoints = sc.findnearest(sim.timevec, self.years)
+        # Compare against the float yearvec, since sim.timevec may contain ss.date objects
+        # whose subtraction yields datedur (which sc.findnearest's np.argmin can't process).
+        years_float = np.array([y.years if isinstance(y, ss.TimePar) else float(y) for y in self.years]) # TODO: handle array timepars natively; skip if already an array
+        self.timepoints = sc.findnearest(sim.t.yearvec, years_float)
 
         if len(self.prob) == 1:
             self.prob = np.array([self.prob[0]] * len(self.timepoints))

@@ -5,6 +5,9 @@ project:
   output-dir: _site
   title: "Starsim"
   execute-dir: file
+  resources:
+    - objects.json
+    - objects.inv
 
 website:
   title: "Starsim"
