@@ -82,9 +82,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-54ee646620c2dec2075bf93b87f445c6.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-ee9dd7979cf4051da80b6023b997f4cf.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-54ee646620c2dec2075bf93b87f445c6.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-aafc68b2255684af78b035618dac2a51.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -693,7 +693,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="overview-of-people" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-people">Overview of People</h2>
 <p>More details on the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class can be easily exported to a dataframe, e.g.:</p>
-<div id="b20f57cd" class="cell" data-execution_count="1">
+<div id="54b790fe" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -717,7 +717,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>When a module is added to a sim, this can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. For example:</p>
-<div id="cfd6f3fd" class="cell" data-execution_count="2">
+<div id="661d652f" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">20</span>, diseases<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'sis'</span>, init_prev<span class="op">=</span><span class="fl">0.2</span>), networks<span class="op">=</span><span class="st">'random'</span>)</span>
@@ -726,18 +726,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 20 agents
-
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-
-  Running 2010.01.01 (10/51) (0.40 s)  ••••———————————————— 22%
-
-  Running 2020.01.01 (20/51) (0.42 s)  ••••••••———————————— 41%
-
-  Running 2030.01.01 (30/51) (0.44 s)  ••••••••••••———————— 61%
-
-  Running 2040.01.01 (40/51) (0.45 s)  ••••••••••••••••———— 80%
-
-  Running 2050.01.01 (50/51) (0.47 s)  •••••••••••••••••••• 100%
+  Running 2010.01.01 (10/51) (0.23 s)  ••••———————————————— 22%
+  Running 2020.01.01 (20/51) (0.25 s)  ••••••••———————————— 41%
+  Running 2030.01.01 (30/51) (0.27 s)  ••••••••••••———————— 61%
+  Running 2040.01.01 (40/51) (0.29 s)  ••••••••••••••••———— 80%
+  Running 2050.01.01 (50/51) (0.31 s)  •••••••••••••••••••• 100%
 
     uid  slot  alive      age  female  ti_dead  ti_removed  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
 0     0     0   True  25.1524   False      NaN         NaN    1.0                  False             True         False       0.3449            1.0             33.0           42.7465        0.6551
@@ -784,7 +778,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="what-happens-when-you-add-a-module" class="level2">
 <h2 class="anchored" data-anchor-id="what-happens-when-you-add-a-module">What happens when you add a module?</h2>
 <p>When you add a module to a <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>, the module’s parameters, states, and results will be added to the centralized collections of parameters, states, and results that are maintained within the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>. To illustrate this, let’s create a <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> with an SIR disease module and a random contact network:</p>
-<div id="c5a8333e" class="cell" data-execution_count="3">
+<div id="bf7496a7" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
@@ -1238,7 +1232,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.3.3 (2026-04-15).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.3.4 (2026-05-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
