@@ -61,7 +61,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </style>
 
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js" integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg==" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
 <script src="../site_libs/quarto-nav/headroom.min.js"></script>
 <script src="../site_libs/clipboard/clipboard.min.js"></script>
 <script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
@@ -82,9 +82,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-aafc68b2255684af78b035618dac2a51.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-ebebdd7f480cdcd9c4984c7f251bfad5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -120,7 +120,7 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
 
 <script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
 
@@ -724,7 +724,7 @@ window.Quarto = {
 <p>The Starsim framework includes a built-in susceptible-infected-recovered (SIR) within-host progression module that can be used as a building block to developing more realistic agent-based models. Here, we use that SIR within-host module in combination with mixing pool transmission to create a simple SIR disease model.</p>
 <p>Here, we use that SIR disease model to test two calibration workflows. The goal is to assess if they able to re-identify a known “true” set of parameters and explore the resulting latent trajectories. The two workflows demonstrated are: 1. <a href="#optimization">Likelihood maximization using the optuna package as integrated with Starsim</a> 2. <a href="#sampling">Posterior sampling using a Bayesian workflow</a></p>
 <p>Re-identifying the known parameter values from synthetic data provides reassurance that the calibration workflow is functioning as expected. For a more realistic Starsim calibration example, please see <a href="../user_guide/workflows_calibration.html">Calibration</a>.</p>
-<div id="9884ed9a" class="cell" data-execution_count="1">
+<div id="700d28fc" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Configure notebook autoreloading and inline plotting</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>load_ext autoreload</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>autoreload <span class="dv">2</span></span>
@@ -752,7 +752,7 @@ window.Quarto = {
 <section id="sir-model-setup" class="level3">
 <h3 class="anchored" data-anchor-id="sir-model-setup">SIR model setup</h3>
 <p>First, we create a simple agent-based SIR simulation using Starsim.</p>
-<div id="bff03d27" class="cell" data-execution_count="2">
+<div id="db3741f0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim():</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Make a simple SIR simulation using Starsim.</span></span>
@@ -851,7 +851,7 @@ window.Quarto = {
 <section id="calibration-setup" class="level3">
 <h3 class="anchored" data-anchor-id="calibration-setup">Calibration setup</h3>
 <p>We will calibrate two parameters, beta and gamma, each allowed to take on values between 0 and 1.</p>
-<div id="3367be74" class="cell" data-execution_count="3">
+<div id="7e907323" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters in a simple dictionary</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'low'</span>: <span class="dv">0</span>, <span class="st">'high'</span>: <span class="fl">0.15</span>},</span>
@@ -859,7 +859,7 @@ window.Quarto = {
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>If using the optimization-based approach in Starsim, likelihood functions are defined and available for use. However, for the sampling-based approach, we will need to create our own likelihood.</p>
-<div id="2d1827c7" class="cell" data-execution_count="4">
+<div id="37919f2a" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> beta_binomial_likelihood(results, calib_data,</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    kappa       <span class="op">=</span> <span class="fl">10.0</span>,</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    prior_alpha <span class="op">=</span> <span class="fl">1.0</span>,</span>
@@ -908,7 +908,7 @@ window.Quarto = {
 <span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.exp(np.<span class="bu">sum</span>(loglik)) <span class="co"># Exponentiated sum of logs</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Bayesian calibration requires a prior distribution over the parameters. Here, we define a simple uniform prior over beta and gamma.</p>
-<div id="c85804a8" class="cell" data-execution_count="5">
+<div id="ad938668" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sample_from_prior(size<span class="op">=</span><span class="dv">1</span>):</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Sample beta and gamma from a uniform prior.</span></span>
@@ -932,7 +932,7 @@ window.Quarto = {
 <section id="generate-synthetic-data-for-reidentification" class="level3">
 <h3 class="anchored" data-anchor-id="generate-synthetic-data-for-reidentification">Generate synthetic data for reidentification</h3>
 <p>That set the basic machinery of the SIR simulation model. Next, we’ll create some synthetic data to use as calibration targets. Because the model is stochastic, we’ll average over several replicates.</p>
-<div id="a93454ea" class="cell" data-execution_count="6">
+<div id="d57b28e5" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>n_reps <span class="op">=</span> <span class="dv">25</span> <span class="co"># Average over 25 repetitions to reduce stochastic noise</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># These are the true parameters the optimizer will later try to identify</span></span>
@@ -1026,7 +1026,7 @@ window.Quarto = {
 <h1>Likelihood maximization using the optuna package as integrated with Starsim</h1>
 <p><a id="optimization"></a></p>
 <p>Starsim provides built-in integration with <a href="https://optuna.org/">Optuna</a> to make advanced model calibration easier. We demonstrate that linkage below using a Beta-binomial likelihood function.</p>
-<div id="73aaa876" class="cell" data-execution_count="7">
+<div id="dd472b85" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim() <span class="co"># Begin by making a single "base" simulation with default parameters</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># This example will use a single calibration component. We choose a</span></span>
@@ -1074,17 +1074,24 @@ window.Quarto = {
 <span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a><span class="ss">    * </span><span class="sc">{</span>true_pars<span class="sc">}</span><span class="ch">\n</span><span class="op">\</span></span>
 <span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a><span class="ss">    The best parameters resulted in a loss of </span><span class="sc">{</span>calib<span class="sc">.</span>study<span class="sc">.</span>best_value<span class="sc">}</span><span class="ss">.'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>The best parameters identified by the optimization are:
-    * {'beta': 0.06661706308329389, 'gamma': 0.03156366097844798, 'rand_seed': 139364}
+<div class="ansi-escaped-output">
+<pre><span class="ansi-blue-fg">The best parameters identified by the optimization are:
+
+    * {'beta': 0.05974463188836904, 'gamma': 0.03405687745441039, 'rand_seed': 157959}
+
     These parameters should be close to the true parameters:
+
     * {'beta': {'value': 0.05}, 'gamma': {'value': 0.03}}
-    The best parameters resulted in a loss of 3.7827363703352623.</code></pre>
+
+    The best parameters resulted in a loss of 4.227182333888369.</span>
+</pre>
+</div>
 </div>
 </div>
 <p>It seems like the best parameter values are pretty close to the right values, so that’s good. We can look at all the results and easily create a DataFrame containing the top K runs.</p>
-<div id="dfdab44c" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> calib.to_df(top_k<span class="op">=</span><span class="dv">10</span>)</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>display(df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ac7ce862" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> calib.to_df(top_k<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>display(df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 
@@ -1116,113 +1123,113 @@ window.Quarto = {
 </thead>
 <tbody>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">4</th>
-<td>3.782736</td>
-<td>2026-04-03 18:17:15.756590</td>
-<td>2026-04-03 18:17:16.166556</td>
-<td>0 days 00:00:00.409966</td>
-<td>0.066617</td>
-<td>0.031564</td>
-<td>139364</td>
+<th data-quarto-table-cell-role="th">33</th>
+<td>4.227182</td>
+<td>2026-05-22 02:09:50.384975</td>
+<td>2026-05-22 02:09:50.777796</td>
+<td>0 days 00:00:00.392821</td>
+<td>0.059745</td>
+<td>0.034057</td>
+<td>157959</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">99</th>
-<td>3.883333</td>
-<td>2026-04-03 18:17:18.685446</td>
-<td>2026-04-03 18:17:18.916206</td>
-<td>0 days 00:00:00.230760</td>
-<td>0.065437</td>
-<td>0.033332</td>
-<td>941538</td>
+<th data-quarto-table-cell-role="th">65</th>
+<td>4.668286</td>
+<td>2026-05-22 02:09:53.695431</td>
+<td>2026-05-22 02:09:54.128982</td>
+<td>0 days 00:00:00.433551</td>
+<td>0.061316</td>
+<td>0.029466</td>
+<td>783267</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">13</th>
-<td>4.321542</td>
-<td>2026-04-03 18:17:15.824099</td>
-<td>2026-04-03 18:17:16.348985</td>
-<td>0 days 00:00:00.524886</td>
-<td>0.067466</td>
-<td>0.032130</td>
-<td>851144</td>
+<th data-quarto-table-cell-role="th">61</th>
+<td>4.720013</td>
+<td>2026-05-22 02:09:53.255073</td>
+<td>2026-05-22 02:09:53.684203</td>
+<td>0 days 00:00:00.429130</td>
+<td>0.060646</td>
+<td>0.029159</td>
+<td>769032</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">86</th>
-<td>4.571243</td>
-<td>2026-04-03 18:17:18.008215</td>
-<td>2026-04-03 18:17:18.299533</td>
-<td>0 days 00:00:00.291318</td>
-<td>0.060467</td>
-<td>0.029725</td>
-<td>974191</td>
+<th data-quarto-table-cell-role="th">69</th>
+<td>5.049724</td>
+<td>2026-05-22 02:09:54.124515</td>
+<td>2026-05-22 02:09:54.541309</td>
+<td>0 days 00:00:00.416794</td>
+<td>0.060044</td>
+<td>0.030751</td>
+<td>734718</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">84</th>
-<td>4.622128</td>
-<td>2026-04-03 18:17:17.943533</td>
-<td>2026-04-03 18:17:18.272145</td>
-<td>0 days 00:00:00.328612</td>
-<td>0.062846</td>
-<td>0.029956</td>
-<td>976689</td>
+<th data-quarto-table-cell-role="th">97</th>
+<td>5.384760</td>
+<td>2026-05-22 02:09:57.099383</td>
+<td>2026-05-22 02:09:57.518577</td>
+<td>0 days 00:00:00.419194</td>
+<td>0.062086</td>
+<td>0.028966</td>
+<td>161508</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">83</th>
-<td>4.777312</td>
-<td>2026-04-03 18:17:17.887780</td>
-<td>2026-04-03 18:17:18.271600</td>
-<td>0 days 00:00:00.383820</td>
-<td>0.062564</td>
-<td>0.029650</td>
-<td>999590</td>
+<th data-quarto-table-cell-role="th">95</th>
+<td>5.641412</td>
+<td>2026-05-22 02:09:56.782058</td>
+<td>2026-05-22 02:09:57.212329</td>
+<td>0 days 00:00:00.430271</td>
+<td>0.070962</td>
+<td>0.028728</td>
+<td>932563</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">87</th>
-<td>5.024023</td>
-<td>2026-04-03 18:17:18.042355</td>
-<td>2026-04-03 18:17:18.354784</td>
-<td>0 days 00:00:00.312429</td>
-<td>0.064755</td>
-<td>0.029107</td>
-<td>891018</td>
+<th data-quarto-table-cell-role="th">62</th>
+<td>5.662909</td>
+<td>2026-05-22 02:09:53.270581</td>
+<td>2026-05-22 02:09:53.685102</td>
+<td>0 days 00:00:00.414521</td>
+<td>0.060832</td>
+<td>0.028447</td>
+<td>814590</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">88</th>
-<td>5.084057</td>
-<td>2026-04-03 18:17:18.068296</td>
-<td>2026-04-03 18:17:18.386463</td>
-<td>0 days 00:00:00.318167</td>
-<td>0.065515</td>
-<td>0.029158</td>
-<td>895662</td>
+<th data-quarto-table-cell-role="th">92</th>
+<td>5.787817</td>
+<td>2026-05-22 02:09:56.617043</td>
+<td>2026-05-22 02:09:57.042775</td>
+<td>0 days 00:00:00.425732</td>
+<td>0.071214</td>
+<td>0.028370</td>
+<td>816228</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">82</th>
-<td>5.589755</td>
-<td>2026-04-03 18:17:17.849747</td>
-<td>2026-04-03 18:17:18.190523</td>
-<td>0 days 00:00:00.340776</td>
-<td>0.061444</td>
-<td>0.028473</td>
-<td>975705</td>
+<th data-quarto-table-cell-role="th">93</th>
+<td>5.821865</td>
+<td>2026-05-22 02:09:56.665044</td>
+<td>2026-05-22 02:09:57.087282</td>
+<td>0 days 00:00:00.422238</td>
+<td>0.062639</td>
+<td>0.028566</td>
+<td>177376</td>
 <td>COMPLETE</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">79</th>
-<td>5.753112</td>
-<td>2026-04-03 18:17:17.754273</td>
-<td>2026-04-03 18:17:18.116566</td>
-<td>0 days 00:00:00.362293</td>
-<td>0.063046</td>
-<td>0.028548</td>
-<td>986555</td>
+<th data-quarto-table-cell-role="th">96</th>
+<td>5.821865</td>
+<td>2026-05-22 02:09:57.053879</td>
+<td>2026-05-22 02:09:57.487082</td>
+<td>0 days 00:00:00.433203</td>
+<td>0.062806</td>
+<td>0.028570</td>
+<td>836986</td>
 <td>COMPLETE</td>
 </tr>
 </tbody>
@@ -1231,14 +1238,14 @@ window.Quarto = {
 </div>
 </div>
 </div>
-<div id="ec13b885" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the results</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>figs <span class="op">=</span> calib.plot_optuna([<span class="st">'plot_optimization_history'</span>, <span class="st">'plot_contour'</span>])</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">0</span>].axes.set_yscale(<span class="st">'log'</span>)</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">1</span>].axvline(true_pars[<span class="st">'beta'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">1</span>].axhline(true_pars[<span class="st">'gamma'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">1</span>].scatter(calib.study.best_params[<span class="st">'beta'</span>], calib.study.best_params[<span class="st">'gamma'</span>], <span class="dv">100</span>, marker<span class="op">=</span><span class="st">'x'</span>, color<span class="op">=</span><span class="st">'red'</span>, zorder<span class="op">=</span><span class="dv">10</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="957a5380" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the results</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>figs <span class="op">=</span> calib.plot_optuna([<span class="st">'plot_optimization_history'</span>, <span class="st">'plot_contour'</span>])</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">0</span>].axes.set_yscale(<span class="st">'log'</span>)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">1</span>].axvline(true_pars[<span class="st">'beta'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">1</span>].axhline(true_pars[<span class="st">'gamma'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>figs[<span class="dv">1</span>].scatter(calib.study.best_params[<span class="st">'beta'</span>], calib.study.best_params[<span class="st">'gamma'</span>], <span class="dv">100</span>, marker<span class="op">=</span><span class="st">'x'</span>, color<span class="op">=</span><span class="st">'red'</span>, zorder<span class="op">=</span><span class="dv">10</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -1249,34 +1256,34 @@ window.Quarto = {
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_sir_calibration_files/figure-html/cell-10-output-2.png" width="596" height="455" class="figure-img"></p>
+<p><img src="workflows_sir_calibration_files/figure-html/cell-10-output-2.png" width="596" height="454" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>Finally, let’s run some simulations with the best parameters and compare to the calibration data. From a mathemtatical perspective, this is not the right thing to do. We have found the maximum-likelihood estimate (MLE) parameters, <span class="math inline">\(\theta\)</span>, and are now running simulations <span class="math inline">\(X \mid \theta\)</span>. These latent state trajectories represent the intrinsic noise in the model, but do not represent uncertainty. For that, additional methods are required or use a Bayesian approach, as illustrated below.</p>
-<div id="5821ab54" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>n_reps <span class="op">=</span> <span class="dv">10</span> <span class="co"># Number of repetitions to run</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="co"># These are the best parameters found, the MLE estimate</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>best_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(value<span class="op">=</span>calib.study.best_params[<span class="st">'beta'</span>]),</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    gamma <span class="op">=</span> <span class="bu">dict</span>(value<span class="op">=</span>calib.study.best_params[<span class="st">'gamma'</span>]),</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the starsim SIR simulations in parallel, cool! If you need to run in</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># serial, for example when debugging, simply set serial=True</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>results_list <span class="op">=</span> sc.parallelize(run_starsim, pars<span class="op">=</span>best_pars, iterkwargs<span class="op">=</span><span class="bu">dict</span>(rand_seed<span class="op">=</span>np.arange(n_reps)), serial<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.concat(results_list) <span class="co"># Combine the results into a single DataFrame</span></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the results, vertical dashed lines indicate the observation times where prevalence is measured</span></span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> results.reset_index().melt(id_vars<span class="op">=</span>[<span class="st">'Time'</span>, <span class="st">'rand_seed'</span>], value_vars<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>], var_name<span class="op">=</span><span class="st">'State'</span>, value_name<span class="op">=</span><span class="st">'Count'</span>)</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, units<span class="op">=</span><span class="st">'rand_seed'</span>, estimator<span class="op">=</span><span class="va">None</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, lw<span class="op">=</span><span class="fl">0.5</span>, legend<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, errorbar<span class="op">=</span>(<span class="st">'pi'</span>, <span class="dv">50</span>), ax<span class="op">=</span>ax, legend<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))</span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ot <span class="kw">in</span> observation_times:</span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    ax.axvline(ot, ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>ax.scatter(starsim_data.index, starsim_data[<span class="st">'x'</span>], marker<span class="op">=</span><span class="st">'o'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'Observed data'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="2f454541" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>n_reps <span class="op">=</span> <span class="dv">10</span> <span class="co"># Number of repetitions to run</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co"># These are the best parameters found, the MLE estimate</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>best_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(value<span class="op">=</span>calib.study.best_params[<span class="st">'beta'</span>]),</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    gamma <span class="op">=</span> <span class="bu">dict</span>(value<span class="op">=</span>calib.study.best_params[<span class="st">'gamma'</span>]),</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the starsim SIR simulations in parallel, cool! If you need to run in</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="co"># serial, for example when debugging, simply set serial=True</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>results_list <span class="op">=</span> sc.parallelize(run_starsim, pars<span class="op">=</span>best_pars, iterkwargs<span class="op">=</span><span class="bu">dict</span>(rand_seed<span class="op">=</span>np.arange(n_reps)), serial<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.concat(results_list) <span class="co"># Combine the results into a single DataFrame</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the results, vertical dashed lines indicate the observation times where prevalence is measured</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> results.reset_index().melt(id_vars<span class="op">=</span>[<span class="st">'Time'</span>, <span class="st">'rand_seed'</span>], value_vars<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>], var_name<span class="op">=</span><span class="st">'State'</span>, value_name<span class="op">=</span><span class="st">'Count'</span>)</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, units<span class="op">=</span><span class="st">'rand_seed'</span>, estimator<span class="op">=</span><span class="va">None</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, lw<span class="op">=</span><span class="fl">0.5</span>, legend<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, errorbar<span class="op">=</span>(<span class="st">'pi'</span>, <span class="dv">50</span>), ax<span class="op">=</span>ax, legend<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ot <span class="kw">in</span> observation_times:</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    ax.axvline(ot, ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>ax.scatter(starsim_data.index, starsim_data[<span class="st">'x'</span>], marker<span class="op">=</span><span class="st">'o'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'Observed data'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -1290,77 +1297,77 @@ window.Quarto = {
 <h1>Bayesian calibration using sampling-importance resampling (SIR)</h1>
 <p><a id="sampling"></a></p>
 <p>Now let’s use a Bayesian calibration approach to see if the results are any different. We’ll use a simple ABC rejection sampling with a beta-binomial likelihood. A key difference is that we’re learning a posterior distribution over both parameters and trajectories rather than just a point estimate of the parameters.</p>
-<div id="247a42e5" class="cell" data-execution_count="11">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>N <span class="op">=</span> <span class="dv">100</span>  <span class="co"># Number of prior samples (more is better, but slower)</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co"># For Beta-Binomial, the concentration parameter. Lower kappa --&gt; broader</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="co"># posterior and higher effective sample size (ESS) for the same N. But not a</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co"># free parameter, kappa comes from the over-dispersion in the observed data.</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>kappa <span class="op">=</span> <span class="dv">10</span> </span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Sample from the prior</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>prior_samples <span class="op">=</span> sample_from_prior(size<span class="op">=</span>N)</span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>rand_seeds <span class="op">=</span> np.random.randint(<span class="dv">0</span>, <span class="fl">1e6</span>, size<span class="op">=</span><span class="dv">2</span><span class="op">*</span>N)</span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>rand_seeds <span class="op">=</span> np.unique(rand_seeds)[:N]</span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Prepare parameter dicts for each sample</span></span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>sample_pars_list <span class="op">=</span> [</span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'pars'</span>: {<span class="st">'beta'</span>: {<span class="st">'value'</span>: row[<span class="st">'beta'</span>]}, <span class="st">'gamma'</span>: {<span class="st">'value'</span>: row[<span class="st">'gamma'</span>]}},</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'rand_seed'</span>: rand_seeds[idx]  <span class="co"># Random seed for each simulation</span></span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> idx, row <span class="kw">in</span> prior_samples.iterrows()</span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>]</span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Run simulations in parallel and collect trajectories</span></span>
-<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>sim_results_list <span class="op">=</span> sc.parallelize(run_starsim, iterkwargs<span class="op">=</span>sample_pars_list, serial<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Store latent state trajectories for each sample</span></span>
-<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>trajectories <span class="op">=</span> pd.concat(sim_results_list) <span class="op">\</span></span>
-<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
-<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>    .set_index([<span class="st">'rand_seed'</span>, <span class="st">'Time'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="e8bfda44" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>N <span class="op">=</span> <span class="dv">100</span>  <span class="co"># Number of prior samples (more is better, but slower)</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co"># For Beta-Binomial, the concentration parameter. Lower kappa --&gt; broader</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="co"># posterior and higher effective sample size (ESS) for the same N. But not a</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="co"># free parameter, kappa comes from the over-dispersion in the observed data.</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>kappa <span class="op">=</span> <span class="dv">10</span> </span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Sample from the prior</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>prior_samples <span class="op">=</span> sample_from_prior(size<span class="op">=</span>N)</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>rand_seeds <span class="op">=</span> np.random.randint(<span class="dv">0</span>, <span class="fl">1e6</span>, size<span class="op">=</span><span class="dv">2</span><span class="op">*</span>N)</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>rand_seeds <span class="op">=</span> np.unique(rand_seeds)[:N]</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Prepare parameter dicts for each sample</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>sample_pars_list <span class="op">=</span> [</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'pars'</span>: {<span class="st">'beta'</span>: {<span class="st">'value'</span>: row[<span class="st">'beta'</span>]}, <span class="st">'gamma'</span>: {<span class="st">'value'</span>: row[<span class="st">'gamma'</span>]}},</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'rand_seed'</span>: rand_seeds[idx]  <span class="co"># Random seed for each simulation</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> idx, row <span class="kw">in</span> prior_samples.iterrows()</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a><span class="co"># Run simulations in parallel and collect trajectories</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>sim_results_list <span class="op">=</span> sc.parallelize(run_starsim, iterkwargs<span class="op">=</span>sample_pars_list, serial<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Store latent state trajectories for each sample</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>trajectories <span class="op">=</span> pd.concat(sim_results_list) <span class="op">\</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>    .set_index([<span class="st">'rand_seed'</span>, <span class="st">'Time'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="eb85dcb6" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute likelihoods for each sample</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>likelihoods <span class="op">=</span> []</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> rand_seed, sim_result <span class="kw">in</span> trajectories.groupby(<span class="st">'rand_seed'</span>):</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    sim_sir <span class="op">=</span> sim_result.loc[rand_seed].loc[observation_times, [<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>]]</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    likelihood <span class="op">=</span> beta_binomial_likelihood(sim_sir, starsim_data, kappa<span class="op">=</span>kappa)</span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    likelihoods.append((rand_seed, likelihood))</span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.DataFrame(likelihoods, columns<span class="op">=</span>[<span class="st">'rand_seed'</span>, <span class="st">'likelihood'</span>])</span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.concat([prior_samples, results], axis<span class="op">=</span><span class="dv">1</span>).set_index(<span class="st">'rand_seed'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="e2f028d5" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute likelihoods for each sample</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>likelihoods <span class="op">=</span> []</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> rand_seed, sim_result <span class="kw">in</span> trajectories.groupby(<span class="st">'rand_seed'</span>):</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    sim_sir <span class="op">=</span> sim_result.loc[rand_seed].loc[observation_times, [<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>]]</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    likelihood <span class="op">=</span> beta_binomial_likelihood(sim_sir, starsim_data, kappa<span class="op">=</span>kappa)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    likelihoods.append((rand_seed, likelihood))</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.DataFrame(likelihoods, columns<span class="op">=</span>[<span class="st">'rand_seed'</span>, <span class="st">'likelihood'</span>])</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> pd.concat([prior_samples, results], axis<span class="op">=</span><span class="dv">1</span>).set_index(<span class="st">'rand_seed'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Within a Bayesian workflow, there are two ways to proceed from this point. 1. Use all samples, weighted by their likelihood. For this approach, there is no resampling step. 2. Resample <span class="math inline">\(K \leq N\)</span> samples with probability proportional to their likelihood (with replacement). This is sampling-importance resampling (SIR), not to be confused with the susceptible-infected-recovered (SIR) model. Ideally, we would choose <span class="math inline">\(K=N\)</span> resamples, but if using these samples for further analysis, it may be useful to choose <span class="math inline">\(K &lt; N\)</span> to reduce computational cost. It’s generally recommended to choose <span class="math inline">\(K\)</span> as one to two times the effective sample size (ESS).</p>
-<div id="2ec51da6" class="cell" data-execution_count="13">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results[<span class="st">'weight'</span>] <span class="op">=</span> results[<span class="st">'likelihood'</span>] <span class="op">/</span> np.<span class="bu">sum</span>(results[<span class="st">'likelihood'</span>])</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Importance resampling</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>ESS <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> np.<span class="bu">sum</span>(results[<span class="st">'weight'</span>]<span class="op">**</span><span class="dv">2</span>)</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'='</span><span class="op">*</span><span class="dv">60</span>)</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Effective Sample Size (ESS) = </span><span class="sc">{</span>ESS<span class="sc">:.1f}</span><span class="ss"> out of </span><span class="sc">{</span>N<span class="sc">}</span><span class="ss">'</span>)</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> ESS <span class="op">&lt;</span> <span class="dv">30</span>:</span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">'WARNING: ESS is below 30, consider increasing N'</span>)</span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'='</span><span class="op">*</span><span class="dv">60</span>)</span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> np.ceil(<span class="fl">1.5</span> <span class="op">*</span> ESS).astype(<span class="bu">int</span>)  <span class="co"># Number of samples to draw</span></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Resampling K ='</span>, K, <span class="st">'samples from the weighted ensemble of N ='</span>, N, <span class="st">'samples'</span>)</span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>resample_seeds <span class="op">=</span> np.random.choice(results.index, size<span class="op">=</span>K, replace<span class="op">=</span><span class="va">True</span>, p<span class="op">=</span>results[<span class="st">'weight'</span>])</span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Merge results into combined (all) and selected (K&lt;N subset)</span></span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>combined <span class="op">=</span> trajectories.reset_index().merge(results, on<span class="op">=</span><span class="st">'rand_seed'</span>).set_index([<span class="st">'rand_seed'</span>, <span class="st">'Time'</span>])</span>
-<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>selected <span class="op">=</span> combined.loc[resample_seeds]</span>
-<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Show posterior samples as a DataFrame</span></span>
-<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>posterior_pars <span class="op">=</span> results.loc[resample_seeds, [<span class="st">'beta'</span>, <span class="st">'gamma'</span>]]</span>
-<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>display(posterior_pars.head())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="2f49780d" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>results[<span class="st">'weight'</span>] <span class="op">=</span> results[<span class="st">'likelihood'</span>] <span class="op">/</span> np.<span class="bu">sum</span>(results[<span class="st">'likelihood'</span>])</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Importance resampling</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>ESS <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> np.<span class="bu">sum</span>(results[<span class="st">'weight'</span>]<span class="op">**</span><span class="dv">2</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'='</span><span class="op">*</span><span class="dv">60</span>)</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Effective Sample Size (ESS) = </span><span class="sc">{</span>ESS<span class="sc">:.1f}</span><span class="ss"> out of </span><span class="sc">{</span>N<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> ESS <span class="op">&lt;</span> <span class="dv">30</span>:</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">'WARNING: ESS is below 30, consider increasing N'</span>)</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'='</span><span class="op">*</span><span class="dv">60</span>)</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> np.ceil(<span class="fl">1.5</span> <span class="op">*</span> ESS).astype(<span class="bu">int</span>)  <span class="co"># Number of samples to draw</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Resampling K ='</span>, K, <span class="st">'samples from the weighted ensemble of N ='</span>, N, <span class="st">'samples'</span>)</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>resample_seeds <span class="op">=</span> np.random.choice(results.index, size<span class="op">=</span>K, replace<span class="op">=</span><span class="va">True</span>, p<span class="op">=</span>results[<span class="st">'weight'</span>])</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Merge results into combined (all) and selected (K&lt;N subset)</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>combined <span class="op">=</span> trajectories.reset_index().merge(results, on<span class="op">=</span><span class="st">'rand_seed'</span>).set_index([<span class="st">'rand_seed'</span>, <span class="st">'Time'</span>])</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>selected <span class="op">=</span> combined.loc[resample_seeds]</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Show posterior samples as a DataFrame</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>posterior_pars <span class="op">=</span> results.loc[resample_seeds, [<span class="st">'beta'</span>, <span class="st">'gamma'</span>]]</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>display(posterior_pars.head())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>============================================================
-Effective Sample Size (ESS) = 9.1 out of 100
+Effective Sample Size (ESS) = 4.3 out of 100
 WARNING: ESS is below 30, consider increasing N
 ============================================================
-Resampling K = 14 samples from the weighted ensemble of N = 100 samples</code></pre>
+Resampling K = 7 samples from the weighted ensemble of N = 100 samples</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -1381,29 +1388,29 @@ Resampling K = 14 samples from the weighted ensemble of N = 100 samples</code></
 </thead>
 <tbody>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">437275</th>
-<td>0.026402</td>
-<td>0.004426</td>
+<th data-quarto-table-cell-role="th">91301</th>
+<td>0.023032</td>
+<td>0.021661</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">155966</th>
-<td>0.045934</td>
-<td>0.021553</td>
+<th data-quarto-table-cell-role="th">457084</th>
+<td>0.058189</td>
+<td>0.029326</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">57682</th>
-<td>0.038427</td>
-<td>0.002475</td>
+<th data-quarto-table-cell-role="th">457084</th>
+<td>0.058189</td>
+<td>0.029326</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">269270</th>
-<td>0.030587</td>
-<td>0.002392</td>
+<th data-quarto-table-cell-role="th">363287</th>
+<td>0.050066</td>
+<td>0.005877</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">293646</th>
-<td>0.056567</td>
-<td>0.029147</td>
+<th data-quarto-table-cell-role="th">457084</th>
+<td>0.058189</td>
+<td>0.029326</td>
 </tr>
 </tbody>
 </table>
@@ -1412,39 +1419,39 @@ Resampling K = 14 samples from the weighted ensemble of N = 100 samples</code></
 </div>
 </div>
 <p>Let’s look at the parameters, full (weighted) posterior mean, and posterior mean from the resample.</p>
-<div id="d96b52b0" class="cell" data-execution_count="14">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">7</span>, <span class="dv">6</span>))</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Scatter all prior samples, colored by likelihood</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>scat <span class="op">=</span> ax.scatter(</span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    results[<span class="st">'beta'</span>], results[<span class="st">'gamma'</span>],</span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    c<span class="op">=</span>results[<span class="st">'weight'</span>], cmap<span class="op">=</span><span class="st">'viridis'</span>, s<span class="op">=</span><span class="dv">15</span>, edgecolor<span class="op">=</span><span class="st">'none'</span>, alpha<span class="op">=</span><span class="fl">0.8</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Overlay red rings for the K resampled posterior samples</span></span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>ax.scatter(</span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    results.loc[resample_seeds, <span class="st">'beta'</span>], results.loc[resample_seeds, <span class="st">'gamma'</span>],</span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    facecolors<span class="op">=</span><span class="st">'none'</span>, edgecolors<span class="op">=</span><span class="st">'red'</span>, s<span class="op">=</span><span class="dv">25</span>, linewidths<span class="op">=</span><span class="dv">1</span>, label<span class="op">=</span><span class="st">'Resampled'</span></span>
-<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Overlay the true parameter values and best posterior sample</span></span>
-<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>ax.axvline(true_pars[<span class="st">'beta'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'True parameters'</span>)</span>
-<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>ax.axhline(true_pars[<span class="st">'gamma'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
-<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Mark the full and resampled posterior means</span></span>
-<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>full_posterior_mean <span class="op">=</span> results[[<span class="st">'beta'</span>, <span class="st">'gamma'</span>]].T.dot(results[<span class="st">'weight'</span>])</span>
-<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>ax.scatter(full_posterior_mean.beta, full_posterior_mean.gamma, <span class="dv">100</span>, marker<span class="op">=</span><span class="st">'x'</span>, color<span class="op">=</span><span class="st">'red'</span>, lw<span class="op">=</span><span class="dv">2</span>, zorder<span class="op">=</span><span class="dv">10</span>, label<span class="op">=</span><span class="st">'Posterior mean (full)'</span>)</span>
-<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>posterior_mean <span class="op">=</span> results.loc[resample_seeds, [<span class="st">'beta'</span>, <span class="st">'gamma'</span>]].mean(axis<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>ax.scatter(posterior_mean.beta, posterior_mean.gamma, <span class="dv">100</span>, marker<span class="op">=</span><span class="st">'x'</span>, color<span class="op">=</span><span class="st">'blue'</span>, lw<span class="op">=</span><span class="dv">2</span>, zorder<span class="op">=</span><span class="dv">11</span>, label<span class="op">=</span><span class="st">'Posterior mean (resampled)'</span>)</span>
-<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'beta'</span>)</span>
-<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'gamma'</span>)</span>
-<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Posterior parameter samples (red rings) and prior samples (colored by likelihood)'</span>)</span>
-<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a>plt.colorbar(scat, ax<span class="op">=</span>ax, label<span class="op">=</span><span class="st">'Normalized likelihood'</span>)</span>
-<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Move the legend outside the figure to the right</span></span>
-<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
-<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
-<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="30c4ad76" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">7</span>, <span class="dv">6</span>))</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Scatter all prior samples, colored by likelihood</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>scat <span class="op">=</span> ax.scatter(</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    results[<span class="st">'beta'</span>], results[<span class="st">'gamma'</span>],</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    c<span class="op">=</span>results[<span class="st">'weight'</span>], cmap<span class="op">=</span><span class="st">'viridis'</span>, s<span class="op">=</span><span class="dv">15</span>, edgecolor<span class="op">=</span><span class="st">'none'</span>, alpha<span class="op">=</span><span class="fl">0.8</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Overlay red rings for the K resampled posterior samples</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>ax.scatter(</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    results.loc[resample_seeds, <span class="st">'beta'</span>], results.loc[resample_seeds, <span class="st">'gamma'</span>],</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    facecolors<span class="op">=</span><span class="st">'none'</span>, edgecolors<span class="op">=</span><span class="st">'red'</span>, s<span class="op">=</span><span class="dv">25</span>, linewidths<span class="op">=</span><span class="dv">1</span>, label<span class="op">=</span><span class="st">'Resampled'</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Overlay the true parameter values and best posterior sample</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>ax.axvline(true_pars[<span class="st">'beta'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'True parameters'</span>)</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>ax.axhline(true_pars[<span class="st">'gamma'</span>][<span class="st">'value'</span>], ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Mark the full and resampled posterior means</span></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>full_posterior_mean <span class="op">=</span> results[[<span class="st">'beta'</span>, <span class="st">'gamma'</span>]].T.dot(results[<span class="st">'weight'</span>])</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>ax.scatter(full_posterior_mean.beta, full_posterior_mean.gamma, <span class="dv">100</span>, marker<span class="op">=</span><span class="st">'x'</span>, color<span class="op">=</span><span class="st">'red'</span>, lw<span class="op">=</span><span class="dv">2</span>, zorder<span class="op">=</span><span class="dv">10</span>, label<span class="op">=</span><span class="st">'Posterior mean (full)'</span>)</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>posterior_mean <span class="op">=</span> results.loc[resample_seeds, [<span class="st">'beta'</span>, <span class="st">'gamma'</span>]].mean(axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>ax.scatter(posterior_mean.beta, posterior_mean.gamma, <span class="dv">100</span>, marker<span class="op">=</span><span class="st">'x'</span>, color<span class="op">=</span><span class="st">'blue'</span>, lw<span class="op">=</span><span class="dv">2</span>, zorder<span class="op">=</span><span class="dv">11</span>, label<span class="op">=</span><span class="st">'Posterior mean (resampled)'</span>)</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">'beta'</span>)</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'gamma'</span>)</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Posterior parameter samples (red rings) and prior samples (colored by likelihood)'</span>)</span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>plt.colorbar(scat, ax<span class="op">=</span>ax, label<span class="op">=</span><span class="st">'Normalized likelihood'</span>)</span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a><span class="co"># Move the legend outside the figure to the right</span></span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -1454,62 +1461,62 @@ Resampling K = 14 samples from the weighted ensemble of N = 100 samples</code></
 </div>
 </div>
 <p>View latent trajectories based on <em>all</em> <span class="math inline">\(N\)</span> samples, weighted by their likelihood. Takes some code to incorporate the weights into the plotting…</p>
-<div id="948d4f44" class="cell" data-execution_count="15">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Use ALL samples, with weights, to compute mean and quantiles</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> combined <span class="op">\</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    .melt(</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        id_vars<span class="op">=</span>[<span class="st">'Time'</span>, <span class="st">'rand_seed'</span>],</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        value_vars<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>],</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        var_name<span class="op">=</span><span class="st">'State'</span>,</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        value_name<span class="op">=</span><span class="st">'Count'</span></span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>df[<span class="st">'Weight'</span>] <span class="op">=</span> df[<span class="st">'rand_seed'</span>].<span class="bu">map</span>(results[<span class="st">'weight'</span>]) <span class="co"># Add weights to the DataFrame</span></span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> weighted_quantile(values, quantiles, weights):</span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> np.asarray(values, <span class="bu">float</span>)</span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    q <span class="op">=</span> np.atleast_1d(quantiles).astype(<span class="bu">float</span>)</span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> np.asarray(weights, <span class="bu">float</span>)</span>
-<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    order <span class="op">=</span> np.argsort(v)</span>
-<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    v, w <span class="op">=</span> v[order], w[order]</span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>    cw <span class="op">=</span> np.cumsum(w)</span>
-<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    cw <span class="op">/=</span> cw[<span class="op">-</span><span class="dv">1</span>] <span class="cf">if</span> cw[<span class="op">-</span><span class="dv">1</span>] <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">else</span> <span class="fl">1.0</span></span>
-<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.interp(q, cw, v)</span>
-<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> summarize(group):</span>
-<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>    vals <span class="op">=</span> group[<span class="st">'Count'</span>].to_numpy()</span>
-<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>    wts  <span class="op">=</span> group[<span class="st">'Weight'</span>].to_numpy()</span>
-<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>    mean <span class="op">=</span> np.average(vals, weights<span class="op">=</span>wts)</span>
-<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>    q05, q25, q75, q95 <span class="op">=</span> weighted_quantile(vals, [<span class="fl">0.05</span>, <span class="fl">0.25</span>, <span class="fl">0.75</span>, <span class="fl">0.95</span>], wts)</span>
-<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.Series({<span class="st">'mean'</span>: mean, <span class="st">'q05'</span>: q05, <span class="st">'q25'</span>: q25, <span class="st">'q75'</span>: q75, <span class="st">'q95'</span>: q95})</span>
-<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> (</span>
-<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>    df.groupby([<span class="st">'Time'</span>,<span class="st">'State'</span>], sort<span class="op">=</span><span class="va">True</span>, as_index<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>      .<span class="bu">apply</span>(summarize)</span>
-<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>      .reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">9</span>,<span class="dv">5</span>))</span>
-<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a>lines <span class="op">=</span> sns.lineplot(data<span class="op">=</span>summary, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'mean'</span>, hue<span class="op">=</span><span class="st">'State'</span>, hue_order<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>],</span>
-<span id="cb18-37"><a href="#cb18-37" aria-hidden="true" tabindex="-1"></a>                     estimator<span class="op">=</span><span class="va">None</span>, errorbar<span class="op">=</span><span class="va">None</span>, ax<span class="op">=</span>ax, zorder<span class="op">=</span><span class="dv">5</span>)</span>
-<span id="cb18-38"><a href="#cb18-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-39"><a href="#cb18-39" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the colors used by seaborn for each state</span></span>
-<span id="cb18-40"><a href="#cb18-40" aria-hidden="true" tabindex="-1"></a>state_colors <span class="op">=</span> {line.get_label(): line.get_color() <span class="cf">for</span> line <span class="kw">in</span> ax.lines}</span>
-<span id="cb18-41"><a href="#cb18-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-42"><a href="#cb18-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> state, g <span class="kw">in</span> summary.groupby(<span class="st">'State'</span>):</span>
-<span id="cb18-43"><a href="#cb18-43" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> state_colors.get(state, <span class="va">None</span>)</span>
-<span id="cb18-44"><a href="#cb18-44" aria-hidden="true" tabindex="-1"></a>    ax.fill_between(g[<span class="st">'Time'</span>], g[<span class="st">'q05'</span>], g[<span class="st">'q95'</span>], alpha<span class="op">=</span><span class="fl">0.12</span>, linewidth<span class="op">=</span><span class="dv">0</span>, color<span class="op">=</span>color)  <span class="co"># 90% band</span></span>
-<span id="cb18-45"><a href="#cb18-45" aria-hidden="true" tabindex="-1"></a>    ax.fill_between(g[<span class="st">'Time'</span>], g[<span class="st">'q25'</span>], g[<span class="st">'q75'</span>], alpha<span class="op">=</span><span class="fl">0.25</span>, linewidth<span class="op">=</span><span class="dv">0</span>, color<span class="op">=</span>color)  <span class="co"># 50% band</span></span>
-<span id="cb18-46"><a href="#cb18-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-47"><a href="#cb18-47" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ot <span class="kw">in</span> observation_times:</span>
-<span id="cb18-48"><a href="#cb18-48" aria-hidden="true" tabindex="-1"></a>    ax.axvline(ot, ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
-<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a>ax.scatter(starsim_data.index, starsim_data[<span class="st">'x'</span>], marker<span class="op">=</span><span class="st">'o'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'Observed data'</span>, zorder<span class="op">=</span><span class="dv">10</span>)<span class="op">;</span></span>
-<span id="cb18-50"><a href="#cb18-50" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'Count'</span>)</span>
-<span id="cb18-52"><a href="#cb18-52" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Weighted posterior trajectories'</span>)</span>
-<span id="cb18-53"><a href="#cb18-53" aria-hidden="true" tabindex="-1"></a>ax.legend(title<span class="op">=</span><span class="st">'State'</span>)</span>
-<span id="cb18-54"><a href="#cb18-54" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))</span>
-<span id="cb18-55"><a href="#cb18-55" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="e3464ea0" class="cell" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Use ALL samples, with weights, to compute mean and quantiles</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> combined <span class="op">\</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    .melt(</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        id_vars<span class="op">=</span>[<span class="st">'Time'</span>, <span class="st">'rand_seed'</span>],</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        value_vars<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>],</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        var_name<span class="op">=</span><span class="st">'State'</span>,</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        value_name<span class="op">=</span><span class="st">'Count'</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>df[<span class="st">'Weight'</span>] <span class="op">=</span> df[<span class="st">'rand_seed'</span>].<span class="bu">map</span>(results[<span class="st">'weight'</span>]) <span class="co"># Add weights to the DataFrame</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> weighted_quantile(values, quantiles, weights):</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> np.asarray(values, <span class="bu">float</span>)</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    q <span class="op">=</span> np.atleast_1d(quantiles).astype(<span class="bu">float</span>)</span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>    w <span class="op">=</span> np.asarray(weights, <span class="bu">float</span>)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>    order <span class="op">=</span> np.argsort(v)</span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>    v, w <span class="op">=</span> v[order], w[order]</span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>    cw <span class="op">=</span> np.cumsum(w)</span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>    cw <span class="op">/=</span> cw[<span class="op">-</span><span class="dv">1</span>] <span class="cf">if</span> cw[<span class="op">-</span><span class="dv">1</span>] <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">else</span> <span class="fl">1.0</span></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.interp(q, cw, v)</span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> summarize(group):</span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>    vals <span class="op">=</span> group[<span class="st">'Count'</span>].to_numpy()</span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>    wts  <span class="op">=</span> group[<span class="st">'Weight'</span>].to_numpy()</span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>    mean <span class="op">=</span> np.average(vals, weights<span class="op">=</span>wts)</span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a>    q05, q25, q75, q95 <span class="op">=</span> weighted_quantile(vals, [<span class="fl">0.05</span>, <span class="fl">0.25</span>, <span class="fl">0.75</span>, <span class="fl">0.95</span>], wts)</span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.Series({<span class="st">'mean'</span>: mean, <span class="st">'q05'</span>: q05, <span class="st">'q25'</span>: q25, <span class="st">'q75'</span>: q75, <span class="st">'q95'</span>: q95})</span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> (</span>
+<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a>    df.groupby([<span class="st">'Time'</span>,<span class="st">'State'</span>], sort<span class="op">=</span><span class="va">True</span>, as_index<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>      .<span class="bu">apply</span>(summarize)</span>
+<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a>      .reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-35"><a href="#cb17-35" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">9</span>,<span class="dv">5</span>))</span>
+<span id="cb17-36"><a href="#cb17-36" aria-hidden="true" tabindex="-1"></a>lines <span class="op">=</span> sns.lineplot(data<span class="op">=</span>summary, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'mean'</span>, hue<span class="op">=</span><span class="st">'State'</span>, hue_order<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>],</span>
+<span id="cb17-37"><a href="#cb17-37" aria-hidden="true" tabindex="-1"></a>                     estimator<span class="op">=</span><span class="va">None</span>, errorbar<span class="op">=</span><span class="va">None</span>, ax<span class="op">=</span>ax, zorder<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb17-38"><a href="#cb17-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-39"><a href="#cb17-39" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the colors used by seaborn for each state</span></span>
+<span id="cb17-40"><a href="#cb17-40" aria-hidden="true" tabindex="-1"></a>state_colors <span class="op">=</span> {line.get_label(): line.get_color() <span class="cf">for</span> line <span class="kw">in</span> ax.lines}</span>
+<span id="cb17-41"><a href="#cb17-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-42"><a href="#cb17-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> state, g <span class="kw">in</span> summary.groupby(<span class="st">'State'</span>):</span>
+<span id="cb17-43"><a href="#cb17-43" aria-hidden="true" tabindex="-1"></a>    color <span class="op">=</span> state_colors.get(state, <span class="va">None</span>)</span>
+<span id="cb17-44"><a href="#cb17-44" aria-hidden="true" tabindex="-1"></a>    ax.fill_between(g[<span class="st">'Time'</span>], g[<span class="st">'q05'</span>], g[<span class="st">'q95'</span>], alpha<span class="op">=</span><span class="fl">0.12</span>, linewidth<span class="op">=</span><span class="dv">0</span>, color<span class="op">=</span>color)  <span class="co"># 90% band</span></span>
+<span id="cb17-45"><a href="#cb17-45" aria-hidden="true" tabindex="-1"></a>    ax.fill_between(g[<span class="st">'Time'</span>], g[<span class="st">'q25'</span>], g[<span class="st">'q75'</span>], alpha<span class="op">=</span><span class="fl">0.25</span>, linewidth<span class="op">=</span><span class="dv">0</span>, color<span class="op">=</span>color)  <span class="co"># 50% band</span></span>
+<span id="cb17-46"><a href="#cb17-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-47"><a href="#cb17-47" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ot <span class="kw">in</span> observation_times:</span>
+<span id="cb17-48"><a href="#cb17-48" aria-hidden="true" tabindex="-1"></a>    ax.axvline(ot, ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb17-49"><a href="#cb17-49" aria-hidden="true" tabindex="-1"></a>ax.scatter(starsim_data.index, starsim_data[<span class="st">'x'</span>], marker<span class="op">=</span><span class="st">'o'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'Observed data'</span>, zorder<span class="op">=</span><span class="dv">10</span>)<span class="op">;</span></span>
+<span id="cb17-50"><a href="#cb17-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-51"><a href="#cb17-51" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">'Count'</span>)</span>
+<span id="cb17-52"><a href="#cb17-52" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Weighted posterior trajectories'</span>)</span>
+<span id="cb17-53"><a href="#cb17-53" aria-hidden="true" tabindex="-1"></a>ax.legend(title<span class="op">=</span><span class="st">'State'</span>)</span>
+<span id="cb17-54"><a href="#cb17-54" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))</span>
+<span id="cb17-55"><a href="#cb17-55" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -1518,28 +1525,28 @@ Resampling K = 14 samples from the weighted ensemble of N = 100 samples</code></
 </div>
 </div>
 </div>
-<div id="6d73cd17" class="cell" data-execution_count="16">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the resampled trajectories. Should be similar to the weighted posterior over latent trajectories shown above.</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> selected <span class="op">\</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    .melt(</span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>        id_vars<span class="op">=</span>[<span class="st">'Time'</span>, <span class="st">'rand_seed'</span>],</span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>        value_vars<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>],</span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>        var_name<span class="op">=</span><span class="st">'State'</span>,</span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>        value_name<span class="op">=</span><span class="st">'Count'</span></span>
-<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">9</span>,<span class="dv">5</span>))</span>
-<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, units<span class="op">=</span><span class="st">'rand_seed'</span>, estimator<span class="op">=</span><span class="va">None</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, lw<span class="op">=</span><span class="fl">0.2</span>, legend<span class="op">=</span><span class="va">False</span>, ax<span class="op">=</span>ax)</span>
-<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, errorbar<span class="op">=</span>(<span class="st">'pi'</span>, <span class="dv">50</span>), alpha<span class="op">=</span><span class="fl">0.5</span>, ax<span class="op">=</span>ax, legend<span class="op">=</span><span class="va">True</span>, zorder<span class="op">=</span><span class="dv">5</span>)</span>
-<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, errorbar<span class="op">=</span>(<span class="st">'pi'</span>, <span class="dv">90</span>), alpha<span class="op">=</span><span class="fl">0.25</span>, ax<span class="op">=</span>ax, legend<span class="op">=</span><span class="va">False</span>, zorder<span class="op">=</span><span class="dv">6</span>)</span>
-<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))</span>
-<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ot <span class="kw">in</span> observation_times:</span>
-<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>    ax.axvline(ot, ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
-<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>ax.scatter(starsim_data.index, starsim_data[<span class="st">'x'</span>], marker<span class="op">=</span><span class="st">'o'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'Observed data'</span>, zorder<span class="op">=</span><span class="dv">10</span>)<span class="op">;</span></span>
-<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a>ax.legend(title<span class="op">=</span><span class="st">'State'</span>)</span>
-<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Resampled posterior trajectories'</span>)</span>
-<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="774a3e2f" class="cell" data-execution_count="16">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot the resampled trajectories. Should be similar to the weighted posterior over latent trajectories shown above.</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> selected <span class="op">\</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    .reset_index() <span class="op">\</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    .melt(</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        id_vars<span class="op">=</span>[<span class="st">'Time'</span>, <span class="st">'rand_seed'</span>],</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        value_vars<span class="op">=</span>[<span class="st">'S'</span>, <span class="st">'I'</span>, <span class="st">'R'</span>],</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        var_name<span class="op">=</span><span class="st">'State'</span>,</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        value_name<span class="op">=</span><span class="st">'Count'</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">9</span>,<span class="dv">5</span>))</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, units<span class="op">=</span><span class="st">'rand_seed'</span>, estimator<span class="op">=</span><span class="va">None</span>, alpha<span class="op">=</span><span class="fl">0.5</span>, lw<span class="op">=</span><span class="fl">0.2</span>, legend<span class="op">=</span><span class="va">False</span>, ax<span class="op">=</span>ax)</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, errorbar<span class="op">=</span>(<span class="st">'pi'</span>, <span class="dv">50</span>), alpha<span class="op">=</span><span class="fl">0.5</span>, ax<span class="op">=</span>ax, legend<span class="op">=</span><span class="va">True</span>, zorder<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>sns.lineplot(data<span class="op">=</span>df, hue<span class="op">=</span><span class="st">'State'</span>, x<span class="op">=</span><span class="st">'Time'</span>, y<span class="op">=</span><span class="st">'Count'</span>, errorbar<span class="op">=</span>(<span class="st">'pi'</span>, <span class="dv">90</span>), alpha<span class="op">=</span><span class="fl">0.25</span>, ax<span class="op">=</span>ax, legend<span class="op">=</span><span class="va">False</span>, zorder<span class="op">=</span><span class="dv">6</span>)</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ot <span class="kw">in</span> observation_times:</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    ax.axvline(ot, ls<span class="op">=</span><span class="st">'--'</span>, color<span class="op">=</span><span class="st">'black'</span>)</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>ax.scatter(starsim_data.index, starsim_data[<span class="st">'x'</span>], marker<span class="op">=</span><span class="st">'o'</span>, color<span class="op">=</span><span class="st">'black'</span>, label<span class="op">=</span><span class="st">'Observed data'</span>, zorder<span class="op">=</span><span class="dv">10</span>)<span class="op">;</span></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>ax.legend(title<span class="op">=</span><span class="st">'State'</span>)</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Resampled posterior trajectories'</span>)</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">

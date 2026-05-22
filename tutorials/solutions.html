@@ -82,9 +82,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-aafc68b2255684af78b035618dac2a51.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-ebebdd7f480cdcd9c4984c7f251bfad5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -722,7 +722,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="question-1">Question 1</h3>
 <p><strong>Q: To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?</strong></p>
 <p>A: We would simply change <code>'sir'</code> to <code>'sis'</code>:</p>
-<div id="97e5325a" class="cell" data-execution_count="2">
+<div id="2e539ef2" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -748,12 +748,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>sim.diseases.sis.plot() <span class="co"># &lt;-- change this</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.29 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.36 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.48 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.54 s)  •••••••••••••••••••• 100%
+
+  Running 2010.01.01 (10/51) (0.27 s)  ••••———————————————— 22%
+
+  Running 2020.01.01 (20/51) (0.31 s)  ••••••••———————————— 41%
+
+  Running 2030.01.01 (30/51) (0.36 s)  ••••••••••••———————— 61%
+
+  Running 2040.01.01 (40/51) (0.40 s)  ••••••••••••••••———— 80%
+
+  Running 2050.01.01 (50/51) (0.45 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -780,7 +786,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-2">Question 2</h3>
 <p><strong>Q: How do the results change if we increase/decrease <code>beta</code>?</strong></p>
 <p>Increasing <code>beta</code> makes the curves steeper:</p>
-<div id="d14a169c" class="cell" data-execution_count="3">
+<div id="2d92e890" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>pars.diseases.<span class="bu">type</span> <span class="op">=</span> <span class="st">'sir'</span> <span class="co"># Switch back to SIR</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>pars2 <span class="op">=</span> sc.dcp(pars) <span class="co"># copy to new dictionary</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>pars2.diseases.beta <span class="op">=</span> <span class="fl">0.10</span></span>
@@ -788,12 +794,18 @@ Figure(768x576)</code></pre>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>sim2.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.13 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.19 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.24 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.29 s)  •••••••••••••••••••• 100%
+
+  Running 2010.01.01 (10/51) (0.05 s)  ••••———————————————— 22%
+
+  Running 2020.01.01 (20/51) (0.11 s)  ••••••••———————————— 41%
+
+  Running 2030.01.01 (30/51) (0.15 s)  ••••••••••••———————— 61%
+
+  Running 2040.01.01 (40/51) (0.19 s)  ••••••••••••••••———— 80%
+
+  Running 2050.01.01 (50/51) (0.23 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -806,19 +818,25 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>Decreasing <code>beta</code> makes the curves shallower:</p>
-<div id="2e6a65da" class="cell" data-execution_count="4">
+<div id="162834a5" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>pars3 <span class="op">=</span> sc.dcp(pars)</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>pars3.diseases.beta <span class="op">=</span> <span class="fl">0.02</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim3 <span class="op">=</span> ss.Sim(pars3).run()</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>sim3.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
-  Running 2020.01.01 (20/51) (0.13 s)  ••••••••———————————— 41%
-  Running 2030.01.01 (30/51) (0.19 s)  ••••••••••••———————— 61%
-  Running 2040.01.01 (40/51) (0.25 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.31 s)  •••••••••••••••••••• 100%
+
+  Running 2010.01.01 (10/51) (0.05 s)  ••••———————————————— 22%
+
+  Running 2020.01.01 (20/51) (0.10 s)  ••••••••———————————— 41%
+
+  Running 2030.01.01 (30/51) (0.15 s)  ••••••••••••———————— 61%
+
+  Running 2040.01.01 (40/51) (0.20 s)  ••••••••••••••••———— 80%
+
+  Running 2050.01.01 (50/51) (0.24 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -835,19 +853,25 @@ Figure(672x480)</code></pre>
 <h3 class="anchored" data-anchor-id="question-3">Question 3</h3>
 <p><strong>Q: How do the results change if we reduce the number of agents to 200?</strong></p>
 <p>We get a similar result as before, except less smooth, since random effects are more important with small numbers of agents:</p>
-<div id="dc4b184a" class="cell" data-execution_count="5">
+<div id="156e971a" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>pars4 <span class="op">=</span> sc.dcp(pars)</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>pars4.n_agents <span class="op">=</span> <span class="dv">200</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>sim4 <span class="op">=</span> ss.Sim(pars4).run()</span>
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>sim4.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 200 agents
+
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+
   Running 2010.01.01 (10/51) (0.02 s)  ••••———————————————— 22%
+
   Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
+
   Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
+
   Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
-  Running 2050.01.01 (50/51) (0.10 s)  •••••••••••••••••••• 100%
+
+  Running 2050.01.01 (50/51) (0.11 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -867,7 +891,7 @@ Figure(672x480)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-1">Question 1</h3>
 <p><strong>Q: How would you model an outbreak of an SIR-like disease within a refugee camp of 2,000 people? Suppose you were interested in the cumulative number of people who got infected over 1 year - how would you find this out?</strong></p>
 <p>The answer obviously depends on the disease parameters. However, we can make some simple assumptions and use <code>cum_infections</code> to determine the total number of infections:</p>
-<div id="ee22b86d" class="cell" data-execution_count="6">
+<div id="1187f378" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -894,19 +918,32 @@ Figure(672x480)</code></pre>
 <span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Cumulative infections over one year: </span><span class="sc">{</span>answer<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
+
   Running 2025.01.01 ( 0/366) (0.00 s)  ———————————————————— 0%
+
   Running 2025.01.31 (30/366) (0.07 s)  •——————————————————— 8%
-  Running 2025.03.02 (60/366) (0.14 s)  •••————————————————— 17%
+
+  Running 2025.03.02 (60/366) (0.15 s)  •••————————————————— 17%
+
   Running 2025.04.01 (90/366) (0.22 s)  ••••———————————————— 25%
-  Running 2025.05.01 (120/366) (0.29 s)  ••••••—————————————— 33%
-  Running 2025.05.31 (150/366) (0.37 s)  ••••••••———————————— 41%
-  Running 2025.06.30 (180/366) (0.45 s)  •••••••••——————————— 49%
-  Running 2025.07.30 (210/366) (0.52 s)  •••••••••••————————— 58%
-  Running 2025.08.29 (240/366) (0.60 s)  •••••••••••••——————— 66%
-  Running 2025.09.28 (270/366) (0.67 s)  ••••••••••••••—————— 74%
-  Running 2025.10.28 (300/366) (0.74 s)  ••••••••••••••••———— 82%
-  Running 2025.11.27 (330/366) (0.80 s)  ••••••••••••••••••—— 90%
-  Running 2025.12.27 (360/366) (0.87 s)  •••••••••••••••••••— 99%
+
+  Running 2025.05.01 (120/366) (0.30 s)  ••••••—————————————— 33%
+
+  Running 2025.05.31 (150/366) (0.38 s)  ••••••••———————————— 41%
+
+  Running 2025.06.30 (180/366) (0.46 s)  •••••••••——————————— 49%
+
+  Running 2025.07.30 (210/366) (0.54 s)  •••••••••••————————— 58%
+
+  Running 2025.08.29 (240/366) (0.62 s)  •••••••••••••——————— 66%
+
+  Running 2025.09.28 (270/366) (0.69 s)  ••••••••••••••—————— 74%
+
+  Running 2025.10.28 (300/366) (0.77 s)  ••••••••••••••••———— 82%
+
+  Running 2025.11.27 (330/366) (0.83 s)  ••••••••••••••••••—— 90%
+
+  Running 2025.12.27 (360/366) (0.90 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -932,7 +969,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-2">Question 1</h3>
 <p><strong>Q: In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with a total population of 24 million in 2020, how many people will there be in 2040? (You do not need to include any diseases in your model.)</strong></p>
 <p>A: We can build our simple demographic model with these parameters, then run it and plot the results:</p>
-<div id="1e175e09" class="cell" data-execution_count="7">
+<div id="3b27982a" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -951,8 +988,11 @@ Figure(768x576)</code></pre>
 <span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Population size in year </span><span class="sc">{</span>pars<span class="sc">.</span>stop<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>answer<span class="sc">}</span><span class="ss"> million'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
+
   Running 2020.01.01 ( 0/21) (0.00 s)  ———————————————————— 5%
+
   Running 2030.01.01 (10/21) (0.02 s)  ••••••••••—————————— 52%
+
   Running 2040.01.01 (20/21) (0.04 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
@@ -990,7 +1030,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-5">Question 1</h3>
 <p><strong>Q: If we change the disease from SIR to SIS and set coverage to 100%, what minimum efficacy of vaccine is required to eradicate the disease by 2050?</strong></p>
 <p>A: There are many ways we could solve this, including with formal numerical optimization packages. However, since we are only varying a single parameter, we can also just use a simple binay search or grid search. This solution illustrates both approaches.</p>
-<div id="106a2341" class="cell" data-execution_count="8">
+<div id="4547dbea" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -1080,37 +1120,70 @@ Figure(768x576)</code></pre>
 <span id="cb16-87"><a href="#cb16-87" aria-hidden="true" tabindex="-1"></a>mid, lb, ub <span class="op">=</span> grid_search()</span>
 <span id="cb16-88"><a href="#cb16-88" aria-hidden="true" tabindex="-1"></a>out <span class="op">=</span> auto_search()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+
 
 ——————————————————————————
+
 Performing grid search ...
+
 ——————————————————————————
+
+</span>
 
 Grid search 1 of 2...
+
   Trials: {0.0: False, 0.25: False, 0.5: True, 0.75: True, 1.0: True}
+
   Results: lower=0.25, upper=0.5
+
 Grid search 2 of 2...
+
   Trials: {0.25: False, 0.3125: False, 0.375: False, 0.4375: False, 0.5: True}
+
   Results: lower=0.4375, upper=0.5
-Result: 0.46875
+
+<span class="ansi-bold">Result: 0.46875</span>
+
+<span class="ansi-cyan-fg">
+
 
 
 ——————————————————————————————
+
 Performing automatic search...
+
 ——————————————————————————————
+
+</span>
 
      step 1 (0.4 s) ++ (orig:1.000 | best:1.000 | new:0.9000 | diff:-0.1000)
+
      step 2 (0.7 s) -- (orig:1.000 | best:0.9000 | new:1.000 | diff:0.1000)
+
      step 3 (1.1 s) ++ (orig:1.000 | best:0.9000 | new:0.7000 | diff:-0.2000)
+
      step 4 (1.5 s) -- (orig:1.000 | best:0.7000 | new:10.30 | diff:9.600)
+
      step 5 (1.9 s) ++ (orig:1.000 | best:0.7000 | new:0.5000 | diff:-0.2000)
-     step 6 (2.2 s) -- (orig:1.000 | best:0.5000 | new:10.10 | diff:9.600)
-     step 7 (2.6 s) -- (orig:1.000 | best:0.5000 | new:0.5500 | diff:0.05000)
-     step 8 (3.0 s) -- (orig:1.000 | best:0.5000 | new:10.30 | diff:9.800)
-     step 9 (3.4 s) -- (orig:1.000 | best:0.5000 | new:10.40 | diff:9.900)
-     step 10 (3.7 s) -- (orig:1.000 | best:0.5000 | new:0.5250 | diff:0.02500)
+
+     step 6 (2.3 s) -- (orig:1.000 | best:0.5000 | new:10.10 | diff:9.600)
+
+     step 7 (2.6 s) -- (orig:1.000 | best:0.5000 | new:10.30 | diff:9.800)
+
+     step 8 (3.0 s) -- (orig:1.000 | best:0.5000 | new:10.40 | diff:9.900)
+
+     step 9 (3.4 s) -- (orig:1.000 | best:0.5000 | new:0.5500 | diff:0.05000)
+
+     step 10 (3.8 s) -- (orig:1.000 | best:0.5000 | new:10.45 | diff:9.950)
+
 ===  Maximum iterations reached (10 steps, orig: 1.000 | best: 0.5000 | ratio: 2.0000000000000004) ===
-Result: 0.49999999999999994</code></pre>
+
+<span class="ansi-bold">Result: 0.49999999999999994</span>
+</pre>
+</div>
 </div>
 </div>
 

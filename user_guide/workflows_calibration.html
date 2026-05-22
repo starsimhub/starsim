@@ -82,9 +82,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-aafc68b2255684af78b035618dac2a51.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-fec5a1fa81bfd162096066a3ebc5bcc8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-ebebdd7f480cdcd9c4984c7f251bfad5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -685,7 +685,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>While many optimization algorithms are available, Starsim has a built-in interface to the Optuna library, which we will demonstrate in this guide. We will use a simple Susceptible-Infected-Recovered (SIR) model as an example. We will tune three input parameters, the infectivity parameter, <code>beta</code>, the initial prevalence parameter, <code>init_prev</code>, and the Poisson-distributed degree distribution parameter, <code>n_contacts</code>. We will calibrate the model using a beta-binomial likelihood function so as to match prevalence at three distinct time points.</p>
 <p>For a comparison of optimization-based and Bayesian approaches to calibration, see the <a href="../user_guide/workflows_sir_calibration.html">SIR calibration workflows notebook</a>.</p>
 <p>We begin with a few imports and default settings:</p>
-<div id="7f2903a8" class="cell" data-execution_count="1">
+<div id="d54cf859" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Notebook configuration</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>load_ext autoreload</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>autoreload <span class="dv">2</span></span>
@@ -702,7 +702,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>debug <span class="op">=</span> <span class="va">False</span> <span class="co"># If true, will run in serial</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The calibration class will require a base <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> object. This <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> will later be modified according to parameters selected by the optimization engine. The following function creates the base <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> object.</p>
-<div id="b1ce5940" class="cell" data-execution_count="2">
+<div id="06ee05ef" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_sim():</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    sir <span class="op">=</span> ss.SIR(</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        beta <span class="op">=</span> ss.perday(<span class="fl">0.075</span>),</span>
@@ -726,7 +726,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Each parameter entry should have range defined by <code>low</code> and <code>high</code> as well as a <code>guess</code> values. The <code>guess</code> value is not used by Optuna, rather only for a check after calibration completes to see if the new parameters are better than the <code>guess</code> values.</p>
 <p>You’ll notice there are a few other parameters that can be specified. For example, the data type of the parameter appears in <code>suggest_type</code>. Possible values are listed in the Optuna documentation, and include <a href="https://optuna.readthedocs.io/en/stable/reference/generated/optuna.trial.Trial.html#optuna.trial.Trial.suggest_float">suggest_float</a> for float values and <a href="https://optuna.readthedocs.io/en/stable/reference/generated/optuna.trial.Trial.html#optuna.trial.Trial.suggest_int">suggest_int</a> for integer types.</p>
 <p>To make things easier for the search algorithm, it’s helpful to indicate how outputs are expected to change with inputs. For example, increasing <code>beta</code> from 0.01 to 0.02 should double disease transmission, but increasing from 0.11 to 0.12 will have a small effect. Thus, we indicate that this parameter should be calibrated with <code>log=True</code>.</p>
-<div id="e91ec98c" class="cell" data-execution_count="3">
+<div id="cd4d823d" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>), <span class="co"># Note the log scale</span></span>
@@ -736,7 +736,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 <p>The optimization engine iteratively chooses input parameters to simulate. Those parameters are passed into the following <code>build_sim</code> function as a dictionary of <code>calib_pars</code> along with the base <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> and any other key word arguments. The <code>calib_pars</code> will be as above, but importantly will have an additional key named <code>value</code> containing the value selected by Optuna.</p>
 <p>When modifying a <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>, it is important to realize that the simulation has not been initialized yet. Nonetheless, the configuration is available for modification at <code>sim.pars</code>, as demonstrated in the function below for the SIR example.</p>
-<div id="a1c0b9cb" class="cell" data-execution_count="4">
+<div id="4772957c" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> build_sim(sim, calib_pars, n_reps<span class="op">=</span><span class="dv">1</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Modify the base simulation by applying calib_pars. The result can be a</span></span>
@@ -777,7 +777,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    ms <span class="op">=</span> ss.MultiSim(sim, iterpars<span class="op">=</span><span class="bu">dict</span>(rand_seed<span class="op">=</span>np.random.randint(<span class="dv">0</span>, <span class="fl">1e6</span>, n_reps)), initialize<span class="op">=</span><span class="va">True</span>, debug<span class="op">=</span><span class="va">True</span>, parallel<span class="op">=</span><span class="va">False</span>)</span>
 <span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ms</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="2b7cd0ce" class="cell" data-execution_count="5">
+<div id="9eafc186" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Lets plot a single simulation to see what it looks like</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -806,7 +806,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li><code>incident</code>: While the two methods above capture the state of the model at a particular point in time (stocks), this component allows you to capture the behavior of the model over time (flows). Instead of just giving one time value, <code>t</code>, you’ll provide a second time value as well called <code>t1</code>. This conformer will add up events occurring between the two time points.</li>
 </ul>
 <p>Let’s make a simple Normal component to capture prevalence at three time points. We’ll use the <code>prevalent</code> conformer to align the simulation output to the real data.</p>
-<div id="73941296" class="cell" data-execution_count="6">
+<div id="a3bf3a30" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>prevalence <span class="op">=</span> ss.Normal(</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    name <span class="op">=</span> <span class="st">'Disease prevalence'</span>,</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    conform <span class="op">=</span> <span class="st">'prevalent'</span>,</span>
@@ -829,7 +829,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Finally, we can bring all the pieces together. We make a single base simulation and create an instance of a Starsim Calibration object. This object requires a few arguments, like the <code>calib_pars</code> and <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>. We also pass in the function that modifies the base <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>, here our <code>build_sim</code> function. No additional <code>build_kw</code> are required in this example.</p>
 <p>We also pass in a list of <code>components</code>. Instead of using this “component-based” system, a user could simply provide an <code>eval_fn</code>, which takes in a completed sim an any <code>eval_kwargs</code> and returns a “mismatch” score to be minimized.</p>
 <p>We can also specify the total number of trials to run, the number of parallel works, and a few other parameters.</p>
-<div id="4f938a1d" class="cell" data-execution_count="7">
+<div id="9051454d" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sc.heading(<span class="st">'Beginning calibration'</span>)</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
@@ -854,80 +854,98 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Performing calibration...'</span>)</span>
 <span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>calib.calibrate()<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+
 
 —————————————————————
+
 Beginning calibration
+
 —————————————————————
 
+</span>
 
-Performing calibration...</code></pre>
+<span class="ansi-cyan-fg">
+
+Performing calibration...</span>
+</pre>
+</div>
 </div>
 <div class="cell-output cell-output-stderr">
-<pre><code>[I 2026-04-04 08:24:11,326] A new study created in RDB with name: starsim_calibration</code></pre>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg">[I 2026-05-22 02:14:36,183]</span> A new study created in RDB with name: starsim_calibration
+</pre>
+</div>
 </div>
 </div>
 <p>Let’s look at the best parameters that were found. Note that the <code>rand_seed</code> was selected at random, but the other parameters are meaningful.</p>
-<div id="7329c797" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>calib.best_pars</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="1a09faad" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>calib.best_pars</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="8">
-<pre><code>{'beta': 0.010158478436090882,
- 'init_prev': 0.04979030887635329,
- 'n_contacts': 3,
- 'rand_seed': 675515}</code></pre>
+<pre><code>{'beta': 0.01527474170459608,
+ 'init_prev': 0.04976786286037853,
+ 'n_contacts': 2,
+ 'rand_seed': 887461}</code></pre>
 </div>
 </div>
 <p>Once the calibration is complete, we can compare the <code>guess</code> values to the best values found by calling <code>check_fit</code>.</p>
-<div id="43149184" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Confirm - Note the comparison is here configured over n_reps=15 replicates</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Confirming fit...'</span>)</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Increase replicates to 15 for more representative results when running check_fit</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>calib.build_kw[<span class="st">'n_reps'</span>] <span class="op">=</span> <span class="dv">15</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>calib.check_fit(do_plot<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="7564f093" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Confirm - Note the comparison is here configured over n_reps=15 replicates</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Confirming fit...'</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Increase replicates to 15 for more representative results when running check_fit</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>calib.build_kw[<span class="st">'n_reps'</span>] <span class="op">=</span> <span class="dv">15</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>calib.check_fit(do_plot<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>
-Confirming fit...
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+Confirming fit...</span>
+
 Fit with original pars: 6.927809785316569
-Fit with best-fit pars: -0.5386149924612117
-✓ Calibration improved fit 6.927809785316569 --&gt; -0.5386149924612117</code></pre>
+
+Fit with best-fit pars: -0.5381729924612115
+
+✓ Calibration improved fit 6.927809785316569 --&gt; -0.5381729924612115
+</pre>
+</div>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="9">
 <pre><code>True</code></pre>
 </div>
 </div>
 <p>After calling <code>check_fit</code>, we can plot the results. This first plot shows the Normal likelihood distributions from each of the 15 simulations we did in <code>check_fit</code> as the colored lines. The vertical dashed line is located at the real (<code>expected</code>) data. Top row is the “guess” values and the bottom row is the new “best” parameters. We want the vertical dashed line to cross the Gaussians at high points, representing high likelihood.</p>
-<div id="fba0cebd" class="cell" data-execution_count="10">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>calib.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="5a69c973" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>calib.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-11-output-1.png" width="1285" height="568" class="figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-11-output-1.png" width="1286" height="569" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>Another way to plot the results is via bootstrapping. Here we repeatedly choose 15 from the <code>n_reps=15</code> simulations (with replacement), compute the average (or sum for some components), and repeatedly calculate the mean. We then plot the distribution of means, and hope it lands near the vertical dashed lines representing the real data.</p>
-<div id="6975907c" class="cell" data-execution_count="11">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="e03e8ac5" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>calib.plot(bootstrap<span class="op">=</span><span class="va">True</span>)<span class="op">;</span> <span class="co"># Pass bootstrap=True to produce this plot</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:1136: UserWarning:
-
-Dataset has 0 variance; skipping density estimate. Pass `warn_singular=False` to disable this warning.
-</code></pre>
+<pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:1140: UserWarning: Dataset has 0 variance; skipping density estimate. Pass `warn_singular=False` to disable this warning.
+  ax = sns.kdeplot(means)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-12-output-2.png" width="1284" height="568" class="figure-img"></p>
+<p><img src="workflows_calibration_files/figure-html/cell-12-output-2.png" width="1286" height="569" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>We can view some plots of the final fitted results. Whereas the two plots above were from the <code>check_fit</code>, running both “guess” and “best” parameters, here we make make new simulations to visualize the results.</p>
-<div id="dc04073a" class="cell" data-execution_count="12">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> calib.plot_final()<span class="op">;</span> <span class="co"># Run the model for build_kw['n_reps'] = 15 replicates</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ecc86d88" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> calib.plot_final()<span class="op">;</span> <span class="co"># Run the model for build_kw['n_reps'] = 15 replicates</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
@@ -952,13 +970,11 @@ Dataset has 0 variance; skipping density estimate. Pass `warn_singular=False` to
 <li>plot_timeline</li>
 </ul>
 <p>Here are some examples:</p>
-<div id="caddc8a2" class="cell" data-execution_count="13">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="11c603b9" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_optimization_history'</span>)<span class="op">;</span> <span class="co"># Plot the optimization history</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:441: ExperimentalWarning:
-
-optuna.visualization.matplotlib._optimization_history.plot_optimization_history is experimental (supported from v2.2.0). The interface can change in the future.
-</code></pre>
+<pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:444: ExperimentalWarning: optuna.visualization.matplotlib._optimization_history.plot_optimization_history is experimental (supported from v2.2.0). The interface can change in the future.
+  fig = getattr(vis, method)(self.study)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -968,13 +984,11 @@ optuna.visualization.matplotlib._optimization_history.plot_optimization_history 
 </div>
 </div>
 </div>
-<div id="fe378fc4" class="cell" data-execution_count="14">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ed317bad" class="cell" data-execution_count="14">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_contour'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:439: ExperimentalWarning:
-
-optuna.visualization.matplotlib._contour.plot_contour is experimental (supported from v2.2.0). The interface can change in the future.
-</code></pre>
+<pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:442: ExperimentalWarning: optuna.visualization.matplotlib._contour.plot_contour is experimental (supported from v2.2.0). The interface can change in the future.
+  fig = vis.plot_contour(self.study, params=params)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -984,80 +998,84 @@ optuna.visualization.matplotlib._contour.plot_contour is experimental (supported
 </div>
 </div>
 </div>
-<div id="729d5b04" class="cell" data-execution_count="15">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_param_importances'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="b85027c1" class="cell" data-execution_count="15">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>calib.plot_optuna(<span class="st">'plot_param_importances'</span>)<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Could not run plot_param_importances: Tried to import 'sklearn' but failed. Please make sure that the package is installed correctly to use this feature. Actual error: No module named 'sklearn'.</code></pre>
+</div>
 <div class="cell-output cell-output-stderr">
-<pre><code>/home/cliffk/idm/starsim/starsim/calibration.py:441: ExperimentalWarning:
-
-optuna.visualization.matplotlib._param_importances.plot_param_importances is experimental (supported from v2.2.0). The interface can change in the future.
-</code></pre>
-</div>
-<div class="cell-output cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="workflows_calibration_files/figure-html/cell-16-output-2.png" width="642" height="455" class="figure-img"></p>
-</figure>
-</div>
+<pre><code>/home/runner/work/starsim/starsim/starsim/calibration.py:444: ExperimentalWarning: optuna.visualization.matplotlib._param_importances.plot_param_importances is experimental (supported from v2.2.0). The interface can change in the future.
+  fig = getattr(vis, method)(self.study)</code></pre>
 </div>
 </div>
 <p>If you choose not to use components, you can always create your own mismatch function, as in the following example:</p>
-<div id="a6e5ba66" class="cell" data-execution_count="16">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>my_data <span class="op">=</span> (ss.date(<span class="st">'2020-01-12'</span>), <span class="fl">0.13</span>)</span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">eval</span>(sim, expected):</span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute the squared error at one point in time.</span></span>
-<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># expected will contain my_data in this example due to eval_kw</span></span>
-<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    date, p <span class="op">=</span> expected</span>
-<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(sim, ss.MultiSim):</span>
-<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim])</span>
-<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> <span class="dv">0</span></span>
-<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> sim.sims:</span>
-<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>        ind <span class="op">=</span> np.searchsorted(s.results.timevec, date, side<span class="op">=</span><span class="st">'left'</span>)</span>
-<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> s.results.sir.prevalence[ind]</span>
-<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>        ret <span class="op">+=</span> (prev <span class="op">-</span> p)<span class="op">**</span><span class="dv">2</span></span>
-<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret</span>
-<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
-<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
-<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>),</span>
-<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
-<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
-<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the calibration</span></span>
-<span id="cb26-27"><a href="#cb26-27" aria-hidden="true" tabindex="-1"></a>calib <span class="op">=</span> ss.Calibration(</span>
-<span id="cb26-28"><a href="#cb26-28" aria-hidden="true" tabindex="-1"></a>    calib_pars <span class="op">=</span> calib_pars,</span>
-<span id="cb26-29"><a href="#cb26-29" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> sim,</span>
-<span id="cb26-30"><a href="#cb26-30" aria-hidden="true" tabindex="-1"></a>    build_fn <span class="op">=</span> build_sim,</span>
-<span id="cb26-31"><a href="#cb26-31" aria-hidden="true" tabindex="-1"></a>    build_kw <span class="op">=</span> <span class="bu">dict</span>(n_reps<span class="op">=</span><span class="dv">2</span>), <span class="co"># Two reps per point</span></span>
-<span id="cb26-32"><a href="#cb26-32" aria-hidden="true" tabindex="-1"></a>    reseed <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb26-33"><a href="#cb26-33" aria-hidden="true" tabindex="-1"></a>    eval_fn <span class="op">=</span> <span class="bu">eval</span>, <span class="co"># Will call my_function(msim, eval_kwargs)</span></span>
-<span id="cb26-34"><a href="#cb26-34" aria-hidden="true" tabindex="-1"></a>    eval_kw <span class="op">=</span> <span class="bu">dict</span>(expected<span class="op">=</span>my_data), <span class="co"># Will call eval(sim, **eval_kw)</span></span>
-<span id="cb26-35"><a href="#cb26-35" aria-hidden="true" tabindex="-1"></a>    total_trials <span class="op">=</span> <span class="dv">20</span>,</span>
-<span id="cb26-36"><a href="#cb26-36" aria-hidden="true" tabindex="-1"></a>    n_workers <span class="op">=</span> <span class="va">None</span>, <span class="co"># None indicates to use all available CPUs</span></span>
-<span id="cb26-37"><a href="#cb26-37" aria-hidden="true" tabindex="-1"></a>    die <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="cb26-38"><a href="#cb26-38" aria-hidden="true" tabindex="-1"></a>    debug <span class="op">=</span> debug,</span>
-<span id="cb26-39"><a href="#cb26-39" aria-hidden="true" tabindex="-1"></a>    verbose <span class="op">=</span> <span class="dv">0</span>,</span>
-<span id="cb26-40"><a href="#cb26-40" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb26-41"><a href="#cb26-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-42"><a href="#cb26-42" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
-<span id="cb26-43"><a href="#cb26-43" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
-<span id="cb26-44"><a href="#cb26-44" aria-hidden="true" tabindex="-1"></a>calib.calibrate()</span>
-<span id="cb26-45"><a href="#cb26-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-46"><a href="#cb26-46" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
-<span id="cb26-47"><a href="#cb26-47" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="fab4de4c" class="cell" data-execution_count="16">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>my_data <span class="op">=</span> (ss.date(<span class="st">'2020-01-12'</span>), <span class="fl">0.13</span>)</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">eval</span>(sim, expected):</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Compute the squared error at one point in time.</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># expected will contain my_data in this example due to eval_kw</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>    date, p <span class="op">=</span> expected</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(sim, ss.MultiSim):</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>        sim <span class="op">=</span> ss.MultiSim(sims<span class="op">=</span>[sim])</span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>    ret <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> sim.sims:</span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>        ind <span class="op">=</span> np.searchsorted(s.results.timevec, date, side<span class="op">=</span><span class="st">'left'</span>)</span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> s.results.sir.prevalence[ind]</span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>        ret <span class="op">+=</span> (prev <span class="op">-</span> p)<span class="op">**</span><span class="dv">2</span></span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ret</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the calibration parameters</span></span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a>calib_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="bu">dict</span>(low<span class="op">=</span><span class="fl">0.01</span>, high<span class="op">=</span><span class="fl">0.30</span>, guess<span class="op">=</span><span class="fl">0.15</span>, suggest_type<span class="op">=</span><span class="st">'suggest_float'</span>, log<span class="op">=</span><span class="va">True</span>),</span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb24-22"><a href="#cb24-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-23"><a href="#cb24-23" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the sim and data</span></span>
+<span id="cb24-24"><a href="#cb24-24" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> make_sim()</span>
+<span id="cb24-25"><a href="#cb24-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-26"><a href="#cb24-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Make the calibration</span></span>
+<span id="cb24-27"><a href="#cb24-27" aria-hidden="true" tabindex="-1"></a>calib <span class="op">=</span> ss.Calibration(</span>
+<span id="cb24-28"><a href="#cb24-28" aria-hidden="true" tabindex="-1"></a>    calib_pars <span class="op">=</span> calib_pars,</span>
+<span id="cb24-29"><a href="#cb24-29" aria-hidden="true" tabindex="-1"></a>    sim <span class="op">=</span> sim,</span>
+<span id="cb24-30"><a href="#cb24-30" aria-hidden="true" tabindex="-1"></a>    build_fn <span class="op">=</span> build_sim,</span>
+<span id="cb24-31"><a href="#cb24-31" aria-hidden="true" tabindex="-1"></a>    build_kw <span class="op">=</span> <span class="bu">dict</span>(n_reps<span class="op">=</span><span class="dv">2</span>), <span class="co"># Two reps per point</span></span>
+<span id="cb24-32"><a href="#cb24-32" aria-hidden="true" tabindex="-1"></a>    reseed <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb24-33"><a href="#cb24-33" aria-hidden="true" tabindex="-1"></a>    eval_fn <span class="op">=</span> <span class="bu">eval</span>, <span class="co"># Will call my_function(msim, eval_kwargs)</span></span>
+<span id="cb24-34"><a href="#cb24-34" aria-hidden="true" tabindex="-1"></a>    eval_kw <span class="op">=</span> <span class="bu">dict</span>(expected<span class="op">=</span>my_data), <span class="co"># Will call eval(sim, **eval_kw)</span></span>
+<span id="cb24-35"><a href="#cb24-35" aria-hidden="true" tabindex="-1"></a>    total_trials <span class="op">=</span> <span class="dv">20</span>,</span>
+<span id="cb24-36"><a href="#cb24-36" aria-hidden="true" tabindex="-1"></a>    n_workers <span class="op">=</span> <span class="va">None</span>, <span class="co"># None indicates to use all available CPUs</span></span>
+<span id="cb24-37"><a href="#cb24-37" aria-hidden="true" tabindex="-1"></a>    die <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb24-38"><a href="#cb24-38" aria-hidden="true" tabindex="-1"></a>    debug <span class="op">=</span> debug,</span>
+<span id="cb24-39"><a href="#cb24-39" aria-hidden="true" tabindex="-1"></a>    verbose <span class="op">=</span> <span class="dv">0</span>,</span>
+<span id="cb24-40"><a href="#cb24-40" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb24-41"><a href="#cb24-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-42"><a href="#cb24-42" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform the calibration</span></span>
+<span id="cb24-43"><a href="#cb24-43" aria-hidden="true" tabindex="-1"></a>sc.printcyan(<span class="st">'</span><span class="ch">\n</span><span class="st">Peforming calibration...'</span>)</span>
+<span id="cb24-44"><a href="#cb24-44" aria-hidden="true" tabindex="-1"></a>calib.calibrate()</span>
+<span id="cb24-45"><a href="#cb24-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-46"><a href="#cb24-46" aria-hidden="true" tabindex="-1"></a><span class="co"># Check</span></span>
+<span id="cb24-47"><a href="#cb24-47" aria-hidden="true" tabindex="-1"></a>calib.check_fit()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>[I 2026-04-04 08:24:28,480] A new study created in RDB with name: starsim_calibration</code></pre>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg">[I 2026-05-22 02:15:26,862]</span> A new study created in RDB with name: starsim_calibration
+</pre>
+</div>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>
-Peforming calibration...
-Fit with original pars: 1.03182125
-Fit with best-fit pars: 1.5250000000000027e-05
-✓ Calibration improved fit 1.03182125 --&gt; 1.5250000000000027e-05</code></pre>
+<div class="ansi-escaped-output">
+<pre><span class="ansi-cyan-fg">
+
+Peforming calibration...</span>
+
+Fit with original pars: 1.07281525
+
+Fit with best-fit pars: 0.00046325000000000034
+
+✓ Calibration improved fit 1.07281525 --&gt; 0.00046325000000000034
+</pre>
+</div>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="16">
 <pre><code>True</code></pre>
