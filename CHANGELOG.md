@@ -10,7 +10,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Aligned `RoutineDelivery.yearvec` with `self.timepoints` by slicing `sim.t.yearvec` directly, ensuring `prob` from `sc.smoothinterp` always matches the timepoint length.
 - **Regression**: `ss.routine_screening`, `ss.routine_triage`, and `ss.routine_vx` with `dt = 1` will now stop one year earlier than before (at `end_year` rather than `end_year + 1`).
 - Added test coverage for `RoutineDelivery` and `CampaignDelivery` in `tests/test_interventions.py`.
-- *GitHub info*: PR [TBD](https://github.com/starsimhub/starsim/pull/TBD)
+- *GitHub info*: PR [1325](https://github.com/starsimhub/starsim/pull/1325)
 
 
 ## Version 3.3.3 (2026-04-15)
