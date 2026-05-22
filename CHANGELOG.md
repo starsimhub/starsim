@@ -3,9 +3,14 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
-## Version 3.3.4 (2026-04-XX)
-- TBC
-- *GitHub info*: PR [TBC](https://github.com/starsimhub/starsim/pull/TBC)
+## Version 3.3.4 (2026-05-21)
+- Fixed `ss.CampaignDelivery` failing to initialize on date-based timelines: `init_pre()` now compares against the float `sim.t.yearvec` instead of the date-typed `sim.timevec`, which caused `sc.findnearest` to crash because subtracting `ss.date` objects produces `datedur`.
+- Fixed `ss.CampaignDelivery` missing a `coverage_dist` placeholder in `__init__`, which caused `AttributeError` on the first delivery. This affected `ss.campaign_screening`, `ss.campaign_triage`, and `ss.campaign_vx`.
+- Fixed `ss.RoutineDelivery` off-by-one when `dt = 1`: `adj_factor` is now `0` (was `1`) for `dt >= 1`, so the intervention no longer runs for one extra year past `end_year`. The previous behavior also caused an `IndexError` when a per-year `prob` array was supplied.
+- Aligned `RoutineDelivery.yearvec` with `self.timepoints` by slicing `sim.t.yearvec` directly, ensuring `prob` from `sc.smoothinterp` always matches the timepoint length.
+- **Regression**: `ss.routine_screening`, `ss.routine_triage`, and `ss.routine_vx` with `dt = 1` will now stop one year earlier than before (at `end_year` rather than `end_year + 1`).
+- Added test coverage for `RoutineDelivery` and `CampaignDelivery` in `tests/test_interventions.py`.
+- *GitHub info*: PR [TBD](https://github.com/starsimhub/starsim/pull/TBD)
 
 
 ## Version 3.3.3 (2026-04-15)
