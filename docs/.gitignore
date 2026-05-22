@@ -11,3 +11,5 @@ objects.inv
 # But keep the index.qmd file
 !/api/index.qmd
 /.quarto/
+
+**/*.quarto_ipynb
