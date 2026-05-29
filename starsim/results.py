@@ -93,6 +93,7 @@ class Result(ss.BaseArr):
 
     @property
     def initialized(self):
+        """ True if values have been set """
         return self.values is not None
 
     @property
@@ -146,6 +147,12 @@ class Result(ss.BaseArr):
         return full
 
     def summary_method(self, die=False):
+        """
+        Infer the summarization method from the result name.
+
+        Heuristic: names containing 'new_' → sum; starting with 'n_' or containing '_n_' → mean;
+        containing 'cum_' → last; otherwise → mean (or raise if die=True).
+        """
         # If no summarization method is provided, try to figure it out from the name
         if 'new_' in self.name:  # Not using startswith because msim results are prefixed with the module name
             summarize_by = 'sum'
@@ -185,10 +192,6 @@ class Result(ss.BaseArr):
             valid_units = ['year', 'month', 'week', 'day'] + ['1YE', '1m', '1w'] # Starsim and pandas units
             raise ValueError(f'new_unit must be specified; valid options include: {sc.strjoin(valid_units)}')
 
-        # Convert the timevec if needed
-        orig_timevec = self.timevec # TODO: refactor
-        self.timevec = self.convert_timevec(force=True)
-
         # Handle summarization method
         if summarize_by is None:
             if self.summarize_by is not None:
@@ -202,6 +205,10 @@ class Result(ss.BaseArr):
         unit_mapper = dict(week='1w', month='1m', year='1YE')
         if new_unit in unit_mapper:
             new_unit = unit_mapper[new_unit]
+
+        # Convert the timevec if needed
+        orig_timevec = self.timevec # TODO: refactor
+        self.timevec = self.convert_timevec(force=True)
 
         # Convert to a Pandas dataframe then summarize. Note that we use a dataframe
         # rather than a series so that we can have multiple columns (low/high/value)
@@ -259,7 +266,7 @@ class Result(ss.BaseArr):
         new_res = Result(
             name=self.name, label=self.label, dtype=self.dtype, scale=self.scale,
             auto_plot=self.auto_plot, module=self.module, summarize_by=self.summarize_by,
-            timevec=ss.DateArray(unique_years.astype(float) + 0.5, unit=ss.years) ,
+            timevec=ss.DateArray(unique_years.astype(float) + 0.5, unit=ss.years),  # +0.5 centers each year's label at mid-year
             values=_aggregate(self.values),
             low=_aggregate(self.low),
             high=_aggregate(self.high),
@@ -296,12 +303,11 @@ class Result(ss.BaseArr):
 
     def convert_timevec(self, force=False):
         """ Make sure we're using a timevec that's in the right format i.e. dates """
-        if self.timevec is not None:
-            if not self.has_dates or force:
-                timevec = ss.DateArray([ss.date(t) for t in self.timevec])
-            else:
-                timevec = self.timevec
-        return timevec
+        if self.timevec is None:
+            return None
+        if not self.has_dates or force:
+            return ss.DateArray([ss.date(t) for t in self.timevec])
+        return self.timevec
 
     def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, **kwargs):
         """

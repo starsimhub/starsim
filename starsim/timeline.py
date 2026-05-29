@@ -78,8 +78,8 @@ class Timeline:
         self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.initialized = False # Call self.init(sim) to initialize the object
 
-        # Decide whether to initialized: we're asked, a sim is provided, or arguments are supplied directly
-        if init or sim or init is None and sum([x is not None for x in [start, stop, dur]]) >= 2:
+        # Decide whether to initialize: we're asked, a sim is provided, or arguments are supplied directly
+        if init or sim or (init is None and sum([x is not None for x in [start, stop, dur]]) >= 2):
             self.init(sim)
         return
 
@@ -203,7 +203,16 @@ class Timeline:
         return now
 
     def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
-        """ Reconcile different ways of supplying inputs """
+        """
+        Reconcile different ways of supplying inputs
+
+        Args:
+            pars (dict): dict of time parameters to apply
+            parent (Timeline): parent timeline to inherit values from
+            reset (bool): if True and stale, reinitialize after update
+            force (bool/None): False = only fill missing values; None = prioritize current; True = prioritize parent
+            kwargs: additional time parameters (start, stop, dur, dt)
+        """
         pars = sc.mergedicts(pars)
         stale = False
 
@@ -377,7 +386,7 @@ class Timeline:
 
         # Additional validation
         start_type = type(start)
-        stop_type = type(start)
+        stop_type = type(stop)
         assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
         assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
         assert isinstance(dur, ss.dur), f'Duration must be ss.dur, not {type(dur)}'
@@ -424,7 +433,7 @@ class Timeline:
         n_steps = len(self.datevec)
         if n_steps > max_steps and ss.options.warn_convert:
             warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
-            warnmsg += 'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
+            warnmsg += f'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
             warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
             ss.warn(warnmsg)
 

@@ -156,7 +156,7 @@ class Network(Route):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self.edges.p1) or (item in self.edges.p2) # TODO: chek if (item in self.members) is faster
+        return (item in self.edges.p1) or (item in self.edges.p2) # TODO: check if (item in self.members) is faster
 
     @property
     def members(self):
@@ -412,6 +412,7 @@ class DynamicNetwork(Network):
         return
 
     def step(self):
+        """ Remove expired partnerships and add new ones """
         self.end_pairs()
         self.add_pairs()
         return
@@ -419,7 +420,7 @@ class DynamicNetwork(Network):
     def end_pairs(self):
         """ Remove partnerships whose duration has expired or whose members have died. """
         people = self.sim.people
-        self.edges.dur = self.edges.dur - 1 # Assume that the edge duration is in units of self.t.dt
+        self.edges.dur = self.edges.dur - 1 # dur is stored in units of self.t.dt (timesteps), so decrement by 1 per step
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -510,7 +511,7 @@ class StaticNet(Network):
             try:
                 self.graph = self.graph(n=self.n_agents, **self.pars)
             except TypeError as e:
-                print(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.NullNet().")
+                ss.warn(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.StaticNet() instead.")
                 raise e
         self.validate_pop(self.n_agents)
         self.get_edges()
@@ -649,7 +650,7 @@ class RandomSafeNet(DynamicNetwork):
     so should be used where CRN safety is important (e.g., scenario analysis).
 
     Note: `ss.RandomNet` uses `n_contacts`, which is the total number of contacts
-    per agent. `ss.RandomSateNet` users `n_edges`, which is the total number of
+    per agent. `ss.RandomSafeNet` uses `n_edges`, which is the total number of
     *edges* per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges.
     For example, `ss.RandomNet(n_contacts=10)` will give (nearly) identical results
     to `ss.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
@@ -807,6 +808,7 @@ class MFNet(SexualNetwork):
         return
 
     def add_pairs(self):
+        """ Form new sexual partnerships between available male and female agents """
         people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
@@ -936,9 +938,11 @@ class PrenatalNet(Network):
             self.append(p1=mother_uids, p2=unborn_uids, beta=np.ones(n))
         return n
 
+
 class MaternalNet(PrenatalNet):
     """ TEMP - for backwards compatibility"""
     pass
+
 
 class PostnatalNet(DynamicNetwork):
     """
@@ -953,11 +957,16 @@ class PostnatalNet(DynamicNetwork):
 
     By default, the postnatal duration is based on the maternal UID and would be the same
     for all infants of that mother, although derived classes could modify this behavior.
+
+    Args:
+        pars (dict): passed to `ss.DynamicNetwork`
+        dur (ss.dur/ss.Dist): edge duration (postpartum period); if None, edges persist until agents die
+        **kwargs (dict): merged with `pars`
     """
 
     def __init__(self, pars=None, dur=None, **kwargs):
         """
-        :param dur (`ss.dur` or `ss.Dist`): Edge duration i.e., postpartum period for this module. If not provided, the postpartum edges will not automatically be removed unless deaths occur (but could otherwise be removed externally)
+
         """
         super().__init__(**kwargs)
         self.define_pars(dur=dur)
@@ -978,6 +987,7 @@ class PostnatalNet(DynamicNetwork):
                 dur = np.full(n, p.dur/self.t.dt)
             self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
         return n
+
 
 class BreastfeedingNet(PostnatalNet):
     """
@@ -1018,6 +1028,7 @@ class BreastfeedingNet(PostnatalNet):
         for k in self.meta_keys():
             self.edges[k] = self.edges[k][active]
         return np.count_nonzero(active)
+
 
 # %% Household networks
 
@@ -1144,7 +1155,7 @@ class HouseholdNet(Network):
             self.n_households += 1
 
             # Sample a household from the data
-            rand_row = np.random.choice(len(dhs))
+            rand_row = np.random.choice(len(dhs)) # TODO: make CRN-safe
             household_data = dhs.iloc[rand_row]
             age_data = household_data['ages']
             sex_data = None
@@ -1183,7 +1194,7 @@ class HouseholdNet(Network):
                 female_uids = cluster_uids[
                     ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
                 if len(female_uids) > 0:
-                    fhoh = np.random.choice(a=female_uids)
+                    fhoh = np.random.choice(a=female_uids) # TODO: make CRN-safe
                     self.fhoh[ss.uids(fhoh)] = True
         return
 
@@ -1193,7 +1204,7 @@ class HouseholdNet(Network):
 
         self.add_births()
 
-        if np.mod(self.ti, self.pars.update_freq):
+        if np.mod(self.ti, self.pars.update_freq): # Skip all but 0
             return
 
         self.create_new_households()
@@ -1246,7 +1257,7 @@ class HouseholdNet(Network):
         if len(moving_out) > 0:
             self.fhoh[moving_out] = True
             potential_partners = ss.uids(ppl.male & (ppl.age > 15) & (ppl.age < 50))
-            partner_inds = np.random.permutation(len(potential_partners))[:len(moving_out)]
+            partner_inds = np.random.permutation(len(potential_partners))[:len(moving_out)] # TODO: make CRN-safe
             partners = potential_partners[partner_inds]
             to_remove = ss.uids.concatenate([moving_out, partners])
             self.remove_uids(to_remove)
@@ -1391,7 +1402,8 @@ class MixingPools(Route):
             errormsg = f'src must be a provided as a dictionary, not {type(self.pars.src)}'
             raise TypeError(errormsg)
         if not isinstance(p.dst, dict):
-            raise TypeError(f'dst must be a provided as a dictionary, not {type(self.pars.src)}')
+            errormsg = f'dst must be a provided as a dictionary, not {type(p.dst)}'
+            raise TypeError(errormsg)
         p.src = sc.objdict(p.src)
         p.dst = sc.objdict(p.dst)
 
@@ -1549,7 +1561,8 @@ class MixingPool(Route):
             return func_or_array(self.sim)
         elif isinstance(func_or_array, ss.uids):
             return func_or_array
-        raise Exception('src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids.')
+        errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(src)}'
+        raise TypeError()
 
     def remove_uids(self, uids):
         """ If UIDs are supplied explicitly, remove them if people die """
@@ -1598,3 +1611,4 @@ class MixingPool(Route):
         self.src_uids = self.get_uids(self.pars.src)
         self.dst_uids = self.get_uids(self.pars.dst)
         return
+

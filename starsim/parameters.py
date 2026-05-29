@@ -19,6 +19,10 @@ class Pars(sc.objdict):
 
     Acts like an `sc.objdict()`, except that adding new keys are disallowed by
     default, and auto-updates known types.
+
+    Args:
+        pars (dict): initial parameters to populate the object with
+        kwargs: additional key-value pairs merged with pars
     """
     def __init__(self, pars=None, **kwargs):
         if pars is not None:
@@ -238,7 +242,7 @@ class SimPars(Pars):
         self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.start     = None  # Start of the simulation (default 2020)
+        self.start     = None  # Start of the simulation (default 2000)
         self.stop      = None  # End of the simulation
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
         self.dt        = None  # Timestep
@@ -274,7 +278,7 @@ class SimPars(Pars):
         default_pars = SimPars() # Create a default SimPars object
         default_val = default_pars[key]
         current_val = self[key]
-        match = (current_val == default_val) # Check if the value matches
+        match = (current_val == default_val) # Check if the value matches # TODO: consider sc.equal() instead
         return match
 
     def validate(self):

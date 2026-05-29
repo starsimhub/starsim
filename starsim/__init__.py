@@ -21,7 +21,7 @@ import sciris as sc
 root = sc.thispath(__file__).parent
 
 # Start imports: version and settings
-t('settings') # SLow since import Numba
+t('settings') # Slow since importing Numba
 from .version import __version__, __versiondate__, __license__
 from .settings import dtypes, options, style, load_fonts
 

@@ -138,7 +138,7 @@ class Sim(ss.Base):
     @property
     def modules(self):
         """
-        Return an interator over all Module instances (stored in standard places) in the Sim
+        Return an iterator over all Module instances (stored in standard places) in the Sim
         """
         for module in itertools.chain(
             self.custom(),
@@ -216,7 +216,7 @@ class Sim(ss.Base):
         matches = self.get_modules(query, match_case=match_case)
         if len(matches) > 1:
             errormsg = f'Multiple matching modules found for {query}; to retrieve all of them, use `Sim.get_modules()` instead'
-            raise Exception(errormsg)
+            raise ValueError(errormsg)
         elif not matches:
             if die:
                 errormsg = f'No matching module found for {query}; set die=False to return None instead'
@@ -262,14 +262,13 @@ class Sim(ss.Base):
                 return list(modules)
 
         # Loop over all modules, looking for matches
+        if isinstance(query, str) and not match_case:
+            query = query.lower()
         for mod in modules:
             if isinstance(query, type) and isinstance(mod, query):
                 matches.append(mod)
             elif isinstance(query, str):
-                name = mod.name
-                if not match_case:
-                    query = query.lower()
-                    name = name.lower()
+                name = mod.name if match_case else mod.name.lower()
                 if query.startswith('*') and query.endswith('*') and query[1:-1] in name:
                     matches.append(mod)
                 elif query.startswith('*') and name.endswith(query[1:]):
@@ -506,7 +505,6 @@ class Sim(ss.Base):
         self.timer.start()
 
         # Check for AlreadyRun errors
-        errormsg = None
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
@@ -705,11 +703,11 @@ class Sim(ss.Base):
             errormsg = f'Could not understand {check=}, must be one of {valid}'
             raise ValueError(errormsg)
 
+        missing = []
         if check:
             if verbose:
                 sc.pp(self._call_required)
 
-            missing = []
             for mod in self.modules:
                 modmissing = mod.check_method_calls()
                 if modmissing:
@@ -813,7 +811,7 @@ class Sim(ss.Base):
         sc.save(filename=filename, obj=sim)
         return filename
 
-    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
+    def to_json(self, filename=None, keys=None, indent=2, verbose=False, **kwargs):
         """
         Export results and parameters as JSON.
 
@@ -858,7 +856,7 @@ class Sim(ss.Base):
         # Final conversion
         d = sc.jsonify(d, **kwargs)
         if filename is not None:
-            sc.savejson(filename=filename, obj=d)
+            sc.savejson(filename=filename, obj=d, indent=indent)
         return d
 
     def to_yaml(self, filename=None, sort_keys=False, **kwargs):
@@ -1003,8 +1001,8 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
 
     Args:
         run (bool): whether to run the sim
-        plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
+        plot (bool): whether to plot the results
         kwargs (dict): passed to `ss.Sim()`
 
     **Examples**:
@@ -1115,7 +1113,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             new = d.sim2
             if multi:
                 old_sem = d.sim1_sem
-                new_sem = d.sim1_sem
+                new_sem = d.sim2_sem
                 sem = old_sem + new_sem
                 small_change = 1.96 # 95% CI, roughly speaking
 

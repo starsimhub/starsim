@@ -142,7 +142,7 @@ class Calibration(sc.prettyobj):
         return nll
 
     def plot(self, **kwargs):
-        """"
+        """
         Plot the calibration results. For a component-based likelihood, it only
         makes sense to directly call plot after calling eval_fn.
         """
@@ -287,7 +287,9 @@ class Calibration(sc.prettyobj):
         if self.verbose: sc.printcyan('\nChecking fit...')
 
         before_pars = sc.dcp(self.calib_pars)
-        for spec in before_pars.values():
+        for name, spec in before_pars.items():
+            if 'guess' not in spec:
+                raise KeyError(f"Calibration parameter '{name}' has no 'guess' key; ensure all calib_pars have a 'guess' entry")
             spec['value'] = spec['guess'] # Use guess values
 
         # Load in case calibration was interrupted
@@ -295,8 +297,9 @@ class Calibration(sc.prettyobj):
             try:
                 study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
                 self.best_pars = sc.objdict(study.best_params)
-            except:
-                raise ValueError('Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
+            except Exception as e:
+                errormsg = f'Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db. Exception:\n{e}'
+                raise ValueError(errormsg)
 
         after_pars = sc.dcp(self.calib_pars)
         for parname, spec in after_pars.items():
@@ -307,7 +310,7 @@ class Calibration(sc.prettyobj):
 
         fix_before = isinstance(self.before_msim, ss.Sim)
         fix_after = isinstance(self.after_msim, ss.Sim)
-        if fix_after or fix_after:
+        if fix_before or fix_after:
             if fix_before:
                 self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
@@ -346,7 +349,7 @@ class Calibration(sc.prettyobj):
         n_trials = len(study.trials)
         failed_trials = []
         for trial in study.trials:
-            data = {'index':trial.number, 'mismatch': trial.value}
+            data = {'index':trial.number, 'mismatch': trial.value}  # 'mismatch' stores the negative log-likelihood
             for key,val in trial.params.items():
                 data[key] = val
             if data['mismatch'] is None:
@@ -581,7 +584,8 @@ class CalibComponent(sc.prettyobj):
     def _validate_conform(self, conform):
         ''' Validate the conform argument '''
         if not isinstance(conform, str) and not callable(conform):
-            raise Exception(f"The conform argument must be a string or a callable function, not {type(conform)}.")
+            f"The conform argument must be a string or a callable function, not {type(conform)}."
+            raise TypeError(errormsg)
         elif isinstance(conform, str):
             conform_ = self.avail_conforms.get(conform.lower(), 'NOT FOUND')
             if conform_ == 'NOT FOUND':
@@ -596,7 +600,7 @@ class CalibComponent(sc.prettyobj):
         if self.combine_reps is None:
             nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
         else:
-            timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
+            timecols = [c for c in actual.columns if isinstance(actual[c].iloc[0], dt.datetime)] # Not robust to data types
             actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
             actual_combined['rand_seed'] = 0 # Fake the seed
             actual_combined = actual_combined.reset_index().set_index('rand_seed') # Make it look like self.actual
@@ -643,7 +647,7 @@ class CalibComponent(sc.prettyobj):
         boot_size = len(seeds)
         nlls = np.zeros(self.n_boot)
         for bi in range(self.n_boot):
-            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)  # intentionally unseeded: bootstrap is a statistical tool, not a sim step
             actual = self.actual.loc[use_seeds]
             nll = self._combine_reps_nll(self.expected, actual, **kwargs)
             nlls[bi] = np.mean(nll) # Mean across reps
@@ -687,6 +691,8 @@ class CalibComponent(sc.prettyobj):
         return g.fig
 
 class BetaBinomial(CalibComponent):
+    """ Beta-binomial negative log-likelihood component for count data with overdispersion """
+
     def compute_nll(self, expected, actual, **kwargs):
         """
         For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
@@ -752,7 +758,7 @@ class BetaBinomial(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
+            for _, row in actual.iterrows():
                 alpha = row['x'] + 1
                 beta = row['n'] - row['x'] + 1
                 q = sps.betabinom(n=e_n, a=alpha, b=beta)
@@ -764,6 +770,7 @@ class BetaBinomial(CalibComponent):
         return
 
 class Binomial(CalibComponent):
+    """ Binomial negative log-likelihood component for count data with a known number of trials """
 
     @staticmethod
     def get_p(df, x_col='x', n_col='n'):
@@ -845,6 +852,8 @@ class Binomial(CalibComponent):
         return
 
 class DirichletMultinomial(CalibComponent):
+    """ Dirichlet-multinomial negative log-likelihood component for compositional count data """
+
     def compute_nll(self, expected, actual, **kwargs):
         """
         The Dirichlet-multinomial negative log-likelihood is the
@@ -932,6 +941,8 @@ class DirichletMultinomial(CalibComponent):
         return
 
 class GammaPoisson(CalibComponent):
+    """ Gamma-Poisson (negative binomial) negative log-likelihood component for overdispersed count data """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1023,6 +1034,8 @@ class GammaPoisson(CalibComponent):
 
 
 class Normal(CalibComponent):
+    """ Normal (Gaussian) negative log-likelihood component for continuous data """
+
     def __init__(self, name, expected, extract_fn, conform, weight=1, sigma2=None, **kwargs):
         super().__init__(name, expected, extract_fn, conform, weight, **kwargs)
         self.sigma2 = sigma2
@@ -1056,7 +1069,7 @@ class Normal(CalibComponent):
             e_x = rep['x_e']
             a_x = rep['x_a']
 
-            # TEMP TODO calculate rate if 'n' supplied
+            # TODO: calculate rate if 'n' supplied
             if 'n' in rep:
                 a_x = rep['x_a'] / rep['n']
 
@@ -1087,7 +1100,7 @@ class Normal(CalibComponent):
         for idx, row in data.iterrows():
             a_x = row['x']
 
-            # TEMP TODO calculate rate if 'n' supplied
+            # TODO: calculate rate if 'n' supplied
             if 'n' in row:
                 a_x = row['x'] / row['n'] # row[['x']].values[0] / row[['n']].values[0]
 
@@ -1130,7 +1143,7 @@ class Normal(CalibComponent):
             for idx, row in actual.iterrows():
                 a_x = row['x']
 
-                # TEMP TODO calculate rate if 'n' supplied
+                # TODO: calculate rate if 'n' supplied
                 if 'n' in row:
                     a_x = row['x'] / row['n'] #row['x'].values / row['n'].values
 

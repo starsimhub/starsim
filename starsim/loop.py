@@ -48,7 +48,7 @@ class Loop:
         self.plan = None
         self.index = 0 # The next function to execute
         self.cpu_time = [] # Store the CPU time of execution of each function
-        self.df = None # User-friendly verison of the plan
+        self.df = None # User-friendly version of the plan
         self.cpu_df = None # User-friendly time analysis
         self.initialized = False
         return
@@ -188,7 +188,6 @@ class Loop:
         """ Combine the module ordering and the time vectors into the integration plan """
         # Assemble the list of dicts
         raw = []
-        ti = -1
         for func_row in self.funcs:
             for t in self.abs_tvecs[func_row['module']]:
                 row = func_row.copy()
@@ -253,7 +252,13 @@ class Loop:
         return
 
     def run(self, until=None, verbose=None):
-        """ Actually run the integration loop; usually called by sim.run() """
+        """
+        Actually run the integration loop; usually called by sim.run()
+
+        Args:
+            until (str/date): if supplied, stop after this date (used by sim.run_one_step)
+            verbose (bool): if True, print each function call as it runs
+        """
         self._check_initialized()
 
         # Convert e.g. '2020-01-01' to an actual date
@@ -278,7 +283,7 @@ class Loop:
         self.to_df() # Store results as a dataframe
         return
 
-    def insert(self, func, label=None, match_fn=None, before=False, verbose=True, die=True):
+    def insert(self, func, label=None, match_fn=None, before=False):
         """
         Insert a function into the loop plan at the specified location.
 
@@ -297,7 +302,6 @@ class Loop:
             label (str): the label (module.name) of the function to match; see `sim.loop.plan.label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match
-            die (bool): whether to raise an exception if no matches found
 
         **Examples**:
 

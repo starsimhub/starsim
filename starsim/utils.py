@@ -152,7 +152,7 @@ class ndict(sc.objdict):
 
     def copy(self):
         """ Shallow copy """
-        new = self.__class__.__new__(nameattr=self._nameattr, type=self._type, strict=self._strict)
+        new = self.__class__(nameattr=self._nameattr, type=self._type, strict=self._strict, overwrite=self._overwrite)
         new.update(self)
         return new
 
@@ -190,8 +190,7 @@ def nlist_to_dict(nlist, die=True):
             raise ValueError(errormsg)
         else:
             ss.warn(errormsg)
-    else:
-        return out
+    return out
 
 
 def warn(msg, category=None, verbose=None, die=None):
@@ -409,11 +408,15 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     if isinstance(data, pd.Series) or isinstance(data, pd.DataFrame):
         data = data.reset_index().to_dict(orient='list')
 
-    # Check that the input is now a dict (scalar types have already been handled above
-    assert isinstance(data, dict), 'Supported inputs are ss.Dict, scalar numbers, DataFrames, Series, or dictionaries'
+    # Check that the input is now a dict (scalar types have already been handled above)
+    if not isinstance(data, dict):
+        errormsg = f'Supported inputs are ss.Dict, scalar numbers, DataFrames, Series, or dictionaries, not {type(data)}'
+        raise TypeError(errormsg)
 
     # Extract the values and index columns
-    assert 'value' in metadata['data_cols'], 'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict'
+    if 'value' not in metadata['data_cols']:
+        errormsg = f'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict. Data columns are:\n{metadata["data_cols"]}'
+        raise ValueError(errormsg)
     values = sc.promotetoarray(data[metadata['data_cols']['value']])
     index = sc.objdict()
     for k, col in metadata['data_cols'].items():
@@ -488,7 +491,7 @@ def validate_sim_data(data=None, die=None):
 
     # Validation
     if not success and die == True:
-        errormsg = 'Data "{data}" could not be converted and die == True'
+        errormsg = f'Data "{data}" could not be converted and die == True'
         raise ValueError(errormsg)
 
     return data
@@ -595,6 +598,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
         - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
+        - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'
         - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
 
@@ -603,7 +607,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
     """
-    suffix='_kw',
+    suffix='_kw'
     _None = '<None>'
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
     kw = sc.objdict() # Output arguments
@@ -626,7 +630,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
 
         # Handle dicts of kwargs, e.g. "fig_kw"
         subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
-        if subtype_dict:
+        if subtype_dict is not None:
             if _debug: print('Subtype dict:', subtype_dict)
             kw[subtype].update(subtype_dict)
 

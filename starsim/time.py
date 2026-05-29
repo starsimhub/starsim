@@ -91,7 +91,7 @@ class DateArray(np.ndarray):
             raise TypeError(errormsg)
 
     def __array_finalize__(self, obj):
-        # Ensure that the unit is propagaged when slicing and copying with dcp
+        # Ensure that the unit is propagated when slicing and copying with dcp
         if obj is not None:
             self._unit = getattr(obj, "_unit", ss.date)
         return
@@ -269,7 +269,7 @@ class date(pd.Timestamp):
             years = kwargs['year']
 
         if years is not None:
-            return cls.from_year(arg, day_round=day_round, allow_zero=allow_zero)
+            return cls.from_year(years, day_round=day_round, allow_zero=allow_zero)
 
         # Otherwise, proceed as normal
         else:
@@ -393,8 +393,7 @@ class date(pd.Timestamp):
     def round(self, to='d'):
         """ Round to a given interval (by default a day) """
         timestamp = super().round(to)
-        self._reset_class(timestamp)
-        return
+        return self._reset_class(timestamp)
 
     def to_pandas(self):
         """ Convert to a standard pd.Timestamp instance """
@@ -580,8 +579,6 @@ class date(pd.Timestamp):
                 step = ss.datedur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
                 step = step.years # Don't try to convert e.g. ss.years(0.1) to a datedur, you get rounding errors
-                # start = float(start)
-                # stop = float(stop)
         elif isinstance(step, str):
             dur_class = get_dur_class(step)
             step = ss.datedur(dur_class(1)) # e.g. ss.datedur(ss.years(1.0))
@@ -801,6 +798,7 @@ class TimePar:
             return len(self.value)
 
     def __hash__(self):
+        """ Treat years as the "hash" (identity) of a TimePar """
         years = self.years
         if self.is_scalar:
             return years
@@ -1578,7 +1576,7 @@ class Rate(TimePar):
                 errormsg = f'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
                 raise TypeError(errormsg)
             else:
-                errormsg = 'Only rates can be added to rates, not {other}'
+                errormsg = f'Only rates can be added to rates, not {other}'
                 raise TypeError(errormsg)
 
     def __radd__(self, other):
@@ -1802,8 +1800,8 @@ class prob(Rate):
     @rate.setter
     def rate(self, rate):
         """ Set both the rate and the value """
-        if sc.isnumber(v) and v<0:
-            errormsg = f'Cannot set a negative rate/probability ({v})'
+        if sc.isnumber(rate) and rate < 0:
+            errormsg = f'Cannot set a negative rate/probability ({rate})'
             raise ValueError(errormsg)
         self._rate = rate
 
@@ -1870,7 +1868,7 @@ class prob(Rate):
         if isinstance(dur, np.ndarray):
             assert arr.shape == dur.shape, 'dur must be either a scalar, or the same size as arr'
             def to_prob(a, b, _v=v):
-                return a.to_prob(b, v=_v)
+                return a.to_prob(b, scale=_v)
 
             vectorize = np.vectorize(to_prob)
             return vectorize(arr, dur)

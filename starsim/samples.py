@@ -12,7 +12,13 @@ import sciris as sc
 
 
 class Dataset:
-    """ Store the results and provide options for filtering """
+    """
+    Store the results and provide options for filtering
+    
+        Args:
+            folder (str/path): path to a folder containing `.zip` Samples files
+            results (odict): pre-constructed dict of Samples objects (used internally by filter())
+    """
     def __init__(self, folder=None, results=None, *args, **kwargs):
         # Note that results are not deep copied, to save memory
         if folder is not None:
@@ -24,7 +30,7 @@ class Dataset:
         elif results is not None:
             self.results = results
         else:
-            raise Exception("Must provide either folder or results to create Dataset")
+            raise ValueError("Must provide either folder or results to create Dataset")
 
     @property
     def ids(self):
@@ -77,10 +83,9 @@ class Dataset:
 
     def get(self, **kwargs):
         """
-        Retrieve a single result from a filter operation
-        e.g. `res = Dataset.get(scenario='foo')` instead of
-        `res = Dataset.filter(scenario='foo')[0]` instead of
-        assuming that the arguments result in only 1 result being selected
+        Retrieve a single result from a filter operation; raises if 0 or >1 match.
+
+        Example: `res = dataset.get(scenario='foo')` instead of `dataset.filter(scenario='foo')[0]`
         """
         ds = self.filter(**kwargs)
         if len(ds) == 0:
@@ -175,8 +180,8 @@ class Samples:
     def zipfile(self):
         if self._zipfile:
             return self._zipfile
-        else:
-            return zipfile.ZipFile(self._fname, mode="r")
+        self._zipfile = zipfile.ZipFile(self._fname, mode="r")  # Cache to avoid opening a new handle on every access
+        return self._zipfile
 
     def __repr__(self):
         _id = self.id.values()
@@ -286,10 +291,12 @@ class Samples:
     def new(cls, folder, outputs, identifiers=None, fname=None, verbose=True):
         """
         Args:
-            folder: The folder name
+            folder (path): the folder to save the zip file in
             outputs: A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry 'seed' for the seed
             identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the
                          same value for all samples. This is useful when generating multiple sets of results e.g., for scenarios (optional)
+            fname (str): filename for the zip file; auto-generated from identifiers if not supplied
+            verbose (bool): whether to print the save path (default True)
         """
         zipdata = {} # Store all the data to be written as files inside the zipfile
         summary_rows = []
@@ -345,7 +352,7 @@ class Samples:
         Example usage
 
         >>> res = Samples(...)
-        >>> for seed, (row, df) in res:
+        >>> for seed, (row, df) in res.items():
         >>>     ...
 
         Returns: Tuple with
@@ -392,7 +399,7 @@ class Samples:
 
         # Otherwise, assume the item is a seed
         if item not in self:
-            raise Exception(f'This dataset does not contain item "{item}"')
+            raise KeyError(f'This dataset does not contain item "{item}"')
 
         if item not in self._cache:
             with self.zipfile.open(self._seedfile(item)) as f:
@@ -414,3 +421,4 @@ class Samples:
         Returns: A list with the output of `fcn`
         """
         return [fcn(x, *args, **kwargs) for x in self]
+

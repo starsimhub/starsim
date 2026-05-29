@@ -102,10 +102,10 @@ class Options(sc.objdict):
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
         options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
 
-        optdesc.sep = 'Set thousands seperator for text output'
+        optdesc.sep = 'Set thousands separator for text output'
         options.sep = sc.parse_env('STARSIM_SEP', ',', str)
 
-        optdesc.date_sep = 'Set seperator for dates'
+        optdesc.date_sep = 'Set separator for dates'
         options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
@@ -129,7 +129,7 @@ class Options(sc.objdict):
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 5000, int) # See https://github.com/starsimhub/starsim/issues/1005 for details
 
-        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only.'
+        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only).'
         options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
 
         return optdesc, options
@@ -144,7 +144,7 @@ class Options(sc.objdict):
         try:
             assert self.getattribute('_locked') # This handles False, not present, etc.
             locked = True
-        except:
+        except (AssertionError, AttributeError):
             locked = False
 
         if locked:
@@ -188,7 +188,7 @@ class Options(sc.objdict):
     def disp(self):
         """ Detailed representation """
         output = 'Starsim options (see also ss.options.help()):\n'
-        keylen = 10  # Maximum key length  -- "interactive"
+        keylen = 10  # Maximum key length
         for k, v in self.items():
             keystr = sc.colorize(f'  {k:>{keylen}s}: ', fg='cyan', output=True)
             reprstr = sc.pp(v, output=True)
@@ -387,7 +387,7 @@ class Options(sc.objdict):
         # Update precision
         for file in files:
             ss_file = getattr(ss, file) # e.g. ss.arrays
-            for key,value in dtypes.items():
+            for key, value in dtypes.items():
                 ss_key = f'ss_{key}' # e.g. int -> ss_int
                 if hasattr(ss_file, ss_key): # e.g. ss.arrays.ss_int
                     setattr(ss_file, ss_key, value)

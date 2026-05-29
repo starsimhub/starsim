@@ -235,7 +235,7 @@ class Module(Base):
 
     Note that there is no *functional* difference between specifying arguments
     this way rather than simply via `**kwargs`, but having the arguments shown in the
-    function signature can make it easier to read, and "_" is a convetion to indicate
+    function signature can make it easier to read, and "_" is a convention to indicate
     that the default is specified below.
 
     It is also of course OK to specify the actual values rather than "_"; however
@@ -370,7 +370,7 @@ class Module(Base):
             for k in self._call_required.keys():
                 if k.split('.')[-1] in disabled: # Look for matches for disabled, omitting the class name
                     self._call_required[k] += 1 # Manually increment the call to pass checking
-        return required
+        return reqs
 
     def check_method_calls(self):
         """
@@ -415,7 +415,7 @@ class Module(Base):
 
     @classmethod
     def from_func(cls, func):
-        """ Create an module from a function """
+        """ Create a module from a function """
         def step(mod): # TODO: see if this can be done more simply
             return mod.func(mod.sim)
         name = func.__name__
@@ -442,7 +442,7 @@ class Module(Base):
     # Warning: do not try to use a decorator with this function, that will break argument passing!
     def update_pars(self, pars=None, **kwargs):
         """
-        Pull out recognized parameters, returning the rest
+        Pull out recognized parameters and update them; raises on unrecognized keys
         """
         # Merge pars and kwargs
         pars = sc.mergedicts(pars, kwargs)
@@ -480,13 +480,13 @@ class Module(Base):
         Define states of the module with the same attribute name as the state
 
         In addition to registering the state with the module by attribute, it adds
-        it to `mod._all_states`, which is used by `mod.state_list` and `mod.state_dict`.
+        it to `mod._auto_states`, which is used by `mod.state_list` and `mod.state_dict`.
 
         Args:
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state, and that it's not already present
             reset (bool): whether to reset the list of module states and use only the ones provided
-            lock (bool): if True, prevent states from being
+            lock (bool): if True, prevent the state attributes from being overwritten after definition
         """
         # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
         if reset:
@@ -667,14 +667,14 @@ class Module(Base):
         return self._auto_states[:]
 
     def match_time_inds(self, inds=None):
-         """ Find the nearest matching sim time indices for the current module """
-         self_tvec = self.t.yearvec
-         sim_tvec = self.sim.t.yearvec
-         if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
-             return Ellipsis if inds is None else inds
-         else:
-             out = sc.findnearest(sim_tvec, self_tvec)
-             return out
+        """ Find the nearest matching sim time indices for the current module """
+        self_tvec = self.t.yearvec
+        sim_tvec = self.sim.t.yearvec
+        if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
+            return Ellipsis if inds is None else inds
+        else:
+            out = sc.findnearest(sim_tvec, self_tvec)
+            return out
 
     @required()
     def start_step(self):

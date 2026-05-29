@@ -97,7 +97,7 @@ class Disease(ss.Module):
         as `None` for NCDs.
 
         Args:
-            uids (array): UIDs for agents to assign disease prongoses to
+            uids (array): UIDs for agents to assign disease prognoses to
             sources (array): Optionally specify the infecting agent
         """
         # Track infections
@@ -160,7 +160,7 @@ class Infection(Disease):
 
         initial_cases = self.pars.init_prev.filter()
         if len(initial_cases):
-            self.set_prognoses(initial_cases, sources=-1)  # TODO: sentinel value to indicate seeds?
+            self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
 
         # Store initial cases to exclude them from results on the first timestep
         self.pars._n_initial_cases = len(initial_cases)
@@ -251,9 +251,9 @@ class Infection(Disease):
             if isinstance(route, ss.Network):
                 if len(route): # Skip networks with no edges
                     edges = route.edges
-                    p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
-                    p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
-                    for src, trg, beta in [p1p2b0, p2p1b1]:
+                    p1_to_p2 = [edges.p1, edges.p2, betamap[nk][0]]  # p1→p2 direction, beta 0
+                    p2_to_p1 = [edges.p2, edges.p1, betamap[nk][1]]  # p2→p1 direction, beta 1
+                    for src, trg, beta in [p1_to_p2, p2_to_p1]:
                         if beta: # Skip networks with no transmission
                             disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
                             beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
@@ -385,7 +385,7 @@ class Infection(Disease):
         """
         if not hasattr(self.pars, 'birth_outcome_keys'):
             return
-        death_keys = {'miscarriage', 'neonatal_deaths', 'stillborn'}
+        death_keys = {'miscarriage', 'neonatal_deaths', 'stillborn'}  # Birth outcomes that trigger request_death
         for key in self.pars.birth_outcome_keys:
             ti_key = f'ti_{key}'
             if not hasattr(self, ti_key):
@@ -405,7 +405,7 @@ class Infection(Disease):
         super().update_results()
         res = self.results
         ti = self.ti
-        n_infections = np.count_nonzero(np.round(self.ti_infected) == ti)
+        n_infections = np.count_nonzero(np.round(self.ti_infected) == ti)  # Round since ti_infected is FloatArr
 
         # Update new infections to remove initial cases on first timestep
         if ti == 0:
@@ -715,7 +715,7 @@ class SIS(Infection):
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/`ss.bernoulli`): the fraction of people to start of being infected
-        dur_inf (float/`ss.du`r/`ss.Dist`): how long (in years) people are infected for
+        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
         waning (float/`ss.rate`): how quickly immunity wanes
         imm_boost (float): how much an infection boosts immunity
     """

@@ -89,6 +89,10 @@ class People:
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
         This operation is normally triggered as part of initializing the state (via `Arr.init()`)
+
+        Args:
+            state (Arr): the state to register
+            die (bool): if True (default), raise an error if the state has already been registered
         """
         if id(state) not in self._states:
             self._states[id(state)] = state
@@ -111,7 +115,7 @@ class People:
             raise TypeError(errormsg)
 
     def __setitem__(self, key, value):
-        """ Ditto """
+        """ Allow people['attr'] = value as an alias for setattr """
         return setattr(self, key, value)
 
     def __iter__(self):
@@ -127,7 +131,7 @@ class People:
         registry will no longer match the memory addresses of the new copied states. Therefore,
         after copying, we need to re-create the states registry with the new object IDs
         """
-        state['_states'] =  {id(v):v for v in state['_states'].values()}
+        state['_states'] = {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
         return
     
@@ -290,7 +294,7 @@ class People:
 
         # Connect the module as People attribute
         if hasattr(self, module.name):
-            raise Exception(f'Module {module.name} already added')
+            raise AttributeError(f'Module {module.name} already added')
         else:
             setattr(self, module.name, module)
 
@@ -486,6 +490,7 @@ class People:
         return
 
     def update_results(self):
+        """ Record per-timestep population counts into the simulation results """
         ti = self.sim.ti
         res = self.sim.results
         res.n_alive[ti] = np.count_nonzero(self.alive)
@@ -495,6 +500,7 @@ class People:
         return
 
     def finish_step(self):
+        """ Remove dead agents and run post-step updates """
         self.remove_dead()
         self.update_post()
         return
@@ -578,7 +584,7 @@ class People:
         **Example**:
 
             sim = ss.demo(plot=False)
-            sim.people.plot_age()
+            sim.people.plot_ages()
         """
         # Preliminaries
         age = self.age
@@ -590,6 +596,7 @@ class People:
         # Define age bins
         if np.iterable(bins):
             width = None # Already defined, don't need
+
         if np.isscalar(bins):
             width = bins
         else:
