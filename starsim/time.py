@@ -801,9 +801,9 @@ class TimePar:
         """ Treat years as the "hash" (identity) of a TimePar """
         years = self.years
         if self.is_scalar:
-            return years
+            return hash(years)
         else:
-            return tuple(years)
+            return hash(tuple(years))
 
     def __format__(self, format_spec=''):
         """Delegate to the underlying value for format specifiers like :n, :g, :f, etc."""

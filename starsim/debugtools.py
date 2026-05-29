@@ -477,11 +477,11 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
     return people
 
 
-def mock_module(dur=10, dt=1.0, **kwargs):
+def mock_module(dur=10, **kwargs):
     """ Create a minimal mock "Module" object; kwargs are passed to `ss.mock_time()` """
     mod = sc.objdict(
         name = 'mock_module',
         t = mock_time(**kwargs),
-        dt = kwargs.get('dt', ss.years(dt)),
+        dt = kwargs.get('dt', ss.years(1.0)),
     )
     return mod

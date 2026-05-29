@@ -390,7 +390,6 @@ class Timeline:
         assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
         assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
         assert isinstance(dur, ss.dur), f'Duration must be ss.dur, not {type(dur)}'
-        assert start_type is stop_type, f'Start and stop must be the same type, not {start_type} and {stop_type}'
         assert start <= stop, f'Start must be before stop, not {start} and {stop}'
         if (stop - start) < self.dt:
             warnmsg = f'The difference between {start = } and {stop = } is less than dt = {self.dt}; no timesteps will be run.'
