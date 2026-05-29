@@ -3,6 +3,11 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.4.0 (2026-05-XX)
+- TBC
+- *GitHub info*: PR [TBC](https://github.com/starsimhub/starsim/pull/TBC)
+
+
 ## Version 3.3.4 (2026-05-21)
 - Fixed `ss.CampaignDelivery` failing to initialize on date-based timelines: `init_pre()` now compares against the float `sim.t.yearvec` instead of the date-typed `sim.timevec`, which caused `sc.findnearest` to crash because subtracting `ss.date` objects produces `datedur`.
 - Fixed `ss.CampaignDelivery` missing a `coverage_dist` placeholder in `__init__`, which caused `AttributeError` on the first delivery. This affected `ss.campaign_screening`, `ss.campaign_triage`, and `ss.campaign_vx`.
