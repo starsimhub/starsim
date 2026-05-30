@@ -569,6 +569,10 @@ class Shrunk:
         s = f'{prefix} has been intentionally "shrunken" to save memory. Run with shrink=False to see the non-shrunken object instead.'
         return s
 
+    def __bool__(self):
+        """ A shrunken object is falsy, so `if obj:` treats it like a missing/None value """
+        return False
+
     def __getattr__(self, attr):
         """ Raise an informative error when a shrunken object's attributes are accessed """
         # Let dunder lookups (copy, pickle, repr machinery) fail with the default error

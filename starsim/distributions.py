@@ -977,8 +977,9 @@ class Dist:
 
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', 'history', '_callable_args']
+        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', '_callable_args']
         ss.shrink(self, to_shrink)
+        self.history = [] # Clear history explicitly rather than shrinking it
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
