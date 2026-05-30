@@ -4,8 +4,10 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.4.0 (2026-05-XX)
-- TBC
-- *GitHub info*: PR [TBC](https://github.com/starsimhub/starsim/pull/TBC)
+- `library`: TBC
+- `ss.shrink()` (previously `ss.utils.shrink()`) is now called automatically after `sim.run()`; this clears circular `Sim` references that otherwise block garbage collection. However, it does not clear `sim.people`, so it is still worth explicitly calling `sim.shrink()` if a ninimal-memory sim is needed, as this will take the typical sim size from ~MB to ~KB.
+- Fixed various minor issues: corrected typos, added docstrings, improved error messages, etc.
+- *GitHub info*: PR [1344](https://github.com/starsimhub/starsim/pull/1344)
 
 
 ## Version 3.3.4 (2026-05-21)

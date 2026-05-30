@@ -551,11 +551,65 @@ def save(filename, obj, **kwargs):
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 
-class shrink:
+class Shrunk:
     """ Define a class to indicate an object has been shrunken """
+    def __init__(self, obj=None, attr=None):
+        try:
+            self.obj_type = type(getattr(obj, attr))
+        except:
+            self.obj_type = None
+        self.attr = attr
+        return
+
     def __repr__(self):
-        s = 'This object has been intentionally "shrunken"; it is a placeholder and has no functionality. Use the non-shrunken object instead.'
+        if self.obj_type and self.attr:
+            prefix = f'The object "{self.attr}" {self.obj_type}'
+        else:
+            prefix = 'This object'
+        s = f'{prefix} has been intentionally "shrunken" to save memory. Run with shrink=False to see the non-shrunken object instead.'
         return s
+
+
+def shrink(obj=None, attrs=None, verbose=False):
+    """
+    Replace one or more object attributes in-place with an `ss.utils.Shrunk()` placeholder.
+
+    Used to save memory or remove circular references, especially when running large
+    numbers of sims. It is good practice to write `shrink()` methods for modules to remove
+    any temporary arrays or other memory-intensive objects.
+
+    `ss.shrink()` can be used to either manually replace an object, or replace multiple attributes 
+    of an object in-place. It is used rather than simply deleting attributes or setting them to
+     `None` to make it clear that the attributes were intentionally removed.
+
+    Args:
+        obj (object): the object to shrink in-place (optional)
+        attrs (str/list): the attributes of the object to shrink
+        verbose (bool): if True, print warnings about missing attributes
+
+    Examples:
+
+        # "Shrink" (remove) the People object
+        sim = ss.Sim()
+        ss.shrink(sim, 'people')
+
+        # Equivalent behavior, used manually
+        sim.people = ss.shrink()
+    """
+    none_count = sum([x is None for x in [obj, attrs]])
+    if none_count == 2:
+        return Shrunk()
+    elif none_count == 1:
+        errormsg = 'You can call ss.shrink() with both obj and attrs, or with neither, but not one or the other'
+        raise ValueError(errormsg)
+    else:
+        for attr in sc.tolist(attrs):
+            if hasattr(obj, attr):
+                shrunk = Shrunk(obj=obj, attr=attr)
+                setattr(obj, attr, shrunk)
+            elif verbose:
+                ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
+    return shrunk
 
 
 #%% Plotting helper functions

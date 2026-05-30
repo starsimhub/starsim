@@ -740,13 +740,13 @@ class Module(Base):
 
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        shrunk = ss.utils.shrink()
+        shrunk = ss.shrink()
         self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
         self.setattribute('dists', shrunk)
         for state in self.state_list:
             with sc.tryexcept():
-                state.people = shrunk
-                state.raw = shrunk
+                to_shrink = ['people', 'raw']
+                ss.shrink(state, to_shrink)
         return
 
     def plot(self):

@@ -488,13 +488,14 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, check_method_calls=True):
+    def run(self, until=None, verbose=None, shrink=True, check_method_calls=True):
         """
         Run the model -- the main method for running a simulation.
 
         Args:
             until (date/str/float): the date to run the sim until
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
+            shrink (bool): whether to shrink the sim after running to release memory
             check_method_calls (bool): whether to check that all required methods were called
         """
         # Initialization steps
@@ -521,7 +522,10 @@ class Sim(ss.Base):
             self.finalize()
             if check_method_calls:
                 self.check_method_calls()
+            if shrink:
+                self.shrink(full=False)
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+        
         return self # Allows e.g. ss.Sim().run().plot()
 
     def finalize(self):
@@ -611,7 +615,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0, intercept=10, die=True):
+    def shrink(self, inplace=True, full=True, size_limit=1.0, intercept=10, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -620,6 +624,7 @@ class Sim(ss.Base):
 
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            full (bool): whether to perform a full shrink, including the People object (otherwise just remove circular references)
             size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
             intercept (float): the size (in units of size_limit) to allow for a zero-timestep sim
             die (bool): whether to raise an exception if the shrink failed
@@ -633,41 +638,44 @@ class Sim(ss.Base):
         else:
             sim = self.copy() # We need to do a deep copy to avoid modifying other objects
 
-        # Shrink the people and loop
-        shrunk = ss.utils.shrink()
-        sim.people = shrunk
-        with sc.tryexcept(die=die):
-            sim.loop.shrink()
-
+        # Shrink the people
+        if full:
+            ss.shrink(sim, 'people')
+        
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
 
+            # Shrink the loop -- important; frees un-collectable sim references
+            sim.loop.shrink()
+
             # Shrink the distributions
-            sim.dists.sim = shrunk
-            sim.dists.obj = shrunk
+            ss.shrink(sim.dists, attrs=['sim', 'obj'])
             for dist in sim.dists.dists.values():
                 with sc.tryexcept(die=die):
-                    dist.shrink()
+                    dist.shrink() # Important; frees un-collectable sim references
+            
+            # The remaining shrinkages are only applied in the full case
+            if full:
 
-            # Finally, shrink the modules
-            for mod in sim.modules:
-                with sc.tryexcept(die=die):
-                    mod.shrink()
-
-            # Check that the module successfully shrunk
-            if size_limit:
-                max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                # Shrink the modules
                 for mod in sim.modules:
-                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
-                    if size > max_size:
-                        errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
-                        if die:
-                            raise RuntimeError(errormsg)
-                        else:
-                            ss.warn(errormsg)
+                    with sc.tryexcept(die=die):
+                        mod.shrink()
 
-        # Finally, set a flag that the sim has been shrunken
-        sim.shrunken = True
+                # Check that the module successfully shrunk
+                if size_limit:
+                    max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                    for mod in sim.modules:
+                        size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
+                        if size > max_size:
+                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
+                            if die:
+                                raise RuntimeError(errormsg)
+                            else:
+                                ss.warn(errormsg)
+
+        # Finally, set a flag that the sim has been shrunken, but only if fully shrunken
+        sim.shrunken = full
         return sim
 
     def check_results_ready(self, errormsg=None):

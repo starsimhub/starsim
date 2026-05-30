@@ -394,10 +394,8 @@ class Loop:
 
     def shrink(self):
         """ Shrink the size of the loop for saving to disk """
-        shrunk = ss.utils.shrink()
-        self.sim = shrunk
-        self.funcs = shrunk
-        self.plan = shrunk
+        to_shrink = ['sim', 'funcs', 'plan']
+        ss.shrink(self, to_shrink)
         return
 
     def plot(self, simplify=False, max_len=100, fig_kw=None, plot_kw=None, scatter_kw=None):
@@ -413,7 +411,7 @@ class Loop:
         """
 
         # Assemble data
-        df = self.to_df()
+        df = self.df
         if simplify:
             filter_out = ['update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
