@@ -41,6 +41,7 @@ def test_loop_plotting():
     sim = ss.Sim(pars).run()
     sim.loop.plot()
     sim.loop.plot_cpu()
+    sim.loop.plot_step_order()
     return sim.loop
 
 
