@@ -569,6 +569,14 @@ class Shrunk:
         s = f'{prefix} has been intentionally "shrunken" to save memory. Run with shrink=False to see the non-shrunken object instead.'
         return s
 
+    def __getattr__(self, attr):
+        """ Raise an informative error when a shrunken object's attributes are accessed """
+        # Let dunder lookups (copy, pickle, repr machinery) fail with the default error
+        if attr.startswith('__') and attr.endswith('__'):
+            raise AttributeError(attr)
+        errormsg = f'You are trying to access the attribute {attr} on a Shrunk object, which has been deleted. Rerun the sim with shrink=False to restore the original object.'
+        raise AttributeError(errormsg)
+
 
 def shrink(obj=None, attrs=None, verbose=False):
     """
