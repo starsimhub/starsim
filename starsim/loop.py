@@ -518,7 +518,7 @@ class Loop:
             sim.loop.plot_step_order()
         """
         self._check_initialized()
-        df = self.plan
+        df = self.df
         if which == 'default':
             which = dict(func_name='step')
         if which:
