@@ -4,9 +4,12 @@ results
 _freeze/
 tutorials/.jupyter_cache/
 objects.json
+objects.inv
 
 # Ignore auto-generated API .qmd files
 /api/*.qmd
 # But keep the index.qmd file
 !/api/index.qmd
 /.quarto/
+
+**/*.quarto_ipynb
