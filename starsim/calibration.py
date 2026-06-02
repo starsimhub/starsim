@@ -45,7 +45,8 @@ def _run_sim(calib_pars, seed=None):
             raise
         print(f'Encountered error running sim!\nSeed: {seed}\nTraceback:\n{sc.traceback()}')
         return None
-
+    finally:
+        sim.shrink(die=False) # Avoid memory leak due to circular references within dataframes/bound functions
 
 class Calibration(sc.prettyobj):
     """
