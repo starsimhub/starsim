@@ -1,5 +1,5 @@
 """
-Define pregnancy, deaths, migration, etc.
+Define pregnancy, deaths, etc.
 """
 import numpy as np
 import starsim as ss
@@ -9,7 +9,6 @@ import pandas as pd
 ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None
-
 
 
 
@@ -213,7 +212,9 @@ class Deaths(Demographics):
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
-            assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+            if death_rate.isna().any(axis=None):
+                errormsg = 'Death rate data has missing values; age bins must be consistent across all years. Data:\n{death_rate}'
+                raise ValueError(errormsg)
         if sc.isnumber(death_rate):
             # If the user has provided a bare number, assume it is per year
             msg = f'Death rate was specified as a number rather than a rate - assuming it is {death_rate} per year'
@@ -317,7 +318,8 @@ class PregnancyPars(ss.Pars):
         self.rate_units = 1e-3  # Assumes fertility rates are per 1000. If using percentages, switch this to 1
 
         # Parameters related to pregnancy duration
-        self.dur_pregnancy = ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])) # Quantiles for looking up fertility rates at delivery time
+        # Gestational age distribution at birth (32-42 weeks); probabilities approximate CDC/WHO preterm birth data
+        self.dur_pregnancy = ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269]))
 
         # Parameters related to breastfeeding
         self.dur_breastfeed = ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5))
@@ -483,7 +485,7 @@ class Pregnancy(Demographics):
     def dur_gestation_at_birth(self):
         """ Return duration of gestation at birth for agents born during the simulation """
         born_during_sim = self.sim.people.parent.notnan & (self.sim.people.age > self.t.dt.years)
-        return ss.weeks(self.people.pregnancy.gestation_at_birth[born_during_sim]).to('years')
+        return ss.weeks(self.sim.people.pregnancy.gestation_at_birth[born_during_sim]).to('years')
 
     @property
     def tri1_uids(self):
@@ -506,7 +508,12 @@ class Pregnancy(Demographics):
         return unborn_children
 
     def make_p_conceive(self, filter_uids=None):
-        """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
+        """
+        Compute per-agent conception probability for this timestep.
+
+        Args:
+            filter_uids: UIDs to compute probabilities for (default: all fecund women). Result is indexed to match these UIDs, or all fecund UIDs if None.
+        """
         ppl = self.sim.people
 
         # Apply filter UIDS and get ages
@@ -557,7 +564,8 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         fertility_rate[self.pregnant.uids] = 0  # Currently pregnant women cannot become pregnant
-        fertility_rate = ss.peryear(fertility_rate[filter_uids])  # Only return rates for requested UIDs
+        out_uids = uids if filter_uids is None else filter_uids
+        fertility_rate = ss.peryear(fertility_rate[out_uids])
         p_conceive = fertility_rate.to_prob(self.t.dt)  # Convert to probability per timestep
         return p_conceive
 
@@ -572,7 +580,9 @@ class Pregnancy(Demographics):
             fertility_rate = fertility_rate.reindex(np.arange(fertility_rate.index.min(), fertility_rate.index.max() + 1)).interpolate()
             max_age = fertility_rate.columns.max()
             fertility_rate[max_age + 1] = 0
-            assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+            if fertility_rate.isna().any(axis=None):
+                errormsg = f'Fertility rate data has missing values; age bins must be consistent across all years. Data:\n{fertility_rate}'
+                raise ValueError(errormsg)
         if sc.isnumber(fertility_rate):
             msg = f'Fertility rate was specified as a number rather than a rate - assuming it is {fertility_rate} per year'
             ss.warn(msg)
@@ -897,6 +907,7 @@ class Pregnancy(Demographics):
         people = self.sim.people
         n_unborn = len(conceive_uids)
         if n_unborn == 0:
+            conceive_uids_with_repeats = ss.uids()
             new_uids = ss.uids()
         else:
             conceive_uids_with_repeats, new_uids, new_slots = self._make_newborn_uids(conceive_uids, embryo_counts)
@@ -1037,6 +1048,19 @@ class Pregnancy(Demographics):
 
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
+
+            # Also reset multiples where all embryos have died
+            multiples = mother_uids[self.carrying_multiple[mother_uids]]
+            if len(multiples):
+                all_unborn = self.find_unborn_children(multiples)
+                alive_unborn = all_unborn[~np.isin(all_unborn, death_uids)]
+                if len(alive_unborn):
+                    alive_parents = np.unique(self.sim.people.parent[alive_unborn])
+                    complete_loss = ss.uids(multiples[~np.isin(multiples, alive_parents)])
+                else:
+                    complete_loss = multiples
+                if len(complete_loss):
+                    self.step_die(complete_loss)
         return
 
     def process_neonatal_deaths(self, death_uids):

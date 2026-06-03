@@ -2,12 +2,25 @@
 Parent class for the integration loop.
 """
 import time
+from dataclasses import dataclass
+from typing import Callable
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
 
+
+@dataclass
+class LoopEntry:
+    """ One executable event in the integration loop """
+    time: object
+    ti: int
+    func_order: int | None
+    func: Callable
+    label: str
+    module: str | None
+    func_name: str
 
 
 #%% Loop class
@@ -46,9 +59,10 @@ class Loop:
         self.func_list = []
         self.abs_tvecs = None
         self.plan = None
+        self.insertions = []
         self.index = 0 # The next function to execute
         self.cpu_time = [] # Store the CPU time of execution of each function
-        self.df = None # User-friendly verison of the plan
+        self.df = None # User-friendly version of the plan
         self.cpu_df = None # User-friendly time analysis
         self.initialized = False
         return
@@ -58,7 +72,6 @@ class Loop:
         self.collect_funcs()
         self.collect_abs_tvecs()
         self.make_plan()
-        self.to_df()
         self.initialized = True
         return
 
@@ -188,36 +201,39 @@ class Loop:
         """ Combine the module ordering and the time vectors into the integration plan """
         # Assemble the list of dicts
         raw = []
-        ti = -1
         for func_row in self.funcs:
             for t in self.abs_tvecs[func_row['module']]:
-                row = func_row.copy()
-                row['time'] = t # Add time column
-                raw.append(row)
-
-        # Turn it into a dataframe
-        self.plan = sc.dataframe(raw)
+                module = func_row['module']
+                func_name = func_row['func_name']
+                raw.append(LoopEntry(
+                    time = t,
+                    ti = 0,
+                    func_order = func_row['func_order'],
+                    func = func_row['func'],
+                    label = f'{module}.{func_name}',
+                    module = module,
+                    func_name = func_name,
+                ))
 
         # Sort it by step_order, a combination of time and function order
-        self.plan['ti'] = 0
-        self.plan['label'] = self.plan.module + '.' + self.plan.func_name
-        col_order = ['time', 'ti', 'func_order', 'func', 'label', 'module', 'func_name'] # Func in the middle to hide it
-        self.plan = self.plan.sort_values(['time','func_order']).reset_index(drop=True)[col_order]
+        self.plan = sorted(raw, key=lambda entry: (entry.time, entry.func_order))
 
         # Calculate the sim time index (ti)
         start_step = 'sim.start_step'
         ti = -1
-        ti_vals = []
-        for i,label in enumerate(self.plan.label):
-            if label == start_step:
+        for entry in self.plan:
+            if entry.label == start_step:
                 ti += 1
-            ti_vals.append(ti)
-        self.plan.loc[:, 'ti'] = ti_vals
+            entry.ti = ti
+
+        # Replay any user insertions tied to the current loop definition
+        for insertion in self.insertions:
+            self._insert_into_plan(**insertion)
 
         # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
         eps = 1e-9
         try:
-            diffs = np.diff(np.float64(self.plan.time)) # May be date, so convert to float
+            diffs = np.diff(np.float64([entry.time for entry in self.plan])) # May be date, so convert to float
             small_diffs = diffs[(diffs > 0) & (diffs < eps)]
             if len(small_diffs):
                 warnmsg = f'{len(small_diffs)} integration loop entries have near-identical times, indicating a floating-point issue:\n{small_diffs}\nCheck your time units across the sim and modules!'
@@ -240,8 +256,8 @@ class Loop:
         Compare sim.run_one_step(), which runs a full timestep (which involves multiple function calls).
         """
         self._check_initialized()
-        f = self.plan.func[self.index] # Get the next function
-        f() # Call it
+        entry = self.plan[self.index] # Get the next entry
+        entry.func() # Call it
         self.index += 1 # Increment the time
         return
 
@@ -253,7 +269,13 @@ class Loop:
         return
 
     def run(self, until=None, verbose=None):
-        """ Actually run the integration loop; usually called by sim.run() """
+        """
+        Actually run the integration loop; usually called by sim.run()
+
+        Args:
+            until (str/date): if supplied, stop after this date (used by sim.run_one_step)
+            verbose (bool): if True, print each function call as it runs
+        """
         self._check_initialized()
 
         # Convert e.g. '2020-01-01' to an actual date
@@ -262,12 +284,12 @@ class Loop:
 
         # Loop over every function in the integration loop, e.g. disease.step()
         self.store_time()
-        for f,label in zip(self.plan.func[self.index:], self.plan.label[self.index:]):
+        while self.index < len(self.plan):
+            entry = self.plan[self.index]
             if verbose:
-                row = self.plan[self.index]
-                print(f'Running t={row.time:n}, step={row.name}, {label}()')
+                print(f'Running t={entry.time:n}, step={self.index}, {entry.label}()')
 
-            f() # Execute the function -- this is where all of Starsim happens!!
+            entry.func() # Execute the function -- this is where all of Starsim happens!!
 
             # Tidy up
             self.index += 1 # Increment the count
@@ -278,11 +300,50 @@ class Loop:
         self.to_df() # Store results as a dataframe
         return
 
-    def insert(self, func, label=None, match_fn=None, before=False, verbose=True, die=True):
+    def plan_metadata(self):
+        """ Return the dataframe view of the plan used for matching and display """
+        cols = ['time', 'ti', 'func_order', 'label', 'module', 'func_name']
+        rows = [{col:getattr(entry, col) for col in cols} for entry in self.plan]
+        return sc.dataframe(rows, columns=cols)
+
+    def _insert_into_plan(self, func, label=None, match_fn=None, before=False):
+        """ Insert into ``self.plan`` without recording the insertion for replay """
+        if label:
+            match_fn = lambda plan: plan.label == label
+
+        # Compute the matches against a dataframe metadata view
+        metadata = self.plan_metadata()
+        matches = match_fn(metadata)
+        matches = np.asarray(matches)
+        if matches.dtype == bool:
+            matches = sc.findinds(matches)
+
+        # Perform the insertion in reverse order
+        name = func.__name__
+        sim_func = lambda: func(self.sim) # Construct a partial function
+        for m in sorted(matches, reverse=True):
+            current = self.plan[m]
+            row = LoopEntry(
+                time = current.time,
+                ti = current.ti,
+                func_order = None,
+                func = sim_func,
+                label = name,
+                module = None,
+                func_name = name,
+            )
+            ind = m if before else m+1
+            self.plan.insert(ind, row)
+
+        self.df = None
+        self.cpu_df = None
+        return
+
+    def insert(self, func, label=None, match_fn=None, before=False):
         """
         Insert a function into the loop plan at the specified location.
 
-        The loop plan is a dataframe with columns including time (e.g. `date('2025-05-05')`),
+        The loop plan metadata view is a dataframe with columns including time (e.g. `date('2025-05-05')`),
         label (e.g. `'randomnet.step'`), module ('`randomnet'`), and function name (`'step'`).
         By default, this method will match the conditions in the plan based on
         the criteria specified.
@@ -294,10 +355,9 @@ class Loop:
 
         Args:
             func (func): the function to insert; must take a single argument, `sim`
-            label (str): the label (module.name) of the function to match; see `sim.loop.plan.label.unique() for choices`
+            label (str): the label (module.name) of the function to match; see `sim.loop.to_df().label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match
-            die (bool): whether to raise an exception if no matches found
 
         **Examples**:
 
@@ -335,39 +395,16 @@ class Loop:
             errormsg = "You can supply label or match, but not both; 'label' is equivalent to 'plan.label == label', please include this in your match function"
             raise ValueError(errormsg)
 
-        if label:
-            match_fn = lambda plan: plan.label == label
-
-        # Compute the matches
-        matches = match_fn(self.plan)
-        if matches.dtype == bool:
-            matches = sc.findinds(matches)
-
-        # Perform the insertion in reverse order
-        name = func.__name__
-        sim_func = lambda: func(self.sim) # Construct a partial function
-        for m in matches[::-1]:
-            ind = m-1 if before else m
-            current = self.plan[ind]
-            row = dict(
-                time = current.time,
-                ti = current.ti,
-                func_order = None,
-                func = sim_func,
-                label = name,
-                module = None,
-                func_name = name,
-            )
-            self.plan.insertrow(ind, row)
-
+        insertion = dict(func=func, label=label, match_fn=match_fn, before=before)
+        self.insertions.append(insertion)
+        self._insert_into_plan(**insertion)
         return
 
     def to_df(self):
         """ Return a user-friendly version of the plan, omitting object columns """
         # Compute the main dataframe
-        cols = ['time', 'ti', 'func_order', 'label', 'module', 'func_name']
         if self.plan is not None:
-            df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
+            df = self.plan_metadata()
         else:
             errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
             raise RuntimeError(errormsg)
@@ -390,10 +427,8 @@ class Loop:
 
     def shrink(self):
         """ Shrink the size of the loop for saving to disk """
-        shrunk = ss.utils.shrink()
-        self.sim = shrunk
-        self.funcs = shrunk
-        self.plan = shrunk
+        to_shrink = ['sim', 'funcs', 'plan']
+        ss.shrink(self, to_shrink)
         return
 
     def plot(self, simplify=False, max_len=100, fig_kw=None, plot_kw=None, scatter_kw=None):
@@ -409,7 +444,9 @@ class Loop:
         """
 
         # Assemble data
-        df = self.to_df()
+        df = self.df
+        if df is None:
+            df = self.to_df()
         if simplify:
             filter_out = ['update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
@@ -516,7 +553,9 @@ class Loop:
             sim.loop.plot_step_order()
         """
         self._check_initialized()
-        df = self.plan
+        df = self.df
+        if df is None:
+            df = self.to_df()
         if which == 'default':
             which = dict(func_name='step')
         if which:
@@ -560,17 +599,10 @@ class Loop:
         return ss.return_fig(fig)
 
     def __deepcopy__(self, memo):
-        """ A dataframe that has functions in it doesn't copy well; convert to a dict first """
+        """ Deep-copy the loop """
         cls = self.__class__
         new = cls.__new__(cls)
         memo[id(self)] = new
         for k, v in vars(self).items():
-            if k == 'plan' and isinstance(v, sc.dataframe):
-                origdict = v.to_dict() # Convert to a dictionary
-                newdict = sc.dcp(origdict, memo=memo, die=False) # Copy the dict
-                newdf = sc.dataframe(newdict)
-                setattr(new, k, newdf)
-            else:
-                setattr(new, k, sc.dcp(v, memo=memo, die=False)) # Regular deepcopy
+            setattr(new, k, sc.dcp(v, memo=memo, die=False))
         return new
-

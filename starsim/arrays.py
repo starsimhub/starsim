@@ -54,8 +54,6 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def convert(self, obj):
         """ Check if an object is an array, and convert if so """
-        # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
-        # print('h1', me, caller, type(obj))
         if isinstance(obj, np.ndarray):
             return self.asnew(obj)
         elif isinstance(obj, BaseArr):
@@ -111,7 +109,14 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         return sc.pr(self)
 
     def asnew(self, values=None, cls=None, **kwargs):
-        """ Duplicate and copy (rather than link) data """
+        """
+        Duplicate and copy (rather than link) data.
+
+        Args:
+            values (array): replacement data; if None, copies existing values
+            cls (type): class to use for the new instance; defaults to the current class
+            kwargs: additional attributes to set on the new instance
+        """
         if cls is None: # Use the current class if none is provided
             cls = self.__class__
         new = object.__new__(cls) # Create a new Arr instance
@@ -267,7 +272,7 @@ class Arr(BaseArr):
             - ss.uids, integer, or integer array: raw
             - BoolArr, boolean array, or full slice: values
         """
-        if isinstance(key, (uids, int, ss_int, tuple)) or (isinstance(key, np.ndarray) and key.dtype == int):
+        if isinstance(key, (uids, int, ss_int, tuple)) or (isinstance(key, np.ndarray) and key.dtype == int): # Catch immediately for speed
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
@@ -287,7 +292,7 @@ class Arr(BaseArr):
             return key.astype(int)
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
-            raise Exception(errormsg)
+            raise TypeError(errormsg)
 
     def _index(self, arr, inds):
         """ Index the array using the most efficient method for the current array size """
@@ -327,7 +332,6 @@ class Arr(BaseArr):
         elif isinstance(other, ss.date):
             other_raw = other.years
         elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
-            raw_size = self_raw.size
             both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
         else:
             self._type_error(other)
@@ -481,7 +485,7 @@ class Arr(BaseArr):
         """ Link to the indices of active agents -- sim.people.auids """
         try:
             return self.people.auids
-        except:
+        except AttributeError:
             if not self.initialized:
                 ss.warn('Trying to access non-initialized Arr object; in most cases, Arr objects need to be initialized with a Sim object, but set skip_init=True if this is intentional.')
             return uids(np.arange(len(self.raw)))
@@ -591,13 +595,19 @@ class Arr(BaseArr):
         raise TypeError(errormsg)
 
     def convert(self, obj, copy=None):
-        """ Check if an object is an array, and convert if so """
+        """
+        Check if an object is an array-like, and convert it to this array's type if so.
+
+        Args:
+            obj: object to convert (BaseArr, np.ndarray, or raises TypeError)
+            copy (bool): whether to copy the data; passed through to asnew()
+        """
         if isinstance(obj, BaseArr):
             return obj
         elif isinstance(obj, np.ndarray):
             return self.asnew(obj, copy=copy)
         else:
-            self._type_error()
+            self._type_error(obj)
         return obj
 
     def _to_raw(self, obj):
@@ -622,10 +632,6 @@ class Arr(BaseArr):
 
     def asnew(self, arr=None, cls=None, name=None, copy=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
-        # me, caller = sys._getframe(0).f_code.co_name, sys._getframe(1).f_code.co_name
-        # print('h2', me, caller, type(arr))
-        # if type(arr) != np.ndarray:
-        #     raise Exception
         if cls is None:
             cls = self.__class__
         if copy is None:
@@ -838,7 +844,7 @@ class BoolState(BoolArr):
 
 
 class IndexArr(Arr):
-    """ A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) """
+    """ A special class of Arr used for UIDs and RNG IDs; not to be used as a general integer array (for that, use IntArr) """
     def __init__(self, name=None, label=None):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, skip_init=True)
         self.raw = uids(self.raw)
@@ -900,7 +906,7 @@ class uids(np.ndarray):
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
-    def concatenate(*args):  # pylint: disable=no-self-argument
+    def concatenate(*args):  # pylint: disable=no-self-argument  # intentionally no `self` so it works as both instance and class method
         """
         Concatenate uids into a single instance
 
@@ -967,7 +973,7 @@ class uids(np.ndarray):
         return np.setxor1d(self, other, **kw).view(self.__class__)
 
     def to_numpy(self):
-        """ Return a view as maia standard NumPy array """
+        """ Return a view as a standard NumPy array """
         return self.view(np.ndarray)
 
     def unique(self, return_index=False):

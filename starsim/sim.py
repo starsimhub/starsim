@@ -138,7 +138,7 @@ class Sim(ss.Base):
     @property
     def modules(self):
         """
-        Return an interator over all Module instances (stored in standard places) in the Sim
+        Return an iterator over all Module instances (stored in standard places) in the Sim
         """
         for module in itertools.chain(
             self.custom(),
@@ -216,7 +216,7 @@ class Sim(ss.Base):
         matches = self.get_modules(query, match_case=match_case)
         if len(matches) > 1:
             errormsg = f'Multiple matching modules found for {query}; to retrieve all of them, use `Sim.get_modules()` instead'
-            raise Exception(errormsg)
+            raise ValueError(errormsg)
         elif not matches:
             if die:
                 errormsg = f'No matching module found for {query}; set die=False to return None instead'
@@ -262,14 +262,13 @@ class Sim(ss.Base):
                 return list(modules)
 
         # Loop over all modules, looking for matches
+        if isinstance(query, str) and not match_case:
+            query = query.lower()
         for mod in modules:
             if isinstance(query, type) and isinstance(mod, query):
                 matches.append(mod)
             elif isinstance(query, str):
-                name = mod.name
-                if not match_case:
-                    query = query.lower()
-                    name = name.lower()
+                name = mod.name if match_case else mod.name.lower()
                 if query.startswith('*') and query.endswith('*') and query[1:-1] in name:
                     matches.append(mod)
                 elif query.startswith('*') and name.endswith(query[1:]):
@@ -489,13 +488,14 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, check_method_calls=True):
+    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True):
         """
         Run the model -- the main method for running a simulation.
 
         Args:
             until (date/str/float): the date to run the sim until
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
+            shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
         """
         # Initialization steps
@@ -506,24 +506,29 @@ class Sim(ss.Base):
         self.timer.start()
 
         # Check for AlreadyRun errors
-        errormsg = None
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
 
-        # Main simulation loop -- just one line!!!
-        self.loop.run(until)
+        try:
+            # Main simulation loop -- just one line!!!
+            self.loop.run(until)
 
-        # Check if the simulation is complete
-        if self.loop.index == len(self.loop.plan):
-            self.complete = True
+            # Check if the simulation is complete
+            if self.loop.index == len(self.loop.plan):
+                self.complete = True
 
-        # If simulation reached the end, finalize the results
-        if self.complete:
-            self.finalize()
-            if check_method_calls:
-                self.check_method_calls()
-            sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+            # If simulation reached the end, finalize the results
+            if self.complete:
+                self.finalize()
+                if check_method_calls:
+                    self.check_method_calls()
+                if shrink:
+                    self.shrink(full=False)
+                sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+        finally:
+            self.dists.clear_run_caches()
+        
         return self # Allows e.g. ss.Sim().run().plot()
 
     def finalize(self):
@@ -613,7 +618,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0, intercept=10, die=True):
+    def shrink(self, inplace=True, full=True, size_limit=1.0, intercept=10, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -622,6 +627,7 @@ class Sim(ss.Base):
 
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            full (bool): whether to perform a full shrink, including the People object (otherwise just remove circular references)
             size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
             intercept (float): the size (in units of size_limit) to allow for a zero-timestep sim
             die (bool): whether to raise an exception if the shrink failed
@@ -635,41 +641,44 @@ class Sim(ss.Base):
         else:
             sim = self.copy() # We need to do a deep copy to avoid modifying other objects
 
-        # Shrink the people and loop
-        shrunk = ss.utils.shrink()
-        sim.people = shrunk
-        with sc.tryexcept(die=die):
-            sim.loop.shrink()
-
+        # Shrink the people
+        if full:
+            ss.shrink(sim, 'people')
+        
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
 
+            # Shrink the loop -- important; frees un-collectable sim references
+            sim.loop.shrink()
+
             # Shrink the distributions
-            sim.dists.sim = shrunk
-            sim.dists.obj = shrunk
+            ss.shrink(sim.dists, attrs=['sim', 'obj'])
             for dist in sim.dists.dists.values():
                 with sc.tryexcept(die=die):
-                    dist.shrink()
+                    dist.shrink() # Important; frees un-collectable sim references
+            
+            # The remaining shrinkages are only applied in the full case
+            if full:
 
-            # Finally, shrink the modules
-            for mod in sim.modules:
-                with sc.tryexcept(die=die):
-                    mod.shrink()
-
-            # Check that the module successfully shrunk
-            if size_limit:
-                max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                # Shrink the modules
                 for mod in sim.modules:
-                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
-                    if size > max_size:
-                        errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
-                        if die:
-                            raise RuntimeError(errormsg)
-                        else:
-                            ss.warn(errormsg)
+                    with sc.tryexcept(die=die):
+                        mod.shrink()
 
-        # Finally, set a flag that the sim has been shrunken
-        sim.shrunken = True
+                # Check that the module successfully shrunk
+                if size_limit:
+                    max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                    for mod in sim.modules:
+                        size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
+                        if size > max_size:
+                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
+                            if die:
+                                raise RuntimeError(errormsg)
+                            else:
+                                ss.warn(errormsg)
+
+        # Finally, set a flag that the sim has been shrunken, but only if fully shrunken
+        sim.shrunken = full
         return sim
 
     def check_results_ready(self, errormsg=None):
@@ -705,11 +714,11 @@ class Sim(ss.Base):
             errormsg = f'Could not understand {check=}, must be one of {valid}'
             raise ValueError(errormsg)
 
+        missing = []
         if check:
             if verbose:
                 sc.pp(self._call_required)
 
-            missing = []
             for mod in self.modules:
                 modmissing = mod.check_method_calls()
                 if modmissing:
@@ -813,7 +822,7 @@ class Sim(ss.Base):
         sc.save(filename=filename, obj=sim)
         return filename
 
-    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
+    def to_json(self, filename=None, keys=None, indent=2, verbose=False, **kwargs):
         """
         Export results and parameters as JSON.
 
@@ -858,7 +867,7 @@ class Sim(ss.Base):
         # Final conversion
         d = sc.jsonify(d, **kwargs)
         if filename is not None:
-            sc.savejson(filename=filename, obj=d)
+            sc.savejson(filename=filename, obj=d, indent=indent)
         return d
 
     def to_yaml(self, filename=None, sort_keys=False, **kwargs):
@@ -1003,8 +1012,8 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
 
     Args:
         run (bool): whether to run the sim
-        plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
+        plot (bool): whether to plot the results
         kwargs (dict): passed to `ss.Sim()`
 
     **Examples**:
@@ -1115,7 +1124,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             new = d.sim2
             if multi:
                 old_sem = d.sim1_sem
-                new_sem = d.sim1_sem
+                new_sem = d.sim2_sem
                 sem = old_sem + new_sem
                 small_change = 1.96 # 95% CI, roughly speaking
 
@@ -1214,4 +1223,3 @@ def check_sims_match(*args, full=False):
         return matches
     else:
         return all(matches)
-

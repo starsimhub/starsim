@@ -20,6 +20,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
 
 
+## Version 3.4.0 (2026-05-XX)
+- `library`: TBC
+- `ss.shrink()` (previously `ss.utils.shrink()`) is now called automatically after `sim.run()`; this clears circular `Sim` references that otherwise block garbage collection. However, it does not clear `sim.people`, so it is still worth explicitly calling `sim.shrink()` if a ninimal-memory sim is needed, as this will take the typical sim size from ~MB to ~KB.
+- Fixed various minor issues: corrected typos, added docstrings, improved error messages, etc.
+- *GitHub info*: PR [1344](https://github.com/starsimhub/starsim/pull/1344)
+
+
 ## Version 3.3.4 (2026-05-21)
 - Fixed `ss.CampaignDelivery` failing to initialize on date-based timelines: `init_pre()` now compares against the float `sim.t.yearvec` instead of the date-typed `sim.timevec`, which caused `sc.findnearest` to crash because subtracting `ss.date` objects produces `datedur`.
 - Fixed `ss.CampaignDelivery` missing a `coverage_dist` placeholder in `__init__`, which caused `AttributeError` on the first delivery. This affected `ss.campaign_screening`, `ss.campaign_triage`, and `ss.campaign_vx`.

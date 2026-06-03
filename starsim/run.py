@@ -62,7 +62,7 @@ class MultiSim:
                 elif isinstance(entry, (list, tuple)): # Merge with current list (rare)
                     merged_sims.extend(list(entry)) # Does not handle doubly nested MultiSim, and that's ok!
                 else:
-                    errormsg = f'Unable to process sim {entry}: expecting ss.Sim or ss.Multisim'
+                    errormsg = f'Unable to process sim {entry}: expecting ss.Sim or ss.MultiSim'
                     raise TypeError(errormsg)
             sims = merged_sims
             
@@ -187,7 +187,7 @@ class MultiSim:
 
         # Handle which sims to use -- same as init_sims()
         if self.sims is None:
-            sims = self.base_sim
+            sims = [self.base_sim]  # Wrap in list so it's iterable in the debug loop
         else:
             sims = self.sims
 
@@ -399,7 +399,7 @@ class MultiSim:
                     quantiles = sc.objdict({'median':0.5, 'min':0, 'max':1, 'q25':0.25, 'q75':0.75})
                 elif isinstance(quantiles, list):
                     quantiles = {q:q for q in quantiles}
-                summary[k] = {q:v for q,v in zip(quantiles, np.quantile(arr, quantiles))}
+                summary[k] = {q: np.quantile(arr, v) for q, v in quantiles.items()}
 
         self.summary = summary # Could reconcile with reduce()'s summary
 
@@ -499,8 +499,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
         sim         (Sim)   : the sim instance to be run
         ind         (int)   : the index of this sim
         reseed      (bool)  : whether to generate a fresh seed for each run
-        noise       (float) : the amount of noise to add to each run
-        noisepar    (str)   : the name of the parameter to add noise to
         shrink      (bool)  : whether to shrink the sim after the sim run
         run_args    (dict)  : arguments passed to sim.run()
         sim_args    (dict)  : extra parameters to pass to the sim, e.g. 'n_infected'
@@ -582,8 +580,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         kwargs      (dict)  : also passed to the sim
 
     Returns:
-        If combine is True, a single sim object with the combined results from each sim.
-        Otherwise, a list of sim objects (default).
+        A list of sim objects (default).
 
     **Example**:
 

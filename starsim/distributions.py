@@ -80,7 +80,7 @@ class Dists(sc.prettyobj):
 
         In practice, the object is usually a Sim, but can be anything.
         """
-        if base_seed:
+        if base_seed is not None:
             self.base_seed = base_seed
         sim = sim if (sim is not None) else self.sim
         obj = obj if (obj is not None) else self.obj
@@ -100,7 +100,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
-            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already foun
+            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
             dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
         else:
@@ -162,6 +162,13 @@ class Dists(sc.prettyobj):
         for dist in self.dists.values():
             out += dist.reset()
         return out
+
+    def clear_run_caches(self):
+        """ Clear rebuildable per-run caches from each managed distribution """
+        if self.dists is not None:
+            for dist in self.dists.values():
+                dist.clear_run_cache()
+        return
 
     def copy_to_module(self, module):
         """ Copy the Sim's Dists object to the specified module """
@@ -709,11 +716,11 @@ class Dist:
                 self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions)
                 self.unit = None
                 if ss.options.warn_convert:
-                    msg += f'Since ss.{self.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
+                    msg += f'Since ss.{self.__class__.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
                     msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)), or set ss.options.warn_convert=False.'
-                    ss.warnmsg(msg)
+                    ss.warn(msg)
             else:
-                msg += f'Since ss.{self.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
+                msg += f'Since ss.{self.__class__.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
                 msg += 'Use e.g. ss.weibull(3, ss.years(5), ss.years(2)) instead of ss.weibull(3, 5, 2, unit=ss.years).'
                 raise ValueError(msg)
 
@@ -751,7 +758,7 @@ class Dist:
 
                 try:
                     self._pars[key] = self._pars[key].astype(float)
-                except:
+                except Exception:
                     pass
 
     def convert_callable(self, parkey, func, size, uids):
@@ -975,17 +982,21 @@ class Dist:
         )
         return out
 
+    def clear_run_cache(self):
+        """ Clear transient callable/draw caches without unlinking the distribution """
+        self._callable_args = None
+        self._callable_keys = None
+        self._uids = None
+        self._slots = None
+        self._n = None
+        self._size = None
+        return
+
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        shrunk = ss.utils.shrink()
-        self.slots = shrunk
-        self._slots = shrunk
-        self.module = shrunk
-        self.sim = shrunk
-        self._n = shrunk
-        self._uids = shrunk
-        self.history = shrunk
-        self._callable_args = shrunk
+        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', '_callable_args', '_callable_keys']
+        ss.shrink(self, to_shrink)
+        self.history = [] # Clear history explicitly rather than shrinking it
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
@@ -1555,6 +1566,11 @@ class multi_random(sc.prettyobj):
     See ss.combine_rands() for the manual version; in almost all cases this class
     should be used instead.
 
+    Args:
+        names (str/list): name(s) for each internal random distribution
+        *args: additional names (shorthand)
+        **kwargs: passed to each `ss.random()` instance
+
     Usage:
         multi = ss.multi_random('source', 'target')
         rvs = multi.rvs(source_uids, target_uids)
@@ -1586,7 +1602,7 @@ class multi_random(sc.prettyobj):
     @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
     def combine_rvs(rvs_list, int_type, int_max):
         """ Combine inputs into one number """
-        # Combine using bitwise-or
+        # Combine using bitwise-xor
         rand_ints = rvs_list[0].view(int_type)
         for rand_floats in rvs_list[1:]:
             rand_ints2 = rand_floats.view(int_type)
