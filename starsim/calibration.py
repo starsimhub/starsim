@@ -104,7 +104,7 @@ class Calibration(sc.prettyobj):
         if sampler      is None: sampler        = op.samplers.TPESampler(multivariate=True, constant_liar=True) # Set multivariate and constant_liar as True - these are expected to be beneficial most of the time (multiple workers) and unlikely to cause harm otherwise
 
         self._parse_storage(study_name, storage) # Process storage arguments to select storage backend and file names
-        self._rdb_storage_cache = None # Cache database storage to avoid unnecessarily opening extra database connections
+        self._storage_cache = None # Cache storage object so all worker threads share one instance
 
         self.build_fn       = build_fn
         self.build_kw       = build_kw or dict()
@@ -344,31 +344,33 @@ class Calibration(sc.prettyobj):
 
         Users can specify `storage` for the calibration in a number of different ways. This function
         resolves them and returns a corresponding Optuna storage object that can subsequently be used
-        directly with Optuna. This function is called directly by Optuna workers so that file locks are
-        correctly handled when using multiple workers
+        directly with Optuna. For journal and RDB storage, the storage object is cached to reduce
+        the total number of storage instances.
         """
-        if self._storage_type == 'journal':
-            lock_obj = op.storages.journal.JournalFileOpenLock(self._db_path)  # needed on Windows
-            backend  = op.storages.journal.JournalFileBackend(self._db_path, lock_obj=lock_obj)
-            if self.verbose: print(f"Using Journal-based storage at {self._db_path}")
-            return op.storages.JournalStorage(backend)
-        elif self._storage_type in ('sqlite', 'connection'):
-            if self._rdb_storage_cache is None:
+
+        if not self._storage_cache:
+            if self._storage_type == 'journal':
+                lock_obj = op.storages.journal.JournalFileOpenLock(self._db_path)  # needed on Windows
+                backend  = op.storages.journal.JournalFileBackend(self._db_path, lock_obj=lock_obj)
+                if self.verbose: print(f"Using Journal-based storage at {self._db_path}")
+                self._storage_cache = op.storages.JournalStorage(backend)
+            elif self._storage_type in ('sqlite', 'connection'):
                 if self.verbose:
                     if self._storage_type == 'sqlite':
                         print(f"Using SQLite database storage at {self._db_path}")
                     else:
                         print(f"Using database storage at {self._storage_spec}")
-                self._rdb_storage_cache = op.storages.RDBStorage(
+                self._storage_cache = op.storages.RDBStorage(
                     self._storage_spec,
                     engine_kwargs={"pool_size": self.run_args.n_cpus, "max_overflow": 0},
                     heartbeat_interval=60,
                 )
-                atexit.register(self._rdb_storage_cache.engine.dispose)
-            return self._rdb_storage_cache
-        else:
-            if self.verbose: print(f"Using explicitly provided Optuna storage at {self._storage_spec}")
-            return self._storage_spec # Assume it is already a BaseStorage instance
+                atexit.register(self._storage_cache.engine.dispose)
+            else:
+                if self.verbose: print(f"Using explicitly provided Optuna storage at {self._storage_spec}")
+                self._storage_cache = self._storage_spec # Assume it is already a BaseStorage instance
+
+        return self._storage_cache
 
     def remove_db(self):
         """
@@ -390,7 +392,7 @@ class Calibration(sc.prettyobj):
             if self.verbose:
                 print('Could not delete study, skipping...')
                 print(str(E))
-        self._rdb_storage_cache = None
+        self._storage_cache = None
         return
 
 
