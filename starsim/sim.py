@@ -488,14 +488,14 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, shrink=True, check_method_calls=True):
+    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True):
         """
         Run the model -- the main method for running a simulation.
 
         Args:
             until (date/str/float): the date to run the sim until
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
-            shrink (bool): whether to shrink the sim after running to release memory
+            shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
         """
         # Initialization steps
@@ -510,21 +510,24 @@ class Sim(ss.Base):
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
 
-        # Main simulation loop -- just one line!!!
-        self.loop.run(until)
+        try:
+            # Main simulation loop -- just one line!!!
+            self.loop.run(until)
 
-        # Check if the simulation is complete
-        if self.loop.index == len(self.loop.plan):
-            self.complete = True
+            # Check if the simulation is complete
+            if self.loop.index == len(self.loop.plan):
+                self.complete = True
 
-        # If simulation reached the end, finalize the results
-        if self.complete:
-            self.finalize()
-            if check_method_calls:
-                self.check_method_calls()
-            if shrink:
-                self.shrink(full=False)
-            sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+            # If simulation reached the end, finalize the results
+            if self.complete:
+                self.finalize()
+                if check_method_calls:
+                    self.check_method_calls()
+                if shrink:
+                    self.shrink(full=False)
+                sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+        finally:
+            self.dists.clear_run_caches()
         
         return self # Allows e.g. ss.Sim().run().plot()
 
@@ -1220,4 +1223,3 @@ def check_sims_match(*args, full=False):
         return matches
     else:
         return all(matches)
-
