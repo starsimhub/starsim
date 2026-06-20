@@ -163,6 +163,13 @@ class Dists(sc.prettyobj):
             out += dist.reset()
         return out
 
+    def clear_run_caches(self):
+        """ Clear rebuildable per-run caches from each managed distribution """
+        if self.dists is not None:
+            for dist in self.dists.values():
+                dist.clear_run_cache()
+        return
+
     def copy_to_module(self, module):
         """ Copy the Sim's Dists object to the specified module """
         matches = {key:dist for key,dist in self.dists.items() if id(dist.module) == id(module)} # Find which dists belong to this module
@@ -975,9 +982,19 @@ class Dist:
         )
         return out
 
+    def clear_run_cache(self):
+        """ Clear transient callable/draw caches without unlinking the distribution """
+        self._callable_args = None
+        self._callable_keys = None
+        self._uids = None
+        self._slots = None
+        self._n = None
+        self._size = None
+        return
+
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', '_callable_args']
+        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', '_callable_args', '_callable_keys']
         ss.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
         return

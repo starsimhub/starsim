@@ -361,7 +361,7 @@ def test_step_count():
             networks='random', n_agents=100, dur=ss.years(1), dt=sim_dt,
         )
         sim.init()
-        plan = sim.loop.plan
+        plan = sim.loop.to_df()
         disease_steps = plan[plan.label.str.contains('sis.step_state')]
         counts_per_ti = disease_steps.groupby('ti').size()
         max_calls = counts_per_ti.max()
