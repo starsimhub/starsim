@@ -17,7 +17,7 @@ import starsim as ss
 ss.options(jupyter=True)
 
 base_pars = sc.objdict(
-    n_agents = 10e3,
+    n_agents = 2e3,
     diseases = sc.objdict(
         type = 'sis',
         beta = 0.1,
@@ -78,7 +78,7 @@ def run_sim(index, beta):
     """ Run a standard simulation """
     label = f'Sim {index}, beta={beta:n}'
     sis = ss.SIS(beta=beta)
-    sim = ss.Sim(label=label, networks='random', diseases=sis, rand_seed=index, verbose=False)
+    sim = ss.Sim(label=label, n_agents=2000, networks='random', diseases=sis, rand_seed=index, verbose=False)
     sim.run()
     sim.shrink() # Remove People and other states to make pickling faster
     return sim

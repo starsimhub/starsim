@@ -58,6 +58,8 @@ website:
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
+      - href: examples.qmd
+        text: Examples
       - href: conduct.qmd
         text: Code of conduct
       - href: contributing.qmd
@@ -96,14 +98,17 @@ website:
             - user_guide/basics_sim.qmd
             - user_guide/basics_people.qmd
             - user_guide/basics_parameters.qmd
+            - user_guide/basics_results.qmd
           - section: "Modules"
             contents:
             - user_guide/modules_diseases.qmd
             - user_guide/modules_networks.qmd
             - user_guide/modules_demographics.qmd
             - user_guide/modules_interventions.qmd
+            - user_guide/modules_products.qmd
             - user_guide/modules_analyzers.qmd
             - user_guide/modules_connectors.qmd
+            - user_guide/modules_adding.qmd
           - section: "Workflows"
             contents:
             - user_guide/workflows_run.qmd
@@ -119,6 +124,8 @@ website:
             - user_guide/advanced_random.qmd
             - user_guide/advanced_profiling.qmd
             - user_guide/advanced_nonstandard.qmd
+        - href: examples.qmd
+          text: "**Examples**"
         - href: conduct.qmd
           text: "**Code of conduct**"
         - href: contributing.qmd

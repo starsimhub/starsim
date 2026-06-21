@@ -86,7 +86,7 @@ For usage at scale, the steps of creating a simulation, running it and producing
 
 ```{python}
 def get_sim(seed, p_death):
-    ppl = ss.People(5000)
+    ppl = ss.People(2000)
     net = ss.RandomNet(n_contacts=ss.poisson(5))
     sir = ss.SIR(p_death=p_death)
     sim = ss.Sim(people=ppl, networks=net, diseases=sir, rand_seed=seed)
@@ -384,7 +384,7 @@ for file_path in resultsdir.glob('*'):
 
 ```{python}
 # Run the sweep over initial and p_death
-n = 10
+n = 5
 seeds = np.arange(n)
 for init_prev in initials:
     for p_death in p_deaths:

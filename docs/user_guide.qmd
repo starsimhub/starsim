@@ -30,7 +30,9 @@ To run these user guides locally:
 
 - [Understanding the model](user_guide/basics_model.qmd)
 - [The Sim object](user_guide/basics_sim.qmd)
+- [People](user_guide/basics_people.qmd)
 - [Parameter configuration](user_guide/basics_parameters.qmd)
+- [Results](user_guide/basics_results.qmd)
 
 ## Modules
 
@@ -38,8 +40,10 @@ To run these user guides locally:
 - [Networks](user_guide/modules_networks.qmd)
 - [Demographics](user_guide/modules_demographics.qmd)
 - [Interventions](user_guide/modules_interventions.qmd)
+- [Products](user_guide/modules_products.qmd)
 - [Analyzers](user_guide/modules_analyzers.qmd)
 - [Connectors](user_guide/modules_connectors.qmd)
+- [Adding new modules](user_guide/modules_adding.qmd)
 
 ## Workflows
 
