@@ -367,6 +367,7 @@ class BaseTreatment(Intervention):
     """
     def __init__(self, product=None, prob=None, eligibility=None, **kwargs):
         super().__init__(**kwargs)
+        if prob is None: prob = 1.0  # Treat all eligible candidates (capped by max_capacity, if set)
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
