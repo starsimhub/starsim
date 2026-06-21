@@ -488,7 +488,7 @@ class Loop:
         if self.cpu_df is None:
             self.to_df()
         df = self.cpu_df
-        ylabels = df.index.values
+        ylabels = df.index.values.copy() # Copy to avoid mutating the cached cpu_df when labels are assembled below
         if bytime:
             y = np.arange(len(ylabels))
         else:
