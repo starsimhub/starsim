@@ -1006,11 +1006,15 @@ class Dist:
         self._size = None
         return
 
-    def shrink(self):
-        """ Shrink the size of the module for saving to disk """
-        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', '_callable_args', '_callable_keys']
+    def shrink(self, max_arr_size=100):
+        """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
+        to_shrink = ['slots', '_slots', 'module', 'sim', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
         ss.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
+        shrunk = ss.shrink()
+        for key, val in self.pars.items():
+            if isinstance(val, np.ndarray) and val.size > max_arr_size:
+                self.pars[key] = shrunk
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
