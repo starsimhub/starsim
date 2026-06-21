@@ -287,6 +287,19 @@ once over the new duration of two years:
 p * ss.years(2) == 0.96
 ```
 
+:::{.callout-tip}
+## `ss.prob` vs `ss.bernoulli`
+
+`ss.prob` (and `ss.probperyear`, etc.) is a *number* — a time-aware scalar you can
+multiply and convert between time periods. `ss.bernoulli` is a *distribution* you
+*sample per agent*: `dist.filter(uids)` returns the UIDs for which the trial
+succeeded. When you need to decide an outcome for each agent ("who gets infected, who
+dies, who is vaccinated?"), use `ss.bernoulli`, not `ss.prob`. Use `ss.prob` when you
+need the probability itself as a value — for example, a per-period probability that
+will be scaled or fed into a distribution. See
+[Distributions](advanced_distributions.qmd).
+:::
+
 #### Probability rates
 
 This quantity is often simply called a "rate", but this is confusing because "rate" as ambiguous. A "probability rate", which in Starsim is simply `ss.per()`, represents the rate at which a _single_ event happens. For example, death rate and birth rates are examples of probability rates, since you can't die (or be born) more than once. Since this is the "normal" definition of the term "rate", it's called `ss.per()` so that its unit-specific versions (`ss.perday`, `ss.peryear`, etc.) are as concise as possible.

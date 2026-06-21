@@ -194,7 +194,15 @@ plt.show()
   `__init__()`, and `super().init_results()` / `super().step()` etc. if you override
   those methods on a base class that already implements them.
 - Use `self.sim`, not a stored reference, to reach the rest of the simulation —
-  modules are linked to the sim during `init_pre()`.
+  modules are linked to the sim during `init_pre()`. Prefer the module-level
+  shortcuts `self.ti`, `self.now`, and `self.t.dt` over `self.sim.t.ti` etc.
+- Track per-agent data with `define_states()` (e.g. `ss.BoolState('vaccinated')`),
+  never as a plain Python attribute or a hand-built array. Only states grow with
+  births, reset on death, and appear automatically in results.
+- For interventions, `start` and `stop` are reserved timeline keywords, but `step()`
+  is **not** automatically gated on them — if you want time-limited behavior, check
+  the time explicitly at the top of `step()` (e.g. `if self.now < self.pars.start: return`),
+  and avoid reusing `start`/`stop` as names for unrelated parameters.
 - For anything random, define an `ss.Dist` (e.g. `ss.bernoulli`, `ss.normal`) as an
   attribute in `__init__()` rather than calling `np.random` directly, so your results
   stay reproducible. See [Random number generation](advanced_random.qmd).

@@ -119,6 +119,16 @@ male→female and female→male transmission probabilities on the `mf` network. 
 [Networks](modules_networks.qmd) page for more.
 :::
 
+:::{.callout-warning}
+`beta` is a per-contact transmission **probability** — a bare float (or a dict/list of
+floats), not a rate. Do **not** wrap it in `ss.peryear()` or `ss.perday()`: doing so
+reinterprets the number as a hazard and rescales it by the timestep, corrupting the
+transmission scale. Use `beta=0.1`, not `beta=ss.perday(0.1)`. (Most other per-agent
+event parameters, such as `p_death`, *are* probabilities or distributions; the
+time-aware rate types are for quantities like birth and death *rates*. See
+[Time](advanced_time.qmd).)
+:::
+
 ## Implementation patterns
 
 ### Pattern 1: Extending existing diseases
