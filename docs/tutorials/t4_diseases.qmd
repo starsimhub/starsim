@@ -34,21 +34,21 @@ Notice how we modified several key parameters:
 - `init_prev=0.4`: Starting with 40% of the population infected
 - `p_death=0.2`: 20% of infected people die
 
-We already saw that this model creates results that are stored in `sim.results.sir`. The results can also be directly accessed via `sir.results`. 
+We already saw that this model creates results that are stored in `sim.results.sir`. The results can also be directly accessed via `sir.results`.
 
-For more detail on any of the diseases that are in the Starsim library of diseases, please refer to the docstrings and source code of the disease files. 
+For more detail on any of the diseases that are in the Starsim library of diseases, please refer to the docstrings and source code of the disease files.
 
 ## Step 2: Simulating multiple diseases
-You can add multiple diseases to the same simulation, like so. Here we are making use of a "connector". A connector is a module in Starsim that tells you how two things relate to one another - in this case, how HIV modifies a person's transmissibility and susceptibility to gonorrhea and vice versa. Unlike dieases, networks, interventions, etc., connectors don't have any pre-specified location in the sim. Instead, they can be placed wherever they make the most sense (for example, a connector that mediated how two networks behaved might be placed at the beginning or end of the list of networks; for diseases, it might be placed at the beginning or end of the list of diseases).
+You can add multiple diseases to the same simulation, like so. Here we are making use of a "connector". A connector is a module in Starsim that tells you how two things relate to one another - in this case, how HIV modifies a person's transmissibility and susceptibility to SIS and vice versa. Unlike dieases, networks, interventions, etc., connectors don't have any pre-specified location in the sim. Instead, they can be placed wherever they make the most sense (for example, a connector that mediated how two networks behaved might be placed at the beginning or end of the list of networks; for diseases, it might be placed at the beginning or end of the list of diseases).
 
 ```{python}
 #| jupyter: {outputs_hidden: false}
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
-class simple_hiv_ng(ss.Module):
-    """ Simple connector whereby rel_sus to NG (Neisseria gonorrhoeae) doubles if CD4 count is <200"""
-    def __init__(self, pars=None, label='HIV-Gonorrhea', **kwargs):
+class simple_hiv_sis(ss.Module):
+    """ Simple connector whereby rel_sus to SIS doubles if CD4 count is <200"""
+    def __init__(self, pars=None, label='HIV-SIS', **kwargs):
         super().__init__()
         self.define_pars(
             rel_trans_hiv  = 2,
@@ -60,37 +60,37 @@ class simple_hiv_ng(ss.Module):
         return
 
     def step(self):
-        """ Specify how HIV increases NG rel_sus and rel_trans """
-        ng = self.sim.people.gonorrhea
+        """ Specify how HIV increases SIS rel_sus and rel_trans """
+        sis = self.sim.people.sis
         hiv = self.sim.people.hiv
         p = self.pars
-        ng.rel_sus[hiv.cd4 < 500] = p.rel_sus_hiv
-        ng.rel_sus[hiv.cd4 < 200] = p.rel_sus_aids
-        ng.rel_trans[hiv.cd4 < 500] = p.rel_trans_hiv
-        ng.rel_trans[hiv.cd4 < 200] = p.rel_trans_aids
+        sis.rel_sus[hiv.cd4 < 500] = p.rel_sus_hiv
+        sis.rel_sus[hiv.cd4 < 200] = p.rel_sus_aids
+        sis.rel_trans[hiv.cd4 < 500] = p.rel_trans_hiv
+        sis.rel_trans[hiv.cd4 < 200] = p.rel_trans_aids
         return
 
 # Make HIV
-hiv = sse.HIV(
+hiv = ssl.diseases.HIV(
     beta = {'mf': [0.0008, 0.0004]},  # Specify transmissibility over the MF network
     init_prev = 0.05,
 )
 
-# Make gonorrhea
-ng = sse.Gonorrhea(
+# Make SIS
+sis = ss.SIS(
     beta = {'mf': [0.05, 0.025]},  # Specify transmissibility over the MF network
     init_prev = 0.025,
 )
 
-# Make the sim, including a connector betweeh HIV and gonorrhea:
+# Make the sim, including a connector between HIV and SIS:
 n_agents = 5_000
-sim = ss.Sim(n_agents=n_agents, networks='mf', diseases=[simple_hiv_ng(), hiv, ng])
+sim = ss.Sim(n_agents=n_agents, networks='mf', diseases=[simple_hiv_sis(), hiv, sis])
 sim.run()
 sim.plot('hiv')
-sim.plot('gonorrhea')
+sim.plot('sis')
 ```
 
-You can see how the two diseases interact - HIV creates a vulnerable population that's more susceptible to gonorrhea infection.
+You can see how the two diseases interact - HIV creates a vulnerable population that's more susceptible to SIS infection.
 
 ## Step 3: Creating your own disease model
 
@@ -172,7 +172,7 @@ The new class includes the following main changes:
 
 1. In `__init__` we added the extra pars and states needed for our model
 2. We defined `infectious` to include both infected and exposed people - this means that we can just reuse the existing logic for how the SIR model handles transmission
-3. We updated `update_pre` and `update_death` to include changes to the `exposed` state 
+3. We updated `update_pre` and `update_death` to include changes to the `exposed` state
 4. We rewrote `set_prognoses` to include the new exposed state.
 
 Here's how it would look in practice:

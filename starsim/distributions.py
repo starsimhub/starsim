@@ -80,7 +80,7 @@ class Dists(sc.prettyobj):
 
         In practice, the object is usually a Sim, but can be anything.
         """
-        if base_seed:
+        if base_seed is not None:
             self.base_seed = base_seed
         sim = sim if (sim is not None) else self.sim
         obj = obj if (obj is not None) else self.obj
@@ -100,7 +100,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
-            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already foun
+            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
             dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
         else:
@@ -162,6 +162,13 @@ class Dists(sc.prettyobj):
         for dist in self.dists.values():
             out += dist.reset()
         return out
+
+    def clear_run_caches(self):
+        """ Clear rebuildable per-run caches from each managed distribution """
+        if self.dists is not None:
+            for dist in self.dists.values():
+                dist.clear_run_cache()
+        return
 
     def copy_to_module(self, module):
         """ Copy the Sim's Dists object to the specified module """
@@ -278,8 +285,8 @@ class Dist:
         debug (bool): print out additional detail
         kwargs (dict): parameters of the distribution
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Create a Bernoulli distribution
         p_death = ss.bernoulli(p=0.1).init(force=True)
         p_death.rvs(50) # Create 50 draws
@@ -294,6 +301,7 @@ class Dist:
         # Create a distribution manually
         dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
         dist.rvs(10) # Return 10 normally distributed random numbers
+        ```
     """
     valid_pars = None
     scaling = None # See "scale_types" above
@@ -408,6 +416,12 @@ class Dist:
                     kwargs[parkeys[i]] = arg
 
         if kwargs:
+            if dist is None: # Only validate when not also changing the distribution type (which changes the valid parameters)
+                invalid = [k for k in kwargs if k not in self.pars]
+                if invalid:
+                    valid = list(self.pars.keys())
+                    errormsg = f'Cannot set parameter(s) {invalid} for {self}: not a valid parameter name for this distribution. Valid parameters are: {valid}'
+                    raise ValueError(errormsg)
             self.pars.update(kwargs)
             if self.initialized:
                 # If initialized, re-process the pars to update self._pars
@@ -450,8 +464,8 @@ class Dist:
 
         Use 0 for original state, -1 for most recent state.
 
-        **Example**:
-
+        Examples:
+            ```python
             dist = ss.random(seed=5).init()
             r1 = dist(5)
             r2 = dist(5)
@@ -462,6 +476,7 @@ class Dist:
             assert all(r1 != r2)
             assert all(r2 == r3)
             assert all(r4 == r1)
+            ```
         """
         if not isinstance(state, dict):
             state = self.history[state]
@@ -569,10 +584,11 @@ class Dist:
             trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
             **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
 
-        **Example**:
-
+        Examples:
+            ```python
             dist = ss.normal(3, 2, unit='years').mock(dt=ss.days(1))
             dist.rvs(10)
+            ```
         """
         mock_sim = ss.mock_sim(**kwargs)
         mock_mod = ss.mock_module(**kwargs)
@@ -709,11 +725,11 @@ class Dist:
                 self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions)
                 self.unit = None
                 if ss.options.warn_convert:
-                    msg += f'Since ss.{self.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
+                    msg += f'Since ss.{self.__class__.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
                     msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)), or set ss.options.warn_convert=False.'
-                    ss.warnmsg(msg)
+                    ss.warn(msg)
             else:
-                msg += f'Since ss.{self.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
+                msg += f'Since ss.{self.__class__.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
                 msg += 'Use e.g. ss.weibull(3, ss.years(5), ss.years(2)) instead of ss.weibull(3, 5, 2, unit=ss.years).'
                 raise ValueError(msg)
 
@@ -751,7 +767,7 @@ class Dist:
 
                 try:
                     self._pars[key] = self._pars[key].astype(float)
-                except:
+                except Exception:
                     pass
 
     def convert_callable(self, parkey, func, size, uids):
@@ -877,8 +893,16 @@ class Dist:
             n = len(n) # If centralized, treat n as a size
         size, slots = self.process_size(n)
 
-        # Check if size is 0, then we can return
+        # Check if size is 0, then we can return -- but still count the call and jump/reset
+        # so that CRN behavior does not depend on whether any random numbers were drawn
         if size == 0:
+            self.called += 1
+            if reset:
+                self.reset(-1)
+            elif self.auto:
+                self.jump()
+            elif self.strict:
+                self.ready = False
             return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
         elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
@@ -975,17 +999,25 @@ class Dist:
         )
         return out
 
-    def shrink(self):
-        """ Shrink the size of the module for saving to disk """
-        shrunk = ss.utils.shrink()
-        self.slots = shrunk
-        self._slots = shrunk
-        self.module = shrunk
-        self.sim = shrunk
-        self._n = shrunk
-        self._uids = shrunk
-        self.history = shrunk
-        self._callable_args = shrunk
+    def clear_run_cache(self):
+        """ Clear transient callable/draw caches without unlinking the distribution """
+        self._callable_args = None
+        self._callable_keys = None
+        self._uids = None
+        self._slots = None
+        self._n = None
+        self._size = None
+        return
+
+    def shrink(self, max_arr_size=100):
+        """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
+        to_shrink = ['slots', '_slots', 'module', 'sim', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
+        ss.shrink(self, to_shrink)
+        self.history = [] # Clear history explicitly rather than shrinking it
+        shrunk = ss.shrink()
+        for key, val in self.pars.items():
+            if isinstance(val, np.ndarray) and val.size > max_arr_size:
+                self.pars[key] = shrunk
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
@@ -1082,9 +1114,10 @@ class lognorm_im(Dist):
         mean (float): the mean of the underlying normal distribution (not this distribution) (default 0.0)
         sigma (float): the standard deviation of the underlying normal distribution (not this distribution) (default 1.0)
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
+        ```
     """
     scaling = scale_types.postdraw
 
@@ -1123,9 +1156,10 @@ class lognorm_ex(Dist):
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
         std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
+        ```
     """
     scaling = scale_types.both
 
@@ -1449,14 +1483,14 @@ class choice(Dist):
         a (int or array): the number of choices, or the choices themselves (default 2)
         p (array): if supplied, the probability of each choice (default, 1/a for a choices)
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Simulate 10 die rolls
         ss.choice(6, strict=False)(10) + 1
 
         # Choose between specified options each with a specified probability (must sum to 1)
         ss.choice(a=[30, 70], p=[0.3, 0.7], strict=False)(10)
-
+        ```
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
     """
@@ -1501,8 +1535,8 @@ class histogram(Dist):
     The values can be supplied in either normalized (sum to 1) or un-normalized
     format.
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Sample from an age distribution
         age_bins = [0,    10,  20,  40,  65, 100]
         age_vals = [0.1, 0.1, 0.3, 0.3, 0.2]
@@ -1513,6 +1547,7 @@ class histogram(Dist):
         data = np.random.randn(10_000)*2+5
         h2 = ss.histogram(data=data, strict=False)
         h2.plot_hist(bins=100)
+        ```
     """
     valid_pars = ['values', 'bins', 'density', 'data']
     scaling = scale_types.false
@@ -1555,6 +1590,11 @@ class multi_random(sc.prettyobj):
     See ss.combine_rands() for the manual version; in almost all cases this class
     should be used instead.
 
+    Args:
+        names (str/list): name(s) for each internal random distribution
+        *args: additional names (shorthand)
+        **kwargs: passed to each `ss.random()` instance
+
     Usage:
         multi = ss.multi_random('source', 'target')
         rvs = multi.rvs(source_uids, target_uids)
@@ -1586,7 +1626,7 @@ class multi_random(sc.prettyobj):
     @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
     def combine_rvs(rvs_list, int_type, int_max):
         """ Combine inputs into one number """
-        # Combine using bitwise-or
+        # Combine using bitwise-xor
         rand_ints = rvs_list[0].view(int_type)
         for rand_floats in rvs_list[1:]:
             rand_ints2 = rand_floats.view(int_type)

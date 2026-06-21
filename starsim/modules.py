@@ -53,8 +53,8 @@ def register_modules(*args):
     Args:
         args (list): the additional modules to register; can be either a module or a list of objects
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Standard use case, register modules automatically
         import my_custom_disease_model as mcdm
         ss.register_modules(mcdm)
@@ -64,6 +64,7 @@ def register_modules(*args):
         my_modules = [mcdm.MyDisease, mcdm.MyNetwork]
         ss.register_modules(my_modules)
         ss.Sim(diseases='mydisease', networks='mynetwork').run()
+        ```
     """
     for arg in args:
         custom_modules.append(arg)
@@ -137,8 +138,8 @@ def required(val=True):
     Args:
         val (True/'disable'): by default, mark method as required; if set to 'disable', then disable method checking for parent classes as well (i.e. remove previous "required" calls)
 
-    **Example**:
-
+    Examples:
+        ```python
         class CustomSIS(ss.SIS):
 
             def step(self):
@@ -149,6 +150,7 @@ def required(val=True):
             @ss.required() # Mark this method as required on run
             def custom_step(self):
                 pass
+        ```
     """
     # Wrap the function
     def decorator(func):
@@ -235,7 +237,7 @@ class Module(Base):
 
     Note that there is no *functional* difference between specifying arguments
     this way rather than simply via `**kwargs`, but having the arguments shown in the
-    function signature can make it easier to read, and "_" is a convetion to indicate
+    function signature can make it easier to read, and "_" is a convention to indicate
     that the default is specified below.
 
     It is also of course OK to specify the actual values rather than "_"; however
@@ -250,8 +252,8 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to `ss.Timeline()` (e.g. start, stop, unit, dt)
 
-    **Example**:
-
+    Examples:
+        ```python
         class SIR(ss.Module):
             def __init__(self, pars=_, beta=_, init_prev=_, p_death=_, **kwargs):
                 super().__init__() # Call this first with no arguments
@@ -262,6 +264,7 @@ class Module(Base):
                 )
                 self.update_pars(pars, **kwargs) # Update with any user-supplied parameters, and raise an exception if trying to set a parameter that wasn't defined in define_pars()
                 return
+        ```
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -370,7 +373,7 @@ class Module(Base):
             for k in self._call_required.keys():
                 if k.split('.')[-1] in disabled: # Look for matches for disabled, omitting the class name
                     self._call_required[k] += 1 # Manually increment the call to pass checking
-        return required
+        return reqs
 
     def check_method_calls(self):
         """
@@ -415,7 +418,48 @@ class Module(Base):
 
     @classmethod
     def from_func(cls, func):
-        """ Create an module from a function """
+        """
+        Create a module from a function
+
+        Wraps a plain function into a module of the calling class, so that simple,
+        one-off logic can be used anywhere a module is expected without writing a
+        full class. The function must take the sim as its only argument; it becomes
+        the module's `step()` method and is therefore called once on every timestep
+        (so it must do its own time gating, e.g. `if sim.now == 2015:`). The module's
+        `name` is taken from the function's name.
+
+        This is the mechanism behind "function-based" interventions and analyzers:
+        passing a function to `interventions=`, `analyzers=`, or `custom=`
+        automatically calls `from_func()` on the appropriate class
+        (`ss.Intervention`, `ss.Analyzer`, or `ss.Module` respectively), so usually
+        you don't need to call this method directly. Call it explicitly when you want
+        to construct the module yourself, e.g. to add it to a sim later.
+
+        Function-based modules are intentionally minimal: they have no parameters,
+        states, or results of their own. As soon as you need `define_pars()`,
+        `define_states()`, or `define_results()`, write a proper subclass instead.
+
+        Args:
+            func (callable): a function taking a single argument, the sim
+
+        Returns:
+            mod (Module): an instance of `cls` whose `step()` calls `func(sim)`
+
+        **Example**::
+
+            import starsim as ss
+
+            def knockdown(sim): # Halve transmission for one year starting in 2015
+                if sim.now == 2015:
+                    sim.diseases.sis.rel_trans[:] *= 0.5
+
+            # Explicit construction ...
+            intv = ss.Intervention.from_func(knockdown)
+            sim = ss.Sim(diseases='sis', networks='random', interventions=intv)
+
+            # ... or equivalently, let the sim convert it automatically:
+            sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)
+        """
         def step(mod): # TODO: see if this can be done more simply
             return mod.func(mod.sim)
         name = func.__name__
@@ -442,7 +486,7 @@ class Module(Base):
     # Warning: do not try to use a decorator with this function, that will break argument passing!
     def update_pars(self, pars=None, **kwargs):
         """
-        Pull out recognized parameters, returning the rest
+        Pull out recognized parameters and update them; raises on unrecognized keys
         """
         # Merge pars and kwargs
         pars = sc.mergedicts(pars, kwargs)
@@ -480,13 +524,13 @@ class Module(Base):
         Define states of the module with the same attribute name as the state
 
         In addition to registering the state with the module by attribute, it adds
-        it to `mod._all_states`, which is used by `mod.state_list` and `mod.state_dict`.
+        it to `mod._auto_states`, which is used by `mod.state_list` and `mod.state_dict`.
 
         Args:
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state, and that it's not already present
             reset (bool): whether to reset the list of module states and use only the ones provided
-            lock (bool): if True, prevent states from being
+            lock (bool): if True, prevent the state attributes from being overwritten after definition
         """
         # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
         if reset:
@@ -667,14 +711,14 @@ class Module(Base):
         return self._auto_states[:]
 
     def match_time_inds(self, inds=None):
-         """ Find the nearest matching sim time indices for the current module """
-         self_tvec = self.t.yearvec
-         sim_tvec = self.sim.t.yearvec
-         if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
-             return Ellipsis if inds is None else inds
-         else:
-             out = sc.findnearest(sim_tvec, self_tvec)
-             return out
+        """ Find the nearest matching sim time indices for the current module """
+        self_tvec = self.t.yearvec
+        sim_tvec = self.sim.t.yearvec
+        if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
+            return Ellipsis if inds is None else inds
+        else:
+            out = sc.findnearest(sim_tvec, self_tvec)
+            return out
 
     @required()
     def start_step(self):
@@ -740,13 +784,13 @@ class Module(Base):
 
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        shrunk = ss.utils.shrink()
+        shrunk = ss.shrink()
         self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
         self.setattribute('dists', shrunk)
         for state in self.state_list:
             with sc.tryexcept():
-                state.people = shrunk
-                state.raw = shrunk
+                to_shrink = ['people', 'raw']
+                ss.shrink(state, to_shrink)
         return
 
     def plot(self):

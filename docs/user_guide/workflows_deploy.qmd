@@ -17,7 +17,7 @@ import starsim as ss
 ss.options(jupyter=True)
 
 base_pars = sc.objdict(
-    n_agents = 10e3,
+    n_agents = 2e3,
     diseases = sc.objdict(
         type = 'sis',
         beta = 0.1,
@@ -59,15 +59,13 @@ msim.plot(legend=False)
 
 Note that parallelizing the build process pickles and unpickles the sims, which can be an expensive operation. `make_sim()` functions can often get quite complicated, so it's often good software engineering practice to separate them out anyway. You can use the `serial=True` argument of Sciris' `sc.parallelize()` function (which is what `ss.parallel()` calls under the hood) in order to run in serial, to see if it's the same speed or faster.
 
-<div class="alert alert-block alert-info">    
-While the traditional way to run on a VM is via SSH and terminal, it is also possible to run remotely via <a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh">VS Code</a> (and Cursor etc.), <a href="https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html">PyCharm</a>, or <a href="https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel">Spyder</a>. You can also run a Jupyter server on the VM and access it that way  (we like <a href="https://tljh.jupyter.org/">The Littlest JupyterHub</a>).
-</div>
+<div class="alert alert-block alert-info"> While the traditional way to run on a VM is via SSH and terminal, it is also possible to run remotely via <a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh">VS Code</a> (and <a href="https://cursor.com">Cursor</a>, <a href="https://posit.co/products/ide/positron">Positron</a>, etc.), <a href="https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html">PyCharm</a>, or <a href="https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel">Spyder</a>. You can also run a Jupyter server on the VM and access it that way (we like <a href="https://tljh.jupyter.org/">The Littlest JupyterHub</a>). </div>
 
 ## Dask and Coiled
 
-Adapting the examples above, we can fairly easily make Starsim simulations run using other popular tools such as [Dask](https://docs.dask.org/) and [Joblib](https://joblib.readthedocs.io/). Here's a Dask example:
+Adapting the examples above, we can fairly easily make Starsim simulations run using other popular tools such as [Dask](https://docs.dask.org/) and [Joblib](https://joblib.readthedocs.io/). Here's a Dask example (note: this and following examples are intentionally not run in these notebooks):
 
-```{python}
+```py
 import dask
 import dask.distributed as dd
 import numpy as np
@@ -78,7 +76,7 @@ def run_sim(index, beta):
     """ Run a standard simulation """
     label = f'Sim {index}, beta={beta:n}'
     sis = ss.SIS(beta=beta)
-    sim = ss.Sim(label=label, networks='random', diseases=sis, rand_seed=index, verbose=False)
+    sim = ss.Sim(label=label, n_agents=2000, networks='random', diseases=sis, rand_seed=index, verbose=False)
     sim.run()
     sim.shrink() # Remove People and other states to make pickling faster
     return sim

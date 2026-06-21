@@ -7,7 +7,7 @@ import pandas as pd
 import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 import pytest
 
 sc.options(interactive=False) # Assume not running interactively
@@ -376,7 +376,7 @@ def test_nnd():
             ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
             ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
         ],
-        diseases=sse.NeonatalSepsis(),
+        diseases=ssl.mnch.NeonatalSepsis(),
         dur=ss.years(3),
         dt=ss.years(1/12),
         rand_seed=1,

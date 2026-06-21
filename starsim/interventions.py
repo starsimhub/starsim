@@ -75,6 +75,13 @@ class Intervention(ss.Module):
 class RoutineDelivery(Intervention):
     """
     Base class for any intervention that uses routine delivery; handles interpolation of input years.
+
+    Args:
+        years (array): years over which to interpolate probabilities (alternative to start/end year)
+        start_year (float): year to start delivery (default: sim start)
+        end_year (float): year to end delivery (default: sim stop)
+        prob (float/array): probability of delivery per year; if array, must match `years`
+        annual_prob (bool): if True (default), treat `prob` as annual and convert per-timestep
     """
 
     def __init__(self, *args, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, **kwargs):
@@ -104,7 +111,6 @@ class RoutineDelivery(Intervention):
             self.start_year = self.years[0]
             self.end_year = self.years[-1]
 
-        # More validation
         # TODO: Refactor to be more agnostic about the types - leverage just doing direct comparisons and don't privilege year units
         yearvec = sim.t.yearvec
         start_year = self.start_year.years if isinstance(self.start_year, ss.TimePar) else self.start_year
@@ -145,7 +151,12 @@ class RoutineDelivery(Intervention):
 
 class CampaignDelivery(Intervention):
     """
-    Base class for any intervention that uses campaign delivery; handles interpolation of input years.
+    Base class for any intervention that uses campaign delivery; delivers only at the specified years.
+
+    Args:
+        years (float/array): year(s) in which to run the campaign
+        interpolate (bool): if True, interpolate probabilities between campaign years (default True)
+        prob (float/array): probability of delivery per campaign year; if array, must match `years`
     """
 
     def __init__(self, *args, years=None, interpolate=None, prob=None, **kwargs):
@@ -272,7 +283,7 @@ class BaseTriage(BaseTest):
         kwargs (dict): passed to BaseTest
     """
     def check_eligibility(self):
-        return sc.promotetoarray(self.eligibility(self.sim))
+        return sc.toarray(self.eligibility(self.sim))
 
     def step(self):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
@@ -286,21 +297,12 @@ class routine_screening(BaseScreening, RoutineDelivery):
     Routine screening - an instance of base screening combined with routine delivery.
     See base classes for a description of input arguments.
 
-    **Examples**:
-
+    Examples:
+        ```python
         screen1 = ss.routine_screening(product=my_prod, prob=0.02) # Screen 2% of the eligible population every year
         screen2 = ss.routine_screening(product=my_prod, prob=0.02, start_year=2020) # Screen 2% every year starting in 2020
         screen3 = ss.routine_screening(product=my_prod, prob=np.linspace(0.005,0.025,5), years=np.arange(2020,2025)) # Scale up screening over 5 years starting in 2020
-
-    # Campaign example
-    years = [2020, 2025]  #
-    prob = [0.5, 0.9]
-    screening = ss.campaign_screening(years=years)  # only delivers in the specified years
-
-    # Routine screening
-    years = [2020, 2025]
-    prob = [0.02, 0.10]
-    routine = ss.routine_screening(years=years)  # interpolates, delivers every year
+        ```
     """
     pass
 
@@ -310,10 +312,11 @@ class campaign_screening(BaseScreening, CampaignDelivery):
     Campaign screening - an instance of base screening combined with campaign delivery.
     See base classes for a description of input arguments.
 
-    **Examples**:
-
+    Examples:
+        ```python
         screen1 = ss.campaign_screening(product=my_prod, prob=0.2, years=2030) # Screen 20% of the eligible population in 2020
         screen2 = ss.campaign_screening(product=my_prod, prob=0.02, years=[2025,2030]) # Screen 20% of the eligible population in 2025 and again in 2030
+        ```
     """
     pass
 
@@ -323,10 +326,12 @@ class routine_triage(BaseTriage, RoutineDelivery):
     Routine triage - an instance of base triage combined with routine delivery.
     See base classes for a description of input arguments.
 
-    **Example**:
+    Examples:
+        ```python
         # Example: Triage positive screens into confirmatory testing
         screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
         triage = ss.routine_triage(product=my_triage, eligibility=screen_pos, prob=0.9, start_year=2030)
+        ```
     """
     pass
 
@@ -336,10 +341,12 @@ class campaign_triage(BaseTriage, CampaignDelivery):
     Campaign triage - an instance of base triage combined with campaign delivery.
     See base classes for a description of input arguments.
 
-    **Examples**:
+    Examples:
+        ```python
         # Example: In 2030, triage all positive screens into confirmatory testing
         screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
         triage1 = ss.campaign_triage(product=my_triage, eligibility=screen_pos, prob=0.9, years=2030)
+        ```
     """
     pass
 
@@ -360,6 +367,7 @@ class BaseTreatment(Intervention):
     """
     def __init__(self, product=None, prob=None, eligibility=None, **kwargs):
         super().__init__(**kwargs)
+        if prob is None: prob = 1.0  # Treat all eligible candidates (capped by max_capacity, if set)
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
@@ -373,10 +381,10 @@ class BaseTreatment(Intervention):
 
     def get_accept_inds(self):
         """
-        Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
+        Get indices of people who will accept treatment; these people are then added to a queue or scheduled for receiving treatment
         """
         accept_uids = ss.uids()
-        eligible_uids = self.check_eligibility()  # Apply eligiblity
+        eligible_uids = self.check_eligibility()  # Apply eligibility
         if len(eligible_uids):
             self.coverage_dist.set(p=self.prob[0])
             accept_uids = self.coverage_dist.filter(eligible_uids)
@@ -472,10 +480,10 @@ class BaseVaccination(Intervention):
 
     def step(self):
         """
-        Deliver the diagnostics by finding who's eligible, finding who accepts, and applying the product.
+        Deliver the vaccine by finding who's eligible, finding who accepts, and applying the product.
         """
         sim = self.sim
-        accept_uids = np.array([])
+        accept_uids = ss.uids()
         if sim.ti in self.timepoints:
 
             ti = sc.findinds(self.timepoints, sim.ti)[0]

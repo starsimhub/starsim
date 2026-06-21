@@ -26,8 +26,8 @@ class Profile(sc.profile):
         plot (bool): whether to plot time spent per module step
         **kwargs (dict): passed to `sc.profile()`
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
 
         net = ss.RandomNet()
@@ -35,6 +35,7 @@ class Profile(sc.profile):
         sim = ss.Sim(networks=net, diseases=sis)
         prof = sim.profile(follow=[net.add_pairs, sis.infect])
         prof.disp()
+        ```
     """
     def __init__(self, sim, follow=None, do_run=True, plot=True, verbose=True, **kwargs):
         assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
@@ -111,8 +112,8 @@ class Debugger(sc.prettyobj):
         die (bool): whether to raise an exception if the condition is met; alternatively 'pause' will pause execution, and False will just print
         run (bool): whether to run immediately
 
-    **Examples**:
-
+    Examples:
+        ```python
         ## Example 1: Identical sims are identical
         import starsim as ss
 
@@ -142,6 +143,7 @@ class Debugger(sc.prettyobj):
         df = db.results[-1].df
         df = df[~df['equal']]
         df.disp()
+        ```
     """
     def __init__(self, *args, func, skip=None, verbose=True, die=True, run=False):
         default_skip = [
@@ -224,12 +226,14 @@ class Debugger(sc.prettyobj):
         return e
 
     def equal_networks(self, *sims):
+        """ Check if network edges are equal """
         ncs = [[n.edges for n in s.networks.values()] for s in sims]
         e = sc.Equal(*ncs, **self.kw)
         self.equal_check(e, 'network edges')
         return e
 
     def equal_results(self, *sims):
+        """ Check if sim results are equal """
         e = sc.Equal(*[s.results for s in sims], **self.kw)
         self.equal_check(e, 'results')
         return e
@@ -282,6 +286,12 @@ class Debugger(sc.prettyobj):
 class Diagnostics(sc.quickobj):
     """ Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
 
+    Args:
+        sim (ss.Sim): the sim to attach diagnostics to
+        rvs (bool/str): whether to track random variates; if a string, used as the export filename (default 'debug_rvs.json')
+        states (bool/str): whether to track people states; if a string, used as the export filename (default 'debug_states.json')
+        detailed (bool): if True, store full arrays; if False, store summary statistics only
+
     See also ss.Debugger() for a user API for debugging multiple sims.
     """
     def __init__(self, sim, rvs=True, states=True, detailed=False):
@@ -325,15 +335,15 @@ class Diagnostics(sc.quickobj):
 
     def store_states(self, key=None):
         """ Store all states from people """
-        key = sc.ifelse(key, self.ti_key)
+        store_key = sc.ifelse(key, self.ti_key)
         entry = sc.objdict()
-        for key, state in self.sim.people.states.items():
+        for state_key, state in self.sim.people.states.items():
             if self.detailed:
-                entry[key] = state.values
+                entry[state_key] = state.values
             else:
-                entry[key] = self.compute_stats(state)
+                entry[state_key] = self.compute_stats(state)
 
-        self.states[key] = entry
+        self.states[store_key] = entry
         return
 
     def export(self):
@@ -371,15 +381,16 @@ def check_version(expected, die=False, warn=True):
         die (bool): whether or not to raise an exception if the check fails
         warn (bool): whether to raise a warning if the check fails
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
+        ```
     """
     if   expected.startswith('>'): valid = [0,1]
     elif expected.startswith('<'): valid = [0,-1]
     elif expected.startswith('!'): valid = [1,-1]
     else: valid = [0] # Assume == is the only valid comparison
-    expected = expected.lstrip('<=>') # Remove comparator information
+    expected = expected.lstrip('<=>!') # Remove comparator information
     version = ss.__version__
     compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
     relation = ['older', '', 'newer'][compare+1] # Picks the right string
@@ -456,20 +467,21 @@ def mock_sim(n_agents=100, **kwargs):
     return sim
 
 
-def mock_people(n_agents=100):
-    """ Create a minimal mock "People" object """
+def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
+    """ Create a minimal mock "People" object with ages """
+    rng = np.random.default_rng(seed=age_seed)
     people = sc.objdict(
         uid = np.arange(n_agents),
         auids = np.arange(n_agents),
         slot = np.arange(n_agents),
-        age = np.random.uniform(0, 70, size=n_agents),
+        age = rng.uniform(min_age, max_age, size=n_agents),
         add_module = lambda x: None, # Placeholder function
     )
     return people
 
 
 def mock_module(dur=10, **kwargs):
-    """ Create a minimal mock "Module" object """
+    """ Create a minimal mock "Module" object; kwargs are passed to `ss.mock_time()` """
     mod = sc.objdict(
         name = 'mock_module',
         t = mock_time(**kwargs),

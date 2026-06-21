@@ -24,8 +24,8 @@ class MultiSim:
         debug (bool): if True, run in serial
         kwargs (dict): stored in run_args and passed to run()
     
-    **Example**:
-        
+    Examples:
+        ```python
         import starsim as ss
         
         s1 = ss.Sim(networks='random', diseases=ss.SIS(beta=0.02), label='Low transmission')
@@ -41,6 +41,7 @@ class MultiSim:
         # Calculate mean results across sims and plot
         msim.mean()
         msim.plot()
+        ```
     """
     def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False,
                  inplace=True, debug=False, **kwargs):
@@ -62,7 +63,7 @@ class MultiSim:
                 elif isinstance(entry, (list, tuple)): # Merge with current list (rare)
                     merged_sims.extend(list(entry)) # Does not handle doubly nested MultiSim, and that's ok!
                 else:
-                    errormsg = f'Unable to process sim {entry}: expecting ss.Sim or ss.Multisim'
+                    errormsg = f'Unable to process sim {entry}: expecting ss.Sim or ss.MultiSim'
                     raise TypeError(errormsg)
             sims = merged_sims
             
@@ -127,11 +128,12 @@ class MultiSim:
         Args:
             output (bool): if true, return a string instead of printing output
 
-        **Example**:
-
+        Examples:
+            ```python
             msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
             msim.run()
             msim.show() # Prints moderate length output
+            ```
         """
         labelstr = f' "{self.label}"' if self.label else ''
         simlenstr = f'{len(self)}'
@@ -187,9 +189,11 @@ class MultiSim:
 
         # Handle which sims to use -- same as init_sims()
         if self.sims is None:
-            sims = self.base_sim
+            sims = [self.base_sim]  # Wrap in list so it's iterable in the debug loop
+            run_target = self.base_sim # But pass the single sim to multi_run() so n_runs is honored (rather than a 1-element list, which it would run as-is)
         else:
             sims = self.sims
+            run_target = self.sims
 
             # Handle missing labels
             for s, sim in enumerate(sims):
@@ -207,7 +211,7 @@ class MultiSim:
             kwargs.pop('parallel', None)
             run_sims = [single_run(sim, **kwargs) for sim in sims]
         else: # The next line does all the work!
-            run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
+            run_sims = multi_run(run_target, **kwargs) # Output sims are copies due to the pickling during parallelization
 
         # Handle output
         if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
@@ -273,12 +277,13 @@ class MultiSim:
             bounds (float): if use_mean=True, the multiplier on the standard deviation for upper and lower bounds (default 2)
             output (bool): whether to return the "reduced" sim (in any case, modify the multisim in-place)
 
-        **Example**:
-
+        Examples:
+            ```python
             msim = ss.MultiSim(ss.Sim())
             msim.run()
             msim.reduce()
             msim.summarize()
+            ```
         """
         if use_mean:
             if bounds is None:
@@ -399,7 +404,7 @@ class MultiSim:
                     quantiles = sc.objdict({'median':0.5, 'min':0, 'max':1, 'q25':0.25, 'q75':0.75})
                 elif isinstance(quantiles, list):
                     quantiles = {q:q for q in quantiles}
-                summary[k] = {q:v for q,v in zip(quantiles, np.quantile(arr, quantiles))}
+                summary[k] = {q: np.quantile(arr, v) for q, v in quantiles.items()}
 
         self.summary = summary # Could reconcile with reduce()'s summary
 
@@ -478,7 +483,8 @@ class MultiSim:
                 if fig is None:
                     fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 else:
-                    axs = sc.toarray(fig.axes)
+                    axs = fig.axes
+                axs = sc.toarray(axs) # Ensure axs is always an array: with a single key, getrowscols() returns a bare Axes
 
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
@@ -499,8 +505,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
         sim         (Sim)   : the sim instance to be run
         ind         (int)   : the index of this sim
         reseed      (bool)  : whether to generate a fresh seed for each run
-        noise       (float) : the amount of noise to add to each run
-        noisepar    (str)   : the name of the parameter to add noise to
         shrink      (bool)  : whether to shrink the sim after the sim run
         run_args    (dict)  : arguments passed to sim.run()
         sim_args    (dict)  : extra parameters to pass to the sim, e.g. 'n_infected'
@@ -512,11 +516,12 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
     Returns:
         sim (Sim): a single sim object with results
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
         sim = ss.Sim() # Create a default simulation
         sim = ss.single_run(sim) # Run it, equivalent(ish) to sim.run()
+        ```
     """
 
     # Set sim and run arguments
@@ -582,14 +587,14 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         kwargs      (dict)  : also passed to the sim
 
     Returns:
-        If combine is True, a single sim object with the combined results from each sim.
-        Otherwise, a list of sim objects (default).
+        A list of sim objects (default).
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
         sim = ss.Sim()
         sims = ss.multi_run(sim, n_runs=6)
+        ```
     """
 
     # Handle inputs
@@ -652,12 +657,13 @@ def parallel(*args, **kwargs):
     Returns:
         A run MultiSim object.
 
-    **Examples**:
-
+    Examples:
+        ```python
         s1 = ss.Sim(n_agents=1000, label='Small', diseases='sis', networks='random')
         s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')
         ss.parallel(s1, s2).plot()
         msim = ss.parallel([s1, s2], shrink=False)
+        ```
     """
     sims = sc.mergelists(*args)
     msim = MultiSim(sims=sims, **kwargs)

@@ -21,7 +21,7 @@ import sciris as sc
 root = sc.thispath(__file__).parent
 
 # Start imports: version and settings
-t('settings') # SLow since import Numba
+t('settings') # Slow since importing Numba
 from .version import __version__, __versiondate__, __license__
 from .settings import dtypes, options, style, load_fonts
 
@@ -40,7 +40,7 @@ sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
 t('utils')
 from .utils import (
     ndict, warn, find_contacts, standardize_netkey, parse_age_range, apply_age_range,
-    standardize_data, validate_sim_data, load, save, plot_args, show,
+    standardize_data, validate_sim_data, load, save, shrink, plot_args, show,
     return_fig,
 )
 
@@ -93,8 +93,7 @@ t('networks') # Slow import due to networkx
 from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
     StaticNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
-    MaternalNet, PrenatalNet, PostnatalNet, BreastfeedingNet,
-    HouseholdNet,
+    PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool,
 )
 
@@ -103,7 +102,7 @@ from .results import Result, Results
 
 t('demographics')
 from .demographics import (
-    Demographics, Births, Deaths, PregnancyPars, Pregnancy, FetalHealth,
+    Demographics, Births, Deaths, PregnancyPars, Pregnancy,
 )
 
 t('products')
@@ -145,6 +144,10 @@ from .calibration import (
 
 t('samples')
 from .samples import Dataset, Samples
+
+# The library of example/reference modules; not exported at the top level, access via e.g. ss.library.mnch.FetalHealth
+t('library')
+from . import library
 
 # Load fonts
 def _load_fonts(debug=debug):

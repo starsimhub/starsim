@@ -29,12 +29,13 @@ class infection_log(Analyzer):
     different than other analyzers, but is required since the information required
     to create an infection log isn't kept outside of the disease's `infect()` step.
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
         sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
         sim.run()
         sim.analyzers[0].plot()
+        ```
     """
     def __init__(self):
         super().__init__()
@@ -82,11 +83,14 @@ class infection_log(Analyzer):
         log = self.logs[key]
         df = log.to_df()
 
-        # Convert to 2d coordinates
-        side = int(np.ceil(np.sqrt(df.target.max())))
+        # Convert to 2d coordinates using compact indexing to avoid oversized grids with sparse UIDs
+        unique_uids = sorted(df.target.unique())
+        uid_to_idx = {uid: idx for idx, uid in enumerate(unique_uids)}
+        side = int(np.ceil(np.sqrt(len(unique_uids))))
         x, y = np.meshgrid(np.arange(side), np.arange(side))
-        df['x'] = x.ravel()[df.target]
-        df['y'] = y.ravel()[df.target]
+        flat = x.ravel()
+        df['x'] = [flat[uid_to_idx[uid]] for uid in df.target]
+        df['y'] = [y.ravel()[uid_to_idx[uid]] for uid in df.target]
 
         # Assemble into frames
         frames = sc.autolist()
@@ -104,9 +108,9 @@ class infection_log(Analyzer):
                 if clear:
                     plt.cla()
                 plt.scatter(frame.x, frame.y, c=frame.c, **kw.plot)
-                plt.xlabel('Agent')
-                plt.ylabel('Agent')
-                plt.title(f't = {ss.date(frame.t)} (step {i+1} of {len(frames)}')
+                plt.xlabel('Agent x')
+                plt.ylabel('Agent y')
+                plt.title(f't = {ss.date(frame.t)} (step {i+1} of {len(frames)})')
                 plt.xlim(0, side)
                 plt.ylim(0, side)
                 plt.pause(1/framerate)
@@ -121,13 +125,14 @@ class dynamics_by_age(Analyzer):
         state (str): the name of the state to analyze
         age_bins (list): the list of age bins to analyze by
 
-    **Example**:
-
+    Examples:
+        ```python
         by_age = ss.dynamics_by_age('sis.infected')
 
         sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
         sim.run()
         sim.analyzers[0].plot() # Note: if Sim(copy_inputs=False), we can also use by_age.plot()
+        ```
     """
     def __init__(self, state, age_bins=(0, 20, 40, 100)):
         super().__init__()
@@ -138,7 +143,14 @@ class dynamics_by_age(Analyzer):
         self.hist = {k: [] for k in self.mins}
         return
 
+    def init_post(self):
+        """ Validate that the requested state exists """
+        super().init_post()
+        if self.state not in self.sim.people.states:
+            raise ValueError(f'State "{self.state}" not found; available states: {list(self.sim.people.states.keys())}')
+
     def step(self):
+        """ Record counts of agents in each age bin who have the tracked state active """
         people = self.sim.people
         for min_age, max_age in zip(self.mins, self.maxes):
             mask = (people.age >= min_age) & (people.age < max_age)
@@ -146,13 +158,14 @@ class dynamics_by_age(Analyzer):
         return
 
     def finalize_results(self):
-        """ Convert to an array """
+        """ Convert per-step lists to arrays """
         super().finalize_results()
         for k,hist in self.hist.items():
             self.hist[k] = np.array(hist)
         return
 
     def plot(self, **kwargs):
+        """ Plot counts by age bin over time """
         kw = ss.plot_args(kwargs)
         with ss.style(**kw.style):
             fig = plt.figure(**kw.fig)
@@ -163,3 +176,4 @@ class dynamics_by_age(Analyzer):
             plt.ylabel('Count')
             plt.ylim(bottom=0)
         return ss.return_fig(fig, **kw.return_fig)
+

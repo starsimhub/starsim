@@ -91,7 +91,7 @@ class DateArray(np.ndarray):
             raise TypeError(errormsg)
 
     def __array_finalize__(self, obj):
-        # Ensure that the unit is propagaged when slicing and copying with dcp
+        # Ensure that the unit is propagated when slicing and copying with dcp
         if obj is not None:
             self._unit = getattr(obj, "_unit", ss.date)
         return
@@ -236,13 +236,14 @@ class date(pd.Timestamp):
         allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
         kwargs (dict): passed to pd.Timestamp()
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.date(2020) # Returns <2020-01-01>
         ss.date(year=2020) # Returns <2020-01-01>
         ss.date(year=2024.75) # Returns <2024-10-01>
         ss.date('2024-04-04') # Returns <2024-04-04>
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
+        ```
     """
     def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
@@ -269,7 +270,7 @@ class date(pd.Timestamp):
             years = kwargs['year']
 
         if years is not None:
-            return cls.from_year(arg, day_round=day_round, allow_zero=allow_zero)
+            return cls.from_year(years, day_round=day_round, allow_zero=allow_zero)
 
         # Otherwise, proceed as normal
         else:
@@ -336,10 +337,11 @@ class date(pd.Timestamp):
             day_round (bool): whether to round to the nearest day
             allow_zero (bool): whether to allow year 0 (if so, return ss.datedur instead)
 
-        **Examples**:
-
+        Examples:
+            ```python
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
+            ```
         """
         if year < 1:
             warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.datedur instead'
@@ -363,10 +365,11 @@ class date(pd.Timestamp):
     def to_year(self):
         """ Convert a date to a floating-point year
 
-        **Examples**:
-
+        Examples:
+            ```python
             ss.date('2020-01-01').to_year() # Returns 2020.0
             ss.date('2024-10-01').to_year() # Returns 2024.7486
+            ```
         """
         year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
         year_end = pd.Timestamp(year=self.year+1,month=1,day=1).timestamp()
@@ -393,8 +396,7 @@ class date(pd.Timestamp):
     def round(self, to='d'):
         """ Round to a given interval (by default a day) """
         timestamp = super().round(to)
-        self._reset_class(timestamp)
-        return
+        return self._reset_class(timestamp)
 
     def to_pandas(self):
         """ Convert to a standard pd.Timestamp instance """
@@ -580,8 +582,6 @@ class date(pd.Timestamp):
                 step = ss.datedur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
                 step = step.years # Don't try to convert e.g. ss.years(0.1) to a datedur, you get rounding errors
-                # start = float(start)
-                # stop = float(stop)
         elif isinstance(step, str):
             dur_class = get_dur_class(step)
             step = ss.datedur(dur_class(1)) # e.g. ss.datedur(ss.years(1.0))
@@ -801,11 +801,12 @@ class TimePar:
             return len(self.value)
 
     def __hash__(self):
+        """ Treat years as the "hash" (identity) of a TimePar """
         years = self.years
         if self.is_scalar:
-            return years
+            return hash(years)
         else:
-            return tuple(years)
+            return hash(tuple(years))
 
     def __format__(self, format_spec=''):
         """Delegate to the underlying value for format specifiers like :n, :g, :f, etc."""
@@ -1578,7 +1579,7 @@ class Rate(TimePar):
                 errormsg = f'Only rates can be added to rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.dt` to get a number of events per timestep.'
                 raise TypeError(errormsg)
             else:
-                errormsg = 'Only rates can be added to rates, not {other}'
+                errormsg = f'Only rates can be added to rates, not {other}'
                 raise TypeError(errormsg)
 
     def __radd__(self, other):
@@ -1643,10 +1644,11 @@ class Rate(TimePar):
             dur (`ss.dur`): the duration over which to convert the probability to
             scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
 
-        **Example**:
-
+        Examples:
+            ```python
             p_month = ss.probpermonth(0.05)
             p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+            ```
         """
         if dur is None:
             dur = self.default_dur # May also be None
@@ -1802,8 +1804,8 @@ class prob(Rate):
     @rate.setter
     def rate(self, rate):
         """ Set both the rate and the value """
-        if sc.isnumber(v) and v<0:
-            errormsg = f'Cannot set a negative rate/probability ({v})'
+        if sc.isnumber(rate) and rate < 0:
+            errormsg = f'Cannot set a negative rate/probability ({rate})'
             raise ValueError(errormsg)
         self._rate = rate
 
@@ -1829,10 +1831,11 @@ class prob(Rate):
             dur (`ss.dur`): the duration over which to convert the probability to
             scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
 
-        **Example**:
-
+        Examples:
+            ```python
             p_month = ss.probpermonth(0.05)
             p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+            ```
         """
         if dur is None:
             if scale == 1.0:
@@ -1870,7 +1873,7 @@ class prob(Rate):
         if isinstance(dur, np.ndarray):
             assert arr.shape == dur.shape, 'dur must be either a scalar, or the same size as arr'
             def to_prob(a, b, _v=v):
-                return a.to_prob(b, v=_v)
+                return a.to_prob(b, scale=_v)
 
             vectorize = np.vectorize(to_prob)
             return vectorize(arr, dur)
@@ -2024,6 +2027,18 @@ def assume_cal_year(val):
 # Durations
 class years(dur):
     base = 'years'
+    def __init__(self, value=1, base=None):
+        # Convert date or date-string input(s) to decimal years, since dates only map cleanly onto years
+        to_convert = (str, pd.Timestamp)
+        if isinstance(value, to_convert): # A single date or date string
+            value = sc.datetoyear(value)
+        elif np.iterable(value):
+            for i,val in enumerate(value):
+                if isinstance(val, to_convert):
+                    value[i] = sc.datetoyear(val)
+        super().__init__(value=value, base=base)
+        return
+
     def __str__(self):
         """ As this is the "default" Starsim unit, show its value simply for calendar years, e.g. 2020.5 """
         if ss.time.assume_cal_year(self.value):

@@ -19,6 +19,10 @@ class Pars(sc.objdict):
 
     Acts like an `sc.objdict()`, except that adding new keys are disallowed by
     default, and auto-updates known types.
+
+    Args:
+        pars (dict): initial parameters to populate the object with
+        kwargs: additional key-value pairs merged with pars
     """
     def __init__(self, pars=None, **kwargs):
         if pars is not None:
@@ -238,7 +242,7 @@ class SimPars(Pars):
         self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.start     = None  # Start of the simulation (default 2020)
+        self.start     = None  # Start of the simulation (default 2000)
         self.stop      = None  # End of the simulation
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
         self.dt        = None  # Timestep
@@ -274,7 +278,7 @@ class SimPars(Pars):
         default_pars = SimPars() # Create a default SimPars object
         default_val = default_pars[key]
         current_val = self[key]
-        match = (current_val == default_val) # Check if the value matches
+        match = (current_val == default_val) # Check if the value matches # TODO: consider sc.equal() instead
         return match
 
     def validate(self):
@@ -440,8 +444,8 @@ class SimPars(Pars):
                 if isinstance(mod, str):
                     mod = dict(type=mod)
 
-                # Convert from class to class instance (used for interventions and analyzers only)
-                if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
+                # Convert from class to class instance (for any module type)
+                if isinstance(mod, type) and issubclass(mod, ss.Module):
                     mod = mod() # Call it to create a class instance
 
                 # Now convert from a dict to a module
@@ -472,17 +476,12 @@ class SimPars(Pars):
                     # Create the module and store it in the list
                     mod = modcls(**mod)
 
-                # Special handling for interventions and analyzers: convert class and function to class instance
-                if modkey in ['interventions', 'analyzers']:
-                    if isinstance(mod, type) and issubclass(mod, expected_cls):
-                        mod = mod()  # Convert from a class to an instance of a class
-                    elif not isinstance(mod, ss.Module) and callable(mod):
-                        mod = expected_cls.from_func(mod)
-
-                # Convert plain modules from functions to actual modules
-                if modkey == 'modules':
-                    if not isinstance(mod, ss.Module) and callable(mod):
-                        mod = ss.Module.from_func(mod)
+                # Convert class and function to class instance (for any module type). expected_cls is the
+                # parent class for this key (e.g. ss.Disease), or ss.Module for 'modules'/'custom'.
+                if isinstance(mod, type) and issubclass(mod, expected_cls):
+                    mod = mod()  # Convert from a class to an instance of a class
+                elif not isinstance(mod, ss.Module) and callable(mod):
+                    mod = expected_cls.from_func(mod)
 
                 # Do final check
                 if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?

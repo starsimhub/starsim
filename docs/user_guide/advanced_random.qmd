@@ -4,10 +4,9 @@ jupyter: python3
 ---
 
 
-The Starsim framework implements a novel approach to sampling from distributions that prevents random number noise from corrupting differences between two simulations. This user guide will demonstrate how to use the common random number (CRN) feature to achieve low-variance differences in simulation results. This feature is important for scenario and sensitivity analyses, where the goal is to isolate the effects of specific changes in model parameters or configurations. 
+The Starsim framework implements a novel approach to sampling from distributions that prevents random number noise from corrupting differences between two simulations. This user guide will demonstrate how to use the common random number (CRN) feature to achieve low-variance differences in simulation results. This feature is important for scenario and sensitivity analyses, where the goal is to isolate the effects of specific changes in model parameters or configurations.
 
-For technical details and additional examples, please refer to the following publication:
-[D. J. Klein, R. G. Abeysuriya, R. M. Stuart, and C. C. Kerr, "Noise-free comparison of stochastic agent-based simulations using common random numbers." arXiv preprint arXiv:2409.02086 (2024).](https://arxiv.org/abs/2409.02086)
+For technical details and additional examples, please refer to the following publication: [D. J. Klein, R. G. Abeysuriya, R. M. Stuart, and C. C. Kerr, "Noise-free comparison of stochastic agent-based simulations using common random numbers." arXiv preprint arXiv:2409.02086 (2024).](https://arxiv.org/abs/2409.02086)
 
 This guide builds on the [Distributions guide](advanced_distributions.qmd), so please familiarize yourself with that guide before proceeding.
 

@@ -58,10 +58,11 @@ class Options(sc.objdict):
         - verbose:        default verbosity for simulations to use
         - warnings:       how to handle warnings (e.g. print, raise as errors, ignore)
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.options(verbose=True) # Set more verbosity
         ss.options(warnings='error') # Be more strict about warnings
+        ```
     """
 
     def __init__(self):
@@ -102,10 +103,10 @@ class Options(sc.objdict):
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
         options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
 
-        optdesc.sep = 'Set thousands seperator for text output'
+        optdesc.sep = 'Set thousands separator for text output'
         options.sep = sc.parse_env('STARSIM_SEP', ',', str)
 
-        optdesc.date_sep = 'Set seperator for dates'
+        optdesc.date_sep = 'Set separator for dates'
         options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
@@ -129,7 +130,7 @@ class Options(sc.objdict):
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 5000, int) # See https://github.com/starsimhub/starsim/issues/1005 for details
 
-        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only.'
+        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only).'
         options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
 
         return optdesc, options
@@ -144,7 +145,7 @@ class Options(sc.objdict):
         try:
             assert self.getattribute('_locked') # This handles False, not present, etc.
             locked = True
-        except:
+        except (AssertionError, AttributeError):
             locked = False
 
         if locked:
@@ -188,7 +189,7 @@ class Options(sc.objdict):
     def disp(self):
         """ Detailed representation """
         output = 'Starsim options (see also ss.options.help()):\n'
-        keylen = 10  # Maximum key length  -- "interactive"
+        keylen = 10  # Maximum key length
         for k, v in self.items():
             keystr = sc.colorize(f'  {k:>{keylen}s}: ', fg='cyan', output=True)
             reprstr = sc.pp(v, output=True)
@@ -206,9 +207,10 @@ class Options(sc.objdict):
             detailed (bool): whether to print out full help
             output (bool): whether to return a list of the options
 
-        **Example**:
-
+        Examples:
+            ```python
             ss.options.help(detailed=True)
+            ```
         """
         # If not detailed, just print the docstring for sc.options
         if not detailed and not len(args):
@@ -269,8 +271,10 @@ class Options(sc.objdict):
             use (bool): whether to use the chosen style
             kwargs (dict):   if supplied, set multiple key-value pairs
 
-        **Example**:
+        Examples:
+            ```python
             ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)
+            ```
         """
 
         # Reset to defaults
@@ -309,8 +313,8 @@ class Options(sc.objdict):
         """
         Alias to set(), for use in a "with" block.
 
-        **Examples**:
-
+        Examples:
+            ```python
             # Silence all output
             with ss.options.context(verbose=0):
                 ss.Sim().run()
@@ -322,6 +326,7 @@ class Options(sc.objdict):
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):
                 ss.Sim().run().plot()
+            ```
         """
 
         # Store current settings
@@ -387,7 +392,7 @@ class Options(sc.objdict):
         # Update precision
         for file in files:
             ss_file = getattr(ss, file) # e.g. ss.arrays
-            for key,value in dtypes.items():
+            for key, value in dtypes.items():
                 ss_key = f'ss_{key}' # e.g. int -> ss_int
                 if hasattr(ss_file, ss_key): # e.g. ss.arrays.ss_int
                     setattr(ss_file, ss_key, value)
@@ -455,8 +460,8 @@ def style(style=None, **kwargs):
         style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options
         **kwargs (dict): passed to `sc.options.with_style()`
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a plot using default Starsim styling
         with ss.style():
             plt.plot()
@@ -468,6 +473,7 @@ def style(style=None, **kwargs):
         # Customize the current style
         with ss.style(font='Rosario'):
             plt.plot()
+        ```
     """
     if style is None:
         style = options._style

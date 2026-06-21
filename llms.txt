@@ -76,8 +76,8 @@ uv add starsim[dev]  # With dev dependencies
 - `time.py`: Time coordination between modules
 - `utils.py`: Helper functions
 
-### Example Disease Models (`starsim_examples/diseases/`)
-Pre-implemented example disease models including HIV, syphilis, gonorrhea, cholera, Ebola, and measles. Core disease base classes (Disease, Infection, NCD, SIR, SIS) live in `starsim/diseases.py`.
+### Example Disease Models (`starsim/library/diseases/`)
+Pre-implemented example disease models including HIV, cholera, Ebola, and measles, available via `import starsim.library as ssl` (e.g. `ssl.diseases.Cholera`). Core disease base classes (Disease, Infection, NCD, SIR, SIS) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
 - `test_*.py`: Main test files

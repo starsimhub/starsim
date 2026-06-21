@@ -126,7 +126,7 @@ The results are broadly similar, although there are differences due to the netwo
 
 ## Epiverse Epidemics: School closure model
 
-This example adapts the example from the _Epidemics_ v0.4.0 R package: 
+This example adapts the example from the _Epidemics_ v0.4.0 R package:
 
 [https://epiverse-trace.github.io/epidemics/](https://epiverse-trace.github.io/epidemics/)
 

@@ -1,0 +1,115 @@
+---
+title: Results
+jupyter: python3
+---
+
+Every Starsim simulation produces **results**: time series of quantities such as the number of infections, deaths, or people in each disease state. This page explains how results are organized, how to access and manipulate them, and how to plot and export them.
+
+## Where results live
+
+After a sim has run, all of its outputs are stored in `sim.results`, which is a nested structure. Each module adds its own group of results, and there are also some sim-level results (such as `n_alive`):
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+sim = ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0).run()
+
+# Top-level groups: one per module, plus sim-level results
+print('Result groups:', list(sim.results.keys()))
+
+# The results within the SIR disease module
+print('SIR results:  ', list(sim.results.sir.keys()))
+```
+
+You access an individual result by drilling down through the module name:
+
+```{python}
+new_infections = sim.results.sir.new_infections
+print(new_infections)
+```
+
+## Anatomy of a result
+
+Each result is an `ss.Result` object. It behaves like a NumPy array (so you can index, slice, and do arithmetic on it directly), but it also carries metadata:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `values` | The underlying NumPy array of values |
+| `timevec` | The time points corresponding to each value |
+| `label` | A human-readable label (used in plots) |
+| `scale` | Whether the quantity scales with population size (e.g. a count) |
+| `low`, `high` | Optional uncertainty bounds (populated by `MultiSim.reduce()`) |
+
+```{python}
+res = sim.results.sir.new_infections
+
+# Use it like an array
+print(f'Peak new infections: {res.max():.0f}')
+print(f'Total infections:    {res.sum():.0f}')
+print(f'Final timestep:      {res[-1]:.0f}')
+
+# ...but it also knows its own time axis and label
+print(f'Label:    {res.label}')
+print(f'First date: {res.timevec[0]}')
+```
+
+## Plotting results
+
+The quickest way to see everything is `sim.plot()`, which plots all results flagged for automatic plotting:
+
+```{python}
+sim.plot()
+```
+
+You can plot a single module's results, or even a single result on its own:
+
+```{python}
+# Just the SIR results
+sim.diseases.sir.plot()
+```
+
+```{python}
+# A single result, with its label and time axis handled automatically
+sim.results.sir.new_infections.plot()
+```
+
+## Exporting results
+
+To get results into a pandas dataframe — for example, to save to CSV or analyze further — use `to_df()`. This works at the level of a single module:
+
+```{python}
+df = sim.results.sir.to_df()
+df.head()
+```
+
+or for the whole sim at once, which flattens every module's results into one wide dataframe:
+
+```{python}
+df = sim.to_df()
+print('Columns:', list(df.columns))
+df.head()
+```
+
+If you'd rather have a flat dictionary of results keyed by `module_result` (rather than a dataframe), use `sim.results.flatten()`.
+
+## Results across multiple runs
+
+When you run many sims with [`ss.MultiSim`](workflows_run.qmd), you usually want summary statistics across the runs rather than each run individually. Calling `reduce()` (or the convenience methods `mean()` / `median()`) combines the runs and populates the `low` and `high` uncertainty bounds on each result:
+
+```{python}
+msim = ss.MultiSim(ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0), n_runs=5)
+msim.run()
+msim.reduce()
+
+# After reducing, each result carries low/high bounds, which plot() shows as a band
+res = msim.results['sir_new_infections']
+print(f'Bounds available: low={res.low is not None}, high={res.high is not None}')
+res.plot()
+```
+
+Note that across multiple runs the results are stored in a flattened structure keyed by `module_result` (e.g. `sir_new_infections`), so you access them with `msim.results['sir_new_infections']` rather than the nested `msim.results.sir...` form used for a single sim.
+
+## Adding your own results
+
+Any module can define custom results. For one-off analyses, the simplest approach is an [Analyzer](modules_analyzers.qmd); to bake results into a module you're writing, define them with `self.define_results()` (see [Adding new modules](modules_adding.qmd)). Either way, your results are stored in `sim.results` alongside the built-in ones and are exported by `to_df()` automatically.

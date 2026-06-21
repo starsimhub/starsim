@@ -1,7 +1,9 @@
 """
 Define connectors, which are used to mediate interactions between modules when the sim is run.
 
-While most of the
+While most of the coupling between disease modules happens automatically via shared states
+(e.g., shared susceptibility), connectors allow explicit cross-module logic such as seasonal
+forcing or co-infection effects.
 """
 import numpy as np
 import sciris as sc
@@ -33,8 +35,8 @@ class seasonality(Connector):
         scale (float): how strong of a seasonality effect to apply (0.1 = 90-110% relative transmission rate depending on time of year)
         shift (float): offset by time of year (0.5 = 6 month offset)
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
 
         pars = dict(
@@ -60,6 +62,7 @@ class seasonality(Connector):
         msim.plot('sis')
 
         s3.connectors[0].plot()
+        ```
     """
     def __init__(self, **kwargs):
         super().__init__()
@@ -101,3 +104,4 @@ class seasonality(Connector):
             plt.ylabel('Relative beta')
             plt.ylim(bottom=0)
         return ss.return_fig(fig)
+

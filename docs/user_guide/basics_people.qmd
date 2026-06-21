@@ -3,14 +3,14 @@ title: People, States, and Arrays
 jupyter: python3
 ---
 
-Starsim is a framework for creating agent-based models, and the `People` class is where we store the agents, so it should come as no surprise that this class serves as the fundamental heart of any Starsim model. In this page we provide alternative pathways for creating people and some guidance on how to adapt these workflows depending on your needs. 
+Starsim is a framework for creating agent-based models, and the `People` class is where we store the agents, so it should come as no surprise that this class serves as the fundamental heart of any Starsim model. In this page we provide alternative pathways for creating people and some guidance on how to adapt these workflows depending on your needs.
 
-We start by giving an overview on this page of Starsim's custom `Arr` (array) classes, which are a separate but related Starsim class designed to neatly track data about people. 
+We start by giving an overview on this page of Starsim's custom `Arr` (array) classes, which are a separate but related Starsim class designed to neatly track data about people.
 
-## Starsim States and Arrays
+## Starsim states and arrays
 Starsim has a set of custom array classes for recording information about each agent in the population. The two fundamental types of array for storing such infomation are the `BoolState` class, which is a Boolean array, and the `FloatArr` class, which stores numbers (we don't distinguish between floats and integers, so all numbers are stored in these arrays). Each of these is a subclass of the Starsim `Arr` class.
 
-The `Arr` class in Starsim is optimized for three key tasks that are common to almost all Starsim models: 
+The `Arr` class in Starsim is optimized for three key tasks that are common to almost all Starsim models:
 
 1. *Dynamic growth*: as the population grows over time, the size of the arrays dynamically update in a way that avoids costly concatenation operations;
 2. *Indexing*: over time, there are agents in the population who die. It is desirable for these agents to remain in the arrays so that we can continue to access data about them, but the indexing is set up so that dead agents are automatically excluded from most operations.
@@ -97,7 +97,7 @@ print(f'Number of urban people: {np.count_nonzero(sim.people.urban)}')
 ```
 
 ## Modifying People with modules
-We saw an example above of adding a custom state to people. However, a far more common way to add states to people is by adding a module to the `Sim`. All the states of the modules will automatically get added to the main `People` instance. 
+We saw an example above of adding a custom state to people. However, a far more common way to add states to people is by adding a module to the `Sim`. All the states of the modules will automatically get added to the main `People` instance.
 
 ```{python}
 ppl = ss.People(30)

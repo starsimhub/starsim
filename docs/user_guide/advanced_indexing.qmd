@@ -139,6 +139,7 @@ print('Mean age (raw):', age.raw.mean()) # <- different since includes dead agen
 3. **Use `.uids` property of boolean arrays** to get UIDs of agents matching criteria
 4. **Use `.true()` and `.false()` methods** for cleaner boolean array handling
 5. **Remember that integer indexing works on active agents**, not UIDs
+6. **Use `ti_*` arrays for "who just changed state"** - e.g. agents infected on the previous step are `(disease.ti_infected == self.ti - 1).uids`, rather than tracking the previous set by hand
 
 ### Don't:
 
@@ -146,6 +147,8 @@ print('Mean age (raw):', age.raw.mean()) # <- different since includes dead agen
 2. **Don't use `.raw` arrays for statistics** unless you specifically need to include dead agents
 3. **Don't use boolean operators (`&`, `|`) on non-boolean arrays** - use comparison operators instead
 4. **Don't forget to check if UID arrays are empty** before performing operations on them
+5. **Don't treat a boolean state as a list of UIDs** - `disease.infected[:]` is a boolean array and `np.array(disease.infected, dtype=int)` is just 0s and 1s; to get the agents, use `disease.infected.uids`
+6. **Don't use `np.where(mask)[0]` to get agents** - it returns positions, not UIDs, which diverge from UIDs once any agent has died; use `mask.uids` instead
 
 ### Performance tips:
 

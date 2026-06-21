@@ -38,13 +38,23 @@ class Timeline:
     The `Timeline` object also has the following attributes/methods:
 
     - `ti` (int): the current timestep
-    - `npts` (int): the total number of timesteps
+    - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
     - `now()` (`ss.date`/float/str): the current time, based on the timevec by default or a different vector if specified
 
-    **Examples**:
+    Note: the time vectors include *both* the start and stop endpoints, so `npts`
+    (the number of time points) is one more than the number of steps taken. For
+    example, `start=0, stop=1, dt=1` runs a single step but produces two time points
+    (`[0, 1]`), since the state is recorded at both the start and the end. Specifying
+    the length via `dur` is exactly equivalent to specifying `stop` (internally,
+    `stop = start + dur`), so e.g. `start=2000, dur=1` and `start=2000, stop=2001`
+    produce identical timelines. See the time user guide for the rationale behind
+    the inclusive endpoint.
 
+    Examples:
+        ```python
         t1 = ss.Timeline(start=2000, stop=2020, dt=1.0)
         t2 = ss.Timeline(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
+        ```
     """
 
     # Allowable time arguments
@@ -78,8 +88,8 @@ class Timeline:
         self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.initialized = False # Call self.init(sim) to initialize the object
 
-        # Decide whether to initialized: we're asked, a sim is provided, or arguments are supplied directly
-        if init or sim or init is None and sum([x is not None for x in [start, stop, dur]]) >= 2:
+        # Decide whether to initialize: we're asked, a sim is provided, or arguments are supplied directly
+        if init or sim or (init is None and sum([x is not None for x in [start, stop, dur]]) >= 2):
             self.init(sim)
         return
 
@@ -99,6 +109,7 @@ class Timeline:
 
     @property
     def npts(self):
+        """ The number of time points (inclusive of both endpoints, so one more than the number of steps) """
         try:
             return self.tvec.shape[0]
         except:
@@ -163,14 +174,15 @@ class Timeline:
         Args:
             key (str): which type of time to get: "time" (default), "year", "date", "tvec", or "str"
 
-        **Examples**:
-
+        Examples:
+            ```python
             t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt='week')
             t.ti = 25
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
             t.now('str') # Returns '2021-06-25'
+            ```
         """
         # Preprocessing
         to_str = False
@@ -203,7 +215,16 @@ class Timeline:
         return now
 
     def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
-        """ Reconcile different ways of supplying inputs """
+        """
+        Reconcile different ways of supplying inputs
+
+        Args:
+            pars (dict): dict of time parameters to apply
+            parent (Timeline): parent timeline to inherit values from
+            reset (bool): if True and stale, reinitialize after update
+            force (bool/None): False = only fill missing values; None = prioritize current; True = prioritize parent
+            kwargs: additional time parameters (start, stop, dur, dt)
+        """
         pars = sc.mergedicts(pars)
         stale = False
 
@@ -377,11 +398,10 @@ class Timeline:
 
         # Additional validation
         start_type = type(start)
-        stop_type = type(start)
+        stop_type = type(stop)
         assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
         assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
         assert isinstance(dur, ss.dur), f'Duration must be ss.dur, not {type(dur)}'
-        assert start_type is stop_type, f'Start and stop must be the same type, not {start_type} and {stop_type}'
         assert start <= stop, f'Start must be before stop, not {start} and {stop}'
         if (stop - start) < self.dt:
             warnmsg = f'The difference between {start = } and {stop = } is less than dt = {self.dt}; no timesteps will be run.'
@@ -424,7 +444,7 @@ class Timeline:
         n_steps = len(self.datevec)
         if n_steps > max_steps and ss.options.warn_convert:
             warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
-            warnmsg += 'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
+            warnmsg += f'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
             warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
             ss.warn(warnmsg)
 

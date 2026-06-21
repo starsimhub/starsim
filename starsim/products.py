@@ -9,15 +9,21 @@ import pandas as pd
 
 
 class Product(ss.Module):
-    """ Generic product implementation """
+    """
+    Generic product base class; subclasses implement administer().
+
+    Products represent diagnostic tests, treatments, or vaccines that can be
+    administered to agents by an Intervention.
+    """
     def init_pre(self, sim):
+        """ Initialize the product; skips if already initialized """
         if not self.initialized:
             super().init_pre(sim)
         else:
             return
 
     def administer(self, uids):
-        """ Adminster a Product - implemented by derived classes """
+        """ Administer a Product - implemented by derived classes """
         raise NotImplementedError
 
 
@@ -37,7 +43,7 @@ class Dx(Product):
         else:
             self.hierarchy = hierarchy
 
-        # Create placehold for multinomial sampling
+        # Create placeholder for multinomial sampling
         n_results = len(self.hierarchy)
         self.result_dist = ss.choice(a=n_results)
         return
@@ -80,11 +86,15 @@ class Dx(Product):
         elif return_format == 'array':
             return results
         else:
-            raise Exception('Unknown return format')
+            errormsg = f'Unknown return_format "{return_format}": must be "dict" or "array"'
+            raise ValueError(errormsg)
 
 class Tx(Product):
     """
     Treatment products change fundamental properties about People, including their prognoses and infectiousness.
+
+    Args:
+        df (DataFrame): treatment specification with columns 'disease', 'state', 'post_state', 'efficacy'
     """
     def __init__(self, df=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -125,18 +135,23 @@ class Tx(Product):
                         pre_tx_state[eff_treat_inds] = False  # People who get treated effectively
                         post_tx_state[eff_treat_inds] = True
 
-        tx_successful = np.array(list(set(tx_successful)))
+        tx_successful = ss.uids(set(tx_successful))
         tx_unsuccessful = np.setdiff1d(uids, tx_successful)
         if return_format == 'dict':
             output = {'successful': tx_successful, 'unsuccessful': tx_unsuccessful}
         elif return_format == 'array':
             output = tx_successful
+        else:
+            errormsg = f'Unknown return_format "{return_format}": must be "dict" or "array"'
+            raise ValueError(errormsg)
 
         return output
 
 
 class Vx(Product):
-    """ Vaccine product """
+    """
+    Vaccine product; subclasses implement administer() to apply immunity.
+    """
     def __init__(self, diseases=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.diseases = sc.tolist(diseases)
@@ -174,14 +189,13 @@ class simple_vx(Vx):
 
     def administer(self, people, uids):
         if self.pars.leaky:
-            factor = 1-self.pars.efficacy
+            factor = 1 - self.pars.efficacy
         else:
             factor = np.random.binomial(1, 1-self.pars.efficacy, len(uids))
 
-        if self.pars.disease is None:
-            self.pars.disease = self.sim.diseases.keys()
-
-        for key in sc.tolist(self.pars.disease):
+        diseases = self.pars.disease if self.pars.disease is not None else self.sim.diseases.keys()
+        for key in sc.tolist(diseases):
             self.sim.diseases[key].rel_sus[uids] *= factor
         return
+
 

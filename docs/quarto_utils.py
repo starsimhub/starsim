@@ -206,19 +206,21 @@ def execute_notebook(path, tidy=True):
     with sc.timer(label=sc.ansi.green(f'    Execution time for {qmd_path}')) as T:
         base = qmd_path.removesuffix('.qmd')
         py_path = base + '.py'
+        success = False
         try:
             print(f'Converting {qmd_path}...')
             qmd2py(path)
             print(f'Executing {py_path}...')
             env = {**os.environ, 'MPLBACKEND': 'agg'} # Use non-interactive backend for matplotlib
-            subprocess.run(['python', py_path], check=True, capture_output=True,cwd=path.parent, env=env) # Use ipython so get_ipython() is available
+            subprocess.run(['ipython', py_path], check=True, capture_output=True,cwd=path.parent, env=env) # Use ipython so get_ipython() and display() are available
             string = f'{yay} {base} executed successfully '
+            success = True
         except subprocess.CalledProcessError as e:
             string = f'{boo} Execution failed for {base}: {e}\n'
         except Exception as e:
             string = f'{boo} Error processing {base}: {str(e)}\n'
         finally:
-            if tidy:
+            if tidy and success: # Keep the .py file if execution failed, to aid debugging
                 sc.rmpath(py_path)
 
     string += f'(time: {T.total:0.1f} s)'
@@ -246,7 +248,7 @@ def execute_notebooks(*args, folders=None, tidy=True, debug=False):
             notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.qmd')]
 
     # Wrapper to chdir before execution
-    def execute(i, path, pause=1.0):
+    def execute(i, path, pause=0.5):
         delay = i*pause
         sc.timedsleep(delay) # For some reason the interval argument to parallelize() isn't working
         return execute_notebook(path, tidy=tidy)

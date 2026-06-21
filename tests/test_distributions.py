@@ -471,6 +471,25 @@ def test_timepar_callable():
     return
 
 
+@sc.timer()
+def test_hist_plotting():
+    """ Test that histogram plotting works """
+    sc.heading('Test plotting of distribution histograms')
+
+    # Based on the advanced distributions user guide
+    sir = ss.SIR(
+        init_prev = ss.bernoulli(p=0.15),
+        dur_inf = ss.weibull(c=2, loc=1, scale=2)
+    )
+    sim = ss.Sim(n_agents=100, diseases=sir, dur=15, networks=ss.RandomNet())
+    sim.run()
+
+    # Plot the distribution
+    rvs = sim.diseases.sir.pars.dur_inf.plot_hist()
+    return
+
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -490,5 +509,6 @@ if __name__ == '__main__':
     o9 = test_repeat_slot()
     o10 = test_timepar_dists()
     o10 = test_timepar_callable()
+    o11 = test_hist_plotting()
 
     T.toc()

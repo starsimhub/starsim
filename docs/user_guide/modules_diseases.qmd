@@ -3,7 +3,9 @@ title: Diseases
 jupyter: python3
 ---
 
+Diseases are the core of most Starsim models: they define the states an agent can be in (e.g. susceptible, infected, recovered), how agents progress between those states, and — for communicable diseases — how infection spreads across the [network](modules_networks.qmd). This page covers the disease class hierarchy, the key states and parameters every infection shares (including `rel_sus` and `rel_trans`), and the patterns for customizing or building your own disease.
 
+For a learning-oriented introduction, see [Tutorial 4 - Diseases](../tutorials/t4_diseases.qmd).
 
 ## Disease class architecture
 
@@ -39,6 +41,68 @@ Starsim has a two-tier disease class hierarchy:
 | `step_state()` | Update states each timestep | When adding new state transitions |
 | `step_die()` | Handle deaths | When disease has custom states |
 | `infect()` | Handle transmission | **Rarely** - use built-in version |
+
+## Core states and parameters
+
+Every `ss.Infection` shares a common set of per-agent states and parameters that govern transmission. The most important are:
+
+| Name | Type | Meaning |
+|------|------|---------|
+| `susceptible` | `BoolState` | Whether an agent can be infected (default `True`) |
+| `infected` | `BoolState` | Whether an agent is currently infected |
+| `infectious` | property | Whether an agent can currently transmit (often `== infected`) |
+| `rel_sus` | `FloatArr` | Per-agent **relative susceptibility** (default `1.0`) |
+| `rel_trans` | `FloatArr` | Per-agent **relative transmissibility** (default `1.0`) |
+| `ti_infected` | `FloatArr` | Timestep at which each agent was infected |
+| `beta` | parameter | Base transmission probability per contact (per network) |
+| `init_prev` | parameter | Initial fraction of the population infected |
+
+## Susceptibility and transmissibility
+
+When `ss.Infection` processes transmission, the probability that infection passes along a single network edge from an infectious source to a susceptible target is, in essence:
+
+$$p_{\text{transmit}} = \beta \times \texttt{rel\_trans}_{\text{source}} \times \texttt{rel\_sus}_{\text{target}}$$
+
+where $\beta$ is the per-contact transmission probability for that network (scaled to the timestep). This factorization is the key invariant to understand:
+
+- Only **infectious** agents contribute their `rel_trans`; everyone else contributes 0.
+- Only **susceptible** agents contribute their `rel_sus`; everyone else contributes 0.
+- `rel_sus` and `rel_trans` both default to `1.0`, so by default transmission is governed entirely by `beta` and the network structure.
+
+These two arrays are the standard "knobs" that the rest of the framework turns to represent heterogeneity in risk. For example:
+
+- A [vaccine product](modules_products.qmd) typically reduces `rel_sus` for vaccinated agents.
+- A treatment might reduce `rel_trans` for treated agents.
+- A [connector](modules_connectors.qmd) between two diseases might increase `rel_sus` to one disease for agents infected with another (co-infection).
+
+Because they're ordinary per-agent arrays, you can also set them directly. Here we fully protect everyone under 20 by setting their `rel_sus` to 0, and see that they avoid infection (aside from the handful seeded as infected at the start via `init_prev`):
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+sir = ss.SIR(init_prev=0.01)
+sim = ss.Sim(n_agents=2000, diseases=sir, networks='random', copy_inputs=False, verbose=0)
+sim.init()
+
+# Fully protect under-20s: rel_sus = 0 means they cannot acquire infection
+young = (sim.people.age < 20).uids
+older = (sim.people.age >= 20).uids
+sir.rel_sus[young] = 0.0
+
+sim.run()
+ever_infected = sir.ti_infected.notnan
+print(f'Protected (under 20): {ever_infected[young].sum()} of {len(young)} ever infected')
+print(f'Unprotected (20+):    {ever_infected[older].sum()} of {len(older)} ever infected')
+```
+
+:::{.callout-note}
+`beta` can be specified per network and per direction. For sexually transmitted infections, for example, `beta={'mf': [0.25, 0.15]}` sets different male→female and female→male transmission probabilities on the `mf` network. See the [Networks](modules_networks.qmd) page for more.
+:::
+
+:::{.callout-warning}
+`beta` is a per-contact transmission **probability** — a bare float (or a dict/list of floats), not a rate. Do **not** wrap it in `ss.peryear()` or `ss.perday()`: doing so reinterprets the number as a hazard and rescales it by the timestep, corrupting the transmission scale. Use `beta=0.1`, not `beta=ss.perday(0.1)`. (Most other per-agent event parameters, such as `p_death`, *are* probabilities or distributions; the time-aware rate types are for quantities like birth and death *rates*. See [Time](advanced_time.qmd).)
+:::
 
 ## Implementation patterns
 

@@ -59,19 +59,17 @@ Starsim provides different network types for different transmission scenarios:
 | `RandomNet` | Random connections | `n_contacts`, `dur` | General infectious diseases |
 | `MFNet` | Male-female partnerships | `duration`, `acts`, `debut` | Heterosexual STI transmission |
 | `MSMNet` | Male-male partnerships | `duration`, `acts`, `participation` | MSM STI transmission |
-| `MaternalNet` | Mother-child (base) | `dur`, `start`, `end` | Vertical transmission |
-| `PrenatalNet` | Prenatal transmission | Inherits from MaternalNet | In-utero transmission |
-| `PostnatalNet` | Postnatal transmission | Inherits from MaternalNet | Breastfeeding, birth canal |
+| `PrenatalNet` | Prenatal transmission | `dur`, `start`, `end` | In-utero (vertical) transmission |
+| `PostnatalNet` | Postnatal transmission | Inherits from `DynamicNetwork` | Breastfeeding, birth canal |
 
 ### Additional example contact networks
-*Note: these are available in the `starsim_examples` module.*
+*Note: these are available in the `starsim.library` module, accessed as e.g. `ssl.networks.DiskNet` after `import starsim.library as ssl`.*
 
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
 | `ErdosRenyiNet` | Probabilistic edges | `p` (edge probability), `dur` | Theoretical network studies |
 | `DiskNet` | Spatial proximity | `r` (radius), `v` (velocity) | Geographic transmission |
 | `NullNet` | Self-connections only | `n_people` | Debugging, placeholders |
-| `EmbeddingNet` | Age-assortative MF | `male_shift`, `embedding_func` | Age-structured STI modeling |
 
 ### Mixing pool classes
 | Class | Purpose | Parameters | Use Case |
@@ -88,13 +86,12 @@ Starsim provides different network types for different transmission scenarios:
 - **For sexually transmitted infections:**
     - `MFNet`: Male-female (heterosexual) transmission
     - `MSMNet`: Transmission between men who have sex with men (MSM)
-    - `EmbeddingNet`: Age-assortative heterosexual mixing
 - **For mother-to-child transmission:**
     - `PrenatalNet`: In-utero transmission (HIV, syphilis)
     - `PostnatalNet`: Birth/breastfeeding transmission (HIV, HBV)
 - **For special purposes:**
     - `StaticNet`: Use existing NetworkX graphs
-    - `DiskNet`: Proof-of-concept spatial/geographic transmission  
+    - `DiskNet`: Proof-of-concept spatial/geographic transmission
     - `NullNet`: Testing/debugging without transmission
     - `ErdosRenyiNet`: Theoretical network analysis
 

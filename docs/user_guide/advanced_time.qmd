@@ -119,6 +119,29 @@ print(t.to_dict())
 
 `tvec` is what the `ss.Timeline` object uses internally as "canonical" simulation time. `timevec` is the "most-human-friendly" representation of the time, and is what is e.g. stored in results to help with plotting.
 
+### Time points vs. timesteps, and `dur` vs. `stop`
+
+The time vectors include **both** the start and the stop endpoints. This means the number of time *points* (`npts`, the length of the time vectors) is one more than the number of *steps* taken: the state is recorded at the start, then after each step. For example, running from `0` to `1` with `dt=1` takes a single step but produces two time points:
+
+```{python}
+t = ss.Timeline(start=0, stop=1, dt=1.0)
+t.init()
+print('Time points:', t.timevec)
+print('npts:', t.npts, '(= 1 step + 1)')
+```
+
+Specifying the length via `dur` is exactly equivalent to specifying `stop`: internally, `stop = start + dur`. So for a given `start` and `dt`, `dur=D` produces an identical timeline to `stop = start + D` (e.g. `start=2000, dur=1` is the same as `start=2000, stop=2001`) — there is no difference in the number of time points between the two.
+
+Why are the endpoints inclusive? For a range like `start=2000, stop=2020`, there are three equally valid interpretations:
+
+1. **Inclusive start, exclusive end** (2000-01-01 to 2019-12-31), by analogy to `np.arange(0, 20)` giving `0`–`19`.
+2. **Inclusive start, minimally inclusive end** (2000-01-01 to 2020-01-01), by analogy to `np.linspace(0, 20)` giving `0`–`20`, or `plt.xlim(left=2000, right=2020)`.
+3. **Inclusive start, maximally inclusive end** (2000-01-01 to 2020-12-31).
+
+Starsim uses the second (middle) interpretation. This is mostly for plotting — a sim run from 2000 to 2020 looks odd if the plot ends in 2019 — and so that `stop` and `dur` are interchangeable: `start=2000, dur=20` intuitively runs *to* 2020, not 2019. (We use 2020-01-01 rather than 2020-12-31 for the same reason: it makes `stop` exactly parallel to `dur`, since 2000-01-01 to 2020-01-01 is exactly 20 years.)
+
+Note that, just as with `np.arange`, the step size determines which points fall within the range, and the final point is the last one *at or before* `stop`. For example, `start='2017-01-01', stop='2024-12-31', dt='month'` ends at `2024-12-01`, because the next monthly point (`2025-01-01`) is past `stop`.
+
 
 ## Timepars
 
@@ -250,19 +273,21 @@ p = ss.prob(0.8, ss.years(1))
 
 indicates a 80% chance of an event occurring in one year.
 
-When multiplied by the original denominator, 1 year in this case, the
-probability remains unchanged, 80%:
+When multiplied by the original denominator, 1 year in this case, the probability remains unchanged, 80%:
 ```py
 p*ss.years(1) == 0.8
 ```
 
-Multiplying `p` by `ss.years(2)` does not simply double the
-probability to 160% (which is not possible), but rather returns a new
-probability of 96% representing the chance of the event occurring at least
-once over the new duration of two years:
+Multiplying `p` by `ss.years(2)` does not simply double the probability to 160% (which is not possible), but rather returns a new probability of 96% representing the chance of the event occurring at least once over the new duration of two years:
 ```py
 p * ss.years(2) == 0.96
 ```
+
+:::{.callout-tip}
+## `ss.prob` vs `ss.bernoulli`
+
+`ss.prob` (and `ss.probperyear`, etc.) is a *number* — a time-aware scalar you can multiply and convert between time periods. `ss.bernoulli` is a *distribution* you *sample per agent*: `dist.filter(uids)` returns the UIDs for which the trial succeeded. When you need to decide an outcome for each agent ("who gets infected, who dies, who is vaccinated?"), use `ss.bernoulli`, not `ss.prob`. Use `ss.prob` when you need the probability itself as a value — for example, a per-period probability that will be scaled or fed into a distribution. See [Distributions](advanced_distributions.qmd).
+:::
 
 #### Probability rates
 

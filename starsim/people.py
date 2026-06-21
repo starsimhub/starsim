@@ -27,8 +27,10 @@ class People:
         extra_states (list): non-default states to initialize
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
 
-    **Examples**:
+    Examples:
+        ```python
         ppl = ss.People(2000)
+        ```
     """
 
     def __init__(self, n_agents, age_data=None, extra_states=None, mock=False):
@@ -89,6 +91,10 @@ class People:
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
         This operation is normally triggered as part of initializing the state (via `Arr.init()`)
+
+        Args:
+            state (Arr): the state to register
+            die (bool): if True (default), raise an error if the state has already been registered
         """
         if id(state) not in self._states:
             self._states[id(state)] = state
@@ -111,7 +117,7 @@ class People:
             raise TypeError(errormsg)
 
     def __setitem__(self, key, value):
-        """ Ditto """
+        """ Allow people['attr'] = value as an alias for setattr """
         return setattr(self, key, value)
 
     def __iter__(self):
@@ -127,7 +133,7 @@ class People:
         registry will no longer match the memory addresses of the new copied states. Therefore,
         after copying, we need to re-create the states registry with the new object IDs
         """
-        state['_states'] =  {id(v):v for v in state['_states'].values()}
+        state['_states'] = {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
         return
     
@@ -153,11 +159,14 @@ class People:
 
     def brief(self, output=False):
         n = self.n_agents_init
-        alive = len(self)
-        alive_str = f'{alive=:n}; ' if alive != n else ''
-        age_mean = self.age.mean()
-        age_std = self.age.std()
-        out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
+        if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
+            out = f'People({n=:n}; uninitialized)'
+        else:
+            alive = len(self)
+            alive_str = f'{alive=:n}; ' if alive != n else ''
+            age_mean = self.age.mean()
+            age_std = self.age.std()
+            out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
         return out if output else print(out)
     
     def keys(self):
@@ -290,7 +299,7 @@ class People:
 
         # Connect the module as People attribute
         if hasattr(self, module.name):
-            raise Exception(f'Module {module.name} already added')
+            raise AttributeError(f'Module {module.name} already added')
         else:
             setattr(self, module.name, module)
 
@@ -486,15 +495,18 @@ class People:
         return
 
     def update_results(self):
+        """ Record per-timestep population counts into the simulation results """
         ti = self.sim.ti
         res = self.sim.results
-        res.n_alive[ti] = np.count_nonzero(self.alive)
+        for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
+            res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 
     def finish_step(self):
+        """ Remove dead agents and run post-step updates """
         self.remove_dead()
         self.update_post()
         return
@@ -575,10 +587,11 @@ class People:
             absolute (bool): whether to show absolute numbers or percentage of the population
             fig_kw (dict): passed to `plt.subplots()`
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.demo(plot=False)
-            sim.people.plot_age()
+            sim.people.plot_ages()
+            ```
         """
         # Preliminaries
         age = self.age
@@ -590,6 +603,7 @@ class People:
         # Define age bins
         if np.iterable(bins):
             width = None # Already defined, don't need
+
         if np.isscalar(bins):
             width = bins
         else:
@@ -637,10 +651,11 @@ class People:
         """
         Get all the properties for a single person.
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
             print(sim.people.person(5)) # The 5th agent in the simulation
+            ```
         """
         person = Person()
         for key in ['uid', 'slot']:
@@ -654,10 +669,11 @@ class Person(sc.objdict):
     """
     A simple class to hold all attributes of a person
 
-    **Example**:
-
+    Examples:
+        ```python
         sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
         print(sim.people.person(5)) # The 5th agent in the simulation
+        ```
     """
     def to_df(self):
         """ Convert to a dataframe """
@@ -773,8 +789,8 @@ class Filter(sc.prettyobj):
             uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate filter objects matching both True and False
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.Sim(n_agents=100e3, dur=10, networks='random', diseases='sir', verbose=0)
             sim.run()
             ppl = sim.people
@@ -788,6 +804,7 @@ class Filter(sc.prettyobj):
             f1 = ppl.filter('female')
             f2 = f1('age')>5
             f3 = ~f2('sir.infected')
+            ```
         """
         if new is True:
             filtered = Filter(self)

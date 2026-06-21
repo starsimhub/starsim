@@ -21,11 +21,12 @@ class ndict(sc.objdict):
         strict (bool): If True, only items with the specified attribute will be accepted.
         overwrite (bool): whether to allow adding a key when one has already been added
 
-    **Examples**:
-
-        networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
-        networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
+    Examples:
+        ```python
+        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
+        ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
         super().__init__()
@@ -69,7 +70,13 @@ class ndict(sc.objdict):
         elif valid is None:
             pass  # Nothing to do
         else:
-            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+            if isinstance(arg, ss.Module) and not hasattr(arg, self._nameattr):
+                # A Module missing its name attribute almost always means super().__init__() was not called
+                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "{self._nameattr}" attribute. '
+                            f'This usually means super().__init__() was not called in the module\'s __init__() method; '
+                            f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
+            else:
+                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
         return self
 
@@ -105,7 +112,8 @@ class ndict(sc.objdict):
             default (obj): what to return if not found (default None)
             match_case (bool): if False (default), ignore case with string matching
 
-        **Example**:
+        Examples:
+            ```python
             sim = ss.Sim(diseases=ss.SIR(name='MySIR'), networks='random')
             sim.run()
 
@@ -113,6 +121,7 @@ class ndict(sc.objdict):
             sim.diseases.get('MySIR')
             sim.diseases.get('mysir')
             sim.diseases.get(ss.SIR)
+            ```
         """
         # Handle strings
         if isinstance(key, str):
@@ -152,7 +161,7 @@ class ndict(sc.objdict):
 
     def copy(self):
         """ Shallow copy """
-        new = self.__class__.__new__(nameattr=self._nameattr, type=self._type, strict=self._strict)
+        new = self.__class__(nameattr=self._nameattr, type=self._type, strict=self._strict, overwrite=self._overwrite)
         new.update(self)
         return new
 
@@ -190,8 +199,7 @@ def nlist_to_dict(nlist, die=True):
             raise ValueError(errormsg)
         else:
             ss.warn(errormsg)
-    else:
-        return out
+    return out
 
 
 def warn(msg, category=None, verbose=None, die=None):
@@ -300,8 +308,9 @@ def parse_age_range(age_string) -> tuple:
             age_lower = float(s[1:])
             age_upper = np.inf
         elif 'to' in s:
-            age_lower = float(s.split('to')[0])
-            age_upper = float(s.split('to')[1])
+            parts = s.split('to')
+            age_lower = float(parts[0])
+            age_upper = float(parts[1])
         else:
             raise ValueError(f'Cannot parse age range: {age_string!r}')
 
@@ -409,11 +418,15 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     if isinstance(data, pd.Series) or isinstance(data, pd.DataFrame):
         data = data.reset_index().to_dict(orient='list')
 
-    # Check that the input is now a dict (scalar types have already been handled above
-    assert isinstance(data, dict), 'Supported inputs are ss.Dict, scalar numbers, DataFrames, Series, or dictionaries'
+    # Check that the input is now a dict (scalar types have already been handled above)
+    if not isinstance(data, dict):
+        errormsg = f'Supported inputs are ss.Dict, scalar numbers, DataFrames, Series, or dictionaries, not {type(data)}'
+        raise TypeError(errormsg)
 
     # Extract the values and index columns
-    assert 'value' in metadata['data_cols'], 'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict'
+    if 'value' not in metadata['data_cols']:
+        errormsg = f'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict. Data columns are:\n{metadata["data_cols"]}'
+        raise ValueError(errormsg)
     values = sc.promotetoarray(data[metadata['data_cols']['value']])
     index = sc.objdict()
     for k, col in metadata['data_cols'].items():
@@ -488,7 +501,7 @@ def validate_sim_data(data=None, die=None):
 
     # Validation
     if not success and die == True:
-        errormsg = 'Data "{data}" could not be converted and die == True'
+        errormsg = f'Data "{data}" could not be converted and die == True'
         raise ValueError(errormsg)
 
     return data
@@ -548,11 +561,78 @@ def save(filename, obj, **kwargs):
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 
-class shrink:
+class Shrunk:
     """ Define a class to indicate an object has been shrunken """
+    def __init__(self, obj=None, attr=None):
+        try:
+            self.obj_type = type(getattr(obj, attr))
+        except:
+            self.obj_type = None
+        self.attr = attr
+        return
+
     def __repr__(self):
-        s = 'This object has been intentionally "shrunken"; it is a placeholder and has no functionality. Use the non-shrunken object instead.'
+        if self.obj_type and self.attr:
+            prefix = f'The object "{self.attr}" {self.obj_type}'
+        else:
+            prefix = 'This object'
+        s = f'{prefix} has been intentionally "shrunken" to save memory. Run with shrink=False to see the non-shrunken object instead.'
         return s
+
+    def __bool__(self):
+        """ A shrunken object is falsy, so `if obj:` treats it like a missing/None value """
+        return False
+
+    def __getattr__(self, attr):
+        """ Raise an informative error when a shrunken object's attributes are accessed """
+        # Let dunder lookups (copy, pickle, repr machinery) fail with the default error
+        if attr.startswith('__') and attr.endswith('__'):
+            raise AttributeError(attr)
+        errormsg = f'You are trying to access the attribute {attr} on a Shrunk object, which has been deleted. Rerun the sim with shrink=False to restore the original object.'
+        raise AttributeError(errormsg)
+
+
+def shrink(obj=None, attrs=None, verbose=False):
+    """
+    Replace one or more object attributes in-place with an `ss.utils.Shrunk()` placeholder.
+
+    Used to save memory or remove circular references, especially when running large
+    numbers of sims. It is good practice to write `shrink()` methods for modules to remove
+    any temporary arrays or other memory-intensive objects.
+
+    `ss.shrink()` can be used to either manually replace an object, or replace multiple attributes 
+    of an object in-place. It is used rather than simply deleting attributes or setting them to
+     `None` to make it clear that the attributes were intentionally removed.
+
+    Args:
+        obj (object): the object to shrink in-place (optional)
+        attrs (str/list): the attributes of the object to shrink
+        verbose (bool): if True, print warnings about missing attributes
+
+    Examples:
+        ```python
+        # "Shrink" (remove) the People object
+        sim = ss.Sim()
+        ss.shrink(sim, 'people')
+
+        # Equivalent behavior, used manually
+        sim.people = ss.shrink()
+        ```
+    """
+    none_count = sum([x is None for x in [obj, attrs]])
+    if none_count == 2:
+        return Shrunk()
+    elif none_count == 1:
+        errormsg = 'You can call ss.shrink() with both obj and attrs, or with neither, but not one or the other'
+        raise ValueError(errormsg)
+    else:
+        for attr in sc.tolist(attrs):
+            if hasattr(obj, attr):
+                shrunk = Shrunk(obj=obj, attr=attr)
+                setattr(obj, attr, shrunk)
+            elif verbose:
+                ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
+    return shrunk
 
 
 #%% Plotting helper functions
@@ -595,15 +675,17 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
         - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
+        - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'
         - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
 
-    **Examples**:
-
+    Examples:
+        ```python
         kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
+        ```
     """
-    suffix='_kw',
+    suffix='_kw'
     _None = '<None>'
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
     kw = sc.objdict() # Output arguments
@@ -626,7 +708,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
 
         # Handle dicts of kwargs, e.g. "fig_kw"
         subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
-        if subtype_dict:
+        if subtype_dict is not None:
             if _debug: print('Subtype dict:', subtype_dict)
             kw[subtype].update(subtype_dict)
 

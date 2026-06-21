@@ -13,8 +13,8 @@ The easiest way to do this is with `ss.parallel()`, which, as the name suggests,
 import starsim as ss
 ss.options(jupyter=True) # Improve plot resolution
 
-sim1 = ss.Sim(label='random', diseases='sis', networks='random')
-sim2 = ss.Sim(label='randomsafe', diseases='sis', networks='randomsafe')
+sim1 = ss.Sim(label='random', n_agents=2000, diseases='sis', networks='random')
+sim2 = ss.Sim(label='randomsafe', n_agents=2000, diseases='sis', networks='randomsafe')
 msim = ss.parallel(sim1, sim2)
 msim.plot()
 ```
@@ -22,8 +22,8 @@ msim.plot()
 `ss.parallel()` is just a wrapper for `ss.MultiSim().run()` (and note how we can pass arguments to all of the sims, e.g. `verbose=0` here):
 
 ```{python}
-sim1 = ss.Sim(diseases='sis', networks='random')
-sim2 = ss.Sim(diseases='sis', networks='randomsafe')
+sim1 = ss.Sim(n_agents=2000, diseases='sis', networks='random')
+sim2 = ss.Sim(n_agents=2000, diseases='sis', networks='randomsafe')
 msim = ss.MultiSim(sims=[sim1, sim2]).run(verbose=0)
 msim.plot()
 ```
@@ -59,8 +59,8 @@ Sims copy inputs by default because it's common to want to reuse a module betwee
 ```{python}
 sis = ss.SIS(beta=0.1)
 
-s1 = ss.Sim(label='Low contacts', diseases=sis, networks=ss.RandomNet(n_contacts=5))
-s2 = ss.Sim(label='High contacts', diseases=sis, networks=ss.RandomNet(n_contacts=10))
+s1 = ss.Sim(label='Low contacts', n_agents=2000, diseases=sis, networks=ss.RandomNet(n_contacts=5))
+s2 = ss.Sim(label='High contacts', n_agents=2000, diseases=sis, networks=ss.RandomNet(n_contacts=10))
 ss.parallel(s1, s2).plot()
 ```
 
@@ -68,7 +68,7 @@ But this can be confusing, because it means the `sis` in the simulation is a dif
 
 ```{python}
 sir = ss.SIR(beta=0.035)
-sim = ss.Sim(diseases=sir, networks='random', copy_inputs=False)
+sim = ss.Sim(n_agents=2000, diseases=sir, networks='random', copy_inputs=False)
 sim.run()
 sir.plot() # This wouldn't work without copy_inputs=False
 ```
@@ -76,8 +76,8 @@ sir.plot() # This wouldn't work without copy_inputs=False
 Conversely, `ss.MultiSim()` by default does _not_ copy the input sims, so they are modified in place:
 
 ```{python}
-s1 = ss.Sim(diseases='sis', networks='random')
-s2 = ss.Sim(diseases='sir', networks='random')
+s1 = ss.Sim(n_agents=2000, diseases='sis', networks='random')
+s2 = ss.Sim(n_agents=2000, diseases='sir', networks='random')
 ss.parallel(s1, s2, verbose=0)
 
 s1.plot() # This also works, because it was run in place
@@ -86,12 +86,40 @@ s1.plot() # This also works, because it was run in place
 If you want to copy the sims before run, then set `inplace=False`:
 
 ```{python}
-s1 = ss.Sim(diseases='sis', networks='random')
-s2 = ss.Sim(diseases='sir', networks='random')
+s1 = ss.Sim(n_agents=2000, diseases='sis', networks='random')
+s2 = ss.Sim(n_agents=2000, diseases='sir', networks='random')
 ss.parallel(s1, s2, verbose=0, inplace=False)
 
 s1.run().plot() # This now works, because the sim was *not* run in place
 ```
+
+## Reducing memory use
+
+When you run many simulations and keep them all in memory (or save them to disk), the biggest contributor to the size of each `Sim` is usually the `People` object and the per-agent state arrays. Once a run has finished, you typically only need the results, not the full population. Calling `sim.shrink()` removes these memory-intensive attributes in place, keeping the results intact:
+
+```{python}
+import starsim as ss
+import sciris as sc
+
+# Run a reasonably large sim
+sim = ss.Sim(n_agents=5000, diseases='sis', networks='random', verbose=0).run()
+
+# Compare the size before and after shrinking
+before = len(sc.dumpstr(sim))
+sim.shrink()
+after = len(sc.dumpstr(sim))
+print(f'Size before shrinking: {before/1e6:.2f} MB')
+print(f'Size after shrinking:  {after/1e6:.2f} MB')
+
+# Results are still available
+sim.plot('sis')
+```
+
+:::{.callout-tip}
+It's good practice to call `sim.shrink()` (or `msim.shrink()` for a `MultiSim`) before storing or saving sims you've finished running, especially when running hundreds or thousands of them. This keeps memory use down and makes saved files smaller and faster to load. `ss.MultiSim` and `ss.parallel()` already shrink each sim by default, so you only need to do this for sims you run and store yourself.
+:::
+
+If you later need the full sim (for example, to continue running it), don't shrink it — or save it with `sim.save('mysim.sim', shrink=False)` to keep everything.
 
 ## Advanced workflows
 

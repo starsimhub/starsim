@@ -8,7 +8,7 @@ import sciris as sc
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
 n = 5 # Default number of samples
 
@@ -205,7 +205,7 @@ def test_worlds(do_plot=False):
             dur_inf = 20,
             p_death = 0, # Here since analyzer can't handle variable numbers of people
         ),
-        networks = sse.EmbeddingNet(duration=5)  # Must be shorter than dur_inf for SIR transmission to occur
+        networks = ss.RandomNet()  # Edges reform each step (< dur_inf), allowing SIR transmission
     )
     s1 = ss.Sim(pars=pars, interventions=CountInf())
     s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])
@@ -247,7 +247,7 @@ def test_independence(do_plot=False, thresh=0.1):
         diseases = [
             dict(type='sir', init_prev=0.1),
             dict(type='sis', init_prev=0.1),
-            sse.HIV(init_prev=0.1),
+            ssl.diseases.HIV(init_prev=0.1),
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),

@@ -14,7 +14,7 @@ When you first create a sim, e.g. with `sim = ss.Sim()`, the resulting `Sim` obj
 * Validating the parameters;
 * Adding a `Time` module to the sim (stored under `sim.t`), which looks after converting parameters between timesteps;
 * Adding `People` to the `Sim`: if these are not supplied directly, Starsim will automatically add `People` with default age/sex structure;
-* Adding all the parameters and results from each `Module` to the `Sim`, and adding the states from each `Module` to the `People`; 
+* Adding all the parameters and results from each `Module` to the `Sim`, and adding the states from each `Module` to the `People`;
 * Initializing any distributions contained anywhere within the parameters or states.
 
 A `Sim` is automatically initialized if `sim.run()` is called.
@@ -23,7 +23,7 @@ A `Sim` is automatically initialized if `sim.run()` is called.
 ### Order of operations
 An important function of the `Sim` class is that it controls the order in which the different steps of each module are executed. Starsim allows users lots of flexibility regarding the timesteps for individual modules. For example, a common usage pattern is that you may only want to update your demographic modules once a year, but you may want to update your disease modules once per month, week, or day. The `Sim` class stores a plan for updating each module in the right order and with the right frequency. This is stored within a specialized `Loop` class housed within the `Sim`. Users typically won't interact with this class directly, but it is worth knowing the order in which updates are made on each timestep.
 
-1. `Modules` have a `start_step` method which is called first. This usually just advances random number generators forward. 
+1. `Modules` have a `start_step` method which is called first. This usually just advances random number generators forward.
 2. Any `Demographic` modules have their `step` method called
 3. Any `Disease` modules have their `step_state` method called
 4. Any `Connectors` have their `step` method called

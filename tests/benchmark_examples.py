@@ -9,7 +9,7 @@ Examples:
 """
 import sciris as sc
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
 sc.options(interactive=False)
 
@@ -30,7 +30,7 @@ def make_simple_setup():
 
 def make_complex_30():
     """A shorter run with substantially more model structure."""
-    hiv = sse.HIV()
+    hiv = ssl.diseases.HIV()
     hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
 
     return ss.Sim(
@@ -40,7 +40,7 @@ def make_complex_30():
         rand_seed=1,
         verbose=0,
         diseases=[ss.SIS(), hiv],
-        networks=[ss.RandomNet(), ss.MFNet(), ss.MaternalNet()],
+        networks=[ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()],
         demographics=ss.Pregnancy(),
         label='complex_30',
     )

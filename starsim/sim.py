@@ -41,12 +41,13 @@ class Sim(ss.Base):
         or all together via the ``modules`` argument. When using ``modules``, Starsim automatically sorts
         them by type. The individual kwargs and ``modules`` can be mixed; they are merged together.
 
-    **Examples**:
-
+    Examples:
+        ```python
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
+        ```
     """
     def __init__(self, pars=None, label=None, people=None, demographics=None, connectors=None, 
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None, 
@@ -138,7 +139,7 @@ class Sim(ss.Base):
     @property
     def modules(self):
         """
-        Return an interator over all Module instances (stored in standard places) in the Sim
+        Return an iterator over all Module instances (stored in standard places) in the Sim
         """
         for module in itertools.chain(
             self.custom(),
@@ -216,7 +217,7 @@ class Sim(ss.Base):
         matches = self.get_modules(query, match_case=match_case)
         if len(matches) > 1:
             errormsg = f'Multiple matching modules found for {query}; to retrieve all of them, use `Sim.get_modules()` instead'
-            raise Exception(errormsg)
+            raise ValueError(errormsg)
         elif not matches:
             if die:
                 errormsg = f'No matching module found for {query}; set die=False to return None instead'
@@ -262,14 +263,13 @@ class Sim(ss.Base):
                 return list(modules)
 
         # Loop over all modules, looking for matches
+        if isinstance(query, str) and not match_case:
+            query = query.lower()
         for mod in modules:
             if isinstance(query, type) and isinstance(mod, query):
                 matches.append(mod)
             elif isinstance(query, str):
-                name = mod.name
-                if not match_case:
-                    query = query.lower()
-                    name = name.lower()
+                name = mod.name if match_case else mod.name.lower()
                 if query.startswith('*') and query.endswith('*') and query[1:-1] in name:
                     matches.append(mod)
                 elif query.startswith('*') and name.endswith(query[1:]):
@@ -422,8 +422,8 @@ class Sim(ss.Base):
             states (bool): as above, for people states (default True)
             detailed (bool): if true, store literally every random number and agent state (otherwise, use summary stats) (default False)
 
-        *Examples:*
-
+        Examples:
+            ```python
             # General settings -- use a small sim and few timesteps if possible
             kw = dict(n_agents=100, start=0, stop=10, networks='random', diseases='sis')
 
@@ -438,6 +438,7 @@ class Sim(ss.Base):
             sim.set_diagnostics(rvs='diagnostics_rvs.json', states='diagnostics_states.json', detailed=True)
             sim.run()
             sim.diagnostics.export()
+            ```
         """
         if rvs or states:
             print('Enabling sim diagnostics ...') # Always print regardless of verbosity
@@ -489,13 +490,14 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, check_method_calls=True):
+    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True):
         """
         Run the model -- the main method for running a simulation.
 
         Args:
             until (date/str/float): the date to run the sim until
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
+            shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
         """
         # Initialization steps
@@ -506,24 +508,29 @@ class Sim(ss.Base):
         self.timer.start()
 
         # Check for AlreadyRun errors
-        errormsg = None
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
 
-        # Main simulation loop -- just one line!!!
-        self.loop.run(until)
+        try:
+            # Main simulation loop -- just one line!!!
+            self.loop.run(until)
 
-        # Check if the simulation is complete
-        if self.loop.index == len(self.loop.plan):
-            self.complete = True
+            # Check if the simulation is complete
+            if self.loop.index == len(self.loop.plan):
+                self.complete = True
 
-        # If simulation reached the end, finalize the results
-        if self.complete:
-            self.finalize()
-            if check_method_calls:
-                self.check_method_calls()
-            sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+            # If simulation reached the end, finalize the results
+            if self.complete:
+                self.finalize()
+                if check_method_calls:
+                    self.check_method_calls()
+                if shrink:
+                    self.shrink(full=False)
+                sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+        finally:
+            self.dists.clear_run_caches()
+        
         return self # Allows e.g. ss.Sim().run().plot()
 
     def finalize(self):
@@ -613,17 +620,26 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, size_limit=1.0, intercept=10, die=True):
+    def shrink(self, inplace=True, full=True, size_limit=1.0, base_size=30, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
         the "shrunken" simulation. Used to reduce the memory required for RAM or
         for saved files.
 
+        After shrinking, each module is expected to be smaller than
+        ``size_limit*(base_size + n_timesteps)`` KB. The ``base_size`` term covers the
+        fixed structural overhead of a module (parameters, results metadata, etc.) that
+        does not depend on the simulation length, expressed as a number of timesteps'
+        worth of allowance; the ``n_timesteps`` term covers the per-timestep results that
+        legitimately grow with the simulation; and ``size_limit`` scales both. A module
+        exceeding this is most likely still holding a per-agent array that failed to shrink.
+
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
-            size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
-            intercept (float): the size (in units of size_limit) to allow for a zero-timestep sim
+            full (bool): whether to perform a full shrink, including the People object (otherwise just remove circular references)
+            size_limit (float): the per-timestep size allowance in KB, which scales the whole limit (set to None to disable the check)
+            base_size (float): the fixed module size to allow independent of simulation length, in timesteps' worth of allowance
             die (bool): whether to raise an exception if the shrink failed
 
         Returns:
@@ -635,41 +651,45 @@ class Sim(ss.Base):
         else:
             sim = self.copy() # We need to do a deep copy to avoid modifying other objects
 
-        # Shrink the people and loop
-        shrunk = ss.utils.shrink()
-        sim.people = shrunk
-        with sc.tryexcept(die=die):
-            sim.loop.shrink()
-
+        # Shrink the people
+        if full:
+            ss.shrink(sim, 'people')
+        
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
 
+            # Shrink the loop -- important; frees un-collectable sim references
+            sim.loop.shrink()
+
             # Shrink the distributions
-            sim.dists.sim = shrunk
-            sim.dists.obj = shrunk
+            ss.shrink(sim.dists, attrs=['sim', 'obj'])
             for dist in sim.dists.dists.values():
                 with sc.tryexcept(die=die):
-                    dist.shrink()
+                    dist.shrink() # Important; frees un-collectable sim references
+            
+            # The remaining shrinkages are only applied in the full case
+            if full:
 
-            # Finally, shrink the modules
-            for mod in sim.modules:
-                with sc.tryexcept(die=die):
-                    mod.shrink()
-
-            # Check that the module successfully shrunk
-            if size_limit:
-                max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                # Shrink the modules
                 for mod in sim.modules:
-                    size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
-                    if size > max_size:
-                        errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
-                        if die:
-                            raise RuntimeError(errormsg)
-                        else:
-                            ss.warn(errormsg)
+                    with sc.tryexcept(die=die):
+                        mod.shrink()
 
-        # Finally, set a flag that the sim has been shrunken
-        sim.shrunken = True
+                # Check that the module successfully shrunk
+                if size_limit:
+                    npts = len(sim)
+                    max_size = size_limit*(base_size + npts) # Maximum size in KB: size_limit scales both the fixed base and the per-timestep allowance
+                    for mod in sim.modules:
+                        size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
+                        if size > max_size:
+                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB (= {size_limit:n} KB/timestep × ({base_size:n} base + {npts} timesteps)); use die=False to turn this message into a warning, or increase base_size/size_limit'
+                            if die:
+                                raise RuntimeError(errormsg)
+                            else:
+                                ss.warn(errormsg)
+
+        # Finally, set a flag that the sim has been shrunken, but only if fully shrunken
+        sim.shrunken = full
         return sim
 
     def check_results_ready(self, errormsg=None):
@@ -705,11 +725,11 @@ class Sim(ss.Base):
             errormsg = f'Could not understand {check=}, must be one of {valid}'
             raise ValueError(errormsg)
 
+        missing = []
         if check:
             if verbose:
                 sc.pp(self._call_required)
 
-            missing = []
             for mod in self.modules:
                 modmissing = mod.check_method_calls()
                 if modmissing:
@@ -747,14 +767,15 @@ class Sim(ss.Base):
             plot (bool): whether to plot time spent per module step
             **kwargs (dict): passed to `sc.profile()`
 
-        **Example**:
-
+        Examples:
+            ```python
             import starsim as ss
 
             net = ss.RandomNet()
             sis = ss.SIS()
             sim = ss.Sim(networks=net, diseases=sis)
             prof = sim.profile(follow=[net.add_pairs, sis.infect])
+            ```
         """
         prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
         return prof
@@ -768,14 +789,15 @@ class Sim(ss.Base):
             mintime (float): exclude function calls less than this time in seconds
             **kwargs (dict): passed to `sc.cprofile()`
 
-        **Example**:
-
+        Examples:
+            ```python
             import starsim as ss
 
             net = ss.RandomNet()
             sis = ss.SIS()
             sim = ss.Sim(networks=net, diseases=sis)
             prof = sim.cprofile()
+            ```
         """
         cprof = sc.cprofile(sort=sort, mintime=mintime, **kwargs)
         with cprof:
@@ -794,9 +816,10 @@ class Sim(ss.Base):
         Returns:
             filename (str): the validated absolute path to the saved file
 
-        **Example**:
-
+        Examples:
+            ```python
             sim.save() # Saves to a .sim file
+            ```
         """
         # Set shrink based on whether we're in the middle of a run
         if shrink is None:
@@ -813,7 +836,7 @@ class Sim(ss.Base):
         sc.save(filename=filename, obj=sim)
         return filename
 
-    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
+    def to_json(self, filename=None, keys=None, indent=2, verbose=False, **kwargs):
         """
         Export results and parameters as JSON.
 
@@ -827,11 +850,12 @@ class Sim(ss.Base):
             A dictionary representation of the parameters and/or summary results
             (or write that dictionary to a file)
 
-        **Examples**:
-
+        Examples:
+            ```python
             json = sim.to_json() # Convert to a dict
             sim.to_json('sim.json') # Write everything
             sim.to_json('summary.json', keys='summary') # Just write the summary
+            ```
         """
         # Handle keys
         if keys is None:
@@ -858,7 +882,7 @@ class Sim(ss.Base):
         # Final conversion
         d = sc.jsonify(d, **kwargs)
         if filename is not None:
-            sc.savejson(filename=filename, obj=d)
+            sc.savejson(filename=filename, obj=d, indent=indent)
         return d
 
     def to_yaml(self, filename=None, sort_keys=False, **kwargs):
@@ -869,10 +893,11 @@ class Sim(ss.Base):
             filename (str): the name of the file to write to (default `{sim.label}.yaml`)
             kwargs (dict): passed to `sim.to_json()`
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.Sim(diseases='sis', networks='random').run()
             sim.to_yaml('results.yaml', keys='results')
+            ```
         """
         if filename is None:
             if self.label:
@@ -903,8 +928,8 @@ class Sim(ss.Base):
             style_kw (dict): passed to `ss.style()`, for controlling the detailed plotting style (default "starsim"; other options are "simple", None, or any Matplotlib style)
             **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
 
-        **Examples**:
-
+        Examples:
+            ```python
             sim = ss.Sim(diseases='sis', networks='random').run()
 
             # Basic usage
@@ -915,6 +940,7 @@ class Sim(ss.Base):
 
             # Plot with a custom figure size, font, and style
             sim.plot(figsize=(12,16), font='Raleway', style='fancy')
+            ```
         """
         self.check_results_ready('Please run the sim before plotting')
 
@@ -1003,14 +1029,15 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
 
     Args:
         run (bool): whether to run the sim
-        plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
+        plot (bool): whether to plot the results
         kwargs (dict): passed to `ss.Sim()`
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
+        ```
     """
     pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)
     sim = Sim(pars)
@@ -1041,11 +1068,12 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         output (bool): whether to return the output as a string (otherwise print)
         die (bool): whether to raise an exception if the sims don't match
 
-    **Example**:
-
+    Examples:
+        ```python
         s1 = ss.Sim(rand_seed=1).run()
         s2 = ss.Sim(rand_seed=2).run()
         ss.diff_sims(s1, s2)
+        ```
     '''
 
     # Convert to dict
@@ -1115,7 +1143,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             new = d.sim2
             if multi:
                 old_sem = d.sim1_sem
-                new_sem = d.sim1_sem
+                new_sem = d.sim2_sem
                 sem = old_sem + new_sem
                 small_change = 1.96 # 95% CI, roughly speaking
 
@@ -1195,12 +1223,13 @@ def check_sims_match(*args, full=False):
         args (list): a list of 2 or more sims to compare
         full (bool): if True, return whether each sim matches the first
 
-    **Example**:
-
+    Examples:
+        ```python
         s1 = ss.Sim(diseases='sir', networks='random')
         s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
         s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
         assert ss.check_sims_match(s1, s2, s3)
+        ```
     """
     if len(args) < 2:
         errormsg = 'Must compare at least 2 sims'
@@ -1214,4 +1243,3 @@ def check_sims_match(*args, full=False):
         return matches
     else:
         return all(matches)
-

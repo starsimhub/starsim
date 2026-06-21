@@ -19,10 +19,10 @@ module. No registration or callback is needed.
 Usage::
 
     import starsim as ss
-    import starsim_examples as sse
+    import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=sse.NeonatalSepsis(),
+        diseases=ssl.mnch.NeonatalSepsis(),
         demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
