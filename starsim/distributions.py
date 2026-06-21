@@ -415,6 +415,12 @@ class Dist:
                     kwargs[parkeys[i]] = arg
 
         if kwargs:
+            if dist is None: # Only validate when not also changing the distribution type (which changes the valid parameters)
+                invalid = [k for k in kwargs if k not in self.pars]
+                if invalid:
+                    valid = list(self.pars.keys())
+                    errormsg = f'Cannot set parameter(s) {invalid} for {self}: not a valid parameter name for this distribution. Valid parameters are: {valid}'
+                    raise ValueError(errormsg)
             self.pars.update(kwargs)
             if self.initialized:
                 # If initialized, re-process the pars to update self._pars
