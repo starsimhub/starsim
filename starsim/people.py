@@ -157,11 +157,14 @@ class People:
 
     def brief(self, output=False):
         n = self.n_agents_init
-        alive = len(self)
-        alive_str = f'{alive=:n}; ' if alive != n else ''
-        age_mean = self.age.mean()
-        age_std = self.age.std()
-        out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
+        if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
+            out = f'People({n=:n}; uninitialized)'
+        else:
+            alive = len(self)
+            alive_str = f'{alive=:n}; ' if alive != n else ''
+            age_mean = self.age.mean()
+            age_std = self.age.std()
+            out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
         return out if output else print(out)
     
     def keys(self):
