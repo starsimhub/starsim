@@ -188,8 +188,10 @@ class MultiSim:
         # Handle which sims to use -- same as init_sims()
         if self.sims is None:
             sims = [self.base_sim]  # Wrap in list so it's iterable in the debug loop
+            run_target = self.base_sim # But pass the single sim to multi_run() so n_runs is honored (rather than a 1-element list, which it would run as-is)
         else:
             sims = self.sims
+            run_target = self.sims
 
             # Handle missing labels
             for s, sim in enumerate(sims):
@@ -207,7 +209,7 @@ class MultiSim:
             kwargs.pop('parallel', None)
             run_sims = [single_run(sim, **kwargs) for sim in sims]
         else: # The next line does all the work!
-            run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
+            run_sims = multi_run(run_target, **kwargs) # Output sims are copies due to the pickling during parallelization
 
         # Handle output
         if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
