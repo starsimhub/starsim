@@ -3,7 +3,7 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
-## Version 3.4.0 (2026-06-XX)
+## Version 3.4.0 (2026-06-21)
 This release introduces the **Starsim library** (`starsim.library`), which absorbs the former standalone `starsim_examples` package. This release also adds memory, reproducibility, and usability improvements along with numerous bugfixes.
 
 ### The Starsim library
@@ -25,7 +25,6 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 ### Bugfixes and improvements
 - Whereas before only interventions and analyzers could be provided as pure functions, now any module can; the function becomes the `step()` method, with the sim being the argument to the function. See [Modules.from_func](https://docs.starsim.org/api/modules.html#starsim.modules.Module.from_func) for details.
 - Fixed the `n_female` result not being calculated.
-
 - `dist.set()` now raises a clear error when given a parameter name that is not valid for that distribution, rather than silently ignoring it.
 - Improved the error message shown when a module overrides misses a required `super()` call.
 - Fixed `ss.MultiSim` not respecting `n_runs` in some cases.
