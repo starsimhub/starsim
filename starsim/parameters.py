@@ -444,8 +444,8 @@ class SimPars(Pars):
                 if isinstance(mod, str):
                     mod = dict(type=mod)
 
-                # Convert from class to class instance (used for interventions and analyzers only)
-                if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
+                # Convert from class to class instance (for any module type)
+                if isinstance(mod, type) and issubclass(mod, ss.Module):
                     mod = mod() # Call it to create a class instance
 
                 # Now convert from a dict to a module
@@ -476,17 +476,12 @@ class SimPars(Pars):
                     # Create the module and store it in the list
                     mod = modcls(**mod)
 
-                # Special handling for interventions and analyzers: convert class and function to class instance
-                if modkey in ['interventions', 'analyzers']:
-                    if isinstance(mod, type) and issubclass(mod, expected_cls):
-                        mod = mod()  # Convert from a class to an instance of a class
-                    elif not isinstance(mod, ss.Module) and callable(mod):
-                        mod = expected_cls.from_func(mod)
-
-                # Convert plain modules from functions to actual modules
-                if modkey == 'modules':
-                    if not isinstance(mod, ss.Module) and callable(mod):
-                        mod = ss.Module.from_func(mod)
+                # Convert class and function to class instance (for any module type). expected_cls is the
+                # parent class for this key (e.g. ss.Disease), or ss.Module for 'modules'/'custom'.
+                if isinstance(mod, type) and issubclass(mod, expected_cls):
+                    mod = mod()  # Convert from a class to an instance of a class
+                elif not isinstance(mod, ss.Module) and callable(mod):
+                    mod = expected_cls.from_func(mod)
 
                 # Do final check
                 if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
