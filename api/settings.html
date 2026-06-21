@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.37">
+<meta name="generator" content="quarto-1.9.38">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -69,7 +69,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
 <link href="../api/debugtools.html" rel="next">
-<link href="../api/samples.html" rel="prev">
+<link href="../api/distributions.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -77,14 +77,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-23bbe8b5e4efc1e257f6d59dce478b08.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-ebebdd7f480cdcd9c4984c7f251bfad5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -322,6 +322,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span class="menu-text">User guide</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="../examples.html"> 
+<span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="../conduct.html"> 
 <span class="menu-text">Code of conduct</span></a>
   </li>  
@@ -406,6 +410,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text">parameters</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/results.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">results</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -488,6 +498,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text">calibration</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/samples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">samples</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -525,18 +541,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../api/results.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">results</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/samples.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">samples</span></a>
-  </div>
-</li>
-          <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
   <a href="../api/settings.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">settings</span></a>
   </div>
@@ -561,20 +565,46 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
+        <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="99">
     <h2 id="toc-title">On this page</h2>
    
   <ul>
   <li><a href="#starsim.settings" id="toc-starsim.settings" class="nav-link active" data-scroll-target="#starsim.settings">settings</a>
-  <ul class="collapse">
+  <ul>
   <li><a href="#classes" id="toc-classes" class="nav-link" data-scroll-target="#classes">Classes</a>
+  <ul>
+  <li><a href="#starsim.settings.Options" id="toc-starsim.settings.Options" class="nav-link" data-scroll-target="#starsim.settings.Options">Options</a>
   <ul class="collapse">
-  <li><a href="#starsim.settings.Options" id="toc-starsim.settings.Options" class="nav-link" data-scroll-target="#starsim.settings.Options">Options</a></li>
+  <li><a href="#examples" id="toc-examples" class="nav-link" data-scroll-target="#examples">Examples</a></li>
+  <li><a href="#attributes" id="toc-attributes" class="nav-link" data-scroll-target="#attributes">Attributes</a></li>
+  <li><a href="#methods" id="toc-methods" class="nav-link" data-scroll-target="#methods">Methods</a>
+  <ul class="collapse">
+  <li><a href="#starsim.settings.Options.changed" id="toc-starsim.settings.Options.changed" class="nav-link" data-scroll-target="#starsim.settings.Options.changed">changed</a></li>
+  <li><a href="#starsim.settings.Options.context" id="toc-starsim.settings.Options.context" class="nav-link" data-scroll-target="#starsim.settings.Options.context">context</a></li>
+  <li><a href="#starsim.settings.Options.disp" id="toc-starsim.settings.Options.disp" class="nav-link" data-scroll-target="#starsim.settings.Options.disp">disp</a></li>
+  <li><a href="#starsim.settings.Options.get_default" id="toc-starsim.settings.Options.get_default" class="nav-link" data-scroll-target="#starsim.settings.Options.get_default">get_default</a></li>
+  <li><a href="#starsim.settings.Options.get_orig_options" id="toc-starsim.settings.Options.get_orig_options" class="nav-link" data-scroll-target="#starsim.settings.Options.get_orig_options">get_orig_options</a></li>
+  <li><a href="#starsim.settings.Options.help" id="toc-starsim.settings.Options.help" class="nav-link" data-scroll-target="#starsim.settings.Options.help">help</a></li>
+  <li><a href="#starsim.settings.Options.refresh_references" id="toc-starsim.settings.Options.refresh_references" class="nav-link" data-scroll-target="#starsim.settings.Options.refresh_references">refresh_references</a></li>
+  <li><a href="#starsim.settings.Options.set" id="toc-starsim.settings.Options.set" class="nav-link" data-scroll-target="#starsim.settings.Options.set">set</a></li>
+  <li><a href="#starsim.settings.Options.set_jupyter" id="toc-starsim.settings.Options.set_jupyter" class="nav-link" data-scroll-target="#starsim.settings.Options.set_jupyter">set_jupyter</a></li>
+  <li><a href="#starsim.settings.Options.set_precision" id="toc-starsim.settings.Options.set_precision" class="nav-link" data-scroll-target="#starsim.settings.Options.set_precision">set_precision</a></li>
+  <li><a href="#starsim.settings.Options.set_style" id="toc-starsim.settings.Options.set_style" class="nav-link" data-scroll-target="#starsim.settings.Options.set_style">set_style</a></li>
+  <li><a href="#starsim.settings.Options.to_dict" id="toc-starsim.settings.Options.to_dict" class="nav-link" data-scroll-target="#starsim.settings.Options.to_dict">to_dict</a></li>
+  </ul></li>
+  </ul></li>
   </ul></li>
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
+  <ul>
+  <li><a href="#starsim.settings.load_fonts" id="toc-starsim.settings.load_fonts" class="nav-link" data-scroll-target="#starsim.settings.load_fonts">load_fonts</a>
   <ul class="collapse">
-  <li><a href="#starsim.settings.load_fonts" id="toc-starsim.settings.load_fonts" class="nav-link" data-scroll-target="#starsim.settings.load_fonts">load_fonts</a></li>
-  <li><a href="#starsim.settings.style" id="toc-starsim.settings.style" class="nav-link" data-scroll-target="#starsim.settings.style">style</a></li>
+  <li><a href="#parameters-2" id="toc-parameters-2" class="nav-link" data-scroll-target="#parameters-2">Parameters</a></li>
+  </ul></li>
+  <li><a href="#starsim.settings.style" id="toc-starsim.settings.style" class="nav-link" data-scroll-target="#starsim.settings.style">style</a>
+  <ul class="collapse">
+  <li><a href="#parameters-3" id="toc-parameters-3" class="nav-link" data-scroll-target="#parameters-3">Parameters</a></li>
+  <li><a href="#examples-4" id="toc-examples-4" class="nav-link" data-scroll-target="#examples-4">Examples</a></li>
+  </ul></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -617,9 +647,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Common options are (see also <code>ss.options.help(detailed=True)</code>):</p>
 <pre><code>- verbose:        default verbosity for simulations to use
 - warnings:       how to handle warnings (e.g. print, raise as errors, ignore)</code></pre>
-<p><strong>Examples</strong>:</p>
-<pre><code>ss.options(verbose=True) # Set more verbosity
-ss.options(warnings='error') # Be more strict about warnings</code></pre>
+<section id="examples" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>ss.options(verbose<span class="op">=</span><span class="va">True</span>) <span class="co"># Set more verbosity</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options(warnings<span class="op">=</span><span class="st">'error'</span>) <span class="co"># Be more strict about warnings</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
 <section id="attributes" class="level4">
 <h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
 <table class="caption-top table">
@@ -706,18 +738,20 @@ ss.options(warnings='error') # Be more strict about warnings</code></pre>
 <h5 class="anchored" data-anchor-id="starsim.settings.Options.context">context</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>settings.Options.context(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias to set(), for use in a “with” block.</p>
-<p><strong>Examples</strong>:</p>
-<pre><code># Silence all output
-with ss.options.context(verbose=0):
-    ss.Sim().run()
-
-# Convert warnings to errors
-with ss.options.context(warnings='error'):
-    ss.Sim(location='not a location').init()
-
-# Use with_style(), not context(), for plotting options
-with ss.options.with_style(dpi=50):
-    ss.Sim().run().plot()</code></pre>
+<section id="examples-1" class="level6 doc-section doc-section-examples">
+<h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-1">Examples</h6>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Silence all output</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ss.options.context(verbose<span class="op">=</span><span class="dv">0</span>):</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    ss.Sim().run()</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert warnings to errors</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ss.options.context(warnings<span class="op">=</span><span class="st">'error'</span>):</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    ss.Sim(location<span class="op">=</span><span class="st">'not a location'</span>).init()</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Use with_style(), not context(), for plotting options</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ss.options.with_style(dpi<span class="op">=</span><span class="dv">50</span>):</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    ss.Sim().run().plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
 </section>
 <section id="starsim.settings.Options.disp" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.settings.Options.disp">disp</h5>
@@ -770,8 +804,10 @@ with ss.options.with_style(dpi=50):
 </tr>
 </tbody>
 </table>
-<p><strong>Example</strong>:</p>
-<pre><code>ss.options.help(detailed=True)</code></pre>
+</section>
+<section id="examples-2" class="level6 doc-section doc-section-examples">
+<h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-2">Examples</h6>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>ss.options.<span class="bu">help</span>(detailed<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.settings.Options.refresh_references" class="level5">
@@ -821,27 +857,30 @@ with ss.options.with_style(dpi=50):
 </tr>
 </tbody>
 </table>
-<p><strong>Example</strong>: ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)</p>
+</section>
+<section id="examples-3" class="level6 doc-section doc-section-examples">
+<h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-3">Examples</h6>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>ss.options.<span class="bu">set</span>(dpi<span class="op">=</span><span class="dv">50</span>) <span class="co"># Equivalent to ss.options(dpi=50)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.settings.Options.set_jupyter" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.settings.Options.set_jupyter">set_jupyter</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_jupyter()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_jupyter()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Set Sciris’ Jupyter settings as well</p>
 </section>
 <section id="starsim.settings.Options.set_precision" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.settings.Options.set_precision">set_precision</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_precision()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_precision()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Change the arithmetic precision used by Starsim/NumPy</p>
 </section>
 <section id="starsim.settings.Options.set_style" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.settings.Options.set_style">set_style</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_style()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>settings.Options.set_style()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Change the plotting style</p>
 </section>
 <section id="starsim.settings.Options.to_dict" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.settings.Options.to_dict">to_dict</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>settings.Options.to_dict()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>settings.Options.to_dict()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Pull out only the settings from the options object</p>
 </section>
 </section>
@@ -869,13 +908,13 @@ with ss.options.with_style(dpi=50):
 </table>
 <section id="starsim.settings.load_fonts" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.settings.load_fonts">load_fonts</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>settings.load_fonts(</span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    folder<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="st">'Mulish'</span>,</span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    rebuild<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>settings.load_fonts(</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    folder<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    name<span class="op">=</span><span class="st">'Mulish'</span>,</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    rebuild<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to load custom fonts for plotting – (usually) not for the user.</p>
 <p>Note: if fonts don’t load, try running <code>ss.settings.load_fonts(rebuild=True)</code>, and/or rebooting the system.</p>
 <section id="parameters-2" class="level4 doc-section doc-section-parameters">
@@ -920,7 +959,7 @@ with ss.options.with_style(dpi=50):
 </section>
 <section id="starsim.settings.style" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.settings.style">style</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>settings.style(style<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>settings.style(style<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Set the style in a with block.</p>
 <p>Note: Starsim comes bundled with three fonts: Mulish (default), Raleway, and Rosario. Use <code>font='sans-serif'</code> to use the Matplotlib default font.</p>
 <section id="parameters-3" class="level4 doc-section doc-section-parameters">
@@ -949,18 +988,20 @@ with ss.options.with_style(dpi=50):
 </tr>
 </tbody>
 </table>
-<p><strong>Examples</strong>::</p>
-<pre><code># Create a plot using default Starsim styling
-with ss.style():
-    plt.plot()
-
-# Create a plot using a built-in Matplotlib style
-with ss.style('seaborn-v0_8-whitegrid'):
-    plt.plot()
-
-# Customize the current style
-with ss.style(font='Rosario'):
-    plt.plot()</code></pre>
+</section>
+<section id="examples-4" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-4">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a plot using default Starsim styling</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ss.style():</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    plt.plot()</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a plot using a built-in Matplotlib style</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ss.style(<span class="st">'seaborn-v0_8-whitegrid'</span>):</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    plt.plot()</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Customize the current style</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ss.style(font<span class="op">=</span><span class="st">'Rosario'</span>):</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    plt.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 
 
 </section>
@@ -1384,8 +1425,8 @@ with ss.style(font='Rosario'):
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../api/samples.html" class="pagination-link" aria-label="samples">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">samples</span>
+      <a href="../api/distributions.html" class="pagination-link" aria-label="distributions">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">distributions</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
@@ -1401,7 +1442,7 @@ with ss.style(font='Rosario'):
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.3.4 (2026-05-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.4.0 (2026-06-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
@@ -1414,6 +1455,12 @@ with ss.style(font='Rosario'):
     <li class="nav-item compact">
     <a class="nav-link" href="mailto:info@starsim.org">
       <i class="bi bi-envelope-at-fill" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsimhub.slack.com">
+      <i class="bi bi-slack" role="img">
 </i> 
     </a>
   </li>  

@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 728,
+  "count": 744,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -17,6 +17,30 @@
       "role": "function",
       "priority": "1",
       "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.finalize_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.analyzers.dynamics_by_age.init_post",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.init_post",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.analyzers.dynamics_by_age.plot",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.plot",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.analyzers.dynamics_by_age.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.step",
       "dispname": "-"
     },
     {
@@ -468,6 +492,38 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.calibration.BetaBinomial.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.BetaBinomial.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.BetaBinomial",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.BetaBinomial",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.Binomial.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Binomial.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.Binomial",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Binomial",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.calibration.CalibComponent.eval",
       "domain": "py",
       "role": "function",
@@ -604,6 +660,62 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.calibration.DirichletMultinomial.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.DirichletMultinomial.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.DirichletMultinomial",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.DirichletMultinomial",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.GammaPoisson.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.GammaPoisson.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.GammaPoisson",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.GammaPoisson",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.Normal.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Normal.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.Normal.compute_var",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Normal.compute_var",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.calibration.Normal",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Normal",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.calibration.linear_accum",
       "domain": "py",
       "role": "function",
@@ -692,6 +804,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.debugtools.Debugger.equal_networks",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/debugtools.html#starsim.debugtools.Debugger.equal_networks",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.debugtools.Debugger.equal_pars",
       "domain": "py",
       "role": "function",
@@ -705,6 +825,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/debugtools.html#starsim.debugtools.Debugger.equal_people",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.debugtools.Debugger.equal_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/debugtools.html#starsim.debugtools.Debugger.equal_results",
       "dispname": "-"
     },
     {
@@ -945,86 +1073,6 @@
       "role": "class",
       "priority": "1",
       "uri": "api/demographics.html#starsim.demographics.Demographics",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.add_conception_callback",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.add_conception_callback",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.apply_growth_restriction",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.apply_growth_restriction",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.apply_timing_shift",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.apply_timing_shift",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.compute_birth_weight",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.compute_birth_weight",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.init_pre",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.init_pre",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.on_conception",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.on_conception",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.on_delivery",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.on_delivery",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.reverse_growth_restriction",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.reverse_growth_restriction",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth.reverse_timing_shift",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.reverse_timing_shift",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.demographics.FetalHealth",
-      "domain": "py",
-      "role": "class",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth",
       "dispname": "-"
     },
     {
@@ -1620,6 +1668,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.distributions.Dist.clear_run_cache",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.clear_run_cache",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.distributions.Dist.convert_callable",
       "domain": "py",
       "role": "function",
@@ -1905,6 +1961,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dists.check_seeds",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.Dists.clear_run_caches",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dists.clear_run_caches",
       "dispname": "-"
     },
     {
@@ -2564,6 +2628,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.loop.Loop.plan_metadata",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/loop.html#starsim.loop.Loop.plan_metadata",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.loop.Loop.plot",
       "domain": "py",
       "role": "function",
@@ -2633,6 +2705,14 @@
       "role": "class",
       "priority": "1",
       "uri": "api/loop.html#starsim.loop.Loop",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.loop.LoopEntry",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/loop.html#starsim.loop.LoopEntry",
       "dispname": "-"
     },
     {
@@ -3028,6 +3108,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.networks.DynamicNetwork.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.DynamicNetwork.step",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.networks.DynamicNetwork",
       "domain": "py",
       "role": "class",
@@ -3036,35 +3124,11 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.networks.HouseholdNet.add_pairs",
+      "name": "starsim.networks.MFNet.add_pairs",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet.add_pairs",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.networks.HouseholdNet.create_new_households",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet.create_new_households",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.networks.HouseholdNet.load_dhs",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet.load_dhs",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.networks.HouseholdNet",
-      "domain": "py",
-      "role": "class",
-      "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet",
+      "uri": "api/networks.html#starsim.networks.MFNet.add_pairs",
       "dispname": "-"
     },
     {
@@ -3185,6 +3249,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.MixingPools.remove_uids",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.MixingPools.shrink",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.MixingPools.shrink",
       "dispname": "-"
     },
     {
@@ -3780,6 +3852,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.people.People.finish_step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/people.html#starsim.people.People.finish_step",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.people.People.get_age_dist",
       "domain": "py",
       "role": "function",
@@ -3940,6 +4020,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.people.People.update_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/people.html#starsim.people.People.update_results",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.people.People",
       "domain": "py",
       "role": "class",
@@ -3993,6 +4081,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/products.html#starsim.products.Product.administer",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.products.Product.init_pre",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/products.html#starsim.products.Product.init_pre",
       "dispname": "-"
     },
     {
@@ -4108,6 +4204,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.results.Result.initialized",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.initialized",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.results.Result.key",
       "domain": "py",
       "role": "attribute",
@@ -4129,6 +4233,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/results.html#starsim.results.Result.resample",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.results.Result.summary_method",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.summary_method",
       "dispname": "-"
     },
     {
@@ -5580,6 +5692,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.timeline.Timeline.npts",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.npts",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.timeline.Timeline.ready",
       "domain": "py",
       "role": "attribute",
@@ -5633,6 +5753,14 @@
       "role": "module",
       "priority": "1",
       "uri": "api/timeline.html#starsim.timeline",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.utils.Shrunk",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/utils.html#starsim.utils.Shrunk",
       "dispname": "-"
     },
     {
@@ -5782,7 +5910,7 @@
     {
       "name": "starsim.utils.shrink",
       "domain": "py",
-      "role": "class",
+      "role": "function",
       "priority": "1",
       "uri": "api/utils.html#starsim.utils.shrink",
       "dispname": "-"
@@ -5841,6 +5969,30 @@
       "role": "function",
       "priority": "1",
       "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.finalize_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.dynamics_by_age.init_post",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.init_post",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.dynamics_by_age.plot",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.plot",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.dynamics_by_age.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.dynamics_by_age.step",
       "dispname": "-"
     },
     {
@@ -6252,6 +6404,38 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.BetaBinomial.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.BetaBinomial.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.BetaBinomial",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.BetaBinomial",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Binomial.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Binomial.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Binomial",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Binomial",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.CalibComponent.eval",
       "domain": "py",
       "role": "function",
@@ -6388,6 +6572,62 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.DirichletMultinomial.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.DirichletMultinomial.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.DirichletMultinomial",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.DirichletMultinomial",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.GammaPoisson.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.GammaPoisson.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.GammaPoisson",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.GammaPoisson",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Normal.compute_nll",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Normal.compute_nll",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Normal.compute_var",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Normal.compute_var",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Normal",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/calibration.html#starsim.calibration.Normal",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.linear_accum",
       "domain": "py",
       "role": "function",
@@ -6460,6 +6700,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Debugger.equal_networks",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/debugtools.html#starsim.debugtools.Debugger.equal_networks",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Debugger.equal_pars",
       "domain": "py",
       "role": "function",
@@ -6473,6 +6721,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/debugtools.html#starsim.debugtools.Debugger.equal_people",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Debugger.equal_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/debugtools.html#starsim.debugtools.Debugger.equal_results",
       "dispname": "-"
     },
     {
@@ -6705,86 +6961,6 @@
       "role": "class",
       "priority": "1",
       "uri": "api/demographics.html#starsim.demographics.Demographics",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.add_conception_callback",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.add_conception_callback",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.apply_growth_restriction",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.apply_growth_restriction",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.apply_timing_shift",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.apply_timing_shift",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.compute_birth_weight",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.compute_birth_weight",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.init_pre",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.init_pre",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.on_conception",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.on_conception",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.on_delivery",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.on_delivery",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.reverse_growth_restriction",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.reverse_growth_restriction",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth.reverse_timing_shift",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth.reverse_timing_shift",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.FetalHealth",
-      "domain": "py",
-      "role": "class",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.FetalHealth",
       "dispname": "-"
     },
     {
@@ -7364,6 +7540,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Dist.clear_run_cache",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.clear_run_cache",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Dist.convert_callable",
       "domain": "py",
       "role": "function",
@@ -7625,6 +7809,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dists.check_seeds",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Dists.clear_run_caches",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dists.clear_run_caches",
       "dispname": "-"
     },
     {
@@ -8260,6 +8452,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Loop.plan_metadata",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/loop.html#starsim.loop.Loop.plan_metadata",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Loop.plot",
       "domain": "py",
       "role": "function",
@@ -8700,6 +8900,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.DynamicNetwork.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.DynamicNetwork.step",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.DynamicNetwork",
       "domain": "py",
       "role": "class",
@@ -8708,35 +8916,11 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.HouseholdNet.add_pairs",
+      "name": "starsim.MFNet.add_pairs",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet.add_pairs",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.HouseholdNet.create_new_households",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet.create_new_households",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.HouseholdNet.load_dhs",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet.load_dhs",
-      "dispname": "-"
-    },
-    {
-      "name": "starsim.HouseholdNet",
-      "domain": "py",
-      "role": "class",
-      "priority": "1",
-      "uri": "api/networks.html#starsim.networks.HouseholdNet",
+      "uri": "api/networks.html#starsim.networks.MFNet.add_pairs",
       "dispname": "-"
     },
     {
@@ -8857,6 +9041,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.MixingPools.remove_uids",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.MixingPools.shrink",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.MixingPools.shrink",
       "dispname": "-"
     },
     {
@@ -9404,6 +9596,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.People.finish_step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/people.html#starsim.people.People.finish_step",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.People.get_age_dist",
       "domain": "py",
       "role": "function",
@@ -9564,6 +9764,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.People.update_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/people.html#starsim.people.People.update_results",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.People",
       "domain": "py",
       "role": "class",
@@ -9609,6 +9817,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/products.html#starsim.products.Product.administer",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Product.init_pre",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/products.html#starsim.products.Product.init_pre",
       "dispname": "-"
     },
     {
@@ -9716,6 +9932,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Result.initialized",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.initialized",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Result.key",
       "domain": "py",
       "role": "attribute",
@@ -9737,6 +9961,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/results.html#starsim.results.Result.resample",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Result.summary_method",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.summary_method",
       "dispname": "-"
     },
     {
@@ -10908,6 +11140,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Timeline.npts",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.npts",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Timeline.ready",
       "domain": "py",
       "role": "attribute",
@@ -11057,6 +11297,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/utils.html#starsim.utils.show",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.shrink",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/utils.html#starsim.utils.shrink",
       "dispname": "-"
     },
     {

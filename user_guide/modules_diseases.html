@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.37">
+<meta name="generator" content="quarto-1.9.38">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -69,7 +69,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
 <link href="../user_guide/modules_networks.html" rel="next">
-<link href="../user_guide/basics_parameters.html" rel="prev">
+<link href="../user_guide/basics_results.html" rel="prev">
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -77,14 +77,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-23bbe8b5e4efc1e257f6d59dce478b08.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-acf12a64177840b8d86f2d4f01b2e9fb.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-ebebdd7f480cdcd9c4984c7f251bfad5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-354dbb5c8daf0de391636ff03b25cfd9.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -121,6 +121,35 @@ gtag('js', new Date());
 gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../assets/styles.css">
 </head>
@@ -322,6 +351,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span class="menu-text">User guide</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="../examples.html"> 
+<span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="../conduct.html"> 
 <span class="menu-text">Code of conduct</span></a>
   </li>  
@@ -497,6 +530,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text">Parameters</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/basics_results.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Results</span></a>
+  </div>
+</li>
       </ul>
   </li>
           <li class="sidebar-item sidebar-item-section">
@@ -534,6 +573,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_products.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Products</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_analyzers.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Analyzers</span></a>
   </div>
@@ -542,6 +587,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_connectors.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Connectors</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Adding new modules</span></a>
   </div>
 </li>
       </ul>
@@ -638,6 +689,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../examples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Examples</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../conduct.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text"><strong>Code of conduct</strong></span></a>
   </div>
@@ -654,18 +711,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
+        <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="99">
     <h2 id="toc-title">On this page</h2>
    
   <ul>
   <li><a href="#disease-class-architecture" id="toc-disease-class-architecture" class="nav-link active" data-scroll-target="#disease-class-architecture">Disease class architecture</a>
-  <ul class="collapse">
+  <ul>
   <li><a href="#ss.disease" id="toc-ss.disease" class="nav-link" data-scroll-target="#ss.disease"><code>ss.Disease</code></a></li>
   <li><a href="#ss.infection" id="toc-ss.infection" class="nav-link" data-scroll-target="#ss.infection"><code>ss.Infection</code></a></li>
   </ul></li>
   <li><a href="#key-implementation-methods" id="toc-key-implementation-methods" class="nav-link" data-scroll-target="#key-implementation-methods">Key implementation methods</a></li>
+  <li><a href="#core-states-and-parameters" id="toc-core-states-and-parameters" class="nav-link" data-scroll-target="#core-states-and-parameters">Core states and parameters</a></li>
+  <li><a href="#susceptibility-and-transmissibility" id="toc-susceptibility-and-transmissibility" class="nav-link" data-scroll-target="#susceptibility-and-transmissibility">Susceptibility and transmissibility</a></li>
   <li><a href="#implementation-patterns" id="toc-implementation-patterns" class="nav-link" data-scroll-target="#implementation-patterns">Implementation patterns</a>
-  <ul class="collapse">
+  <ul>
   <li><a href="#pattern-1-extending-existing-diseases" id="toc-pattern-1-extending-existing-diseases" class="nav-link" data-scroll-target="#pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</a></li>
   <li><a href="#pattern-2-adding-new-states" id="toc-pattern-2-adding-new-states" class="nav-link" data-scroll-target="#pattern-2-adding-new-states">Pattern 2: Adding new states</a></li>
   </ul></li>
@@ -695,6 +754,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </header>
 
 
+<p>Diseases are the core of most Starsim models: they define the states an agent can be in (e.g.&nbsp;susceptible, infected, recovered), how agents progress between those states, and — for communicable diseases — how infection spreads across the <a href="../user_guide/modules_networks.html">network</a>. This page covers the disease class hierarchy, the key states and parameters every infection shares (including <code>rel_sus</code> and <code>rel_trans</code>), and the patterns for customizing or building your own disease.</p>
+<p>For a learning-oriented introduction, see <a href="../tutorials/t4_diseases.html">Tutorial 4 - Diseases</a>.</p>
 <section id="disease-class-architecture" class="level2">
 <h2 class="anchored" data-anchor-id="disease-class-architecture">Disease class architecture</h2>
 <p>Starsim has a two-tier disease class hierarchy:</p>
@@ -770,58 +831,179 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tbody>
 </table>
 </section>
+<section id="core-states-and-parameters" class="level2">
+<h2 class="anchored" data-anchor-id="core-states-and-parameters">Core states and parameters</h2>
+<p>Every <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a> shares a common set of per-agent states and parameters that govern transmission. The most important are:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>susceptible</code></td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a></td>
+<td>Whether an agent can be infected (default <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a>)</td>
+</tr>
+<tr class="even">
+<td><code>infected</code></td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a></td>
+<td>Whether an agent is currently infected</td>
+</tr>
+<tr class="odd">
+<td><code>infectious</code></td>
+<td>property</td>
+<td>Whether an agent can currently transmit (often <code>== infected</code>)</td>
+</tr>
+<tr class="even">
+<td><code>rel_sus</code></td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a></td>
+<td>Per-agent <strong>relative susceptibility</strong> (default <code>1.0</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>rel_trans</code></td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a></td>
+<td>Per-agent <strong>relative transmissibility</strong> (default <code>1.0</code>)</td>
+</tr>
+<tr class="even">
+<td><code>ti_infected</code></td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a></td>
+<td>Timestep at which each agent was infected</td>
+</tr>
+<tr class="odd">
+<td><code>beta</code></td>
+<td>parameter</td>
+<td>Base transmission probability per contact (per network)</td>
+</tr>
+<tr class="even">
+<td><code>init_prev</code></td>
+<td>parameter</td>
+<td>Initial fraction of the population infected</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="susceptibility-and-transmissibility" class="level2">
+<h2 class="anchored" data-anchor-id="susceptibility-and-transmissibility">Susceptibility and transmissibility</h2>
+<p>When <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a> processes transmission, the probability that infection passes along a single network edge from an infectious source to a susceptible target is, in essence:</p>
+<p><span class="math display">\[p_{\text{transmit}} = \beta \times \texttt{rel\_trans}_{\text{source}} \times \texttt{rel\_sus}_{\text{target}}\]</span></p>
+<p>where <span class="math inline">\(\beta\)</span> is the per-contact transmission probability for that network (scaled to the timestep). This factorization is the key invariant to understand:</p>
+<ul>
+<li>Only <strong>infectious</strong> agents contribute their <code>rel_trans</code>; everyone else contributes 0.</li>
+<li>Only <strong>susceptible</strong> agents contribute their <code>rel_sus</code>; everyone else contributes 0.</li>
+<li><code>rel_sus</code> and <code>rel_trans</code> both default to <code>1.0</code>, so by default transmission is governed entirely by <code>beta</code> and the network structure.</li>
+</ul>
+<p>These two arrays are the standard “knobs” that the rest of the framework turns to represent heterogeneity in risk. For example:</p>
+<ul>
+<li>A <a href="../user_guide/modules_products.html">vaccine product</a> typically reduces <code>rel_sus</code> for vaccinated agents.</li>
+<li>A treatment might reduce <code>rel_trans</code> for treated agents.</li>
+<li>A <a href="../user_guide/modules_connectors.html">connector</a> between two diseases might increase <code>rel_sus</code> to one disease for agents infected with another (co-infection).</li>
+</ul>
+<p>Because they’re ordinary per-agent arrays, you can also set them directly. Here we fully protect everyone under 20 by setting their <code>rel_sus</code> to 0, and see that they avoid infection (aside from the handful seeded as infected at the start via <code>init_prev</code>):</p>
+<div id="113b2e79" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(init_prev<span class="op">=</span><span class="fl">0.01</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>, copy_inputs<span class="op">=</span><span class="va">False</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>sim.init()</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Fully protect under-20s: rel_sus = 0 means they cannot acquire infection</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>young <span class="op">=</span> (sim.people.age <span class="op">&lt;</span> <span class="dv">20</span>).uids</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>older <span class="op">=</span> (sim.people.age <span class="op">&gt;=</span> <span class="dv">20</span>).uids</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>sir.rel_sus[young] <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>ever_infected <span class="op">=</span> sir.ti_infected.notnan</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Protected (under 20): </span><span class="sc">{</span>ever_infected[young]<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss"> of </span><span class="sc">{</span><span class="bu">len</span>(young)<span class="sc">}</span><span class="ss"> ever infected'</span>)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Unprotected (20+):    </span><span class="sc">{</span>ever_infected[older]<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss"> of </span><span class="sc">{</span><span class="bu">len</span>(older)<span class="sc">}</span><span class="ss"> ever infected'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Protected (under 20): 7 of 668 ever infected
+Unprotected (20+):    1277 of 1332 ever infected</code></pre>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>beta</code> can be specified per network and per direction. For sexually transmitted infections, for example, <code>beta={'mf': [0.25, 0.15]}</code> sets different male→female and female→male transmission probabilities on the <code>mf</code> network. See the <a href="../user_guide/modules_networks.html">Networks</a> page for more.</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>beta</code> is a per-contact transmission <strong>probability</strong> — a bare float (or a dict/list of floats), not a rate. Do <strong>not</strong> wrap it in <code>ss.peryear()</code> or <code>ss.perday()</code>: doing so reinterprets the number as a hazard and rescales it by the timestep, corrupting the transmission scale. Use <code>beta=0.1</code>, not <code>beta=ss.perday(0.1)</code>. (Most other per-agent event parameters, such as <code>p_death</code>, <em>are</em> probabilities or distributions; the time-aware rate types are for quantities like birth and death <em>rates</em>. See <a href="../user_guide/advanced_time.html">Time</a>.)</p>
+</div>
+</div>
+</section>
 <section id="implementation-patterns" class="level2">
 <h2 class="anchored" data-anchor-id="implementation-patterns">Implementation patterns</h2>
 <section id="pattern-1-extending-existing-diseases" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</h3>
 <p>When you need to modify an existing disease model, inherit from it and override specific methods:</p>
-<div id="412eb255" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyCustomSIR(ss.SIR):</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom parameters</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(my_param<span class="op">=</span><span class="fl">0.5</span>)</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom progression logic</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Additional custom logic here</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="d7ca741f" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyCustomSIR(ss.SIR):</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom parameters</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(my_param<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom progression logic</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Additional custom logic here</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
 <section id="pattern-2-adding-new-states" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-2-adding-new-states">Pattern 2: Adding new states</h3>
 <p>To add states to an existing disease:</p>
-<div id="ba0af644" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SIR):</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add new parameters</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(dur_exp<span class="op">=</span>ss.lognorm_ex(<span class="fl">0.5</span>))</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add new states</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'exposed'</span>, label<span class="op">=</span><span class="st">'Exposed'</span>),</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>            ss.FloatArr(<span class="st">'ti_exposed'</span>, label<span class="op">=</span><span class="st">'Time of exposure'</span>),</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">@property</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> infectious(<span class="va">self</span>):</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define who can transmit (both infected and exposed)</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.infected <span class="op">|</span> <span class="va">self</span>.exposed</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_state(<span class="va">self</span>):</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Call parent state updates first</span></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_state()</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom state transitions</span></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        transitioning <span class="op">=</span> <span class="va">self</span>.exposed <span class="op">&amp;</span> (<span class="va">self</span>.ti_infected <span class="op">&lt;=</span> <span class="va">self</span>.ti)</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.exposed[transitioning] <span class="op">=</span> <span class="va">False</span></span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.infected[transitioning] <span class="op">=</span> <span class="va">True</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="dc5a1ffe" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SIR):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add new parameters</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(dur_exp<span class="op">=</span>ss.lognorm_ex(<span class="fl">0.5</span>))</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add new states</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'exposed'</span>, label<span class="op">=</span><span class="st">'Exposed'</span>),</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>            ss.FloatArr(<span class="st">'ti_exposed'</span>, label<span class="op">=</span><span class="st">'Time of exposure'</span>),</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">@property</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> infectious(<span class="va">self</span>):</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define who can transmit (both infected and exposed)</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.infected <span class="op">|</span> <span class="va">self</span>.exposed</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_state(<span class="va">self</span>):</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Call parent state updates first</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_state()</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom state transitions</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>        transitioning <span class="op">=</span> <span class="va">self</span>.exposed <span class="op">&amp;</span> (<span class="va">self</span>.ti_infected <span class="op">&lt;=</span> <span class="va">self</span>.ti)</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.exposed[transitioning] <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.infected[transitioning] <span class="op">=</span> <span class="va">True</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 
 
@@ -1244,8 +1426,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../user_guide/basics_parameters.html" class="pagination-link" aria-label="Parameters">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Parameters</span>
+      <a href="../user_guide/basics_results.html" class="pagination-link" aria-label="Results">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Results</span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
@@ -1261,7 +1443,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.3.4 (2026-05-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.4.0 (2026-06-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
@@ -1274,6 +1456,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <li class="nav-item compact">
     <a class="nav-link" href="mailto:info@starsim.org">
       <i class="bi bi-envelope-at-fill" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsimhub.slack.com">
+      <i class="bi bi-slack" role="img">
 </i> 
     </a>
   </li>  
