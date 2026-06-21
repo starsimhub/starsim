@@ -23,9 +23,9 @@ class ndict(sc.objdict):
 
     Examples:
         ```python
-        networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
-        networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
+        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):

@@ -154,7 +154,7 @@ The submodules of the Starsim folder are as follows:
 - `utils.py`: Helper functions.
 - `version.py`: Version, date, and license information.
 
-Starsim also includes a `starsim_examples` folder, which contains definitions of different examples of diseases, including STIs, Ebola, and cholera. **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. [STIsim](https://stisim.org).
+Starsim also includes a `starsim.library` subpackage (imported as `import starsim.library as ssl`), which contains example and reference modules: diseases (e.g. `ssl.diseases.Cholera`, `ssl.diseases.Ebola`, `ssl.diseases.HIV`), networks (e.g. `ssl.networks.HouseholdNet`), and maternal/newborn/child health modules (e.g. `ssl.mnch.FetalHealth`). **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. [STIsim](https://stisim.org).
 
 ## Contributing
 

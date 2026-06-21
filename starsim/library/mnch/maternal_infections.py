@@ -32,10 +32,10 @@ in ``birth_outcomes``.
 Usage::
 
     import starsim as ss
-    import starsim_examples as sse
+    import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=sse.CongenitalDisease(beta=0.2, init_prev=0.2),
+        diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
         demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )

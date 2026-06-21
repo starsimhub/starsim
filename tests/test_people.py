@@ -4,7 +4,7 @@ Test the People object
 import numpy as np
 import sciris as sc
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 import matplotlib.pyplot as plt
 
 sc.options.interactive = False # Assume not running interactively
@@ -33,7 +33,7 @@ def test_people():
     ppl = ss.People(small, extra_states=extra_states)
 
     # Possible to add a module to people outside a sim (not typical workflow)
-    ppl.add_module(sse.HIV())
+    ppl.add_module(ssl.diseases.HIV())
 
     return ppl
 
@@ -78,15 +78,15 @@ def test_ppl_construction(do_plot=False):
     }
     sim_pars = {'networks': [ss.MFNet(**mf_pars)], 'n_agents': small}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}}
-    gon = sse.Gonorrhea(**gon_pars)
+    gon = ssl.diseases.HIV(**gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.init()
     sim.run()
     if do_plot:
         plt.figure()
-        plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
-        plt.title('Number of gonorrhea infections')
+        plt.plot(sim.timevec, sim.results.hiv.n_infected)
+        plt.title('Number of HIV infections')
 
     return sim
 

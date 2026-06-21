@@ -27,7 +27,7 @@ def make_sim(run=False, **kwargs):
     via pytest), also plot the sim by default.
     """
     diseases = ['sir', 'sis']
-    networks = ['random', 'mf', 'maternal']
+    networks = ['random', 'mf', 'prenatal']
     sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
 
     # Optionally run and plot

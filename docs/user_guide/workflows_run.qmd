@@ -120,7 +120,7 @@ def make_sim(seed=1, n_agents=None, start=1990, stop=2030, debug=False, add_stis
         p_pair_form=0.58,
         condom_data=pd.read_csv(f'data/condom_use.csv'),
     )
-    maternal = ss.MaternalNet(dt='month')
+    maternal = ss.PrenatalNet(dt='month')
 
     # Diseases
     hiv = make_hiv()

@@ -6,7 +6,7 @@ Test networks
 import sciris as sc
 import numpy as np
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 
@@ -33,7 +33,7 @@ def test_manual():
     # Create a maternal network
     sim = ss.Sim(n_agents=n_agents)
     sim.init()
-    nw2 = ss.MaternalNet()
+    nw2 = ss.PrenatalNet()
     nw2.init_pre(sim)
     nw2.add_pairs(mother_uids=[1, 2, 3], unborn_uids=[100, 101, 102])
 
@@ -152,12 +152,12 @@ def test_erdosrenyi():
 
     # Manual creation
     p = 0.1
-    nw1 = sse.ErdosRenyiNet(p=p)
+    nw1 = ssl.networks.ErdosRenyiNet(p=p)
     ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
-    ss.register_modules(sse)
+    ss.register_modules(ssl.networks)
     s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
     nw2 = s2.networks[0]
 
@@ -181,7 +181,7 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    nw1 = sse.DiskNet()
+    nw1 = ssl.networks.DiskNet()
     s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
@@ -197,7 +197,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = sse.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
+    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -237,7 +237,7 @@ def test_static():
 def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
-    network = sse.NullNet()
+    network = ssl.networks.NullNet()
     sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
@@ -265,8 +265,8 @@ def test_household():
     sc.heading('Testing HouseholdNet...')
     dhs_data = make_dhs_data(n=small)
 
-    # Test ss.HouseholdNet (static)
-    household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=False)
+    # Test ssl.networks.HouseholdNet (static)
+    household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False)
     sim = ss.Sim(n_agents=small, diseases='sis', networks=household)
     sim.run()
 
@@ -275,7 +275,7 @@ def test_household():
 
     # Test with sexes provided
     dhs_data_sex = make_dhs_data(include_sexes=True)
-    household2 = ss.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
+    household2 = ssl.networks.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
     sim2 = ss.Sim(n_agents=small, diseases='sis', networks=household2)
     sim2.run()
 
@@ -287,7 +287,7 @@ def test_dynamic_household():
     sc.heading('Testing dynamic HouseholdNet...')
     dhs_data = make_dhs_data(n=medium)
 
-    household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=True)
+    household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
     preg = ss.Pregnancy()
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
