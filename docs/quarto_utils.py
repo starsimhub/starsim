@@ -248,7 +248,7 @@ def execute_notebooks(*args, folders=None, tidy=True, debug=False):
             notebooks += [folder_path / f for f in sc.getfilepaths(folder_path, '*.qmd')]
 
     # Wrapper to chdir before execution
-    def execute(i, path, pause=1.0):
+    def execute(i, path, pause=0.5):
         delay = i*pause
         sc.timedsleep(delay) # For some reason the interval argument to parallelize() isn't working
         return execute_notebook(path, tidy=tidy)
