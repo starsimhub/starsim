@@ -91,7 +91,7 @@ Starsim provides different network types for different transmission scenarios:
     - `PostnatalNet`: Birth/breastfeeding transmission (HIV, HBV)
 - **For special purposes:**
     - `StaticNet`: Use existing NetworkX graphs
-    - `DiskNet`: Proof-of-concept spatial/geographic transmission  
+    - `DiskNet`: Proof-of-concept spatial/geographic transmission
     - `NullNet`: Testing/debugging without transmission
     - `ErdosRenyiNet`: Theoretical network analysis
 

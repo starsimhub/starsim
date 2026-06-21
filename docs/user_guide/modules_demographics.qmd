@@ -108,7 +108,7 @@ msim.plot()
 
 - **Demographics modules** enable realistic population dynamics in Starsim:
     - **Births**: Simple constant or time-varying birth rates
-    - **Deaths**: Background mortality separate from disease deaths  
+    - **Deaths**: Background mortality separate from disease deaths
     - **Pregnancy**: Detailed pregnancy modeling with maternal/neonatal outcomes
 - **Key considerations:**
     - Use `demographics=True` for default birth/death rates

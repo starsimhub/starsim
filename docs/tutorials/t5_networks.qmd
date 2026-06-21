@@ -38,7 +38,7 @@ import matplotlib.pyplot as plt
 random = ss.RandomNet()
 ```
 
-The network we just made stores two very important things: the list of contacts (found in `random.edges`) and the parameters (`random.pars`).  
+The network we just made stores two very important things: the list of contacts (found in `random.edges`) and the parameters (`random.pars`).
 
 If we just make a network on its own like this, it's not very interesting. Like all components of Starsim, it needs to be initialized within a `sim` before the database of contacts gets populated:
 

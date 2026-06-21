@@ -273,16 +273,12 @@ p = ss.prob(0.8, ss.years(1))
 
 indicates a 80% chance of an event occurring in one year.
 
-When multiplied by the original denominator, 1 year in this case, the
-probability remains unchanged, 80%:
+When multiplied by the original denominator, 1 year in this case, the probability remains unchanged, 80%:
 ```py
 p*ss.years(1) == 0.8
 ```
 
-Multiplying `p` by `ss.years(2)` does not simply double the
-probability to 160% (which is not possible), but rather returns a new
-probability of 96% representing the chance of the event occurring at least
-once over the new duration of two years:
+Multiplying `p` by `ss.years(2)` does not simply double the probability to 160% (which is not possible), but rather returns a new probability of 96% representing the chance of the event occurring at least once over the new duration of two years:
 ```py
 p * ss.years(2) == 0.96
 ```
@@ -290,14 +286,7 @@ p * ss.years(2) == 0.96
 :::{.callout-tip}
 ## `ss.prob` vs `ss.bernoulli`
 
-`ss.prob` (and `ss.probperyear`, etc.) is a *number* — a time-aware scalar you can
-multiply and convert between time periods. `ss.bernoulli` is a *distribution* you
-*sample per agent*: `dist.filter(uids)` returns the UIDs for which the trial
-succeeded. When you need to decide an outcome for each agent ("who gets infected, who
-dies, who is vaccinated?"), use `ss.bernoulli`, not `ss.prob`. Use `ss.prob` when you
-need the probability itself as a value — for example, a per-period probability that
-will be scaled or fed into a distribution. See
-[Distributions](advanced_distributions.qmd).
+`ss.prob` (and `ss.probperyear`, etc.) is a *number* — a time-aware scalar you can multiply and convert between time periods. `ss.bernoulli` is a *distribution* you *sample per agent*: `dist.filter(uids)` returns the UIDs for which the trial succeeded. When you need to decide an outcome for each agent ("who gets infected, who dies, who is vaccinated?"), use `ss.bernoulli`, not `ss.prob`. Use `ss.prob` when you need the probability itself as a value — for example, a per-period probability that will be scaled or fed into a distribution. See [Distributions](advanced_distributions.qmd).
 :::
 
 #### Probability rates

@@ -3,21 +3,13 @@ title: Adding new modules
 jupyter: python3
 ---
 
-Most of the science in a Starsim model lives in its **modules**. Diseases,
-networks, demographics, interventions, analyzers, and connectors are all modules,
-and they all share the same structure and lifecycle. Once you understand that
-shared structure, you can write your own module to do almost anything.
+Most of the science in a Starsim model lives in its **modules**. Diseases, networks, demographics, interventions, analyzers, and connectors are all modules, and they all share the same structure and lifecycle. Once you understand that shared structure, you can write your own module to do almost anything.
 
-This page covers the anatomy of a module, the initialization and execution
-lifecycle, and a complete worked example. For module-type-specific guidance, see
-the dedicated pages ([Diseases](modules_diseases.qmd),
-[Networks](modules_networks.qmd), [Interventions](modules_interventions.qmd), etc.).
+This page covers the anatomy of a module, the initialization and execution lifecycle, and a complete worked example. For module-type-specific guidance, see the dedicated pages ([Diseases](modules_diseases.qmd), [Networks](modules_networks.qmd), [Interventions](modules_interventions.qmd), etc.).
 
 ## Choosing a base class
 
-Rather than subclassing `ss.Module` directly, you almost always want to subclass one
-of the six module types, so that your module is run at the right point in the
-simulation loop and ends up in the right place on the `Sim`:
+Rather than subclassing `ss.Module` directly, you almost always want to subclass one of the six module types, so that your module is run at the right point in the simulation loop and ends up in the right place on the `Sim`:
 
 | Base class | Use for | Added to `Sim` via |
 |------------|---------|--------------------|
@@ -28,20 +20,15 @@ simulation loop and ends up in the right place on the `Sim`:
 | `ss.Analyzer` | Recording results without changing anything | `analyzers=` |
 | `ss.Connector` | Interactions between modules | `connectors=` |
 
-If your module genuinely doesn't fit any of these, you can subclass `ss.Module`
-directly, but this is rare.
+If your module genuinely doesn't fit any of these, you can subclass `ss.Module` directly, but this is rare.
 
 ## Anatomy of a module
 
-A typical module defines some combination of the following. The only part that's
-strictly required is a `step()` method (or, for some base classes, the methods they
-expect you to override).
+A typical module defines some combination of the following. The only part that's strictly required is a `step()` method (or, for some base classes, the methods they expect you to override).
 
 ### Parameters: `define_pars()` and `update_pars()`
 
-In `__init__()`, call `super().__init__()` *first* with no arguments, then declare
-your parameters with their defaults via `self.define_pars()`, then apply any
-user-supplied overrides with `self.update_pars()`:
+In `__init__()`, call `super().__init__()` *first* with no arguments, then declare your parameters with their defaults via `self.define_pars()`, then apply any user-supplied overrides with `self.update_pars()`:
 
 ```python
 class MyModule(ss.Intervention):
@@ -55,16 +42,11 @@ class MyModule(ss.Intervention):
         return
 ```
 
-`update_pars()` raises an error if you try to set a parameter that wasn't declared
-in `define_pars()`, which catches typos early. Rates and durations should use
-Starsim's [time parameters](advanced_time.qmd) (e.g. `ss.peryear`, `ss.dur`) so they
-scale correctly with the timestep.
+`update_pars()` raises an error if you try to set a parameter that wasn't declared in `define_pars()`, which catches typos early. Rates and durations should use Starsim's [time parameters](advanced_time.qmd) (e.g. `ss.peryear`, `ss.dur`) so they scale correctly with the timestep.
 
 ### States: `define_states()`
 
-States are per-agent arrays that persist across timesteps. Declare them with
-`self.define_states()`, passing `ss.Arr` objects such as `ss.BoolState`,
-`ss.FloatArr`, or `ss.State`:
+States are per-agent arrays that persist across timesteps. Declare them with `self.define_states()`, passing `ss.Arr` objects such as `ss.BoolState`, `ss.FloatArr`, or `ss.State`:
 
 ```python
 self.define_states(
@@ -73,15 +55,11 @@ self.define_states(
 )
 ```
 
-Each state becomes an attribute (`self.vaccinated`) and is automatically connected to
-the `People` object. A handy shortcut: every `ss.BoolState` automatically generates a
-corresponding `n_<name>` count result (e.g. `n_vaccinated`), so you often don't need
-to define that result yourself.
+Each state becomes an attribute (`self.vaccinated`) and is automatically connected to the `People` object. A handy shortcut: every `ss.BoolState` automatically generates a corresponding `n_<name>` count result (e.g. `n_vaccinated`), so you often don't need to define that result yourself.
 
 ### Results: `define_results()`
 
-To record custom outputs, override `init_results()` and call `self.define_results()`
-with `ss.Result` objects. Results are time series the length of the simulation:
+To record custom outputs, override `init_results()` and call `self.define_results()` with `ss.Result` objects. Results are time series the length of the simulation:
 
 ```python
 def init_results(self):
@@ -92,14 +70,11 @@ def init_results(self):
     return
 ```
 
-Set `scale=True` for extensive quantities (counts that should scale with population
-size) and `scale=False` for intensive ones (rates, fractions).
+Set `scale=True` for extensive quantities (counts that should scale with population size) and `scale=False` for intensive ones (rates, fractions).
 
 ### The work: `step()`
 
-`step()` is called once per timestep and is where the module does its job. Inside it,
-`self.sim` gives access to the whole simulation, `self.ti` is the current timestep
-index, and `self.t.dt` is the module's timestep:
+`step()` is called once per timestep and is where the module does its job. Inside it, `self.sim` gives access to the whole simulation, `self.ti` is the current timestep index, and `self.t.dt` is the module's timestep:
 
 ```python
 def step(self):
@@ -114,22 +89,14 @@ def step(self):
 When a `Sim` initializes and runs, each module passes through these stages:
 
 1. **`__init__()`** — you create the module; parameters and states are declared.
-2. **`init_pre(sim)`** — called once during `sim.init()`. Links the module to the
-   sim and `People`, initializes the timeline, and calls `init_results()`. You rarely
-   override this, but if you do, call `super().init_pre(sim)`.
-3. **`init_post()`** — called after distributions are initialized; use this for setup
-   that needs initial agent values (e.g. setting initial states).
+2. **`init_pre(sim)`** — called once during `sim.init()`. Links the module to the sim and `People`, initializes the timeline, and calls `init_results()`. You rarely override this, but if you do, call `super().init_pre(sim)`.
+3. **`init_post()`** — called after distributions are initialized; use this for setup that needs initial agent values (e.g. setting initial states).
 4. **`step()`** — called every timestep while the sim runs.
-5. **`finalize()`** / **`finalize_results()`** — called once at the end, e.g. to
-   normalize accumulated results.
+5. **`finalize()`** / **`finalize_results()`** — called once at the end, e.g. to normalize accumulated results.
 
 ## A complete example
 
-Here's a self-contained custom intervention that vaccinates a fraction of
-susceptible agents each year, conferring partial protection. It illustrates
-parameters (including a time parameter and a distribution), a state, use of
-`self.sim` and `self.t.dt` inside `step()`, and the automatically generated
-`n_vaccinated` result:
+Here's a self-contained custom intervention that vaccinates a fraction of susceptible agents each year, conferring partial protection. It illustrates parameters (including a time parameter and a distribution), a state, use of `self.sim` and `self.t.dt` inside `step()`, and the automatically generated `n_vaccinated` result:
 
 ```{python}
 import starsim as ss
@@ -174,8 +141,7 @@ msim = ss.parallel(s1, s2)
 msim.plot('sis_n_infected')
 ```
 
-Because we defined `vaccinated` as a `ss.BoolState`, the count is automatically
-available as a result, so we can plot the vaccination rollout without any extra code:
+Because we defined `vaccinated` as a `ss.BoolState`, the count is automatically available as a result, so we can plot the vaccination rollout without any extra code:
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -190,13 +156,9 @@ plt.show()
 
 ## Modules from functions
 
-For quick, one-off logic you don't need a full class. Any module type can be created
-from a plain function that takes the sim as its only argument: the function becomes the
-module's `step()` and is called once per timestep. This is the mechanism behind
-"function-based" interventions and analyzers.
+For quick, one-off logic you don't need a full class. Any module type can be created from a plain function that takes the sim as its only argument: the function becomes the module's `step()` and is called once per timestep. This is the mechanism behind "function-based" interventions and analyzers.
 
-The easiest way is to pass the function directly — Starsim converts it to the right
-module type automatically, using the function's name as the module name:
+The easiest way is to pass the function directly — Starsim converts it to the right module type automatically, using the function's name as the module name:
 
 ```{python}
 import starsim as ss
@@ -215,11 +177,7 @@ print(type(sim.interventions[0]).__name__)  # Intervention
 print(sim.interventions[0].name)            # 'knockdown'
 ```
 
-A function passed to `interventions=` becomes an `ss.Intervention`, one passed to
-`analyzers=` becomes an `ss.Analyzer`, and one passed to `custom=` (or `modules=`)
-becomes a bare `ss.Module`. To build the module explicitly — for example to set a
-custom name, or to construct it before adding it to a sim — call `from_func()` on the
-class you want:
+A function passed to `interventions=` becomes an `ss.Intervention`, one passed to `analyzers=` becomes an `ss.Analyzer`, and one passed to `custom=` (or `modules=`) becomes a bare `ss.Module`. To build the module explicitly — for example to set a custom name, or to construct it before adding it to a sim — call `from_func()` on the class you want:
 
 ```python
 intv = ss.Intervention.from_func(knockdown)   # An Intervention whose step() calls knockdown(sim)
@@ -227,31 +185,13 @@ ana  = ss.Analyzer.from_func(my_recorder)      # An Analyzer
 sim  = ss.Sim(diseases='sis', networks='random', interventions=intv)
 ```
 
-Note that the function is called on **every** timestep, so it must do its own time
-gating (e.g. `if sim.now == 2015:`). Function modules are deliberately minimal: they
-have no parameters, states, or results of their own. As soon as you need per-agent
-state (`define_states()`), tracked results (`define_results()`), or configurable
-parameters (`define_pars()`), write a proper subclass instead — see the
-[Interventions](modules_interventions.qmd) and [Analyzers](modules_analyzers.qmd) pages
-for the function-vs-class tradeoff.
+Note that the function is called on **every** timestep, so it must do its own time gating (e.g. `if sim.now == 2015:`). Function modules are deliberately minimal: they have no parameters, states, or results of their own. As soon as you need per-agent state (`define_states()`), tracked results (`define_results()`), or configurable parameters (`define_pars()`), write a proper subclass instead — see the [Interventions](modules_interventions.qmd) and [Analyzers](modules_analyzers.qmd) pages for the function-vs-class tradeoff.
 
 ## Tips
 
-- Always call `super().__init__()` (with no arguments) as the first line of your
-  `__init__()`, and `super().init_results()` / `super().step()` etc. if you override
-  those methods on a base class that already implements them.
-- Use `self.sim`, not a stored reference, to reach the rest of the simulation —
-  modules are linked to the sim during `init_pre()`. Prefer the module-level
-  shortcuts `self.ti`, `self.now`, and `self.t.dt` over `self.sim.t.ti` etc.
-- Track per-agent data with `define_states()` (e.g. `ss.BoolState('vaccinated')`),
-  never as a plain Python attribute or a hand-built array. Only states grow with
-  births, reset on death, and appear automatically in results.
-- For interventions, `start` and `stop` are reserved timeline keywords, but `step()`
-  is **not** automatically gated on them — if you want time-limited behavior, check
-  the time explicitly at the top of `step()` (e.g. `if self.now < self.pars.start: return`),
-  and avoid reusing `start`/`stop` as names for unrelated parameters.
-- For anything random, define an `ss.Dist` (e.g. `ss.bernoulli`, `ss.normal`) as an
-  attribute in `__init__()` rather than calling `np.random` directly, so your results
-  stay reproducible. See [Random number generation](advanced_random.qmd).
-- If you just want to record results without changing the simulation, write an
-  [Analyzer](modules_analyzers.qmd) instead of a full module.
+- Always call `super().__init__()` (with no arguments) as the first line of your `__init__()`, and `super().init_results()` / `super().step()` etc. if you override those methods on a base class that already implements them.
+- Use `self.sim`, not a stored reference, to reach the rest of the simulation — modules are linked to the sim during `init_pre()`. Prefer the module-level shortcuts `self.ti`, `self.now`, and `self.t.dt` over `self.sim.t.ti` etc.
+- Track per-agent data with `define_states()` (e.g. `ss.BoolState('vaccinated')`), never as a plain Python attribute or a hand-built array. Only states grow with births, reset on death, and appear automatically in results.
+- For interventions, `start` and `stop` are reserved timeline keywords, but `step()` is **not** automatically gated on them — if you want time-limited behavior, check the time explicitly at the top of `step()` (e.g. `if self.now < self.pars.start: return`), and avoid reusing `start`/`stop` as names for unrelated parameters.
+- For anything random, define an `ss.Dist` (e.g. `ss.bernoulli`, `ss.normal`) as an attribute in `__init__()` rather than calling `np.random` directly, so your results stay reproducible. See [Random number generation](advanced_random.qmd).
+- If you just want to record results without changing the simulation, write an [Analyzer](modules_analyzers.qmd) instead of a full module.

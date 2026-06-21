@@ -3,24 +3,15 @@ title: Products
 jupyter: python3
 ---
 
-In Starsim, a **product** represents the actual medical tool that an intervention
-delivers: a diagnostic test, a treatment, or a vaccine. The split between
-*interventions* and *products* mirrors how real programs work: an intervention
-decides *who* gets something and *when* (eligibility, coverage, timing), while the
-product defines *what* happens to an agent when it's administered.
+In Starsim, a **product** represents the actual medical tool that an intervention delivers: a diagnostic test, a treatment, or a vaccine. The split between *interventions* and *products* mirrors how real programs work: an intervention decides *who* gets something and *when* (eligibility, coverage, timing), while the product defines *what* happens to an agent when it's administered.
 
-This separation means you can reuse the same product across different delivery
-strategies. For example, a single vaccine product can be deployed via a routine
-immunization program in one scenario and a one-off campaign in another, without
-redefining the vaccine itself.
+This separation means you can reuse the same product across different delivery strategies. For example, a single vaccine product can be deployed via a routine immunization program in one scenario and a one-off campaign in another, without redefining the vaccine itself.
 
-For how products are *delivered*, see the [Interventions](modules_interventions.qmd)
-page; this page focuses on the products themselves.
+For how products are *delivered*, see the [Interventions](modules_interventions.qmd) page; this page focuses on the products themselves.
 
 ## Product types
 
-All products inherit from `ss.Product` (itself an `ss.Module`) and implement an
-`administer()` method. Starsim provides three base product types:
+All products inherit from `ss.Product` (itself an `ss.Module`) and implement an `administer()` method. Starsim provides three base product types:
 
 | Class | Represents | Delivered by |
 |-------|------------|--------------|
@@ -30,11 +21,7 @@ All products inherit from `ss.Product` (itself an `ss.Module`) and implement an
 
 ## Vaccines
 
-The simplest product to use is `ss.simple_vx`, a built-in vaccine that reduces an
-agent's relative susceptibility (`rel_sus`). It can be "leaky" (everyone who is
-vaccinated gets partial protection, the default) or "all-or-nothing"
-(`leaky=False`, where a fraction of recipients are fully protected and the rest are
-not protected at all):
+The simplest product to use is `ss.simple_vx`, a built-in vaccine that reduces an agent's relative susceptibility (`rel_sus`). It can be "leaky" (everyone who is vaccinated gets partial protection, the default) or "all-or-nothing" (`leaky=False`, where a fraction of recipients are fully protected and the rest are not protected at all):
 
 ```{python}
 import starsim as ss
@@ -55,10 +42,7 @@ ss.parallel(s1, s2).plot('sis_n_infected')
 
 ## Diagnostics
 
-A diagnostic product (`ss.Dx`) is defined by a dataframe giving the probability of
-each test result, conditional on an agent's true disease state. The results are
-returned in priority order (the `hierarchy`), with the first listed result taking
-precedence when an agent could match more than one:
+A diagnostic product (`ss.Dx`) is defined by a dataframe giving the probability of each test result, conditional on an agent's true disease state. The results are returned in priority order (the `hierarchy`), with the first listed result taking precedence when an agent could match more than one:
 
 ```{python}
 import sciris as sc
@@ -87,16 +71,11 @@ sim.run()
 print('Tested positive on final step:', len(sim.interventions.routine_screening.outcomes['positive']))
 ```
 
-Screening is often paired with treatment: agents who test positive become eligible
-for a treatment intervention (this is the "triage" pattern; see the
-[Interventions](modules_interventions.qmd) page).
+Screening is often paired with treatment: agents who test positive become eligible for a treatment intervention (this is the "triage" pattern; see the [Interventions](modules_interventions.qmd) page).
 
 ## Treatments
 
-A treatment product (`ss.Tx`) moves agents from one disease state to another with a
-given efficacy. It's defined by a dataframe with `disease`, `state`, `post_state`,
-and `efficacy` columns. Here we clear infection in an SIS model, returning treated
-agents to susceptible:
+A treatment product (`ss.Tx`) moves agents from one disease state to another with a given efficacy. It's defined by a dataframe with `disease`, `state`, `post_state`, and `efficacy` columns. Here we clear infection in an SIS model, returning treated agents to susceptible:
 
 ```{python}
 import sciris as sc
@@ -119,15 +98,11 @@ s2 = ss.Sim(pars, label='With treatment', interventions=treatment)
 ss.parallel(s1, s2).plot('sis_n_infected')
 ```
 
-The `max_capacity` argument caps how many agents can be treated per timestep, which
-is useful for modelling resource-constrained programs.
+The `max_capacity` argument caps how many agents can be treated per timestep, which is useful for modelling resource-constrained programs.
 
 ## Writing a custom product
 
-If the built-in products don't do what you need, you can write your own by
-subclassing `ss.Vx`, `ss.Dx`, `ss.Tx`, or `ss.Product` directly and implementing
-`administer()`. Vaccine products receive `(people, uids)`; diagnostics and
-treatments receive `(uids)` and return their outcomes.
+If the built-in products don't do what you need, you can write your own by subclassing `ss.Vx`, `ss.Dx`, `ss.Tx`, or `ss.Product` directly and implementing `administer()`. Vaccine products receive `(people, uids)`; diagnostics and treatments receive `(uids)` and return their outcomes.
 
 The example below is a vaccine whose efficacy is higher for younger agents:
 
@@ -159,7 +134,5 @@ sim.plot('sis')
 ```
 
 :::{.callout-tip}
-Because products are modules, they can define their own parameters (with
-`define_pars()`), states, and results, just like any other Starsim module. See
-[Adding new modules](modules_adding.qmd) for the general pattern.
+Because products are modules, they can define their own parameters (with `define_pars()`), states, and results, just like any other Starsim module. See [Adding new modules](modules_adding.qmd) for the general pattern.
 :::

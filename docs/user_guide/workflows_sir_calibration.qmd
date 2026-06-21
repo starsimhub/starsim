@@ -5,7 +5,7 @@ jupyter: python3
 
 
 
-The Starsim framework includes a built-in susceptible-infected-recovered (SIR) within-host progression module that can be used as a building block to developing more realistic agent-based models. Here, we use that SIR within-host module in combination with mixing pool transmission to create a simple SIR disease model. 
+The Starsim framework includes a built-in susceptible-infected-recovered (SIR) within-host progression module that can be used as a building block to developing more realistic agent-based models. Here, we use that SIR within-host module in combination with mixing pool transmission to create a simple SIR disease model.
 
 Here, we use that SIR disease model to test two calibration workflows. The goal is to assess if they able to re-identify a known "true" set of parameters and explore the resulting latent trajectories. The two workflows demonstrated are:
 1. [Likelihood maximization using the optuna package as integrated with Starsim](#optimization)

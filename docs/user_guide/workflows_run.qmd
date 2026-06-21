@@ -95,11 +95,7 @@ s1.run().plot() # This now works, because the sim was *not* run in place
 
 ## Reducing memory use
 
-When you run many simulations and keep them all in memory (or save them to disk), the
-biggest contributor to the size of each `Sim` is usually the `People` object and the
-per-agent state arrays. Once a run has finished, you typically only need the results,
-not the full population. Calling `sim.shrink()` removes these memory-intensive
-attributes in place, keeping the results intact:
+When you run many simulations and keep them all in memory (or save them to disk), the biggest contributor to the size of each `Sim` is usually the `People` object and the per-agent state arrays. Once a run has finished, you typically only need the results, not the full population. Calling `sim.shrink()` removes these memory-intensive attributes in place, keeping the results intact:
 
 ```{python}
 import starsim as ss
@@ -120,15 +116,10 @@ sim.plot('sis')
 ```
 
 :::{.callout-tip}
-It's good practice to call `sim.shrink()` (or `msim.shrink()` for a `MultiSim`)
-before storing or saving sims you've finished running, especially when running
-hundreds or thousands of them. This keeps memory use down and makes saved files
-smaller and faster to load. `ss.MultiSim` and `ss.parallel()` already shrink each
-sim by default, so you only need to do this for sims you run and store yourself.
+It's good practice to call `sim.shrink()` (or `msim.shrink()` for a `MultiSim`) before storing or saving sims you've finished running, especially when running hundreds or thousands of them. This keeps memory use down and makes saved files smaller and faster to load. `ss.MultiSim` and `ss.parallel()` already shrink each sim by default, so you only need to do this for sims you run and store yourself.
 :::
 
-If you later need the full sim (for example, to continue running it), don't shrink it —
-or save it with `sim.save('mysim.sim', shrink=False)` to keep everything.
+If you later need the full sim (for example, to continue running it), don't shrink it — or save it with `sim.save('mysim.sim', shrink=False)` to keep everything.
 
 ## Advanced workflows
 

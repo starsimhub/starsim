@@ -59,9 +59,7 @@ msim.plot(legend=False)
 
 Note that parallelizing the build process pickles and unpickles the sims, which can be an expensive operation. `make_sim()` functions can often get quite complicated, so it's often good software engineering practice to separate them out anyway. You can use the `serial=True` argument of Sciris' `sc.parallelize()` function (which is what `ss.parallel()` calls under the hood) in order to run in serial, to see if it's the same speed or faster.
 
-<div class="alert alert-block alert-info">    
-While the traditional way to run on a VM is via SSH and terminal, it is also possible to run remotely via <a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh">VS Code</a> (and Cursor etc.), <a href="https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html">PyCharm</a>, or <a href="https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel">Spyder</a>. You can also run a Jupyter server on the VM and access it that way  (we like <a href="https://tljh.jupyter.org/">The Littlest JupyterHub</a>).
-</div>
+<div class="alert alert-block alert-info"> While the traditional way to run on a VM is via SSH and terminal, it is also possible to run remotely via <a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh">VS Code</a> (and Cursor etc.), <a href="https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html">PyCharm</a>, or <a href="https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel">Spyder</a>. You can also run a Jupyter server on the VM and access it that way  (we like <a href="https://tljh.jupyter.org/">The Littlest JupyterHub</a>). </div>
 
 ## Dask and Coiled
 

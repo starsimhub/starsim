@@ -4,10 +4,7 @@ jupyter: python3
 ---
 
 
-These are the solutions to the exercises from each of the tutorials. Many of these
-exercises are open-ended, so these are just *example* solutions — there are often
-many equally valid approaches. If you get stuck or want to discuss alternatives,
-[email us](mailto:info@starsim.org)!
+These are the solutions to the exercises from each of the tutorials. Many of these exercises are open-ended, so these are just *example* solutions — there are often many equally valid approaches. If you get stuck or want to discuss alternatives, [email us](mailto:info@starsim.org)!
 
 
 <div class="alert alert-info">
@@ -133,9 +130,7 @@ print(f'Cumulative infections over one year: {answer}')
 
 **Q: Whether an epidemic 'takes off' depends to a large extent on the basic reproduction number, which in this kind of model depends on `beta`, `n_contacts`, and `dur_inf`. Experiment with different values for each and compare the trajectory of `sim.results.sir.n_infected`.**
 
-A: All three parameters increase transmission, so increasing any of them makes the
-epidemic grow faster and larger. The cleanest way to see this is to write a small
-helper that builds a sim for a given set of parameters, then compare them:
+A: All three parameters increase transmission, so increasing any of them makes the epidemic grow faster and larger. The cleanest way to see this is to write a small helper that builds a sim for a given set of parameters, then compare them:
 
 ```{python}
 import starsim as ss
@@ -161,9 +156,7 @@ msim = ss.parallel(sims)
 msim.plot('sir_n_infected')
 ```
 
-Each of the three modified scenarios produces a larger, faster epidemic than the
-baseline, illustrating that they all push the reproduction number in the same
-direction.
+Each of the three modified scenarios produces a larger, faster epidemic than the baseline, illustrating that they all push the reproduction number in the same direction.
 
 ## T3 Solutions
 
@@ -247,8 +240,7 @@ class SEIR(ss.SIR):
 
 **Q: Try different values of `dur_exp` in the SEIR model — how does it affect the epidemic curve?**
 
-A: A longer exposed (latent) period delays the onset of infectiousness, so the
-epidemic peak comes later and is somewhat lower and broader:
+A: A longer exposed (latent) period delays the onset of infectiousness, so the epidemic peak comes later and is somewhat lower and broader:
 
 ```{python}
 sims = []
@@ -263,9 +255,7 @@ msim.plot('seir_n_infected')
 
 **Q: Adapt the SEIR example to be SEIRS (where recovered people can become susceptible again).**
 
-A: We add a duration of immunity (`dur_imm`) and, in `step_state()`, move recovered
-agents back to susceptible once their immunity has waned. We schedule the waning time
-in `set_prognoses()` for everyone who is going to recover:
+A: We add a duration of immunity (`dur_imm`) and, in `step_state()`, move recovered agents back to susceptible once their immunity has waned. We schedule the waning time in `set_prognoses()` for everyone who is going to recover:
 
 ```{python}
 class SEIRS(SEIR):
@@ -298,17 +288,13 @@ sim.run()
 sim.plot('seirs')
 ```
 
-Unlike the SEIR model, the SEIRS model can sustain endemic transmission, because the
-pool of susceptibles is continually replenished as immunity wanes.
+Unlike the SEIR model, the SEIRS model can sustain endemic transmission, because the pool of susceptibles is continually replenished as immunity wanes.
 
 ### Question 3
 
 **Q: Can you create a model with two strains of the same disease that provide partial cross-immunity?**
 
-A: One clean way to do this is to model the two strains as two separate diseases, and
-use a [connector](../user_guide/modules_connectors.qmd) to couple them: recovery from
-one strain reduces susceptibility to the other. Here we reset and re-apply the
-cross-protection each timestep so it always reflects the current recovered population:
+A: One clean way to do this is to model the two strains as two separate diseases, and use a [connector](../user_guide/modules_connectors.qmd) to couple them: recovery from one strain reduces susceptibility to the other. Here we reset and re-apply the cross-protection each timestep so it always reflects the current recovered population:
 
 ```{python}
 # Two independent SIR "strains" (strain 2 is seeded slightly later)
@@ -343,8 +329,7 @@ sim.run()
 sim.plot('strain1')
 ```
 
-Higher values of `protection` make it harder for the second strain to spread through
-people who have already recovered from the first.
+Higher values of `protection` make it harder for the second strain to spread through people who have already recovered from the first.
 
 ## T5 Solutions
 
@@ -352,8 +337,7 @@ people who have already recovered from the first.
 
 **Q: Adapt the HIV example to include both MF and MSM transmission.**
 
-A: We add an `ss.MSMNet` alongside the `ss.MFNet`, and specify a `beta` for each
-network in the disease's `beta` dictionary:
+A: We add an `ss.MSMNet` alongside the `ss.MFNet`, and specify a `beta` for each network in the disease's `beta` dictionary:
 
 ```{python}
 import starsim as ss
@@ -376,19 +360,13 @@ sim.plot('hiv')
 
 **Q: Modify the `age_mf` network to have different age bins and mixing probabilities.**
 
-A: This exercise is open-ended and depends on the assortativity you want to model.
-The general approach is to override `add_pairs()` in a subclass of `ss.MFNet` (as
-sketched in the tutorial), and within it, choose partners using your own age-bin
-logic — for example, by binning agents by age and drawing partners preferentially
-from nearby bins. The [Networks user guide](../user_guide/modules_networks.qmd) shows
-worked examples of age-structured mixing, which is the most robust starting point.
+A: This exercise is open-ended and depends on the assortativity you want to model. The general approach is to override `add_pairs()` in a subclass of `ss.MFNet` (as sketched in the tutorial), and within it, choose partners using your own age-bin logic — for example, by binning agents by age and drawing partners preferentially from nearby bins. The [Networks user guide](../user_guide/modules_networks.qmd) shows worked examples of age-structured mixing, which is the most robust starting point.
 
 ### Question 3
 
 **Q: Compare random vs age-structured networks — how do they affect epidemic dynamics?**
 
-A: We can run the same SIR disease on a structureless `RandomNet` and on the
-age-structured `MFNet`, and compare the infection trajectories:
+A: We can run the same SIR disease on a structureless `RandomNet` and on the age-structured `MFNet`, and compare the infection trajectories:
 
 ```{python}
 s_rand = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.RandomNet(n_contacts=10),
@@ -399,9 +377,7 @@ msim = ss.parallel(s_rand, s_age)
 msim.plot('sir_n_infected')
 ```
 
-The age-structured network restricts who can contact whom (and the `MFNet` only
-connects agents in partnerships), so it typically produces slower, smaller epidemics
-than a random network where every agent can mix freely.
+The age-structured network restricts who can contact whom (and the `MFNet` only connects agents in partnerships), so it typically produces slower, smaller epidemics than a random network where every agent can mix freely.
 
 ## T6 Solutions
 
