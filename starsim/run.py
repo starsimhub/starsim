@@ -483,7 +483,8 @@ class MultiSim:
                 if fig is None:
                     fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
                 else:
-                    axs = sc.toarray(fig.axes)
+                    axs = fig.axes
+                axs = sc.toarray(axs) # Ensure axs is always an array: with a single key, getrowscols() returns a bare Axes
 
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):

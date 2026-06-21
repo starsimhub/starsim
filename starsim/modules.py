@@ -418,7 +418,48 @@ class Module(Base):
 
     @classmethod
     def from_func(cls, func):
-        """ Create a module from a function """
+        """
+        Create a module from a function
+
+        Wraps a plain function into a module of the calling class, so that simple,
+        one-off logic can be used anywhere a module is expected without writing a
+        full class. The function must take the sim as its only argument; it becomes
+        the module's `step()` method and is therefore called once on every timestep
+        (so it must do its own time gating, e.g. `if sim.now == 2015:`). The module's
+        `name` is taken from the function's name.
+
+        This is the mechanism behind "function-based" interventions and analyzers:
+        passing a function to `interventions=`, `analyzers=`, or `custom=`
+        automatically calls `from_func()` on the appropriate class
+        (`ss.Intervention`, `ss.Analyzer`, or `ss.Module` respectively), so usually
+        you don't need to call this method directly. Call it explicitly when you want
+        to construct the module yourself, e.g. to add it to a sim later.
+
+        Function-based modules are intentionally minimal: they have no parameters,
+        states, or results of their own. As soon as you need `define_pars()`,
+        `define_states()`, or `define_results()`, write a proper subclass instead.
+
+        Args:
+            func (callable): a function taking a single argument, the sim
+
+        Returns:
+            mod (Module): an instance of `cls` whose `step()` calls `func(sim)`
+
+        **Example**::
+
+            import starsim as ss
+
+            def knockdown(sim): # Halve transmission for one year starting in 2015
+                if sim.now == 2015:
+                    sim.diseases.sis.rel_trans[:] *= 0.5
+
+            # Explicit construction ...
+            intv = ss.Intervention.from_func(knockdown)
+            sim = ss.Sim(diseases='sis', networks='random', interventions=intv)
+
+            # ... or equivalently, let the sim convert it automatically:
+            sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)
+        """
         def step(mod): # TODO: see if this can be done more simply
             return mod.func(mod.sim)
         name = func.__name__

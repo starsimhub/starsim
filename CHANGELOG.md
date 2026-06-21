@@ -3,10 +3,44 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
-## Version 3.4.0 (2026-05-XX)
-- `library`: TBC
-- `ss.shrink()` (previously `ss.utils.shrink()`) is now called automatically after `sim.run()`; this clears circular `Sim` references that otherwise block garbage collection. However, it does not clear `sim.people`, so it is still worth explicitly calling `sim.shrink()` if a ninimal-memory sim is needed, as this will take the typical sim size from ~MB to ~KB.
-- Fixed various minor issues: corrected typos, added docstrings, improved error messages, etc.
+## Version 3.4.0 (2026-06-XX)
+This release introduces the **Starsim library** (`starsim.library`), which absorbs the former standalone `starsim_examples` package. This release also adds memory, reproducibility, and usability improvements along with numerous bugfixes.
+
+### The Starsim library
+- Example and reference modules that previously lived in the separate `starsim_examples` package are now bundled with Starsim in `starsim.library`, imported as `import starsim.library as ssl`. Unlike core Starsim, the library does *not* export everything at the top level; classes are accessed via their submodule:
+  - Diseases: `ssl.diseases.Cholera`, `ssl.diseases.Ebola`, `ssl.diseases.HIV`, `ssl.diseases.Measles`
+  - Maternal, neonatal, and child health: `ssl.mnch.FetalHealth`, `ssl.mnch.MaternalInfections`, `ssl.mnch.NeonatalSepsis`
+  - Networks: `ssl.networks.HouseholdNet`, `ssl.networks.SpatialNet`, and the theoretical/abstract networks
+- *Regression*: `ss.FetalHealth` and `ss.HouseholdNet` are no longer available at the top level. Instead of `ss.FetalHealth()` and `ss.HouseholdNet()`, use `ssl.mnch.FetalHealth()` and `ssl.networks.HouseholdNet()` (with `import starsim.library as ssl`).
+- *Regression*: `ss.MaternalNet` has been removed. It was a thin alias for the prenatal network (`class MaternalNet(PrenatalNet)`); replace `ss.MaternalNet(...)` with `ss.PrenatalNet(...)`.
+- *Regression*: the `gonorrhea` and `syphilis` example diseases have been removed from the package (they are not part of the new library). Full, maintained STI models are available in [STIsim](https://github.com/starsimhub/stisim). Replace `ss.Gonorrhea()` with `import stisim as sti; sti.Gonorrhea()` and the same for syphilis.
+- Standalone example scripts ([LASER](https://laser.idmod.org/) comparisons, language translations, network embedding) have moved out of the package into `docs/examples`.
+
+### Memory and reproducibility
+- `ss.shrink()` (previously `ss.utils.shrink()`) is now available at the top level. Calling `sim.run(shrink=True)` (the new default) performs a lightweight shrink that clears the circular `Sim` references that otherwise block garbage collection. A full `sim.shrink()` additionally clears `sim.people`, taking a typical sim from ~MB to ~KB.
+- Shrinking was refactored to be more robust, including for distributions and mixing pools, with clearer error messages when a module fails to shrink below its expected size.
+- Distribution run caches are now cleared automatically after each `sim.run()`.
+- *Regression*: distributions now count the call and jump/reset their random state even when sampling zero agents, so common-random-number (CRN) behavior no longer depends on whether any random numbers were actually drawn. This is more correct, but may produce numerically different results in models where a distribution is sometimes sampled with an empty set of agents.
+
+### Bugfixes and improvements
+- Whereas before only interventions and analyzers could be provided as pure functions, now any module can; the function becomes the `step()` method, with the sim being the argument to the function. See [Modules.from_func](https://docs.starsim.org/api/modules.html#starsim.modules.Module.from_func) for details.
+- Fixed the `n_female` result not being calculated.
+
+- `dist.set()` now raises a clear error when given a parameter name that is not valid for that distribution, rather than silently ignoring it.
+- Improved the error message shown when a module overrides misses a required `super()` call.
+- Fixed `ss.MultiSim` not respecting `n_runs` in some cases.
+- Fixed `sim.loop.plot()`, and added and tested `sim.loop.plot_step_order()` for visualizing multi-timestep execution order.
+- Fixed `MultiSim.plot('single_key')` raising `AttributeError: 'Axes' object has no attribute 'flatten'` on a reduced multisim (i.e. after `reduce()`, `mean()`, or `median()`) when plotting a single result key.
+- `ss.years()` now accepts dates and date strings (and iterables of them), converting them to decimal years (e.g. `ss.years('2020-07-01')`).
+- Made `ss.parse_age_range()` more robust when parsing `'X to Y'`-style ranges.
+- Fixed the string representation of an uninitialized `ss.People` object.
+- Pinned `numpy>2`.
+- Applied an engineering uplift across the codebase: added and corrected docstrings, normalized line endings, improved error messages, and fixed assorted minor issues.
+
+### Documentation
+- Added a "getting started" guide and reorganized the API reference.
+- Clarified the documentation on inclusive vs. exclusive time.
+- Added new user-guide and tutorial pages, and updated guidance on common modeling gotchas (transmission `beta` as a probability, getting agent UIDs from states, custom-module conventions, etc.).
 - *GitHub info*: PR [1344](https://github.com/starsimhub/starsim/pull/1344)
 
 
