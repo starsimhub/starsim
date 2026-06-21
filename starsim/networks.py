@@ -1460,6 +1460,13 @@ class MixingPools(Route):
             mp.step()
         return
 
+    def shrink(self):
+        """ Shrink the size of the mixing pools for saving to disk """
+        super().shrink()
+        for mp in self.pools:
+            mp.shrink()
+        return
+
 
 class MixingPool(Route):
     """

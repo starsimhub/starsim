@@ -618,18 +618,26 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, inplace=True, full=True, size_limit=1.0, intercept=10, die=True):
+    def shrink(self, inplace=True, full=True, size_limit=1.0, base_size=30, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
         the "shrunken" simulation. Used to reduce the memory required for RAM or
         for saved files.
 
+        After shrinking, each module is expected to be smaller than
+        ``size_limit*(base_size + n_timesteps)`` KB. The ``base_size`` term covers the
+        fixed structural overhead of a module (parameters, results metadata, etc.) that
+        does not depend on the simulation length, expressed as a number of timesteps'
+        worth of allowance; the ``n_timesteps`` term covers the per-timestep results that
+        legitimately grow with the simulation; and ``size_limit`` scales both. A module
+        exceeding this is most likely still holding a per-agent array that failed to shrink.
+
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
             full (bool): whether to perform a full shrink, including the People object (otherwise just remove circular references)
-            size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
-            intercept (float): the size (in units of size_limit) to allow for a zero-timestep sim
+            size_limit (float): the per-timestep size allowance in KB, which scales the whole limit (set to None to disable the check)
+            base_size (float): the fixed module size to allow independent of simulation length, in timesteps' worth of allowance
             die (bool): whether to raise an exception if the shrink failed
 
         Returns:
@@ -667,11 +675,12 @@ class Sim(ss.Base):
 
                 # Check that the module successfully shrunk
                 if size_limit:
-                    max_size = size_limit*(len(sim)+intercept) # Maximum size in KB
+                    npts = len(sim)
+                    max_size = size_limit*(base_size + npts) # Maximum size in KB: size_limit scales both the fixed base and the per-timestep allowance
                     for mod in sim.modules:
                         size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
                         if size > max_size:
-                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB; use die=False to turn this message into a warning, or change size_limit to a larger value'
+                            errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB > {max_size:n} KB (= {size_limit:n} KB/timestep × ({base_size:n} base + {npts} timesteps)); use die=False to turn this message into a warning, or increase base_size/size_limit'
                             if die:
                                 raise RuntimeError(errormsg)
                             else:
