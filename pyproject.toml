@@ -30,7 +30,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=1.24.0",
+    "numpy>=2.0.0",
     "pandas>=2.0.0",
     "sciris>=3.2.8",
     "numba>=0.57.0",
