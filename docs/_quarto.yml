@@ -29,6 +29,8 @@ website:
         aria-label: GitHub
       - icon: envelope-at-fill
         href: mailto:info@starsim.org
+      - icon: slack
+        href: https://starsimhub.slack.com
       - icon: globe
         href: https://starsim.org/
 
@@ -160,42 +162,6 @@ website:
             - api/debugtools.qmd
             - api/utils.qmd
 
-format:
-  html:
-    theme: 
-      light: [cosmo, ./assets/styles-light.scss]
-      dark: [cosmo, ./assets/styles-dark.scss]
-    css: ./assets/styles.css
-    toc: true
-    toc-depth: 3
-    highlight-style: github
-
-filters:
-  - interlinks
-
-interlinks:
-  fast: false
-  sources:
-    python:
-      url: https://docs.python.org/3/
-    numpy:
-      url: https://numpy.org/doc/stable/
-    pandas:
-      url: https://pandas.pydata.org/pandas-docs/stable/
-    scipy:
-      url: https://docs.scipy.org/doc/scipy/
-    matplotlib:
-      url: https://matplotlib.org/stable/
-    sciris:
-      url: https://docs.sciris.org/en/latest/
-  autolink: true
-  aliases:
-    numpy: [np]
-    pandas: [pd]
-    matplotlib: [plt]
-    sciris: [sc]
-    starsim: [null, ss]
-
 quartodoc:
   package: starsim
   title: API reference
@@ -230,6 +196,43 @@ quartodoc:
         - time
         - timeline
         - utils
+
+format:
+  html:
+    theme: 
+      light: [cosmo, ./assets/styles-light.scss]
+      dark: [cosmo, ./assets/styles-dark.scss]
+    css: ./assets/styles.css
+    toc: true
+    toc-expand: true
+    toc-depth: 5
+    highlight-style: github
+
+filters:
+  - interlinks
+
+interlinks:
+  fast: false
+  sources:
+    python:
+      url: https://docs.python.org/3/
+    numpy:
+      url: https://numpy.org/doc/stable/
+    pandas:
+      url: https://pandas.pydata.org/pandas-docs/stable/
+    scipy:
+      url: https://docs.scipy.org/doc/scipy/
+    matplotlib:
+      url: https://matplotlib.org/stable/
+    sciris:
+      url: https://docs.sciris.org/en/latest/
+  autolink: true
+  aliases:
+    numpy: [np]
+    pandas: [pd]
+    matplotlib: [plt]
+    sciris: [sc]
+    starsim: [null, ss]
 
 execute:
   freeze: auto # Only re-execute notebooks that have changed
