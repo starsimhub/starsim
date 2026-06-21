@@ -136,6 +136,7 @@ website:
             - api/loop.qmd
             - api/people.qmd
             - api/parameters.qmd
+            - api/results.qmd
         - section: "**Modules**"
           contents:
             - api/modules.qmd
@@ -150,14 +151,13 @@ website:
           contents:
             - api/run.qmd
             - api/calibration.qmd
+            - api/samples.qmd
         - section: "**Utilities**"
           contents:
             - api/arrays.qmd
             - api/time.qmd
             - api/timeline.qmd
             - api/distributions.qmd
-            - api/results.qmd
-            - api/samples.qmd
             - api/settings.qmd
             - api/debugtools.qmd
             - api/utils.qmd
