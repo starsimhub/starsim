@@ -493,7 +493,8 @@ class People:
         """ Record per-timestep population counts into the simulation results """
         ti = self.sim.ti
         res = self.sim.results
-        res.n_alive[ti] = np.count_nonzero(self.alive)
+        for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
+            res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
