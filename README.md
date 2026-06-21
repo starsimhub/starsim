@@ -10,7 +10,7 @@ Starsim builds on our previous suite of disease-specific models, which included 
 
 Examples of health areas that have already been [modeled using Starsim](https://docs.starsim.org/user_guide/intro_models.html) include [sexually transmitted infections](https://stisim.org) (HIV, HPV, and syphilis, including co-transmission), respiratory infections ([tuberculosis](https://starsim.org/tbsim) and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as [family planning](https://fpsim.org) and malnutrition). 
 
-For more information, see the [documentation](https://docs.starsim.org). For Starsim for R, see [r.starsim.org](https://r.starsim.org). For Starsim's AI tools, see [ai.starsim.org](https://ai.starsim.org).
+For more information, see the [documentation](https://docs.starsim.org) or the [code](https://github.com/starsimhub/starsim). For Starsim for R, see [r.starsim.org](https://r.starsim.org). For Starsim's AI tools, see [ai.starsim.org](https://ai.starsim.org).
 
 
 ## Requirements
