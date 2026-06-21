@@ -170,9 +170,7 @@ quartodoc:
   parser: google
   render_interlinks: true
   sections:
-    - title: API reference
-      desc: Full details on all Starsim classes and functions.
-      contents:
+    - contents: # No title/desc here: the page already shows an "API reference" heading from the top-level title above (issue #1330)
         - analyzers
         - arrays
         - calibration

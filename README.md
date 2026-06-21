@@ -22,6 +22,8 @@ We recommend, but do not require, installing Starsim in a virtual environment, s
 
 ## Installation
 
+If you're new to Python, check out our [getting started guide](https://starsim.org/getting-started/).
+
 ### Python
 
 Starsim is most easily installed via [PyPI](https://pypi.org):
