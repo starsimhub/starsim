@@ -69,7 +69,13 @@ class ndict(sc.objdict):
         elif valid is None:
             pass  # Nothing to do
         else:
-            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+            if isinstance(arg, ss.Module) and not hasattr(arg, self._nameattr):
+                # A Module missing its name attribute almost always means super().__init__() was not called
+                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "{self._nameattr}" attribute. '
+                            f'This usually means super().__init__() was not called in the module\'s __init__() method; '
+                            f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
+            else:
+                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
         return self
 
