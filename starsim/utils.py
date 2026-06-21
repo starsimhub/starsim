@@ -299,8 +299,9 @@ def parse_age_range(age_string) -> tuple:
             age_lower = float(s[1:])
             age_upper = np.inf
         elif 'to' in s:
-            age_lower = float(s.split('to')[0])
-            age_upper = float(s.split('to')[1])
+            parts = s.split('to')
+            age_lower = float(parts[0])
+            age_upper = float(parts[1])
         else:
             raise ValueError(f'Cannot parse age range: {age_string!r}')
 
