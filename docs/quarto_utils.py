@@ -212,7 +212,7 @@ def execute_notebook(path, tidy=True):
             qmd2py(path)
             print(f'Executing {py_path}...')
             env = {**os.environ, 'MPLBACKEND': 'agg'} # Use non-interactive backend for matplotlib
-            subprocess.run(['python', py_path], check=True, capture_output=True,cwd=path.parent, env=env) # Use ipython so get_ipython() is available
+            subprocess.run(['ipython', py_path], check=True, capture_output=True,cwd=path.parent, env=env) # Use ipython so get_ipython() and display() are available
             string = f'{yay} {base} executed successfully '
             success = True
         except subprocess.CalledProcessError as e:
