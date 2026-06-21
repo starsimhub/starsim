@@ -2022,6 +2022,18 @@ def assume_cal_year(val):
 # Durations
 class years(dur):
     base = 'years'
+    def __init__(self, value=1, base=None):
+        # Convert date or date-string input(s) to decimal years, since dates only map cleanly onto years
+        to_convert = (str, pd.Timestamp)
+        if isinstance(value, to_convert): # A single date or date string
+            value = sc.datetoyear(value)
+        elif np.iterable(value):
+            for i,val in enumerate(value):
+                if isinstance(val, to_convert):
+                    value[i] = sc.datetoyear(val)
+        super().__init__(value=value, base=base)
+        return
+
     def __str__(self):
         """ As this is the "default" Starsim unit, show its value simply for calendar years, e.g. 2020.5 """
         if ss.time.assume_cal_year(self.value):
