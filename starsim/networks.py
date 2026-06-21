@@ -942,6 +942,11 @@ class PrenatalNet(Network):
         return n
 
 
+class MaternalNet(PrenatalNet):
+    """ Alias for ``PrenatalNet``, kept for backwards compatibility """
+    pass
+
+
 class PostnatalNet(DynamicNetwork):
     """
     Network to track postnatal processes

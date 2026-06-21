@@ -93,7 +93,7 @@ t('networks') # Slow import due to networkx
 from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
     StaticNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
-    PrenatalNet, PostnatalNet, BreastfeedingNet,
+    PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool,
 )
 
