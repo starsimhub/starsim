@@ -38,8 +38,17 @@ class Timeline:
     The `Timeline` object also has the following attributes/methods:
 
     - `ti` (int): the current timestep
-    - `npts` (int): the total number of timesteps
+    - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
     - `now()` (`ss.date`/float/str): the current time, based on the timevec by default or a different vector if specified
+
+    Note: the time vectors include *both* the start and stop endpoints, so `npts`
+    (the number of time points) is one more than the number of steps taken. For
+    example, `start=0, stop=1, dt=1` runs a single step but produces two time points
+    (`[0, 1]`), since the state is recorded at both the start and the end. Specifying
+    the length via `dur` is exactly equivalent to specifying `stop` (internally,
+    `stop = start + dur`), so e.g. `start=2000, dur=1` and `start=2000, stop=2001`
+    produce identical timelines. See the time user guide for the rationale behind
+    the inclusive endpoint.
 
     **Examples**:
 
@@ -99,6 +108,7 @@ class Timeline:
 
     @property
     def npts(self):
+        """ The number of time points (inclusive of both endpoints, so one more than the number of steps) """
         try:
             return self.tvec.shape[0]
         except:
