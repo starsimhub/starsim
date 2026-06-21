@@ -884,8 +884,16 @@ class Dist:
             n = len(n) # If centralized, treat n as a size
         size, slots = self.process_size(n)
 
-        # Check if size is 0, then we can return
+        # Check if size is 0, then we can return -- but still count the call and jump/reset
+        # so that CRN behavior does not depend on whether any random numbers were drawn
         if size == 0:
+            self.called += 1
+            if reset:
+                self.reset(-1)
+            elif self.auto:
+                self.jump()
+            elif self.strict:
+                self.ready = False
             return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
         elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
