@@ -1175,8 +1175,8 @@ class FetalHealth(ss.Module):
         min_ga (dur):                   floor for timing shifts (delivery can't be brought before this GA)
         percentile_dist (Dist):         distribution for baseline fetal weight percentile
 
-    **Example**::
-
+    Examples:
+        ```python
         import starsim as ss
 
         sim = ss.Sim(
@@ -1185,6 +1185,7 @@ class FetalHealth(ss.Module):
             networks=ss.PrenatalNet(),
         )
         sim.run()
+        ```
     """
 
     # Approximate 50th percentile fetal weight (grams) by gestational age (weeks)

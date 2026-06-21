@@ -50,8 +50,8 @@ class Network(Route):
     although not all have to be supplied at the time of creation (they must all
     be the same at the time of initialization, though, or else validation will fail).
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Generate an average of 10 contacts for 1000 people
         n_contacts_pp = 10
         n_people = 1000
@@ -66,6 +66,7 @@ class Network(Route):
         index = np.arange(n)
         self_conn = p1 == p2
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
+        ```
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Initialize as a module
@@ -267,12 +268,13 @@ class Network(Route):
             max_edges (int): the maximum number of edges to show
             random (bool): if true, select edges randomly; otherwise, show the first N
 
-        **Example**:
-
+        Examples:
+            ```python
             import networkx as nx
             sim = ss.Sim(n_agents=100, networks='mf').init()
             G = sim.networks.randomnet.to_graph()
             nx.draw(G)
+            ```
         """
         keys = [('p1', int), ('p2', int), ('beta', float)]
         data = [np.array(self.edges[k], dtype=dtype) for k,dtype in keys]
@@ -473,8 +475,8 @@ class StaticNet(Network):
     If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
     The parameter "n" is supplied automatically to be equal to n_agents.
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Generate a networkx graph and pass to Starsim
         import networkx as nx
         import starsim as ss
@@ -483,6 +485,7 @@ class StaticNet(Network):
 
         # Pass a networkx graph generator to Starsim
         ss.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
+        ```
     """
 
     def __init__(self, graph=None, pars=None, **kwargs):
@@ -1292,12 +1295,13 @@ class HouseholdNet(Network):
             sc.dataframe: A dataframe with columns ``hh_id``, ``ages``, and
             ``sexes`` ready for use with ``HouseholdNet(dhs_data=...)``.
 
-        **Example**::
-
+        Examples:
+            ```python
             import starsim as ss
             dhs_data = ss.HouseholdNet.load_dhs('ZZHR62FL.DTA')
             sim = ss.Sim(networks=ss.HouseholdNet(dhs_data=dhs_data))
             sim.run()
+            ```
         """
         import pandas as pd
         hr = pd.read_stata(str(path), convert_categoricals=False)
@@ -1362,8 +1366,8 @@ class MixingPools(Route):
         beta (float): overall transmission via these mixing pools
         n_contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
         mps = ss.MixingPools(
             diseases = 'sis',
@@ -1374,6 +1378,7 @@ class MixingPools(Route):
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
+        ```
     """
     def __init__(self, pars=None, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
@@ -1479,8 +1484,8 @@ class MixingPool(Route):
         beta (float): overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
         n_contacts (Dist): the number of effective contacts of the destination agents
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
 
         # Set the parameters
@@ -1501,6 +1506,7 @@ class MixingPool(Route):
         sim = ss.Sim(diseases=sis, networks=mp)
         sim.run()
         sim.plot()
+        ```
     """
     def __init__(self, pars=None, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()

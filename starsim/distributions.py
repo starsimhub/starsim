@@ -285,8 +285,8 @@ class Dist:
         debug (bool): print out additional detail
         kwargs (dict): parameters of the distribution
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Create a Bernoulli distribution
         p_death = ss.bernoulli(p=0.1).init(force=True)
         p_death.rvs(50) # Create 50 draws
@@ -301,6 +301,7 @@ class Dist:
         # Create a distribution manually
         dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
         dist.rvs(10) # Return 10 normally distributed random numbers
+        ```
     """
     valid_pars = None
     scaling = None # See "scale_types" above
@@ -463,8 +464,8 @@ class Dist:
 
         Use 0 for original state, -1 for most recent state.
 
-        **Example**:
-
+        Examples:
+            ```python
             dist = ss.random(seed=5).init()
             r1 = dist(5)
             r2 = dist(5)
@@ -475,6 +476,7 @@ class Dist:
             assert all(r1 != r2)
             assert all(r2 == r3)
             assert all(r4 == r1)
+            ```
         """
         if not isinstance(state, dict):
             state = self.history[state]
@@ -582,10 +584,11 @@ class Dist:
             trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
             **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
 
-        **Example**:
-
+        Examples:
+            ```python
             dist = ss.normal(3, 2, unit='years').mock(dt=ss.days(1))
             dist.rvs(10)
+            ```
         """
         mock_sim = ss.mock_sim(**kwargs)
         mock_mod = ss.mock_module(**kwargs)
@@ -1111,9 +1114,10 @@ class lognorm_im(Dist):
         mean (float): the mean of the underlying normal distribution (not this distribution) (default 0.0)
         sigma (float): the standard deviation of the underlying normal distribution (not this distribution) (default 1.0)
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
+        ```
     """
     scaling = scale_types.postdraw
 
@@ -1152,9 +1156,10 @@ class lognorm_ex(Dist):
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
         std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
+        ```
     """
     scaling = scale_types.both
 
@@ -1478,14 +1483,14 @@ class choice(Dist):
         a (int or array): the number of choices, or the choices themselves (default 2)
         p (array): if supplied, the probability of each choice (default, 1/a for a choices)
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Simulate 10 die rolls
         ss.choice(6, strict=False)(10) + 1
 
         # Choose between specified options each with a specified probability (must sum to 1)
         ss.choice(a=[30, 70], p=[0.3, 0.7], strict=False)(10)
-
+        ```
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
     """
@@ -1530,8 +1535,8 @@ class histogram(Dist):
     The values can be supplied in either normalized (sum to 1) or un-normalized
     format.
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Sample from an age distribution
         age_bins = [0,    10,  20,  40,  65, 100]
         age_vals = [0.1, 0.1, 0.3, 0.3, 0.2]
@@ -1542,6 +1547,7 @@ class histogram(Dist):
         data = np.random.randn(10_000)*2+5
         h2 = ss.histogram(data=data, strict=False)
         h2.plot_hist(bins=100)
+        ```
     """
     valid_pars = ['values', 'bins', 'density', 'data']
     scaling = scale_types.false

@@ -41,12 +41,13 @@ class Sim(ss.Base):
         or all together via the ``modules`` argument. When using ``modules``, Starsim automatically sorts
         them by type. The individual kwargs and ``modules`` can be mixed; they are merged together.
 
-    **Examples**:
-
+    Examples:
+        ```python
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
+        ```
     """
     def __init__(self, pars=None, label=None, people=None, demographics=None, connectors=None, 
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None, 
@@ -421,8 +422,8 @@ class Sim(ss.Base):
             states (bool): as above, for people states (default True)
             detailed (bool): if true, store literally every random number and agent state (otherwise, use summary stats) (default False)
 
-        *Examples:*
-
+        Examples:
+            ```python
             # General settings -- use a small sim and few timesteps if possible
             kw = dict(n_agents=100, start=0, stop=10, networks='random', diseases='sis')
 
@@ -437,6 +438,7 @@ class Sim(ss.Base):
             sim.set_diagnostics(rvs='diagnostics_rvs.json', states='diagnostics_states.json', detailed=True)
             sim.run()
             sim.diagnostics.export()
+            ```
         """
         if rvs or states:
             print('Enabling sim diagnostics ...') # Always print regardless of verbosity
@@ -765,14 +767,15 @@ class Sim(ss.Base):
             plot (bool): whether to plot time spent per module step
             **kwargs (dict): passed to `sc.profile()`
 
-        **Example**:
-
+        Examples:
+            ```python
             import starsim as ss
 
             net = ss.RandomNet()
             sis = ss.SIS()
             sim = ss.Sim(networks=net, diseases=sis)
             prof = sim.profile(follow=[net.add_pairs, sis.infect])
+            ```
         """
         prof = ss.Profile(self, follow=follow, do_run=do_run, plot=plot, **kwargs)
         return prof
@@ -786,14 +789,15 @@ class Sim(ss.Base):
             mintime (float): exclude function calls less than this time in seconds
             **kwargs (dict): passed to `sc.cprofile()`
 
-        **Example**:
-
+        Examples:
+            ```python
             import starsim as ss
 
             net = ss.RandomNet()
             sis = ss.SIS()
             sim = ss.Sim(networks=net, diseases=sis)
             prof = sim.cprofile()
+            ```
         """
         cprof = sc.cprofile(sort=sort, mintime=mintime, **kwargs)
         with cprof:
@@ -812,9 +816,10 @@ class Sim(ss.Base):
         Returns:
             filename (str): the validated absolute path to the saved file
 
-        **Example**:
-
+        Examples:
+            ```python
             sim.save() # Saves to a .sim file
+            ```
         """
         # Set shrink based on whether we're in the middle of a run
         if shrink is None:
@@ -845,11 +850,12 @@ class Sim(ss.Base):
             A dictionary representation of the parameters and/or summary results
             (or write that dictionary to a file)
 
-        **Examples**:
-
+        Examples:
+            ```python
             json = sim.to_json() # Convert to a dict
             sim.to_json('sim.json') # Write everything
             sim.to_json('summary.json', keys='summary') # Just write the summary
+            ```
         """
         # Handle keys
         if keys is None:
@@ -887,10 +893,11 @@ class Sim(ss.Base):
             filename (str): the name of the file to write to (default `{sim.label}.yaml`)
             kwargs (dict): passed to `sim.to_json()`
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.Sim(diseases='sis', networks='random').run()
             sim.to_yaml('results.yaml', keys='results')
+            ```
         """
         if filename is None:
             if self.label:
@@ -921,8 +928,8 @@ class Sim(ss.Base):
             style_kw (dict): passed to `ss.style()`, for controlling the detailed plotting style (default "starsim"; other options are "simple", None, or any Matplotlib style)
             **kwargs (dict): known arguments (e.g. figsize, font) split between the above dicts; see `ss.plot_args()` for all valid options
 
-        **Examples**:
-
+        Examples:
+            ```python
             sim = ss.Sim(diseases='sis', networks='random').run()
 
             # Basic usage
@@ -933,6 +940,7 @@ class Sim(ss.Base):
 
             # Plot with a custom figure size, font, and style
             sim.plot(figsize=(12,16), font='Raleway', style='fancy')
+            ```
         """
         self.check_results_ready('Please run the sim before plotting')
 
@@ -1025,10 +1033,11 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         plot (bool): whether to plot the results
         kwargs (dict): passed to `ss.Sim()`
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
+        ```
     """
     pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)
     sim = Sim(pars)
@@ -1059,11 +1068,12 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         output (bool): whether to return the output as a string (otherwise print)
         die (bool): whether to raise an exception if the sims don't match
 
-    **Example**:
-
+    Examples:
+        ```python
         s1 = ss.Sim(rand_seed=1).run()
         s2 = ss.Sim(rand_seed=2).run()
         ss.diff_sims(s1, s2)
+        ```
     '''
 
     # Convert to dict
@@ -1213,12 +1223,13 @@ def check_sims_match(*args, full=False):
         args (list): a list of 2 or more sims to compare
         full (bool): if True, return whether each sim matches the first
 
-    **Example**:
-
+    Examples:
+        ```python
         s1 = ss.Sim(diseases='sir', networks='random')
         s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
         s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
         assert ss.check_sims_match(s1, s2, s3)
+        ```
     """
     if len(args) < 2:
         errormsg = 'Must compare at least 2 sims'

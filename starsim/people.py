@@ -27,8 +27,10 @@ class People:
         extra_states (list): non-default states to initialize
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
 
-    **Examples**:
+    Examples:
+        ```python
         ppl = ss.People(2000)
+        ```
     """
 
     def __init__(self, n_agents, age_data=None, extra_states=None, mock=False):
@@ -585,10 +587,11 @@ class People:
             absolute (bool): whether to show absolute numbers or percentage of the population
             fig_kw (dict): passed to `plt.subplots()`
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.demo(plot=False)
             sim.people.plot_ages()
+            ```
         """
         # Preliminaries
         age = self.age
@@ -648,10 +651,11 @@ class People:
         """
         Get all the properties for a single person.
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
             print(sim.people.person(5)) # The 5th agent in the simulation
+            ```
         """
         person = Person()
         for key in ['uid', 'slot']:
@@ -665,10 +669,11 @@ class Person(sc.objdict):
     """
     A simple class to hold all attributes of a person
 
-    **Example**:
-
+    Examples:
+        ```python
         sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
         print(sim.people.person(5)) # The 5th agent in the simulation
+        ```
     """
     def to_df(self):
         """ Convert to a dataframe """
@@ -784,8 +789,8 @@ class Filter(sc.prettyobj):
             uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate filter objects matching both True and False
 
-        **Example**:
-
+        Examples:
+            ```python
             sim = ss.Sim(n_agents=100e3, dur=10, networks='random', diseases='sir', verbose=0)
             sim.run()
             ppl = sim.people
@@ -799,6 +804,7 @@ class Filter(sc.prettyobj):
             f1 = ppl.filter('female')
             f2 = f1('age')>5
             f3 = ~f2('sir.infected')
+            ```
         """
         if new is True:
             filtered = Filter(self)

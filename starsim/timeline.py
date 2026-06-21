@@ -50,10 +50,11 @@ class Timeline:
     produce identical timelines. See the time user guide for the rationale behind
     the inclusive endpoint.
 
-    **Examples**:
-
+    Examples:
+        ```python
         t1 = ss.Timeline(start=2000, stop=2020, dt=1.0)
         t2 = ss.Timeline(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
+        ```
     """
 
     # Allowable time arguments
@@ -173,14 +174,15 @@ class Timeline:
         Args:
             key (str): which type of time to get: "time" (default), "year", "date", "tvec", or "str"
 
-        **Examples**:
-
+        Examples:
+            ```python
             t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt='week')
             t.ti = 25
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
             t.now('str') # Returns '2021-06-25'
+            ```
         """
         # Preprocessing
         to_str = False

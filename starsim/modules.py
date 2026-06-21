@@ -53,8 +53,8 @@ def register_modules(*args):
     Args:
         args (list): the additional modules to register; can be either a module or a list of objects
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Standard use case, register modules automatically
         import my_custom_disease_model as mcdm
         ss.register_modules(mcdm)
@@ -64,6 +64,7 @@ def register_modules(*args):
         my_modules = [mcdm.MyDisease, mcdm.MyNetwork]
         ss.register_modules(my_modules)
         ss.Sim(diseases='mydisease', networks='mynetwork').run()
+        ```
     """
     for arg in args:
         custom_modules.append(arg)
@@ -137,8 +138,8 @@ def required(val=True):
     Args:
         val (True/'disable'): by default, mark method as required; if set to 'disable', then disable method checking for parent classes as well (i.e. remove previous "required" calls)
 
-    **Example**:
-
+    Examples:
+        ```python
         class CustomSIS(ss.SIS):
 
             def step(self):
@@ -149,6 +150,7 @@ def required(val=True):
             @ss.required() # Mark this method as required on run
             def custom_step(self):
                 pass
+        ```
     """
     # Wrap the function
     def decorator(func):
@@ -250,8 +252,8 @@ class Module(Base):
         label (str): the full, human-readable name for the module (e.g. "Random network")
         kwargs (dict): passed to `ss.Timeline()` (e.g. start, stop, unit, dt)
 
-    **Example**:
-
+    Examples:
+        ```python
         class SIR(ss.Module):
             def __init__(self, pars=_, beta=_, init_prev=_, p_death=_, **kwargs):
                 super().__init__() # Call this first with no arguments
@@ -262,6 +264,7 @@ class Module(Base):
                 )
                 self.update_pars(pars, **kwargs) # Update with any user-supplied parameters, and raise an exception if trying to set a parameter that wasn't defined in define_pars()
                 return
+        ```
     """
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping

@@ -21,11 +21,12 @@ class ndict(sc.objdict):
         strict (bool): If True, only items with the specified attribute will be accepted.
         overwrite (bool): whether to allow adding a key when one has already been added
 
-    **Examples**:
-
+    Examples:
+        ```python
         networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
         networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
         networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
+        ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
         super().__init__()
@@ -111,7 +112,8 @@ class ndict(sc.objdict):
             default (obj): what to return if not found (default None)
             match_case (bool): if False (default), ignore case with string matching
 
-        **Example**:
+        Examples:
+            ```python
             sim = ss.Sim(diseases=ss.SIR(name='MySIR'), networks='random')
             sim.run()
 
@@ -119,6 +121,7 @@ class ndict(sc.objdict):
             sim.diseases.get('MySIR')
             sim.diseases.get('mysir')
             sim.diseases.get(ss.SIR)
+            ```
         """
         # Handle strings
         if isinstance(key, str):
@@ -607,13 +610,14 @@ def shrink(obj=None, attrs=None, verbose=False):
         verbose (bool): if True, print warnings about missing attributes
 
     Examples:
-
+        ```python
         # "Shrink" (remove) the People object
         sim = ss.Sim()
         ss.shrink(sim, 'people')
 
         # Equivalent behavior, used manually
         sim.people = ss.shrink()
+        ```
     """
     none_count = sum([x is None for x in [obj, attrs]])
     if none_count == 2:
@@ -675,10 +679,11 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - style: 'font', 'fontsize', 'interactive'
         - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
 
-    **Examples**:
-
+    Examples:
+        ```python
         kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
+        ```
     """
     suffix='_kw'
     _None = '<None>'

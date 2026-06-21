@@ -58,10 +58,11 @@ class Options(sc.objdict):
         - verbose:        default verbosity for simulations to use
         - warnings:       how to handle warnings (e.g. print, raise as errors, ignore)
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.options(verbose=True) # Set more verbosity
         ss.options(warnings='error') # Be more strict about warnings
+        ```
     """
 
     def __init__(self):
@@ -206,9 +207,10 @@ class Options(sc.objdict):
             detailed (bool): whether to print out full help
             output (bool): whether to return a list of the options
 
-        **Example**:
-
+        Examples:
+            ```python
             ss.options.help(detailed=True)
+            ```
         """
         # If not detailed, just print the docstring for sc.options
         if not detailed and not len(args):
@@ -269,8 +271,10 @@ class Options(sc.objdict):
             use (bool): whether to use the chosen style
             kwargs (dict):   if supplied, set multiple key-value pairs
 
-        **Example**:
+        Examples:
+            ```python
             ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)
+            ```
         """
 
         # Reset to defaults
@@ -309,8 +313,8 @@ class Options(sc.objdict):
         """
         Alias to set(), for use in a "with" block.
 
-        **Examples**:
-
+        Examples:
+            ```python
             # Silence all output
             with ss.options.context(verbose=0):
                 ss.Sim().run()
@@ -322,6 +326,7 @@ class Options(sc.objdict):
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):
                 ss.Sim().run().plot()
+            ```
         """
 
         # Store current settings
@@ -455,8 +460,8 @@ def style(style=None, **kwargs):
         style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options
         **kwargs (dict): passed to `sc.options.with_style()`
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a plot using default Starsim styling
         with ss.style():
             plt.plot()
@@ -468,6 +473,7 @@ def style(style=None, **kwargs):
         # Customize the current style
         with ss.style(font='Rosario'):
             plt.plot()
+        ```
     """
     if style is None:
         style = options._style

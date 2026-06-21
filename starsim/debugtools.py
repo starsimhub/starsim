@@ -26,8 +26,8 @@ class Profile(sc.profile):
         plot (bool): whether to plot time spent per module step
         **kwargs (dict): passed to `sc.profile()`
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
 
         net = ss.RandomNet()
@@ -35,6 +35,7 @@ class Profile(sc.profile):
         sim = ss.Sim(networks=net, diseases=sis)
         prof = sim.profile(follow=[net.add_pairs, sis.infect])
         prof.disp()
+        ```
     """
     def __init__(self, sim, follow=None, do_run=True, plot=True, verbose=True, **kwargs):
         assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
@@ -111,8 +112,8 @@ class Debugger(sc.prettyobj):
         die (bool): whether to raise an exception if the condition is met; alternatively 'pause' will pause execution, and False will just print
         run (bool): whether to run immediately
 
-    **Examples**:
-
+    Examples:
+        ```python
         ## Example 1: Identical sims are identical
         import starsim as ss
 
@@ -142,6 +143,7 @@ class Debugger(sc.prettyobj):
         df = db.results[-1].df
         df = df[~df['equal']]
         df.disp()
+        ```
     """
     def __init__(self, *args, func, skip=None, verbose=True, die=True, run=False):
         default_skip = [
@@ -379,9 +381,10 @@ def check_version(expected, die=False, warn=True):
         die (bool): whether or not to raise an exception if the check fails
         warn (bool): whether to raise a warning if the check fails
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
+        ```
     """
     if   expected.startswith('>'): valid = [0,1]
     elif expected.startswith('<'): valid = [0,-1]

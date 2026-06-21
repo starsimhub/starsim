@@ -359,8 +359,8 @@ class Loop:
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match
 
-        **Examples**:
-
+        Examples:
+            ```python
             # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
                 print(f'Population size is {len(sim.people)}')
@@ -388,6 +388,7 @@ class Loop:
             sim.init()
             sim.loop.insert(update_betas, match_fn=match_fn, before=True)
             sim.run()
+            ```
         """
         self._check_initialized()
 
@@ -543,14 +544,15 @@ class Loop:
             fig_kw (dict): passed to `plt.figure()`
             legend_kw (dict): passed to `plt.legend()`
 
-        **Example**:
-
+        Examples:
+            ```python
             sis = ss.SIS(dt=0.1)
             net = ss.RandomNet(dt=0.5)
             births = ss.Births(dt=1)
             sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
             sim.init()
             sim.loop.plot_step_order()
+            ```
         """
         self._check_initialized()
         df = self.df

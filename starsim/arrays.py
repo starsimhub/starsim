@@ -1,7 +1,6 @@
 """
 Define array-handling classes, including agent states
 """
-# import sys
 import itertools
 import numbers
 import numpy as np
@@ -193,8 +192,8 @@ class Arr(BaseArr):
         people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
         mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a standalone Arr for quick testing
         age = ss.Arr('age', default=0, mock=5) # 5 = length if not supplying a real People object
         age[:] = [20, 30, 40, 50, 60]
@@ -203,6 +202,7 @@ class Arr(BaseArr):
         # Use within a simulation
         sim = ss.Sim(n_agents=100).init()
         sim.people.age.mean()  # Mean age of active agents
+        ```
     """
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
         # Set attributes
@@ -717,13 +717,14 @@ class BoolArr(Arr):
     """
     Subclass of `ss.Arr` with defaults for booleans.
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a standalone BoolArr
         infected = ss.BoolArr('infected', mock=5)
         infected[[0, 2, 4]] = True
         infected.count()  # Returns 3
         infected.uids     # Returns ss.uids([0, 2, 4])
+        ```
     """
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
@@ -884,14 +885,15 @@ class uids(np.ndarray):
     the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
     and preserves ``id(self)``.
 
-    **Examples**::
-
+    Examples:
+        ```python
         a = ss.uids([1, 2, 3])
         b = ss.uids([3, 4, 5])
         a + b   # Concatenate: uids([1, 2, 3, 3, 4, 5])
         a | b   # Union:       uids([1, 2, 3, 4, 5])
         a & b   # Intersect:   uids([3])
         a - b   # Difference:  uids([1, 2])
+        ```
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array

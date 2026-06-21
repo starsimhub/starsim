@@ -35,8 +35,8 @@ class seasonality(Connector):
         scale (float): how strong of a seasonality effect to apply (0.1 = 90-110% relative transmission rate depending on time of year)
         shift (float): offset by time of year (0.5 = 6 month offset)
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
 
         pars = dict(
@@ -62,6 +62,7 @@ class seasonality(Connector):
         msim.plot('sis')
 
         s3.connectors[0].plot()
+        ```
     """
     def __init__(self, **kwargs):
         super().__init__()
