@@ -490,6 +490,15 @@ class People:
         """
         return self.scale[inds].sum()
 
+    def epi_flows(self, inds):
+        """
+        Body-weighted version of a flow over `inds` -- the demographic/transmission analogue of
+        `scale_flows`. Sums `epi_weight` (whole people for vital dynamics) rather than `scale`
+        (people in results); equals `len(inds)` when all `epi_weight` are 1. Fine sub-agents
+        (`epi_weight == 0`) contribute nothing.
+        """
+        return self.epi_weight[inds].sum()
+
     def count(self, x):
         """
         Scale-weighted count of agents -- the default way to count agents into a result.

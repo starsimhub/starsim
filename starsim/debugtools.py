@@ -481,6 +481,7 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
         add_module = lambda x: None, # Placeholder function
     )
     people.scale_flows = lambda inds: people.scale[inds].sum() # Mirror People.scale_flows for scale-weighted counting
+    people.epi_flows = lambda inds: people.epi_weight[inds].sum() # Mirror People.epi_flows for body-weighted counting
     people.count = lambda x: x.count() if isinstance(x, ss.BoolArr) else people.scale_flows(x) # Mirror People.count
     return people
 
