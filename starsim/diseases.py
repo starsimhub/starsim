@@ -173,8 +173,8 @@ class Infection(Disease):
         super().init_results()
         self.define_results(
             ss.Result('prevalence',     dtype=float, scale=False, label='Prevalence'),
-            ss.Result('new_infections', dtype=int,   scale=True,  label='New infections'),
-            ss.Result('cum_infections', dtype=int,   scale=True,  label='Cumulative infections'),
+            ss.Result('new_infections', dtype=float, scale=True,  label='New infections'), # float for scale-weighted (fractional) counts
+            ss.Result('cum_infections', dtype=float, scale=True,  label='Cumulative infections'),
         )
         return
 
@@ -405,7 +405,8 @@ class Infection(Disease):
         super().update_results()
         res = self.results
         ti = self.ti
-        n_infections = np.count_nonzero(np.round(self.ti_infected) == ti)  # Round since ti_infected is FloatArr
+        newly_infected = np.asarray(np.round(self.ti_infected) == ti)  # bool mask over active agents; round since ti_infected is FloatArr
+        n_infections = self.sim.people.scale.values[newly_infected].sum()  # scale-weighted; == raw count when scales are 1
 
         # Update new infections to remove initial cases on first timestep
         if ti == 0:
@@ -413,7 +414,7 @@ class Infection(Disease):
             n_infections -= n_initial_cases
 
         res.new_infections[ti] = n_infections
-        res.prevalence[ti] = res.n_infected[ti] / len(self.sim.people)
+        res.prevalence[ti] = res.n_infected[ti] / self.sim.people.scale.values.sum()  # scale-weighted; denominator == len(people) when scales are 1
         return
 
     def finalize_results(self):
@@ -593,18 +594,18 @@ class NCD(Disease):
         """
         super().init_results()
         self.define_results(
-            ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
+            ss.Result('n_not_at_risk', dtype=float, label='Not at risk'), # float for scale-weighted (fractional) counts
             ss.Result('prevalence',    dtype=float, label='Prevalence'),
-            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
+            ss.Result('new_deaths',    dtype=float, label='Deaths'),
         )
         return
 
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(self.sim.people)
-        self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
+        self.results.n_not_at_risk[ti] = self.not_at_risk.count()  # scale-weighted; == raw count when scales are 1
+        self.results.prevalence[ti]    = self.affected.count() / self.sim.people.scale.values.sum()  # scale-weighted; denom == len(people) when scales are 1
+        self.results.new_deaths[ti]    = self.sim.people.scale.values[np.asarray(self.ti_dead == ti)].sum()  # scale-weighted
         return
 
 

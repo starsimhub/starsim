@@ -311,3 +311,36 @@ def test_auto_state_results_are_scale_weighted_and_float():
     assert np.issubdtype(ns.dtype, np.floating)   # dtype changed to float to hold fractional counts
     # raw counting would spike ~5x at the split step; scale-weighting conserves represented pop
     assert ns.max() <= 1.3 * np.asarray(base.results.sir.n_susceptible).max()
+
+
+# ---------------------------------------------------------------------------
+# Scale-aware counting plan, Task 3: scale-weighted flows and rates
+# ---------------------------------------------------------------------------
+
+def test_disease_flow_results_are_float():
+    # Infection flows (new_infections) and NCD flows (new_deaths, n_not_at_risk) must be float
+    # to hold fractional scale-weighted counts.
+    sir = ss.Sim(n_agents=200, diseases='sir', networks='random', dur=5, rand_seed=1)
+    sir.run()
+    assert np.issubdtype(np.asarray(sir.results.sir.new_infections).dtype, np.floating)
+    ncd = ss.Sim(n_agents=200, diseases=ss.NCD(), dur=5, rand_seed=1)
+    ncd.run()
+    for key in ('new_deaths', 'n_not_at_risk'):
+        assert np.issubdtype(np.asarray(ncd.results.ncd[key]).dtype, np.floating), f"{key} must be float"
+
+
+def test_scale_weighted_prevalence_denominator():
+    # Prevalence = scale-weighted infected / scale-weighted active population. Splitting
+    # susceptibles conserves both, so prevalence is unchanged. A raw len(people) denominator
+    # would grow with the split and drop prevalence ~ratio-fold.
+    sim = ss.Sim(n_agents=400, diseases='sir', networks='random', dur=3, rand_seed=2)
+    sim.run()  # produce some infected agents
+    ppl = sim.people
+    sir = ppl.sir
+    def prevalence():
+        return sir.infected.count() / ppl.scale.values.sum()
+    before = prevalence()
+    ppl.split(sir.susceptible.uids, 5)  # split susceptibles (does not change infected or Sum(scale))
+    after = prevalence()
+    assert before > 0
+    assert np.isclose(before, after)
