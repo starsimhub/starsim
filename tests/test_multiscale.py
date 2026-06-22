@@ -126,3 +126,51 @@ def test_split_does_not_perturb_other_agents():
     assert len(common) > 100
     for s in common:
         assert none[s] == some[s], f"slot {s} draw changed because other agents split"
+
+
+# ---------------------------------------------------------------------------
+# Task 4: failure mode C - independence and variance reduction
+# ---------------------------------------------------------------------------
+
+def test_fine_siblings_have_distinct_slots_no_collisions():
+    # Independence precondition: all fine agents get distinct slots, disjoint from
+    # the base/alive population's slots.
+    ppl = make_people(n=500)
+    uids = ss.uids(np.arange(0, 400))   # split most of the population at high ratio
+    new_uids = ppl.split(uids, 10)
+    fine_slots = np.asarray(ppl.slot[new_uids])
+    assert len(np.unique(fine_slots)) == len(fine_slots)          # distinct among siblings
+    base_slots = np.asarray(ppl.slot[uids])
+    assert len(np.intersect1d(fine_slots, base_slots)) == 0       # disjoint from parents
+
+
+def test_split_estimator_unbiased_and_lower_variance():
+    # FAILURE MODE C: the scale-weighted count of a rare event must be ~unbiased and
+    # have lower variance with splitting than without, over many seeds.
+    P_RARE = 0.02
+    RATIO = 10
+    N = 2000
+    N_SEEDS = 40
+
+    def rare_count(seed, do_split):
+        sim = ss.Sim(n_agents=N, diseases='sir', networks='random', dur=2, rand_seed=seed)
+        sim.init()
+        ppl = sim.people
+        uids = ppl.auids.copy()
+        if do_split:
+            new = ppl.split(uids, RATIO)
+            uids = uids.concatenate(new)
+        d = ss.bernoulli(p=P_RARE, name='rare')
+        # Pass the sim's base seed so the probe varies across seeds (matches how the
+        # Dists container seeds module dists: dists.init(base_seed=rand_seed), sim.py).
+        d.init(sim=sim, module=sim.diseases.sir, seed=sim.pars.rand_seed)
+        hit = d.rvs(uids)
+        return float((ppl.scale[uids] * hit).sum())   # scale-weighted rare-event count
+
+    base = np.array([rare_count(s, False) for s in range(N_SEEDS)])
+    split = np.array([rare_count(s, True) for s in range(N_SEEDS)])
+
+    truth = P_RARE * N
+    assert abs(base.mean() - truth) / truth < 0.15      # both unbiased
+    assert abs(split.mean() - truth) / truth < 0.15
+    assert split.var() < base.var() * 0.6               # variance materially reduced
