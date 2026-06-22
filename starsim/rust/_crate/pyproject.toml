@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "starsim-rust-kernels"
+version = "0.0.1"
+description = "Compiled numeric kernels for the Starsim Rust backend"
+requires-python = ">=3.10"
+classifiers = ["Programming Language :: Rust"]
+
+[tool.maturin]
+# Build an abi3 wheel (one wheel for py3.10+), so library ssr modules need no toolchain.
+features = ["pyo3/extension-module"]
+module-name = "starsim_rust_kernels"

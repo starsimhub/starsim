@@ -1,0 +1,18 @@
+[package]
+name = "starsim_rust_kernels"
+version = "0.0.1"
+edition = "2021"
+description = "Compiled numeric kernels for the Starsim Rust backend (starsim.rust / ssr)"
+license = "MIT"
+
+[lib]
+name = "starsim_rust_kernels"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+numpy = "0.22"
+
+[profile.release]
+opt-level = 3
+lto = true
