@@ -344,3 +344,35 @@ def test_scale_weighted_prevalence_denominator():
     after = prevalence()
     assert before > 0
     assert np.isclose(before, after)
+
+
+# ---------------------------------------------------------------------------
+# Network non-transmission flag (Primitive 4)
+# ---------------------------------------------------------------------------
+
+class SplitSomeSusceptibles(ss.Intervention):
+    """ At ti=2, split the first 30 susceptible agents (so a known fine cohort exists). """
+    def __init__(self, ratio=5, name=None):
+        super().__init__(name=name)
+        self.ratio = ratio
+
+    def step(self):
+        if self.sim.ti == 2:
+            uids = self.sim.people.sir.susceptible.uids[:30]
+            if len(uids):
+                self.sim.people.split(uids, self.ratio)
+
+
+def test_fine_agents_excluded_from_network_transmission():
+    # Fine agents must not form network edges, so they cannot be infected via transmission.
+    # Without exclusion they would join add_pairs (alive & age>0) and could get infected.
+    sim = ss.Sim(n_agents=400, diseases='sir', networks='random', dur=12, rand_seed=1,
+                 interventions=SplitSomeSusceptibles(ratio=5))
+    sim.run()
+    ppl = sim.people
+    fine = ppl.auids[ppl.fine[ppl.auids]]
+    assert len(fine) > 0
+    # no network edge touches any fine agent
+    net = sim.networks[0]
+    edge_endpoints = set(np.asarray(net.edges.p1).tolist()) | set(np.asarray(net.edges.p2).tolist())
+    assert not (set(int(u) for u in fine) & edge_endpoints), "fine agents must not appear in network edges"
