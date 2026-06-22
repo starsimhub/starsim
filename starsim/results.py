@@ -31,13 +31,14 @@ class Result(ss.BaseArr):
     you can use result.disp().
     """
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, flow=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
         self.module = module
         self.scale = scale # TODO: should default to True for ints, False for floats
         self.auto_plot = auto_plot
+        self.flow = flow # Optional callable (module)->BoolArr/uids; if set, the framework auto-fills this result scale-weighted each step
         self.timevec = timevec
         self.low = low
         self.high = high

@@ -435,3 +435,54 @@ def test_pregnancy_counts_are_scale_weighted():
         sp = total(True, key)
         assert base > 0, f"{key} baseline should be positive"
         assert np.isclose(base, sp, rtol=0.2), f"represented {key} should be conserved: base={base} split={sp}"
+
+
+# ---------------------------------------------------------------------------
+# Scale-weighted-by-default counting: People.count(x) dispatch
+# ---------------------------------------------------------------------------
+
+def test_people_count_dispatch_scale_weighted():
+    sim = ss.Sim(n_agents=200, diseases='sir', networks='random', dur=3, rand_seed=1)
+    sim.run()
+    ppl = sim.people
+    sir = ppl.sir
+    # scale==1: count(condition) == raw count_nonzero; count(uids) == len
+    cond = sir.infected & (ppl.age > 0)
+    assert ppl.count(cond) == np.count_nonzero(cond)            # BoolArr condition
+    assert ppl.count(sir.infected) == sir.infected.count()      # BoolState
+    assert ppl.count(sir.infected.uids) == len(sir.infected.uids)  # uids set
+    # under multiscale: count is conserved across a split
+    before = ppl.count(sir.susceptible)
+    ppl.split(sir.susceptible.uids, 5)
+    assert np.isclose(ppl.count(sir.susceptible), before)       # splitting susceptibles conserves the count
+
+
+# ---------------------------------------------------------------------------
+# Scale-weighted-by-default counting: declarative flow results
+# ---------------------------------------------------------------------------
+
+class FlowAnalyzer(ss.Analyzer):
+    """ Declares a flow result bound to a condition; writes NO counting code. """
+    def step(self):
+        pass
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('flow_count', flow=lambda a: a.sim.people.sir.susceptible)
+        )
+
+
+def test_declarative_flow_autofills_scaled():
+    # An analyzer that only DECLARES a flow gets it auto-filled and scale-weighted by the
+    # framework. Splitting the population must not inflate the flow ~5x.
+    def run(split):
+        ivs = [SplitEveryone(ratio=5)] if split else []  # splits everyone at ti=1
+        s = ss.Sim(n_agents=300, diseases='sir', networks='random', dur=6, rand_seed=1,
+                   interventions=ivs, analyzers=FlowAnalyzer())
+        s.run()
+        return np.asarray(s.results.flowanalyzer.flow_count)
+    base = run(False)
+    sp = run(True)
+    assert base.max() > 0                          # the flow was auto-filled (builder wrote no count)
+    assert sp.max() <= 1.3 * base.max()            # scale-weighted: not inflated by the split

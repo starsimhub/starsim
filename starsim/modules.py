@@ -752,6 +752,9 @@ class Module(Base):
         """
         for state in self.auto_state_list:
             self.results[f'n_{state.name}'][self.ti] = state.count() # scale-weighted; == raw count when scales are 1
+        for res in self.results.values(): # Auto-fill declared flow results, scale-weighted
+            if isinstance(res, ss.Result) and res.flow is not None:
+                self.results[res.name][self.ti] = self.sim.people.count(res.flow(self))
         return
 
     @required()

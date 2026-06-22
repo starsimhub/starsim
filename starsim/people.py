@@ -481,6 +481,27 @@ class People:
         """
         return self.scale[inds].sum()
 
+    def count(self, x):
+        """
+        Scale-weighted count of agents -- the default way to count agents into a result.
+
+        Counts agents by the population they represent (`scale`), so it is correct under
+        multiscale and equals the raw count when every agent's `scale` is 1. Accepts either a
+        boolean condition or a set of UIDs:
+
+        - `ss.BoolArr`/`ss.BoolState` (e.g. `disease.infected` or `infected & (age > 50)`): counts
+          the truthy agents.
+        - `ss.uids` / boolean mask: counts those agents.
+
+        Examples:
+            sim.people.count(disease.infected)                 # how many are infected (scaled)
+            sim.people.count((disease.infected & at_risk))     # ad-hoc condition (scaled)
+            sim.people.count(new_infection_uids)               # a flow this step (scaled)
+        """
+        if isinstance(x, ss.BoolArr):
+            return x.count()
+        return self.scale_flows(x)
+
     def update_post(self):
         """ Final updates at the very end of the timestep """
         sim = self.sim
