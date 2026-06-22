@@ -406,7 +406,8 @@ class Infection(Disease):
         res = self.results
         ti = self.ti
         newly_infected = np.asarray(np.round(self.ti_infected) == ti)  # bool mask over active agents; round since ti_infected is FloatArr
-        n_infections = self.sim.people.scale.values[newly_infected].sum()  # scale-weighted; == raw count when scales are 1
+        newly_uids = self.sim.people.auids[newly_infected]
+        n_infections = self.sim.people.scale[newly_uids].sum()  # scale-weighted; == raw count when scales are 1
 
         # Update new infections to remove initial cases on first timestep
         if ti == 0:
@@ -414,7 +415,7 @@ class Infection(Disease):
             n_infections -= n_initial_cases
 
         res.new_infections[ti] = n_infections
-        res.prevalence[ti] = res.n_infected[ti] / self.sim.people.scale.values.sum()  # scale-weighted; denominator == len(people) when scales are 1
+        res.prevalence[ti] = res.n_infected[ti] / self.sim.people.scale[self.sim.people.auids].sum()  # scale-weighted; denominator == len(people) when scales are 1
         return
 
     def finalize_results(self):
@@ -604,7 +605,7 @@ class NCD(Disease):
         super().update_results()
         ti = self.ti
         self.results.n_not_at_risk[ti] = self.not_at_risk.count()  # scale-weighted; == raw count when scales are 1
-        self.results.prevalence[ti]    = self.affected.count() / self.sim.people.scale.values.sum()  # scale-weighted; denom == len(people) when scales are 1
+        self.results.prevalence[ti]    = self.affected.count() / self.sim.people.scale[self.sim.people.auids].sum()  # scale-weighted; denom == len(people) when scales are 1
         self.results.new_deaths[ti]    = self.sim.people.scale.values[np.asarray(self.ti_dead == ti)].sum()  # scale-weighted
         return
 

@@ -475,6 +475,7 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
         auids = np.arange(n_agents),
         slot = np.arange(n_agents),
         age = rng.uniform(min_age, max_age, size=n_agents),
+        scale = np.ones(n_agents), # Per-agent scale factor (uniform in the mock); needed by scale-weighted counting
         add_module = lambda x: None, # Placeholder function
     )
     return people
