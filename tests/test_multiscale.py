@@ -376,3 +376,32 @@ def test_fine_agents_excluded_from_network_transmission():
     net = sim.networks[0]
     edge_endpoints = set(np.asarray(net.edges.p1).tolist()) | set(np.asarray(net.edges.p2).tolist())
     assert not (set(int(u) for u in fine) & edge_endpoints), "fine agents must not appear in network edges"
+
+
+# ---------------------------------------------------------------------------
+# Scale-aware demographics (Primitive 3): Deaths
+# ---------------------------------------------------------------------------
+
+class SplitEveryone(ss.Intervention):
+    """ At ti=1, split the whole living population by `ratio`. """
+    def __init__(self, ratio=4, name=None):
+        super().__init__(name=name)
+        self.ratio = ratio
+
+    def step(self):
+        if self.sim.ti == 1:
+            self.sim.people.split(self.sim.people.auids.copy(), self.ratio)
+
+
+def test_deaths_count_is_scale_weighted():
+    # Splitting the whole population by 4 makes 4x as many (raw) agents, each representing
+    # 1/4 of a person. The scale-weighted death count must be conserved, not inflated 4x.
+    def total_deaths(split):
+        ivs = [SplitEveryone(ratio=4)] if split else []
+        s = ss.Sim(n_agents=2000, demographics=ss.Deaths(death_rate=20), dur=10, rand_seed=1, interventions=ivs)
+        s.run()
+        return float(np.nansum(s.results.deaths.new))
+    base = total_deaths(False)
+    sp = total_deaths(True)
+    assert base > 0
+    assert np.isclose(base, sp, rtol=0.15), f"represented deaths should be conserved: base={base} split={sp}"

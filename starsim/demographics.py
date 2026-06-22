@@ -272,8 +272,8 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
+            ss.Result('new',        dtype=float, scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # float for scale-weighted (fractional) counts; use sim deaths instead
+            ss.Result('cumulative', dtype=float, scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
             ss.Result('cmr',        dtype=float, scale=False, summarize_by='mean', label='Crude mortality rate'),
         )
         return
@@ -284,7 +284,7 @@ class Deaths(Demographics):
         self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
         death_uids = self._p_death.filter()
         self.sim.people.request_death(death_uids)
-        self.n_deaths = len(death_uids)
+        self.n_deaths = self.sim.people.scale[death_uids].sum()  # scale-weighted represented deaths; == len(death_uids) when scales are 1
         return self.n_deaths
 
     def update_results(self):
