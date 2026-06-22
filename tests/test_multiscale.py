@@ -283,3 +283,31 @@ def test_count_is_scale_weighted():
     ppl.split(ss.uids(np.arange(10)), 5)
     assert len(ppl.auids) == 140
     assert np.isclose(ppl.alive.count(), 100.0)
+
+
+class SplitSusceptibles(ss.Intervention):
+    """ At `ti_split`, split all currently-susceptible agents. """
+    def __init__(self, ratio=5, ti_split=2, name=None):
+        super().__init__(name=name)
+        self.ratio = ratio
+        self.ti_split = ti_split
+
+    def step(self):
+        if self.sim.ti == self.ti_split:
+            uids = self.sim.people.sir.susceptible.uids
+            if len(uids):
+                self.sim.people.split(uids, self.ratio)
+
+
+def test_auto_state_results_are_scale_weighted_and_float():
+    def run(split):
+        ivs = [SplitSusceptibles(ratio=5, ti_split=2)] if split else []
+        s = ss.Sim(n_agents=300, diseases='sir', networks='random', dur=6, rand_seed=1, interventions=ivs)
+        s.run()
+        return s
+    base = run(False)
+    sp = run(True)
+    ns = np.asarray(sp.results.sir.n_susceptible)
+    assert np.issubdtype(ns.dtype, np.floating)   # dtype changed to float to hold fractional counts
+    # raw counting would spike ~5x at the split step; scale-weighting conserves represented pop
+    assert ns.max() <= 1.3 * np.asarray(base.results.sir.n_susceptible).max()
