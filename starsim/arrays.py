@@ -497,7 +497,7 @@ class Arr(BaseArr):
         Equals the raw nonzero count when every agent's `scale` is 1 (the default), and counts
         fine-scale agents by the population they represent under multiscale (see `People.split`).
         """
-        return float(self.people.scale[self.uids].sum())
+        return float(self.people.scale_flows(self.uids))
 
     @property
     def values(self):

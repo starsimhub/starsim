@@ -570,8 +570,8 @@ class People:
         res = self.sim.results
         for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
             res[f'n_{state.name}'][ti] = getattr(self, state.name).count() # scale-weighted; == raw count when scales are 1
-        res.new_deaths[ti] = self.scale[(self.ti_dead == ti).uids].sum()       # scale-weighted; == raw count when scales are 1
-        res.new_emigrants[ti] = self.scale[(self.ti_removed == ti).uids].sum() # scale-weighted
+        res.new_deaths[ti] = self.scale_flows((self.ti_dead == ti).uids)       # scale-weighted; == raw count when scales are 1
+        res.new_emigrants[ti] = self.scale_flows((self.ti_removed == ti).uids) # scale-weighted
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 

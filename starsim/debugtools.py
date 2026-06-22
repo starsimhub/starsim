@@ -478,6 +478,7 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
         scale = np.ones(n_agents), # Per-agent scale factor (uniform in the mock); needed by scale-weighted counting
         add_module = lambda x: None, # Placeholder function
     )
+    people.scale_flows = lambda inds: people.scale[inds].sum() # Mirror People.scale_flows for scale-weighted counting
     return people
 
 

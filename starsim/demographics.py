@@ -124,7 +124,7 @@ class Births(Demographics):
 
     def step(self):
         new_uids = self.add_births()
-        self.n_births_this_step = self.sim.people.scale[new_uids].sum()  # scale-weighted; == len(new_uids) when scales are 1
+        self.n_births_this_step = self.sim.people.scale_flows(new_uids)  # scale-weighted; == len(new_uids) when scales are 1
         return new_uids
 
     def add_births(self):
@@ -285,7 +285,7 @@ class Deaths(Demographics):
         self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
         death_uids = self._p_death.filter()
         self.sim.people.request_death(death_uids)
-        self.n_deaths = self.sim.people.scale[death_uids].sum()  # scale-weighted represented deaths; == len(death_uids) when scales are 1
+        self.n_deaths = self.sim.people.scale_flows(death_uids)  # scale-weighted represented deaths; == len(death_uids) when scales are 1
         return self.n_deaths
 
     def update_results(self):
@@ -734,9 +734,9 @@ class Pregnancy(Demographics):
         very_preterm = ga_wk < self.pars.very_preterm_threshold.weeks
         self.preterm[newborn_uids]      = preterm
         self.very_preterm[newborn_uids] = very_preterm
-        scale = self.sim.people.scale
-        self._counts.n_preterm      += scale[newborn_uids[preterm]].sum()       # scale-weighted; == preterm.sum() when scales are 1
-        self._counts.n_very_preterm += scale[newborn_uids[very_preterm]].sum()  # scale-weighted
+        scale_flows = self.sim.people.scale_flows
+        self._counts.n_preterm      += scale_flows(newborn_uids[preterm])       # scale-weighted; == preterm.sum() when scales are 1
+        self._counts.n_very_preterm += scale_flows(newborn_uids[very_preterm])  # scale-weighted
 
         self.pregnant[mother_uids] = False
         self.ti_delivery[mother_uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
@@ -834,7 +834,7 @@ class Pregnancy(Demographics):
         """
         maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
-        self.results['maternal_deaths'][self.ti] = self.sim.people.scale[maternal_deaths].sum()  # scale-weighted
+        self.results['maternal_deaths'][self.ti] = self.sim.people.scale_flows(maternal_deaths)  # scale-weighted
         return
 
     def select_conceivers(self, uids=None):
@@ -969,13 +969,13 @@ class Pregnancy(Demographics):
         if len(mothers):
             newborns = self.find_unborn_children(mothers)
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
-            self._counts.births += self.sim.people.scale[newborns].sum()  # scale-weighted; == len(newborns) when scales are 1
+            self._counts.births += self.sim.people.scale_flows(newborns)  # scale-weighted; == len(newborns) when scales are 1
             self.process_newborns(newborns)             # Process newborns
 
         # Figure out who conceives, set prognoses, and make embryos
         self.set_rel_sus()                              # Update rel_sus
         conceivers = self.select_conceivers()            # Get the UIDs of women who are going to conceive this timestep
-        self._counts.pregnancies += self.sim.people.scale[conceivers].sum()  # scale-weighted; == len(conceivers) when scales are 1
+        self._counts.pregnancies += self.sim.people.scale_flows(conceivers)  # scale-weighted; == len(conceivers) when scales are 1
 
         # Make pregnancies and embryos
         if len(conceivers):
@@ -1046,9 +1046,9 @@ class Pregnancy(Demographics):
             self.n_stillbirths[mother_uids[~is_mc]] += 1
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                scale = self.sim.people.scale
-                self.results['miscarriages'][ti] += scale[prenatal_death_uids[is_mc]].sum()   # scale-weighted
-                self.results['stillbirths'][ti]  += scale[prenatal_death_uids[~is_mc]].sum()  # scale-weighted
+                scale_flows = self.sim.people.scale_flows
+                self.results['miscarriages'][ti] += scale_flows(prenatal_death_uids[is_mc])   # scale-weighted
+                self.results['stillbirths'][ti]  += scale_flows(prenatal_death_uids[~is_mc])  # scale-weighted
 
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
@@ -1080,7 +1080,7 @@ class Pregnancy(Demographics):
             self.neonatal_death[nnd_uids] = True
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                self.results['neonatal_deaths'][ti] += self.sim.people.scale[nnd_uids].sum()  # scale-weighted
+                self.results['neonatal_deaths'][ti] += self.sim.people.scale_flows(nnd_uids)  # scale-weighted
         return
 
     def update_results(self):
