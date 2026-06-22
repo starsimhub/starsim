@@ -405,8 +405,7 @@ class Infection(Disease):
         super().update_results()
         res = self.results
         ti = self.ti
-        newly_infected = np.asarray(np.round(self.ti_infected) == ti)  # bool mask over active agents; round since ti_infected is FloatArr
-        newly_uids = self.sim.people.auids[newly_infected]
+        newly_uids = self.sim.people.auids[self.ti_infected.round() == ti]  # newly infected this step (round since ti_infected is fractional)
         n_infections = self.sim.people.scale[newly_uids].sum()  # scale-weighted; == raw count when scales are 1
 
         # Update new infections to remove initial cases on first timestep
@@ -606,7 +605,7 @@ class NCD(Disease):
         ti = self.ti
         self.results.n_not_at_risk[ti] = self.not_at_risk.count()  # scale-weighted; == raw count when scales are 1
         self.results.prevalence[ti]    = self.affected.count() / self.sim.people.scale[self.sim.people.auids].sum()  # scale-weighted; denom == len(people) when scales are 1
-        self.results.new_deaths[ti]    = self.sim.people.scale.values[np.asarray(self.ti_dead == ti)].sum()  # scale-weighted
+        self.results.new_deaths[ti]    = self.sim.people.scale[(self.ti_dead == ti).uids].sum()  # scale-weighted
         return
 
 

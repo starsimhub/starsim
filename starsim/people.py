@@ -439,12 +439,12 @@ class People:
                              'all splits in a sim must use the same ratio (fine-slot blocks would otherwise collide)')
 
         offset = self._split_slot_offset
-        parent_slots = np.asarray(self.slot[uids])
+        parent_slots = self.slot[uids]
 
         # Deterministic reserved block per parent slot; disjoint across distinct parents.
         # new_slots layout matches parent_map: [k=0 for all parents, k=1 for all parents, ...]
         new_slots = np.concatenate([offset + parent_slots * n_sib + k for k in range(n_sib)])
-        parent_map = np.tile(np.asarray(uids), n_sib)
+        parent_map = np.tile(uids, n_sib)
 
         new_uids = self.grow(n_sib * len(uids), new_slots)
         for state in self.states.values():
