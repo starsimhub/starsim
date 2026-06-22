@@ -268,3 +268,18 @@ def test_no_split_is_bit_identical_to_baseline():
             assert np.array_equal(a, b)                   # e.g. the date timevec
     assert (s1.people.scale.raw == 1).all()
     assert not s1.people.fine.raw.any()
+
+
+# ---------------------------------------------------------------------------
+# Scale-aware counting plan, Task 1: scale-weighted Arr.count()
+# ---------------------------------------------------------------------------
+
+def test_count_is_scale_weighted():
+    ppl = make_people(n=100)
+    # all scale 1 -> count == raw nonzero count
+    assert ppl.alive.count() == 100
+    # split 10 agents by ratio 5: raw alive grows to 100 + 10*4 = 140 agents,
+    # but the scale-weighted count must stay 100 (represented population conserved)
+    ppl.split(ss.uids(np.arange(10)), 5)
+    assert len(ppl.auids) == 140
+    assert np.isclose(ppl.alive.count(), 100.0)
