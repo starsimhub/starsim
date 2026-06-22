@@ -1,0 +1,129 @@
+---
+title: Multiscale agents
+jupyter: python3
+---
+
+Multiscale modeling lets a single simulation represent some agents at a coarser scale and others at a finer scale, so that **rare events can be resolved at high resolution without paying the memory cost of simulating the whole population at that resolution**. The classic use case is a rare disease outcome — for example, the progression from precancer to cervical cancer in HPV — where the event is too infrequent to estimate well from a coarse population, but simulating millions of agents just to capture it is wasteful.
+
+Starsim implements multiscale as a first-class, framework-level capability. A disease model expresses only the one decision that is specific to it — *where* to resolve the rare pathway at finer scale — by calling `sim.people.split()`. Everything else (counting, demographics, transmission, and common-random-number safety) is handled by the framework and is correct automatically.
+
+This guide builds on the [Random numbers guide](advanced_random.qmd), since multiscale relies on common random numbers (CRN); please read that first.
+
+In this guide you will:
+
+- Understand what an agent's `scale` means and how splitting works
+- Learn the one call a disease model needs (`sim.people.split`)
+- See how results are scale-weighted by default, so counts stay correct
+- Learn how to write new components (diseases, interventions, analyzers) that are multiscale-correct without extra effort
+
+
+## Agent scale
+
+Every agent has a `scale` (`people.scale`, a per-agent float, default `1.0`) giving the number of people that agent represents. A normal, single-scale simulation leaves every `scale` at 1, so an agent represents exactly one person and all counts are ordinary head counts.
+
+Multiscale introduces agents with `scale < 1`: a *fine-scale* agent with `scale = 0.1` represents one tenth of a person. The key property is that **the total represented population is `sum(scale)`, not the number of agents** — so a result must be *scale-weighted* (sum of `scale`) rather than a raw count to stay correct. Starsim does this weighting for you (see [below](#counting-is-scale-weighted-by-default)).
+
+
+## Splitting agents
+
+`sim.people.split(uids, ratio)` replaces each listed agent with `ratio` finer-scale agents, conserving the represented population. It is the only multiscale-specific call a disease model makes — typically at the decision point where a rare pathway branches off.
+
+```{python}
+import starsim as ss
+
+sim = ss.Sim(n_agents=2000, diseases='sir', networks='random', dur=5, rand_seed=1)
+sim.init()
+ppl = sim.people
+susc = ppl.sir.susceptible
+
+print(f'Before: {susc.count():.0f} represented, {len(susc.uids)} raw agents')
+
+# Resolve 200 agents at 10x finer scale
+new = ppl.split(susc.uids[:200], ratio=10)
+
+print(f'After:  {ppl.sir.susceptible.count():.0f} represented, {len(ppl.sir.susceptible.uids)} raw agents')
+print(f'Created {len(new)} fine agents, each scale = {ppl.scale[new[0]]:.2f}')
+```
+
+Notice that the **represented** susceptible count is unchanged — splitting conserves population — while the **raw** agent count grew. Each of the `ratio` resolved agents (the original plus `ratio-1` new copies) carries `1/ratio` of the original scale.
+
+What `split` does for you:
+
+- **Copies all module states** from each parent to its new fine-scale siblings, so they begin as identical replicas of the parent at the moment of the split.
+- **Assigns CRN-safe slots** to the new agents, derived deterministically from the parent's slot. This means the fine agents draw *independent* random trajectories (so variance actually drops), yet the assignment is *reproducible* across scenarios — the property that makes [common random numbers](advanced_random.qmd) work. The original agent keeps its slot, so its trajectory is bit-identical to a no-split run.
+- **Tags the fine agents** (`people.fine`) so the framework can treat them appropriately — notably, fine agents are excluded from network transmission (they resolve their own within-host progression; they do not spread disease).
+
+::: {.callout-important}
+## One ratio per simulation
+The reserved-slot scheme is collision-free only when every `split` call uses the same `ratio`. Calling `split` with a different ratio later raises an error rather than silently correlating agents. Re-splitting an already-fine agent is likewise unsupported.
+:::
+
+
+## Counting is scale-weighted by default
+
+Because every count must be scale-weighted under multiscale, Starsim makes scale-weighting the **default** way to turn an agent set into a number. You generally do not have to think about it:
+
+- **State counts** — every `n_<state>` result (e.g. `n_infected`, `n_susceptible`) is filled via the scale-weighted `Arr.count()`, automatically.
+- **Counting in your own code** — `(condition).count()` is scale-weighted, and works on computed conditions too:
+
+```{python}
+infected_adults = ppl.sir.infected & (ppl.age > 15)
+print(f'{infected_adults.count():.1f} infected adults (scale-weighted)')
+```
+
+- **`sim.people.count(x)`** is the single entry point for counting agents, scaled. It accepts a boolean state/condition or a set of UIDs:
+
+```{python}
+print(ppl.count(ppl.sir.infected))         # a state
+print(ppl.count(ppl.sir.infected.uids))    # a set of UIDs
+```
+
+When all scales are 1, every one of these equals the ordinary raw count, so single-scale simulations are completely unaffected.
+
+
+## Flow results
+
+Event counts ("how many agents did X this step", e.g. `new_infections`) are **flows**. Declare a flow on a `Result` with a `flow=` callable, and the framework auto-fills it scale-weighted every step — you write no counting code. The callable receives the module and returns the agents who experienced the event this step (a condition or UIDs):
+
+```python
+ss.Result('new_infections', flow=lambda m: (m.ti_infected.round() == m.ti))
+```
+
+This mirrors how `BoolState`s automatically generate `n_<state>` results. It works in any module — disease, intervention, or analyzer — because the base `update_results` fills declared flows for all of them.
+
+::: {.callout-note}
+## Flows that will be saved or run in parallel
+A `flow` stored as a lambda cannot be pickled, so it breaks `sc.save()` and parallel runs (`ss.parallel`/`MultiSim`, which use multiprocessing). For any reusable component, use a top-level function or a method instead of a lambda:
+
+```python
+def new_infections_flow(module):
+    return module.ti_infected.round() == module.ti
+
+ss.Result('new_infections', flow=new_infections_flow)
+```
+:::
+
+For irregular flows that accumulate across several sub-steps rather than matching a single per-step condition, fill the result with `sim.people.scale_flows(uids)` (the scale-weighted sum over a UID set) directly.
+
+
+## Writing multiscale-correct components
+
+The upshot for anyone building a disease, intervention, or analyzer: **use the scale-aware idioms and your component is multiscale-correct for free.**
+
+- To count agents in a state or condition: call `.count()` on the (Bool) state/condition, or `sim.people.count(x)`.
+- To record an event count: declare it as a `flow`, or fill it with `sim.people.scale_flows(uids)`.
+- Avoid `len(uids)` and `np.count_nonzero(...)` for anything written to a result — those are raw counts and will be wrong under multiscale. (They remain correct for control flow and indexing; the rule is only about counts that become results.)
+
+Demographics (births, deaths, pregnancy) and network transmission are already scale-aware framework-side, so vital dynamics and disease spread behave correctly under multiscale without any model-specific handling.
+
+
+## Summary
+
+| You write | The framework handles |
+|---|---|
+| `sim.people.split(uids, ratio)` at the rare-event decision | State copying, CRN-safe slot assignment, population conservation |
+| `.count()` / `people.count()` to count agents | Scale-weighting every count automatically |
+| `ss.Result(..., flow=fn)` to declare event counts | Auto-filling flows scale-weighted each step |
+| (nothing extra) | Scale-weighted demographics; fine agents excluded from transmission |
+
+Multiscale is a strict, backward-compatible generalization: with every `scale == 1` (the default), results are identical to a non-multiscale run. You only opt in by calling `split`.

@@ -3,6 +3,16 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.5.0 (unreleased)
+This release adds **multiscale agents** as a first-class, framework-level capability: a simulation can resolve rare events (e.g. precancer→cancer in HPV) at finer scale without simulating the whole population at that resolution. See the [Multiscale agents guide](https://docs.starsim.org/user_guide/advanced_multiscale.html).
+
+### Multiscale agents
+- `sim.people.split(uids, ratio)` replaces each listed agent with `ratio` finer-scale agents, conserving the represented population. It copies all module states to the new agents, assigns CRN-safe slots derived from the parent (so fine agents draw independent but reproducible trajectories), and tags them via `people.fine`. This is the only multiscale-specific call a disease model needs.
+- Counting is now **scale-weighted by default**: `Arr.count()` (and therefore every auto-generated `n_<state>` result) counts agents by the population they represent (`scale`). `People.count(x)` is a new single entry point that counts a boolean state/condition or a set of UIDs, scaled.
+- New **declarative flow results**: `ss.Result(name, flow=fn)` auto-fills an event count scale-weighted every step (mirroring how `BoolState`s generate `n_<state>` results), for diseases, interventions, and analyzers.
+- Demographics (`Births`, `Deaths`, `Pregnancy`) and network transmission are now scale-aware: vital-dynamics counts are scale-weighted and fine agents are excluded from network transmission.
+- Fully backward compatible: with every `scale == 1` (the default), all results are identical to before. The `n_<state>` and flow/demographics count results are now stored as floats (to hold fractional scale-weighted values), but equal the previous integer values for single-scale runs.
+
 ## Version 3.4.0 (2026-06-21)
 This release introduces the **Starsim library** (`starsim.library`), which absorbs the former standalone `starsim_examples` package. This release also adds memory, reproducibility, and usability improvements along with numerous bugfixes.
 

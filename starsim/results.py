@@ -25,6 +25,11 @@ class Result(ss.BaseArr):
         low (array): values for the lower bound
         high (array): values for the upper bound
         summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+        flow (callable): if set, a flow result auto-filled scale-weighted each step from
+            `flow(module)`, which returns the agents (a `BoolArr` condition or `uids`) who
+            experienced the event this step. Use a top-level function or method, not a lambda,
+            if the sim will be saved or run in parallel (a lambda cannot be pickled). See the
+            [Multiscale agents guide](https://docs.starsim.org/user_guide/advanced_multiscale.html).
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
