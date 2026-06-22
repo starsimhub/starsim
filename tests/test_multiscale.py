@@ -229,3 +229,25 @@ def test_split_invariant_to_unrelated_scenario_change():
     a = target_assignment(None)
     b = target_assignment([120, 121, 122])
     assert a == b, "fine slots for the target cohort must be invariant to unrelated splits"
+
+
+# ---------------------------------------------------------------------------
+# Task 6: backward-compatibility guardrail
+# ---------------------------------------------------------------------------
+
+def test_no_split_is_bit_identical_to_baseline():
+    # Adding the fine state + split() must not change any default-sim result, and
+    # must leave scale==1 / fine==False everywhere when split() is never called.
+    s1 = ss.Sim(n_agents=500, diseases='sir', networks='random', dur=20, rand_seed=3)
+    s1.run()
+    s2 = ss.Sim(n_agents=500, diseases='sir', networks='random', dur=20, rand_seed=3)
+    s2.run()
+    for key in s1.results.sir.keys():
+        a = np.asarray(s1.results.sir[key])
+        b = np.asarray(s2.results.sir[key])
+        if np.issubdtype(a.dtype, np.number):
+            assert np.array_equal(a, b, equal_nan=True)   # numeric result (may contain NaN)
+        else:
+            assert np.array_equal(a, b)                   # e.g. the date timevec
+    assert (s1.people.scale.raw == 1).all()
+    assert not s1.people.fine.raw.any()
