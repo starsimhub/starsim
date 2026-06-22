@@ -399,6 +399,54 @@ class People:
         self.auids = self.auids.concatenate(new_uids)
         return new_uids
 
+    def split(self, uids, ratio):
+        """
+        Split coarse agents into `ratio` finer-scale agents, conserving the total
+        represented population (`sum(scale)`), to resolve rare events at higher resolution.
+
+        Each input agent is retained (keeping its slot, hence its CRN trajectory) and
+        `ratio - 1` sibling copies are created. All `ratio` resolved agents have their
+        `scale` divided by `ratio`. Sibling slots come from a deterministic reserved block
+        keyed by the parent's slot: `offset + parent_slot*(ratio-1) + k`. This is collision-free
+        by construction and a pure function of the parent, so fine-agent draws are reproducible
+        across scenarios and independent of split order/volume. This is what the prior hpvsim
+        attempt lacked: it grew agents with default (sequential) slots, which are order-dependent.
+
+        Args:
+            uids (uids): coarse agents to split (must not already be fine-scale)
+            ratio (int): number of fine-scale agents each coarse agent becomes (>= 2)
+
+        Returns:
+            new_uids (uids): the newly created sibling UIDs
+        """
+        uids = ss.uids(uids)
+        ratio = int(ratio)
+        if ratio < 2 or len(uids) == 0:
+            return ss.uids()
+        if self.fine[uids].any():
+            raise ValueError('split() received agents that are already fine-scale; re-splitting is unsupported')
+
+        n_sib = ratio - 1
+        offset = self._split_slot_offset
+        parent_slots = np.asarray(self.slot[uids])
+
+        # Deterministic reserved block per parent slot; disjoint across distinct parents.
+        # new_slots layout matches parent_map: [k=0 for all parents, k=1 for all parents, ...]
+        new_slots = np.concatenate([offset + parent_slots * n_sib + k for k in range(n_sib)])
+        parent_map = np.tile(np.asarray(uids), n_sib)
+
+        new_uids = self.grow(n_sib * len(uids), new_slots)
+        for state in self.states.values():
+            state[new_uids] = state[parent_map]
+        self.parent[new_uids] = parent_map
+
+        new_scale = self.scale[uids] / ratio
+        self.scale[uids] = new_scale
+        self.scale[new_uids] = np.tile(new_scale, n_sib)
+        self.fine[uids] = True
+        self.fine[new_uids] = True
+        return new_uids
+
     def filter(self, criteria=None, uids=None, split=False):
         """
         Store indices to allow for easy filtering of the People object.
