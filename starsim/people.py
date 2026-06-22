@@ -69,6 +69,7 @@ class People:
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
+            ss.BoolArr('fine', default=False), # True for fine-scale agents created by People.split() (BoolArr, not BoolState, so no auto n_fine result)
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
@@ -335,7 +336,17 @@ class People:
     def n_uids(self):
         """ Number of UIDs used in People """
         return self.uid.len_used
-    
+
+    @property
+    def _split_slot_offset(self):
+        """
+        Base of the reserved slot band for fine-scale agents created by `split()`.
+
+        Sits above `Pregnancy`'s reserved newborn range (`slot_scale=5` -> 5*n) so
+        fine-agent slots cannot collide with newborn slots.
+        """
+        return int(max(1000, 10 * self.n_agents_init))
+
     @property
     def dead(self):
         """ Dead boolean. Also includes removed agents """
