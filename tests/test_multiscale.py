@@ -97,3 +97,32 @@ def test_split_slots_are_deterministic_function_of_parent():
     for ps, slots in slots_a.items():
         assert sorted(slots) == sorted(slots_b[ps]), \
             "fine-agent slots must be a pure function of the parent slot"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: failure mode B - splitting does not perturb other agents
+# (mechanism level; the end-to-end transmitting variant is deferred to the
+#  network non-transmission plan, since fine agents still transmit today.)
+# ---------------------------------------------------------------------------
+
+def test_split_does_not_perturb_other_agents():
+    # A slotted draw for untouched agents must be identical whether or not other
+    # agents were split. Split must not consume/shift shared RNG state or mutate
+    # the slots of agents that did not split.
+    def draws_after(split_uids):
+        sim = ss.Sim(n_agents=200, diseases='sir', networks='random', dur=5, rand_seed=1)
+        sim.init()
+        ppl = sim.people
+        if len(split_uids):
+            ppl.split(ss.uids(split_uids), 5)
+        d = ss.normal(loc=0, scale=1, name='probe')
+        d.init(sim=sim, module=sim.diseases.sir)
+        untouched = ppl.auids[~ppl.fine[ppl.auids]]
+        return {int(ppl.slot[u]): float(v) for u, v in zip(untouched, d.rvs(untouched))}
+
+    none = draws_after([])
+    some = draws_after([10, 11, 12, 13, 14])
+    common = [s for s in none if s in some]
+    assert len(common) > 100
+    for s in common:
+        assert none[s] == some[s], f"slot {s} draw changed because other agents split"
