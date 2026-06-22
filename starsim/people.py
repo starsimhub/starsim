@@ -68,8 +68,9 @@ class People:
             ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
-            ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
-            ss.BoolArr('fine', default=False), # True for fine-scale agents created by People.split() (BoolArr, not BoolState, so no auto n_fine result)
+            ss.FloatArr('scale', default=1.0), # Result weight: people represented in outputs (count/scale_flows/results)
+            ss.FloatArr('epi_weight', default=1.0), # Demographic & transmission weight: whole people for vital dynamics + transmission participation
+            ss.BoolArr('fine', default=False), # True for non-participating fine-scale sub-agents created by People.split() (BoolArr, not BoolState, so no auto n_fine result)
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
@@ -423,8 +424,11 @@ class People:
         ratio = int(ratio)
         if ratio < 2 or len(uids) == 0:
             return ss.uids()
-        if self.fine[uids].any():
-            raise ValueError('split() received agents that are already fine-scale; re-splitting is unsupported')
+        # Re-splitting is unsupported (it would reuse a parent's reserved slot block and collide):
+        # reject fine siblings, and parents already split (whose result scale was divided below
+        # their body weight).
+        if self.fine[uids].any() or (self.scale[uids] < self.epi_weight[uids]).any():
+            raise ValueError('split() received agents that are already part of a split cohort; re-splitting is unsupported')
 
         n_sib = ratio - 1
 
@@ -451,10 +455,15 @@ class People:
             state[new_uids] = state[parent_map]
         self.parent[new_uids] = parent_map
 
+        # Result axis: divide scale across all `ratio` resolved sub-draws (parent + siblings)
         new_scale = self.scale[uids] / ratio
         self.scale[uids] = new_scale
         self.scale[new_uids] = np.tile(new_scale, n_sib)
-        self.fine[uids] = True
+        # Epi axis: the parent stays a whole body (keeps its epi_weight); siblings are
+        # non-participating sub-agents (epi_weight 0, tagged fine -> excluded from transmission
+        # and vital dynamics). This keeps total transmission/reproduction consistent: the cohort
+        # contributes one body (the parent), while its outcome is resolved across `ratio` sub-draws.
+        self.epi_weight[new_uids] = 0.0
         self.fine[new_uids] = True
         return new_uids
 

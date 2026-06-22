@@ -54,8 +54,9 @@ def test_split_mechanics_count_scale_and_copy():
     assert np.allclose(ppl.scale[new_uids], np.tile(orig_scale / ratio, ratio - 1))
     # siblings are exact state copies of their parent (age block-tiled by parent)
     assert np.allclose(ppl.age[new_uids], np.tile(orig_age, ratio - 1))
-    # everyone involved is now fine-scale
-    assert ppl.fine[uids].all() and ppl.fine[new_uids].all()
+    # only the siblings are fine sub-agents; the parent stays a full participating body
+    assert not ppl.fine[uids].any()
+    assert ppl.fine[new_uids].all()
 
 
 def test_split_total_scale_is_conserved():
@@ -486,3 +487,53 @@ def test_declarative_flow_autofills_scaled():
     sp = run(True)
     assert base.max() > 0                          # the flow was auto-filled (builder wrote no count)
     assert sp.max() <= 1.3 * base.max()            # scale-weighted: not inflated by the split
+
+
+# ---------------------------------------------------------------------------
+# Two-axis multiscale: epi_weight (demographics/transmission) vs scale (results)
+# ---------------------------------------------------------------------------
+
+def test_split_two_axis_epi_weight():
+    ppl = make_people(n=100)
+    uids = ss.uids([3, 7, 42])
+    ratio = 5
+    new = ppl.split(uids, ratio)
+    # Result axis: scale is 1/ratio for the whole cohort (parent + siblings)
+    assert np.allclose(ppl.scale[uids], 1 / ratio)
+    assert np.allclose(ppl.scale[new], 1 / ratio)
+    # Epi axis: the parent keeps its full body weight; siblings carry none
+    assert np.allclose(ppl.epi_weight[uids], 1.0)
+    assert np.allclose(ppl.epi_weight[new], 0.0)
+    # fine tags ONLY the siblings now (the parent stays a full participant)
+    assert not ppl.fine[uids].any()
+    assert ppl.fine[new].all()
+    # Conservation on both axes: scale-weighted = represented pop; epi-weighted = whole bodies
+    assert np.isclose(ppl.scale[uids].sum() + ppl.scale[new].sum(), len(uids))      # 3 represented
+    assert np.isclose(ppl.epi_weight[uids].sum() + ppl.epi_weight[new].sum(), len(uids))  # 3 bodies (parents)
+
+
+def test_split_parent_reproduces_as_whole_body():
+    # A split parent stays a full reproducing body: it bears whole newborns (scale == epi_weight ==
+    # the mother's epi_weight); fine siblings bear none.
+    class SplitFirst(ss.Intervention):
+        def __init__(self, name=None):
+            super().__init__(name=name)
+        def step(self):
+            if self.sim.ti == 1:
+                ppl = self.sim.people
+                fertile = ppl.female.uids[:20]
+                if len(fertile):
+                    ppl.split(fertile, 10)
+    sim = ss.Sim(n_agents=1000, demographics=ss.Pregnancy(fertility_rate=200), dur=8,
+                 rand_seed=1, interventions=SplitFirst())
+    sim.run()
+    ppl = sim.people
+    # Any agent born during the run is a whole body: scale == epi_weight, both > 0 (no fractional newborns)
+    born = ppl.auids[(ppl.age[ppl.auids] >= 0) & (ppl.parent[ppl.auids] != ppl.parent.nan)]
+    newborns = born[ppl.age[born] < 8]
+    assert len(newborns) > 0
+    assert np.allclose(ppl.scale[newborns], ppl.epi_weight[newborns])  # whole, not fractional
+    assert (ppl.epi_weight[newborns] > 0).all()
+    # fine siblings never reproduce -> no newborn has a fine parent
+    parents_of_newborns = ppl.parent[newborns]
+    assert not ppl.fine[ss.uids(parents_of_newborns.astype(int))].any()

@@ -119,7 +119,6 @@ the parent's original scale).
 
 ## Risks / open questions
 
-- **Naming** of the new weight (`epi_weight` vs `epi_weight`/`body_weight`).
 - **Death of a split parent vs the cohort:** if the parent dies of background causes, the cohort's
   outcome resolution is moot; whether/how siblings are culled is **disease-model territory**
   (hpvsim decides), not framework — the framework provides `split` + the two weights.
