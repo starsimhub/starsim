@@ -88,8 +88,8 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
+            ss.Result('new',        dtype=float, scale=True,  summarize_by='sum',  label='New births'), # float for scale-weighted (fractional) counts
+            ss.Result('cumulative', dtype=float, scale=True,  summarize_by='last', label='Cumulative births'),
             ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
         return
@@ -124,7 +124,7 @@ class Births(Demographics):
 
     def step(self):
         new_uids = self.add_births()
-        self.n_births_this_step = len(new_uids)
+        self.n_births_this_step = self.sim.people.scale[new_uids].sum()  # scale-weighted; == len(new_uids) when scales are 1
         return new_uids
 
     def add_births(self):
@@ -134,6 +134,7 @@ class Births(Demographics):
         new_uids = people.grow(len(birth_uids))
         people.age[new_uids] = 0
         people.parent[new_uids] = birth_uids
+        people.scale[new_uids] = people.scale[birth_uids]  # newborn represents the same population as its parent
         return new_uids
 
     def update_results(self):
@@ -144,7 +145,7 @@ class Births(Demographics):
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
         births_per_year = self.n_births_this_step/self.sim.t.dt_year
-        denom = self.sim.people.alive.sum()
+        denom = self.sim.people.alive.count()  # scale-weighted alive population
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
 
@@ -631,7 +632,7 @@ class Pregnancy(Demographics):
         """
         super().init_results()
 
-        scaling_kw = dict(dtype=int, scale=True)
+        scaling_kw = dict(dtype=float, scale=True) # float to hold scale-weighted (fractional) counts under multiscale
         nonscaling_kw = dict(dtype=float, scale=False)
         self.derived_results = ['n_fecund', 'n_fertile', 'n_susceptible']
 
@@ -733,8 +734,9 @@ class Pregnancy(Demographics):
         very_preterm = ga_wk < self.pars.very_preterm_threshold.weeks
         self.preterm[newborn_uids]      = preterm
         self.very_preterm[newborn_uids] = very_preterm
-        self._counts.n_preterm      += preterm.sum()
-        self._counts.n_very_preterm += very_preterm.sum()
+        scale = self.sim.people.scale
+        self._counts.n_preterm      += scale[newborn_uids[preterm]].sum()       # scale-weighted; == preterm.sum() when scales are 1
+        self._counts.n_very_preterm += scale[newborn_uids[very_preterm]].sum()  # scale-weighted
 
         self.pregnant[mother_uids] = False
         self.ti_delivery[mother_uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
@@ -832,7 +834,7 @@ class Pregnancy(Demographics):
         """
         maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
-        self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
+        self.results['maternal_deaths'][self.ti] = self.sim.people.scale[maternal_deaths].sum()  # scale-weighted
         return
 
     def select_conceivers(self, uids=None):
@@ -897,6 +899,7 @@ class Pregnancy(Demographics):
         people.slot[new_uids] = new_slots  # Before sampling female_dist
         people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
         people.parent[new_uids] = conceive_uids
+        people.scale[new_uids] = people.scale[conceive_uids]  # newborn represents the same population as its mother
         return
 
     def make_embryos(self, conceive_uids, embryo_counts=None):
@@ -966,13 +969,13 @@ class Pregnancy(Demographics):
         if len(mothers):
             newborns = self.find_unborn_children(mothers)
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
-            self._counts.births += len(newborns)       # += to handle burn-in
+            self._counts.births += self.sim.people.scale[newborns].sum()  # scale-weighted; == len(newborns) when scales are 1
             self.process_newborns(newborns)             # Process newborns
 
         # Figure out who conceives, set prognoses, and make embryos
         self.set_rel_sus()                              # Update rel_sus
         conceivers = self.select_conceivers()            # Get the UIDs of women who are going to conceive this timestep
-        self._counts.pregnancies += len(conceivers)  # += to handle burn-in
+        self._counts.pregnancies += self.sim.people.scale[conceivers].sum()  # scale-weighted; == len(conceivers) when scales are 1
 
         # Make pregnancies and embryos
         if len(conceivers):
@@ -1043,8 +1046,9 @@ class Pregnancy(Demographics):
             self.n_stillbirths[mother_uids[~is_mc]] += 1
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                self.results['miscarriages'][ti] += is_mc.sum()
-                self.results['stillbirths'][ti]  += (~is_mc).sum()
+                scale = self.sim.people.scale
+                self.results['miscarriages'][ti] += scale[prenatal_death_uids[is_mc]].sum()   # scale-weighted
+                self.results['stillbirths'][ti]  += scale[prenatal_death_uids[~is_mc]].sum()  # scale-weighted
 
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
@@ -1076,7 +1080,7 @@ class Pregnancy(Demographics):
             self.neonatal_death[nnd_uids] = True
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                self.results['neonatal_deaths'][ti] += len(nnd_uids)
+                self.results['neonatal_deaths'][ti] += self.sim.people.scale[nnd_uids].sum()  # scale-weighted
         return
 
     def update_results(self):
@@ -1094,7 +1098,7 @@ class Pregnancy(Demographics):
 
         for dr in self.derived_results:
             state = getattr(self, dr.replace('n_', ''))
-            res[dr][ti] = state.sum()
+            res[dr][ti] = state.count()  # scale-weighted; == state.sum() when scales are 1
 
         # Update ASFR, TFR, and MMR
         self.compute_asfr()
@@ -1110,8 +1114,10 @@ class Pregnancy(Demographics):
         """
         new_mother_uids = (self.ti_delivery == self.ti).uids
         new_mother_ages = self.sim.people.age[new_mother_uids]
-        births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins)
-        women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins)
+        scale = self.sim.people.scale
+        # Scale-weighted histograms: each agent contributes its represented population
+        births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins, weights=scale[new_mother_uids])
+        women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins, weights=scale[self.sim.people.female])
         self.asfr[:, self.ti] = sc.safedivide(births_by_age, women_by_age) * 1000
         return
 

@@ -405,3 +405,33 @@ def test_deaths_count_is_scale_weighted():
     sp = total_deaths(True)
     assert base > 0
     assert np.isclose(base, sp, rtol=0.15), f"represented deaths should be conserved: base={base} split={sp}"
+
+
+def test_births_count_is_scale_weighted():
+    # Splitting the population must not inflate represented births: newborns inherit the
+    # parent's scale, so the scale-weighted birth count is conserved.
+    def total_births(split):
+        ivs = [SplitEveryone(ratio=4)] if split else []
+        s = ss.Sim(n_agents=2000, demographics=ss.Births(birth_rate=30), dur=10, rand_seed=1, interventions=ivs)
+        s.run()
+        return float(np.nansum(s.results.births.new))
+    base = total_births(False)
+    sp = total_births(True)
+    assert base > 0
+    assert np.isclose(base, sp, rtol=0.15), f"represented births should be conserved: base={base} split={sp}"
+
+
+def test_pregnancy_counts_are_scale_weighted():
+    # Pregnancy births/pregnancies must be represented (scale-weighted): newborns inherit the
+    # mother's scale, so splitting the population does not inflate the counts ~4x.
+    def total(split, key):
+        ivs = [SplitEveryone(ratio=4)] if split else []
+        s = ss.Sim(n_agents=2000, demographics=ss.Pregnancy(fertility_rate=80),
+                   dur=8, rand_seed=1, interventions=ivs)
+        s.run()
+        return float(np.nansum(s.results.pregnancy[key]))
+    for key in ('births', 'pregnancies'):
+        base = total(False, key)
+        sp = total(True, key)
+        assert base > 0, f"{key} baseline should be positive"
+        assert np.isclose(base, sp, rtol=0.2), f"represented {key} should be conserved: base={base} split={sp}"
