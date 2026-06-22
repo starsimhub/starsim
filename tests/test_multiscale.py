@@ -77,6 +77,22 @@ def test_split_rejects_resplit():
         pass
 
 
+def test_split_rejects_mixed_ratio():
+    # The deterministic reserved-block scheme is collision-free only when the
+    # sibling-block width (ratio-1) is constant; a second call with a different
+    # ratio would overlap blocks and silently correlate fine agents. Reject it.
+    ppl = make_people(n=100)
+    ppl.split(ss.uids([1]), 5)
+    try:
+        ppl.split(ss.uids([2]), 3)   # different ratio -> would collide
+        assert False, "expected ValueError on mixed ratio"
+    except ValueError:
+        pass
+    # same ratio on a different cohort is fine
+    new = ppl.split(ss.uids([3]), 5)
+    assert len(new) == 4
+
+
 def test_split_slots_are_deterministic_function_of_parent():
     # FAILURE MODE A (unit-level): the slots a parent produces must NOT depend on
     # call order or on which other agents are split alongside it.
@@ -221,7 +237,8 @@ def test_split_invariant_to_unrelated_scenario_change():
         target = SplitSubset([10, 11, 12, 13, 14], ratio=5, ti_split=2, name='target')
         ivs = [target]
         if extra_split_slots:
-            ivs.append(SplitSubset(extra_split_slots, ratio=3, ti_split=1, name='extra'))  # unrelated, earlier
+            # Same ratio as target (one ratio per sim); disjoint parent slots -> disjoint blocks.
+            ivs.append(SplitSubset(extra_split_slots, ratio=5, ti_split=1, name='extra'))  # unrelated, earlier
         ss.Sim(n_agents=200, diseases='sir', networks='random', dur=8, rand_seed=7,
                interventions=ivs).run()
         return target.assigned
