@@ -174,3 +174,58 @@ def test_split_estimator_unbiased_and_lower_variance():
     assert abs(base.mean() - truth) / truth < 0.15      # both unbiased
     assert abs(split.mean() - truth) / truth < 0.15
     assert split.var() < base.var() * 0.6               # variance materially reduced
+
+
+# ---------------------------------------------------------------------------
+# Task 5: failure mode A - cross-scenario reproducibility (end-to-end)
+# ---------------------------------------------------------------------------
+
+class SplitSubset(ss.Intervention):
+    """ At `ti_split`, split the agents whose slot is in `split_slots`, recording the
+    fine slots assigned to each parent slot in `self.assigned`. """
+    def __init__(self, split_slots, ratio=5, ti_split=2, name=None):
+        super().__init__(name=name)
+        self.split_slots = set(int(s) for s in split_slots)
+        self.ratio = ratio
+        self.ti_split = ti_split
+        self.assigned = {}
+
+    def step(self):
+        if self.sim.ti == self.ti_split:
+            ppl = self.sim.people
+            mask = np.isin(np.asarray(ppl.slot[ppl.auids]), list(self.split_slots))
+            uids = ppl.auids[mask]
+            if len(uids):
+                new = ppl.split(uids, self.ratio)
+                for u in new:
+                    ps = int(ppl.slot[ss.uids([int(ppl.parent[u])])][0])
+                    self.assigned.setdefault(ps, []).append(int(ppl.slot[u]))
+                self.assigned = {k: sorted(v) for k, v in self.assigned.items()}
+
+
+def test_split_reproducible_across_reruns():
+    # FAILURE MODE A (1): identical seed + identical split => identical fine-slot assignment.
+    def assigned(seed):
+        iv = SplitSubset([10, 11, 12, 13, 14], ratio=5, ti_split=2)
+        ss.Sim(n_agents=200, diseases='sir', networks='random', dur=8, rand_seed=seed,
+               interventions=iv).run()
+        return iv.assigned
+    assert assigned(7) == assigned(7)
+
+
+def test_split_invariant_to_unrelated_scenario_change():
+    # FAILURE MODE A (2): an unrelated split of OTHER agents (even earlier in the run)
+    # must not change the fine slots assigned to the target cohort. Slots are a pure
+    # function of the parent slot, so the assignment is invariant.
+    def target_assignment(extra_split_slots):
+        target = SplitSubset([10, 11, 12, 13, 14], ratio=5, ti_split=2, name='target')
+        ivs = [target]
+        if extra_split_slots:
+            ivs.append(SplitSubset(extra_split_slots, ratio=3, ti_split=1, name='extra'))  # unrelated, earlier
+        ss.Sim(n_agents=200, diseases='sir', networks='random', dur=8, rand_seed=7,
+               interventions=ivs).run()
+        return target.assigned
+
+    a = target_assignment(None)
+    b = target_assignment([120, 121, 122])
+    assert a == b, "fine slots for the target cohort must be invariant to unrelated splits"
