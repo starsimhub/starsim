@@ -408,11 +408,13 @@ class People:
 
         Each input agent is retained (keeping its slot, hence its CRN trajectory) and
         `ratio - 1` sibling copies are created. All `ratio` resolved agents have their
-        `scale` divided by `ratio`. Sibling slots come from a deterministic reserved block
-        keyed by the parent's slot: `offset + parent_slot*(ratio-1) + k`. This is collision-free
-        by construction and a pure function of the parent, so fine-agent draws are reproducible
-        across scenarios and independent of split order/volume. This is what the prior hpvsim
-        attempt lacked: it grew agents with default (sequential) slots, which are order-dependent.
+        `scale` divided by `ratio`. Sibling slots come from a deterministic, recurrence-safe
+        reserved block keyed by the parent's slot via `_reserved_fine_slots` (each parent owns
+        MAX_LIVE_COHORTS sub-blocks of width `ratio-1`, picking the lowest sub-block free of live
+        descendants). This is collision-free by construction and a pure function of the parent,
+        so fine-agent draws are reproducible across scenarios and independent of split
+        order/volume. This is what the prior hpvsim attempt lacked: it grew agents with default
+        (sequential) slots, which are order-dependent.
 
         Args:
             uids (uids): coarse agents to split (must not already be fine-scale)
@@ -433,7 +435,7 @@ class People:
 
         n_sib = ratio - 1
 
-        # The reserved-block slots (offset + parent_slot*n_sib + k) are collision-free across
+        # The reserved sub-blocks (_reserved_fine_slots, width n_sib) are collision-free across
         # parents only when the block width n_sib is constant; a second call with a different
         # ratio, or a mix with spawn_fine (which reserves width ratio rather than ratio-1),
         # would overlap blocks and silently correlate fine agents. Enforce one scheme + ratio per sim.
