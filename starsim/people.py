@@ -45,6 +45,7 @@ class People:
         self.version = ss.__version__  # Store version info
         self.initialized = False
         self.n_agents_init = n_agents
+        self.MAX_LIVE_COHORTS = 4  # Max concurrent live fine-descendant cohorts per parent (for spawn_fine recurrence)
 
         # Handle the four fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, AUIDs for tracking alive agents, and agents' parents
@@ -475,6 +476,38 @@ class People:
                              f'cannot also use {(scheme, ratio)} (reserved slot blocks would collide)')
         return
 
+    def _reserved_fine_slots(self, parent_uids, counts, width):
+        """CRN-safe, recurrence-safe reserved-block slots for fine descendants.
+
+        Each parent owns MAX_LIVE_COHORTS sub-blocks of `width` slots. For each parent we
+        pick the lowest sub-block not currently occupied by a LIVE fine descendant (so a
+        recurring parent gets a disjoint block while prior descendants live, and reuses a
+        sub-block once its descendants die). Returns (new_slots, parent_map) aligned
+        element-wise.
+        """
+        offset = self._split_slot_offset
+        mlc = int(self.MAX_LIVE_COHORTS)
+        slots_out = []
+        parents_out = []
+        for p, k in zip(parent_uids, np.asarray(counts)):
+            if k <= 0:
+                continue
+            base = offset + int(self.slot[p]) * (width * mlc)
+            # sub-blocks occupied by this parent's LIVE fine descendants
+            desc = ((self.parent == int(p)) & self.fine & self.alive).uids
+            occupied = set(((int(self.slot[d]) - base) // width) for d in desc
+                           if 0 <= (int(self.slot[d]) - base) < width * mlc)
+            episode = next((e for e in range(mlc) if e not in occupied), None)
+            if episode is None:
+                raise ValueError(f'parent slot {int(self.slot[p])} already has {mlc} live fine '
+                                 f'cohorts (MAX_LIVE_COHORTS); cannot allocate another')
+            sub = base + episode * width
+            slots_out.append(np.arange(sub, sub + int(k)))
+            parents_out.append(np.full(int(k), int(p)))
+        if not slots_out:
+            return np.array([], dtype=int), ss.uids()
+        return np.concatenate(slots_out), ss.uids(np.concatenate(parents_out))
+
     def spawn_fine(self, parent_uids, n_events, ratio):
         """
         Materialize fine sub-agents for rare-event successes, keeping each parent a
@@ -518,13 +551,9 @@ class People:
         self._claim_resolution_scheme('spawn_fine', ratio)
         par = parent_uids[keep]
         k = n_events[keep]
-        par_slots = np.asarray(self.slot[par])
         par_scale = self.scale[par].copy()
 
-        offset = self._split_slot_offset
-        new_slots = np.concatenate([offset + s * ratio + np.arange(kk)
-                                    for s, kk in zip(par_slots, k)])
-        parent_map = ss.uids(np.repeat(par, k))
+        new_slots, parent_map = self._reserved_fine_slots(par, k, ratio)
 
         new_uids = self.grow(len(new_slots), new_slots)
         for state in self.states.values():

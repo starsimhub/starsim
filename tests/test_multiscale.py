@@ -765,3 +765,51 @@ def test_all_zero_spawn_fine_does_not_claim_scheme():
     # now split with a DIFFERENT ratio — must succeed (no scheme was claimed above)
     new = ppl.split(ss.uids([3, 4]), 7)
     assert len(new) == 12  # (7-1) * 2 parents
+
+
+# ---------------------------------------------------------------------------
+# Task 1 (recurrence): reserved-block multi-cohort slots for spawn_fine
+# ---------------------------------------------------------------------------
+
+def test_spawn_fine_recurrence_disjoint_slots_while_descendants_live():
+    ppl = make_people(n=100)
+    p = ss.uids([7])
+    f1 = ppl.spawn_fine(p, np.array([2]), 5)
+    assert ppl.alive[f1].all()                       # episode-1 cohort still alive
+    f2 = ppl.spawn_fine(p, np.array([2]), 5)          # same parent recurs
+    s1 = set(int(ppl.slot[u]) for u in f1)
+    s2 = set(int(ppl.slot[u]) for u in f2)
+    assert not (s1 & s2)                              # NO live-live slot collision
+
+
+def test_spawn_fine_recurrence_reuses_block_when_descendants_dead():
+    ppl = make_people(n=100)
+    p = ss.uids([7])
+    f1 = ppl.spawn_fine(p, np.array([2]), 5)
+    ppl.request_death(f1); ppl.step_die(); ppl.remove_dead()  # episode-1 cohort dies
+    f2 = ppl.spawn_fine(p, np.array([2]), 5)
+    # block recycled: episode-2 reuses episode-1's sub-block (no range growth)
+    assert set(int(ppl.slot[u]) for u in f2) == {int(ppl.slot[u]) for u in f1} or \
+           min(int(ppl.slot[u]) for u in f2) <= max(int(ppl.slot[u]) for u in f1)
+
+
+def test_spawn_fine_bound_raises_after_max_live_cohorts():
+    ppl = make_people(n=100)
+    p = ss.uids([7])
+    for _ in range(ppl.MAX_LIVE_COHORTS):
+        ppl.spawn_fine(p, np.array([1]), 5)           # 4 live cohorts
+    try:
+        ppl.spawn_fine(p, np.array([1]), 5)           # 5th while all 4 alive
+        assert False, 'expected ValueError exceeding MAX_LIVE_COHORTS'
+    except ValueError:
+        pass
+
+
+def test_spawn_fine_recurrence_reproducible():
+    def run():
+        ppl = make_people(n=100)
+        p = ss.uids([7])
+        a = ppl.spawn_fine(p, np.array([2]), 5)
+        b = ppl.spawn_fine(p, np.array([2]), 5)
+        return sorted(int(ppl.slot[u]) for u in a), sorted(int(ppl.slot[u]) for u in b)
+    assert run() == run()
