@@ -467,6 +467,80 @@ class People:
         self.fine[new_uids] = True
         return new_uids
 
+    def _claim_resolution_scheme(self, scheme, ratio):
+        """Enforce one multiscale resolution scheme + one ratio per sim, so the
+        reserved-block slot ranges of split (width ratio-1) and spawn_fine (width
+        ratio) never overlap."""
+        prev = getattr(self, '_resolution_scheme', None)
+        if prev is None:
+            self._resolution_scheme = (scheme, ratio)
+        elif prev != (scheme, ratio):
+            raise ValueError(f'this sim already uses resolution scheme {prev}; '
+                             f'cannot also use {(scheme, ratio)} (reserved slot blocks would collide)')
+        return
+
+    def spawn_fine(self, parent_uids, n_events, ratio):
+        """
+        Materialize fine sub-agents for rare-event successes, keeping each parent a
+        whole body. For rare-outcome resolution (resolve a rare branch at finer
+        scale) as opposed to split()'s population partition.
+
+        For each parent with `n_events[i] = k > 0`, create `k` fine agents at
+        `scale = parent.scale/ratio` (epi_weight 0, fine=True), with CRN-safe
+        reserved-block slots keyed by the parent (`offset + parent_slot*ratio + j`),
+        copying all states. The parent stays a whole body (epi_weight unchanged,
+        not fine) and sheds the delegated mass: `scale *= (1 - k/ratio)`, conserving
+        sum(scale). The disease model owns the event draw and supplies the counts.
+
+        Args:
+            parent_uids (uids): at-risk whole bodies (must not be fine)
+            n_events (int array): successes per parent, 0..ratio (aligned to parent_uids)
+            ratio (int): resolution; each fine agent carries 1/ratio of the parent scale
+
+        Returns:
+            new_uids (uids): the newly created fine agents
+        """
+        parent_uids = ss.uids(parent_uids)
+        ratio = int(ratio)
+        n_events = np.asarray(n_events, dtype=int)
+        if ratio < 2 or len(parent_uids) == 0:
+            return ss.uids()
+        if len(n_events) != len(parent_uids):
+            raise ValueError('n_events must align with parent_uids')
+        if (n_events < 0).any() or (n_events > ratio).any():
+            raise ValueError('n_events entries must be in [0, ratio]')
+        if self.fine[parent_uids].any():
+            raise ValueError('spawn_fine received fine agents; only whole bodies can be resolved')
+
+        # One resolution scheme per sim: spawn_fine reserves block width `ratio`
+        # (split reserves ratio-1); mixing would overlap reserved blocks.
+        self._claim_resolution_scheme('spawn_fine', ratio)
+
+        keep = n_events > 0
+        if not keep.any():
+            return ss.uids()
+        par = parent_uids[keep]
+        k = n_events[keep]
+        par_slots = np.asarray(self.slot[par])
+        par_scale = self.scale[par].copy()
+
+        offset = self._split_slot_offset
+        new_slots = np.concatenate([offset + s * ratio + np.arange(kk)
+                                    for s, kk in zip(par_slots, k)])
+        parent_map = ss.uids(np.repeat(par, k))
+
+        new_uids = self.grow(len(new_slots), new_slots)
+        for state in self.states.values():
+            state[new_uids] = state[parent_map]
+        self.parent[new_uids] = parent_map
+
+        self.scale[new_uids] = np.repeat(par_scale / ratio, k)
+        self.epi_weight[new_uids] = 0.0
+        self.fine[new_uids] = True
+        # Shed the delegated outcome mass from the parents (conserves sum(scale)).
+        self.scale[par] = par_scale * (1 - k / ratio)
+        return new_uids
+
     def filter(self, criteria=None, uids=None, split=False):
         """
         Store indices to allow for easy filtering of the People object.

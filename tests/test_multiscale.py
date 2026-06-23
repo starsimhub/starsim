@@ -512,6 +512,57 @@ def test_split_two_axis_epi_weight():
     assert np.isclose(ppl.epi_weight[uids].sum() + ppl.epi_weight[new].sum(), len(uids))  # 3 bodies (parents)
 
 
+# ---------------------------------------------------------------------------
+# Task N: spawn_fine primitive
+# ---------------------------------------------------------------------------
+
+def test_spawn_fine_mechanics_and_conservation():
+    ppl = make_people(n=100)
+    parents = ss.uids([3, 7, 42])
+    n_events = np.array([2, 0, 1])   # parent 7 gets none
+    ratio = 5
+    orig_scale = ppl.scale[parents].copy()
+    orig_age = ppl.age[parents].copy()
+    total_scale_before = ppl.scale[ppl.auids].sum()
+
+    new = ppl.spawn_fine(parents, n_events, ratio)
+
+    assert len(new) == 3                      # 2 + 0 + 1
+    # fine agents: scale = parent/ratio, epi_weight 0, fine True, state-copied
+    assert np.allclose(ppl.scale[new], np.repeat(orig_scale[[0, 2]] / ratio, [2, 1]))
+    assert (ppl.epi_weight[new] == 0).all()
+    assert ppl.fine[new].all()
+    # parents stay whole bodies (epi_weight unchanged, not fine), scale shed by k/ratio
+    assert (ppl.epi_weight[parents] == 1).all()
+    assert not ppl.fine[parents].any()
+    assert np.allclose(ppl.scale[parents], orig_scale * (1 - n_events / ratio))
+    # conservation of sum(scale)
+    assert np.isclose(ppl.scale[ppl.auids].sum(), total_scale_before)
+    # lineage + state copy
+    assert set(int(p) for p in ppl.parent[new]) == {3, 42}
+    assert np.allclose(ppl.age[new], np.repeat(orig_age[[0, 2]], [2, 1]))
+
+
+def test_spawn_fine_edge_cases():
+    ppl = make_people(n=100)
+    # k = ratio -> parent scale 0, still epi_weight 1 (a whole body) and not fine
+    new = ppl.spawn_fine(ss.uids([5]), np.array([4]), 4)
+    assert len(new) == 4
+    assert np.isclose(ppl.scale[ss.uids([5])][0], 0.0)
+    assert ppl.epi_weight[ss.uids([5])][0] == 1.0
+    assert not ppl.fine[ss.uids([5])].any()
+    # all-zero counts -> no agents, no-op
+    ppl2 = make_people(n=50)
+    before = len(ppl2.auids)
+    assert len(ppl2.spawn_fine(ss.uids([1, 2]), np.array([0, 0]), 4)) == 0
+    assert len(ppl2.auids) == before
+    # epi_weight conserved across a real spawn
+    ppl3 = make_people(n=100)
+    ew_before = ppl3.epi_weight[ppl3.auids].sum()
+    ppl3.spawn_fine(ss.uids([1, 2, 3]), np.array([2, 1, 3]), 4)
+    assert np.isclose(ppl3.epi_weight[ppl3.auids].sum(), ew_before)
+
+
 def test_split_parent_reproduces_as_whole_body():
     # A split parent stays a full reproducing body: it bears whole newborns (scale == epi_weight ==
     # the mother's epi_weight); fine siblings bear none.
