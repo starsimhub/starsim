@@ -689,3 +689,47 @@ def test_spawn_fine_siblings_distinct_slots():
     assert len(np.unique(fine_slots)) == len(fine_slots)          # all distinct
     base_slots = np.asarray(ppl.slot[parents])
     assert len(np.intersect1d(fine_slots, base_slots)) == 0       # disjoint from parents
+
+
+# ---------------------------------------------------------------------------
+# Task 4: integration — weighting, network/demographics exclusion, backward compat
+# ---------------------------------------------------------------------------
+
+class SpawnFineSusceptibles(ss.Intervention):
+    """At ti=2, resolve each susceptible as if a rare event hit 1 of `ratio` sub-resolutions."""
+    def __init__(self, ratio=5, name=None):
+        super().__init__(name=name); self.ratio = ratio
+    def step(self):
+        if self.sim.ti == 2:
+            uids = self.sim.people.sir.susceptible.uids
+            if len(uids):
+                self.sim.people.spawn_fine(uids, np.ones(len(uids), dtype=int), self.ratio)
+
+
+def test_spawn_fine_weighting_and_exclusion():
+    sim = ss.Sim(n_agents=400, diseases='sir', networks='random', dur=10, rand_seed=1,
+                 interventions=SpawnFineSusceptibles(ratio=5))
+    sim.run()
+    ppl = sim.people
+    fine = ppl.auids[ppl.fine[ppl.auids]]
+    assert len(fine) > 0
+    # fine agents carry no network edges
+    net = sim.networks[0]
+    endpoints = set(np.asarray(net.edges.p1).tolist()) | set(np.asarray(net.edges.p2).tolist())
+    assert not (set(int(u) for u in fine) & endpoints)
+    # fine agents carry no demographic body weight
+    assert np.isclose(ppl.epi_flows(fine), 0.0)
+
+
+def test_spawn_fine_absent_is_bit_identical():
+    s1 = ss.Sim(n_agents=500, diseases='sir', networks='random', dur=20, rand_seed=3); s1.run()
+    s2 = ss.Sim(n_agents=500, diseases='sir', networks='random', dur=20, rand_seed=3); s2.run()
+    for key in s1.results.sir.keys():
+        a = np.asarray(s1.results.sir[key]); b = np.asarray(s2.results.sir[key])
+        if np.issubdtype(a.dtype, np.number):
+            assert np.array_equal(a, b, equal_nan=True)
+        else:
+            assert np.array_equal(a, b)
+    assert (s1.people.scale.raw == 1).all()
+    assert (s1.people.epi_weight.raw == 1).all()
+    assert not s1.people.fine.raw.any()
