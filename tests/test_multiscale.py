@@ -513,7 +513,7 @@ def test_split_two_axis_epi_weight():
 
 
 # ---------------------------------------------------------------------------
-# Task N: spawn_fine primitive
+# Task 1: spawn_fine primitive
 # ---------------------------------------------------------------------------
 
 def test_spawn_fine_mechanics_and_conservation():
@@ -733,3 +733,35 @@ def test_spawn_fine_absent_is_bit_identical():
     assert (s1.people.scale.raw == 1).all()
     assert (s1.people.epi_weight.raw == 1).all()
     assert not s1.people.fine.raw.any()
+
+
+# ---------------------------------------------------------------------------
+# Task 5: one-scheme-per-sim guard — split and spawn_fine cannot mix
+# ---------------------------------------------------------------------------
+
+def test_split_and_spawn_fine_cannot_mix():
+    ppl = make_people(n=100)
+    ppl.split(ss.uids([1, 2]), 5)
+    try:
+        ppl.spawn_fine(ss.uids([3]), np.array([1]), 5)  # different scheme, same offset region
+        assert False, 'expected ValueError mixing split + spawn_fine'
+    except ValueError:
+        pass
+    # spawn_fine-only sim: a second spawn_fine with the same ratio is fine
+    ppl2 = make_people(n=100)
+    ppl2.spawn_fine(ss.uids([1]), np.array([1]), 5)
+    new = ppl2.spawn_fine(ss.uids([2]), np.array([2]), 5)
+    assert len(new) == 2
+
+
+def test_all_zero_spawn_fine_does_not_claim_scheme():
+    # Minor #1 regression: an all-zero n_events spawn_fine must not claim the
+    # resolution scheme, so a subsequent split with a different ratio must not
+    # be blocked by the vacuous all-zero call.
+    ppl = make_people(n=100)
+    # all-zero call — no agents created, must be a no-op (scheme NOT claimed)
+    result = ppl.spawn_fine(ss.uids([1, 2]), np.array([0, 0]), 4)
+    assert len(result) == 0
+    # now split with a DIFFERENT ratio — must succeed (no scheme was claimed above)
+    new = ppl.split(ss.uids([3, 4]), 7)
+    assert len(new) == 12  # (7-1) * 2 parents

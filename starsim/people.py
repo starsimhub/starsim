@@ -434,13 +434,9 @@ class People:
 
         # The reserved-block slots (offset + parent_slot*n_sib + k) are collision-free across
         # parents only when the block width n_sib is constant; a second call with a different
-        # ratio would overlap blocks and silently correlate fine agents. Enforce one ratio per sim.
-        prev_n_sib = getattr(self, '_split_n_sib', None)
-        if prev_n_sib is None:
-            self._split_n_sib = n_sib
-        elif n_sib != prev_n_sib:
-            raise ValueError(f'split() ratio {ratio} differs from the earlier ratio {prev_n_sib + 1}; '
-                             'all splits in a sim must use the same ratio (fine-slot blocks would otherwise collide)')
+        # ratio, or a mix with spawn_fine (which reserves width ratio rather than ratio-1),
+        # would overlap blocks and silently correlate fine agents. Enforce one scheme + ratio per sim.
+        self._claim_resolution_scheme('split', ratio)
 
         offset = self._split_slot_offset
         parent_slots = self.slot[uids]
@@ -512,13 +508,14 @@ class People:
         if self.fine[parent_uids].any():
             raise ValueError('spawn_fine received fine agents; only whole bodies can be resolved')
 
-        # One resolution scheme per sim: spawn_fine reserves block width `ratio`
-        # (split reserves ratio-1); mixing would overlap reserved blocks.
-        self._claim_resolution_scheme('spawn_fine', ratio)
-
         keep = n_events > 0
         if not keep.any():
             return ss.uids()
+
+        # One resolution scheme per sim: spawn_fine reserves block width `ratio`
+        # (split reserves ratio-1); mixing would overlap reserved blocks.
+        # Claim after the all-zero early return so a vacuous call does not lock in the scheme.
+        self._claim_resolution_scheme('spawn_fine', ratio)
         par = parent_uids[keep]
         k = n_events[keep]
         par_slots = np.asarray(self.slot[par])
