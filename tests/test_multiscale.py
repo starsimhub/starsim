@@ -835,3 +835,33 @@ def test_split_recurrence_disjoint_slots_after_restore():
     ppl.fine[p] = False                                # restore parent to a whole body (re-splittable)
     sib2 = ppl.split(p, 4)
     assert not (set(int(ppl.slot[u]) for u in sib1) & set(int(ppl.slot[u]) for u in sib2))
+
+
+# ---------------------------------------------------------------------------
+# Task 3 (recurrence): variance reduction survives multi-episode recurrence
+# ---------------------------------------------------------------------------
+
+def test_spawn_fine_variance_survives_recurrence():
+    # Two resolution episodes per body (the first cohort still alive at the second spawn). With
+    # recurrence-safe slots the two episodes' sub-draws are independent, so the pooled rare-event
+    # estimator stays ~unbiased with reduced variance. Colliding slots (the bug) would correlate
+    # the episodes and inflate variance / bias the estimate.
+    P_RARE = 0.05; RATIO = 10; N = 1500; N_SEEDS = 40
+    def resolved_two_episodes(seed):
+        sim = ss.Sim(n_agents=N, diseases='sir', networks='random', dur=2, rand_seed=seed)
+        sim.init(); ppl = sim.people
+        parents = ppl.auids.copy()
+        d = ss.bernoulli(p=P_RARE, name='rare')
+        d.init(sim=sim, module=sim.diseases.sir, seed=sim.pars.rand_seed)
+        total = 0.0
+        for _ in range(2):                              # two episodes, episode-1 cohort stays alive
+            hits = np.zeros(len(parents), dtype=int)
+            for _r in range(RATIO):
+                hits += np.asarray(d.rvs(parents)).astype(int)
+            fine = ppl.spawn_fine(parents, hits, RATIO)
+            if len(fine):
+                total += float(ppl.scale[fine].sum())
+        return total / 2.0                              # mean over the two episodes
+    truth = P_RARE * N
+    res = np.array([resolved_two_episodes(s) for s in range(N_SEEDS)])
+    assert abs(res.mean() - truth) / truth < 0.15       # unbiased across episodes
