@@ -636,3 +636,56 @@ def test_spawn_fine_does_not_perturb_other_agents():
     assert len(common) > 100
     for s in common:
         assert none[s] == some[s], f'slot {s} draw changed because other agents spawned fine'
+
+
+# ---------------------------------------------------------------------------
+# Task 3: spawn_fine independence + variance reduction (failure mode C)
+# ---------------------------------------------------------------------------
+
+def test_spawn_fine_estimator_unbiased_and_lower_variance():
+    # The rare-outcome estimator built via spawn_fine must be ~unbiased and have lower
+    # variance than a single draw per body. Model: draw the rare event for `ratio`
+    # sub-resolutions per body, spawn one fine agent per success; the scale-weighted
+    # count of fine agents estimates the expected rare-event count.
+    P_RARE = 0.05
+    RATIO = 10
+    N = 2000
+    N_SEEDS = 40
+
+    def single_count(seed):
+        sim = ss.Sim(n_agents=N, diseases='sir', networks='random', dur=2, rand_seed=seed)
+        sim.init(); ppl = sim.people
+        d = ss.bernoulli(p=P_RARE, name='rare')
+        d.init(sim=sim, module=sim.diseases.sir, seed=sim.pars.rand_seed)
+        return float((ppl.scale[ppl.auids] * d.rvs(ppl.auids)).sum())
+
+    def resolved_count(seed):
+        sim = ss.Sim(n_agents=N, diseases='sir', networks='random', dur=2, rand_seed=seed)
+        sim.init(); ppl = sim.people
+        parents = ppl.auids.copy()
+        d = ss.bernoulli(p=P_RARE, name='rare')
+        d.init(sim=sim, module=sim.diseases.sir, seed=sim.pars.rand_seed)
+        # draw the rare event RATIO times per body, count successes per body
+        hits = np.zeros(len(parents), dtype=int)
+        for _ in range(RATIO):
+            hits += np.asarray(d.rvs(parents)).astype(int)
+        fine = ppl.spawn_fine(parents, hits, RATIO)
+        # scale-weighted count of materialized fine (cancer) agents
+        return float(ppl.scale[fine].sum()) if len(fine) else 0.0
+
+    truth = P_RARE * N
+    base = np.array([single_count(s) for s in range(N_SEEDS)])
+    res = np.array([resolved_count(s) for s in range(N_SEEDS)])
+    assert abs(base.mean() - truth) / truth < 0.15
+    assert abs(res.mean() - truth) / truth < 0.15      # unbiased
+    assert res.var() < base.var() * 0.6                # variance materially reduced
+
+
+def test_spawn_fine_siblings_distinct_slots():
+    ppl = make_people(n=500)
+    parents = ss.uids(np.arange(0, 300))
+    new = ppl.spawn_fine(parents, np.full(300, 10), 10)   # all parents, full count
+    fine_slots = np.asarray(ppl.slot[new])
+    assert len(np.unique(fine_slots)) == len(fine_slots)          # all distinct
+    base_slots = np.asarray(ppl.slot[parents])
+    assert len(np.intersect1d(fine_slots, base_slots)) == 0       # disjoint from parents
