@@ -33,17 +33,31 @@ multi-gigabyte draw arrays. **Infeasible.** The discriminator must be bounded an
 2. **No live–live collision:** at any time, no two live agents share a slot.
 3. **Disjoint across distinct parents** (existing property, keep).
 4. **Dense/bounded slot range:** max slot grows like `n_agents × ratio × (small constant)`, not ×`n_timesteps`.
-5. **Backward compatible:** single-resolution (non-recurrent) usage is bit-identical to today.
+5. **Backward compatible (core invariant):** a sim that never splits/spawns (scale==epi_weight==1)
+   is bit-identical to today. NOTE: giving each parent an inline block of `width*MAX_LIVE_COHORTS`
+   re-spaces every parent's reserved block, so `split`-*with*-multiscale slot **values** change (and
+   thus exact draws/results for split-based multiscale runs). This is acceptable: no in-tree consumer
+   depends on split's exact slot values (the split tests are statistical/relative — reproducibility,
+   distinctness, disjointness, variance), and behavior stays statistically equivalent. A separate
+   "recurrence band" that preserved episode-0 slots was rejected: births mint unbounded slots over a
+   run, so such a band cannot be statically sized without collision risk.
 
 ## Design options
 
 ### Option A (recommended) — live-descendant-cohort index, with recycling
 
-Discriminate by the **number of currently-live descendant cohorts** of the parent at spawn time:
+Each parent owns a contiguous block of `MAX_LIVE_COHORTS` sub-blocks of `width` slots:
 ```
-episode = (# live fine agents whose `parent` is this parent) // width      # 0,1,2,...
-slot     = offset + parent_slot * (width * MAX_LIVE_COHORTS) + episode*width + j
+base    = offset + parent_slot * (width * MAX_LIVE_COHORTS)
+# Recycle: pick the lowest sub-block not currently occupied by a LIVE descendant.
+occupied = { (slot[d] - base) // width  for d in live fine agents with parent==this parent }
+episode  = min(e in 0..MAX_LIVE_COHORTS-1  with e not in occupied)     # raise if none free
+slot     = base + episode*width + j                                     # j in 0..count-1
 ```
+Using the occupied-sub-block set (not a simple live-count `// width`) makes it robust to
+`spawn_fine`'s *variable* per-call cohort sizes (`k <= width`): each episode claims a whole `width`
+sub-block regardless of how many of its slots it fills, and a sub-block frees for reuse only when all
+its live descendants have died.
 - Reproducible: the live-descendant count is a deterministic function of run state.
 - Recurrence-safe: while a prior cohort is alive, `episode` is ≥1 ⇒ a disjoint sub-block; once all
   prior descendants die, `episode` returns to 0 and the block is **reused against dead agents only**
