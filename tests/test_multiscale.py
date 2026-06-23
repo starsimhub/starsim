@@ -588,3 +588,51 @@ def test_split_parent_reproduces_as_whole_body():
     # fine siblings never reproduce -> no newborn has a fine parent
     parents_of_newborns = ppl.parent[newborns]
     assert not ppl.fine[ss.uids(parents_of_newborns.astype(int))].any()
+
+
+# ---------------------------------------------------------------------------
+# Task 2: spawn_fine CRN reproducibility + non-perturbation (failure modes A, B)
+# ---------------------------------------------------------------------------
+
+def test_spawn_fine_slots_deterministic_function_of_parent():
+    def fine_slots_by_parent(order):
+        ppl = make_people(n=100)
+        new = ppl.spawn_fine(ss.uids(order), np.array([2, 3, 1]), 4)
+        out = {}
+        for u in new:
+            ps = int(ppl.slot[ss.uids([int(ppl.parent[u])])][0])
+            out.setdefault(ps, []).append(int(ppl.slot[u]))
+        return {k: sorted(v) for k, v in out.items()}
+    a = fine_slots_by_parent([10, 20, 30])
+    # reversed order + matching counts must give identical slots per parent
+    def reversed_run():
+        ppl = make_people(n=100)
+        ppl.spawn_fine(ss.uids([99]), np.array([2]), 4)        # unrelated spawn first
+        new = ppl.spawn_fine(ss.uids([30, 20, 10]), np.array([1, 3, 2]), 4)
+        out = {}
+        for u in new:
+            ps = int(ppl.slot[ss.uids([int(ppl.parent[u])])][0])
+            out.setdefault(ps, []).append(int(ppl.slot[u]))
+        return {k: sorted(v) for k, v in out.items()}
+    b = reversed_run()
+    for ps, slots in a.items():
+        assert slots == b[ps], 'fine slots must be a pure function of parent slot + index'
+
+
+def test_spawn_fine_does_not_perturb_other_agents():
+    def draws_after(spawn):
+        sim = ss.Sim(n_agents=200, diseases='sir', networks='random', dur=5, rand_seed=1)
+        sim.init()
+        ppl = sim.people
+        if spawn:
+            ppl.spawn_fine(ss.uids([10, 11, 12, 13, 14]), np.array([5, 5, 5, 5, 5]), 5)
+        d = ss.normal(loc=0, scale=1, name='probe')
+        d.init(sim=sim, module=sim.diseases.sir)
+        untouched = ppl.auids[~ppl.fine[ppl.auids]]
+        return {int(ppl.slot[u]): float(v) for u, v in zip(untouched, d.rvs(untouched))}
+    none = draws_after(False)
+    some = draws_after(True)
+    common = [s for s in none if s in some]
+    assert len(common) > 100
+    for s in common:
+        assert none[s] == some[s], f'slot {s} draw changed because other agents spawned fine'
