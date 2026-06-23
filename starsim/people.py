@@ -425,11 +425,11 @@ class People:
         ratio = int(ratio)
         if ratio < 2 or len(uids) == 0:
             return ss.uids()
-        # Re-splitting is unsupported (it would reuse a parent's reserved slot block and collide):
-        # reject fine siblings, and parents already split (whose result scale was divided below
-        # their body weight).
-        if self.fine[uids].any() or (self.scale[uids] < self.epi_weight[uids]).any():
-            raise ValueError('split() received agents that are already part of a split cohort; re-splitting is unsupported')
+        # Re-splitting fine siblings is unsupported: they are sub-agents with no body weight
+        # and splitting them would collide with the parent's reserved block. Parents may be
+        # re-split (recurrence-safe: _reserved_fine_slots picks a new sub-block each time).
+        if self.fine[uids].any():
+            raise ValueError('split() received fine agents; re-splitting a fine sibling is unsupported')
 
         n_sib = ratio - 1
 
@@ -439,23 +439,18 @@ class People:
         # would overlap blocks and silently correlate fine agents. Enforce one scheme + ratio per sim.
         self._claim_resolution_scheme('split', ratio)
 
-        offset = self._split_slot_offset
-        parent_slots = self.slot[uids]
+        new_slots, parent_map = self._reserved_fine_slots(uids, np.full(len(uids), n_sib), n_sib)
 
-        # Deterministic reserved block per parent slot; disjoint across distinct parents.
-        # new_slots layout matches parent_map: [k=0 for all parents, k=1 for all parents, ...]
-        new_slots = np.concatenate([offset + parent_slots * n_sib + k for k in range(n_sib)])
-        parent_map = np.tile(uids, n_sib)
-
-        new_uids = self.grow(n_sib * len(uids), new_slots)
+        new_uids = self.grow(len(new_slots), new_slots)
         for state in self.states.values():
             state[new_uids] = state[parent_map]
         self.parent[new_uids] = parent_map
 
-        # Result axis: divide scale across all `ratio` resolved sub-draws (parent + siblings)
+        # Result axis: divide scale across all `ratio` resolved sub-draws (parent + siblings).
+        # parent_map from _reserved_fine_slots is grouped per parent (repeat, not tile).
         new_scale = self.scale[uids] / ratio
         self.scale[uids] = new_scale
-        self.scale[new_uids] = np.tile(new_scale, n_sib)
+        self.scale[new_uids] = np.repeat(new_scale, n_sib)
         # Epi axis: the parent stays a whole body (keeps its epi_weight); siblings are
         # non-participating sub-agents (epi_weight 0, tagged fine -> excluded from transmission
         # and vital dynamics). This keeps total transmission/reproduction consistent: the cohort

@@ -51,9 +51,10 @@ def test_split_mechanics_count_scale_and_copy():
     assert len(new_uids) == len(uids) * (ratio - 1)
     # conservation: each resolved agent carries 1/ratio of the parent's scale
     assert np.allclose(ppl.scale[uids], orig_scale / ratio)
-    assert np.allclose(ppl.scale[new_uids], np.tile(orig_scale / ratio, ratio - 1))
-    # siblings are exact state copies of their parent (age block-tiled by parent)
-    assert np.allclose(ppl.age[new_uids], np.tile(orig_age, ratio - 1))
+    # _reserved_fine_slots groups by parent (repeat, not tile): [p0_s0, p0_s1, p1_s0, p1_s1, ...]
+    assert np.allclose(ppl.scale[new_uids], np.repeat(orig_scale / ratio, ratio - 1))
+    # siblings are exact state copies of their parent (grouped by parent)
+    assert np.allclose(ppl.age[new_uids], np.repeat(orig_age, ratio - 1))
     # only the siblings are fine sub-agents; the parent stays a full participating body
     assert not ppl.fine[uids].any()
     assert ppl.fine[new_uids].all()
@@ -68,14 +69,19 @@ def test_split_total_scale_is_conserved():
 
 
 def test_split_rejects_resplit():
+    # Fine siblings (epi_weight==0) must never be re-split; parents can recur (recurrence-safe).
     ppl = make_people(n=100)
     uids = ss.uids([5, 6])
-    ppl.split(uids, 3)
+    siblings = ppl.split(uids, 3)
+    # Attempting to split the fine SIBLINGS must raise.
     try:
-        ppl.split(uids, 3)
-        assert False, "expected ValueError on re-split"
+        ppl.split(siblings[:2], 3)
+        assert False, "expected ValueError on re-split of fine siblings"
     except ValueError:
         pass
+    # The PARENT can be re-split (recurrence-safe: gets a new cohort slot block).
+    new = ppl.split(uids, 3)
+    assert len(new) == len(uids) * 2  # ratio-1 siblings per parent
 
 
 def test_split_rejects_mixed_ratio():
@@ -813,3 +819,19 @@ def test_spawn_fine_recurrence_reproducible():
         b = ppl.spawn_fine(p, np.array([2]), 5)
         return sorted(int(ppl.slot[u]) for u in a), sorted(int(ppl.slot[u]) for u in b)
     assert run() == run()
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (recurrence): reserved-block multi-cohort slots for split
+# ---------------------------------------------------------------------------
+
+def test_split_recurrence_disjoint_slots_after_restore():
+    # A parent that is split, then restored to non-fine (mimicking a disease model that keeps
+    # a non-event body alive), then split again while its first cohort lives, must get a
+    # disjoint slot block.
+    ppl = make_people(n=100)
+    p = ss.uids([7])
+    sib1 = ppl.split(p, 4)
+    ppl.fine[p] = False                                # restore parent to a whole body (re-splittable)
+    sib2 = ppl.split(p, 4)
+    assert not (set(int(ppl.slot[u]) for u in sib1) & set(int(ppl.slot[u]) for u in sib2))
