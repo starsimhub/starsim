@@ -14,6 +14,27 @@ ss_int = ss.dtypes.int
 _ = None
 
 
+@nb.njit(cache=True)
+def fisher_yates_shuffle(arr, randvals):
+    """ In-place Fisher-Yates shuffle using precomputed uniform random values.
+
+    Equivalent to `np.random.permutation` (a uniform random shuffle), but ~1.3x faster
+    for the large arrays used in network generation. `randvals` should be uniform on
+    [0, 1) and the same length as `arr`.
+
+    Note: `randvals` is consumed in order (`randvals[k]` for the k-th swap), not indexed
+    by position. This means that changing the array length (e.g. adding one agent) shifts
+    every swap, so the shuffle is *not* random-number safe -- matching `ss.RandomNet`'s
+    intended behavior (see `ss.RandomSafeNet` for the CRN-safe version).
+    """
+    n = arr.shape[0]
+    for k in range(n - 1):
+        i = n - 1 - k # Position to swap, working from the top down
+        j = int(randvals[k] * (i + 1))
+        tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp
+    return arr
+
+
 
 # %% General network classes
 
@@ -594,7 +615,9 @@ class RandomNet(DynamicNetwork):
             Two arrays, for source and target
         """
         source = np.repeat(inds, n_contacts)
-        target = self.dist.rng.permutation(source)
+        target = source.copy()
+        randvals = self.dist.rng.random(len(target)) # Precompute the random values for the shuffle
+        fisher_yates_shuffle(target, randvals) # Shuffle the target in place (faster equivalent of rng.permutation)
         self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
 
@@ -641,6 +664,32 @@ class RandomNet(DynamicNetwork):
             else:
                 self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
+
+
+class RandomFastNet(RandomNet):
+    """
+    A faster, approximate version of `ss.RandomNet`
+
+    Identical to `ss.RandomNet` except that the target end of each edge is drawn
+    uniformly at random, rather than via a shuffle of the source stubs. This is
+    roughly 1.8x faster at generating edges, but the per-agent degree is no longer
+    fixed: the source side of each edge is still exactly `n_contacts`, while the
+    target side is Poisson-distributed (mean `n_contacts`). Agents therefore have
+    somewhat more variable numbers of contacts than with `ss.RandomNet`.
+
+    Note: like `ss.RandomNet`, this is not random-number safe; see `ss.RandomSafeNet`
+    for the CRN-safe (but slower) version.
+    """
+    def get_edges(self, inds, n_contacts):
+        """ Find edges by drawing the target of each edge uniformly at random (see `ss.RandomNet.get_edges`) """
+        source = np.repeat(inds, n_contacts)
+        if len(source):
+            idx = self.dist.rng.integers(0, len(inds), len(source)) # A random target agent for each source stub
+            target = inds[idx]
+        else:
+            target = source
+        self.dist.jump() # Reset the RNG manually, as in RandomNet.get_edges
+        return source, target
 
 
 class RandomSafeNet(DynamicNetwork):
