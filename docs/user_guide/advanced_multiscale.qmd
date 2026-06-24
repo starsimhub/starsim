@@ -5,14 +5,14 @@ jupyter: python3
 
 Multiscale modeling lets a single simulation resolve *rare events* at high resolution without paying the memory cost of simulating the whole population at that resolution. The classic use case is a rare disease outcome — for example, the progression from precancer to cervical cancer in HPV — where the event is too infrequent to estimate well from a coarse population, but simulating millions of agents just to capture it is wasteful.
 
-Starsim implements multiscale as a first-class, framework-level capability. A disease model expresses only the one decision that is specific to it — *where* to resolve the rare pathway at finer scale — by calling `sim.people.split()`. Everything else (counting, demographics, transmission, and common-random-number safety) is handled by the framework and is correct automatically.
+Starsim implements multiscale as a first-class, framework-level capability. A disease model expresses only the one decision that is specific to it — *where* to resolve the rare pathway at finer scale — by calling one of two primitives: `sim.people.split()` (partition a population into finer sub-draws) or `sim.people.spawn_fine()` (materialize only the rare successes of a branch). Everything else (counting, demographics, transmission, and common-random-number safety) is handled by the framework and is correct automatically.
 
 This guide builds on the [Random numbers guide](advanced_random.qmd), since multiscale relies on common random numbers (CRN); please read that first.
 
 In this guide you will:
 
 - Understand an agent's two weights: `scale` (results) and `epi_weight` (dynamics)
-- Learn the one call a disease model needs (`sim.people.split`)
+- Learn the two resolution primitives (`sim.people.split` and `sim.people.spawn_fine`) and when to use each
 - See how results and demographics stay correct automatically
 - Learn how to write new components that are multiscale-correct without extra effort
 
@@ -31,7 +31,7 @@ The key property is that a count must be *weighted* (a sum of the relevant weigh
 
 ## Splitting agents
 
-`sim.people.split(uids, ratio)` resolves each listed agent's downstream outcome at `ratio`-times finer scale, conserving both the represented population and the number of whole bodies. It is the only multiscale-specific call a disease model makes — typically at the decision point where a rare pathway branches off.
+`sim.people.split(uids, ratio)` resolves each listed agent's downstream outcome at `ratio`-times finer scale, conserving both the represented population and the number of whole bodies. It is one of the two multiscale-specific calls a disease model makes (the other is [`spawn_fine`](#spawn-fine)) — typically placed at the decision point where a rare pathway branches off.
 
 ```{python}
 import starsim as ss
@@ -66,9 +66,37 @@ What `split` does for you:
 - **Sets the two weights** as above and tags the siblings `fine`; networks and demographics then exclude the fine siblings automatically, while the parent participates normally.
 
 ::: {.callout-important}
-## One ratio per simulation
-The reserved-slot scheme is collision-free only when every `split` call uses the same `ratio`. Calling `split` with a different ratio, or re-splitting an agent already in a split cohort, raises an error rather than silently corrupting draws.
+## One resolution scheme per simulation
+The reserved-slot scheme is collision-free only when the whole simulation uses a single primitive (`split` *or* `spawn_fine`) with a single `ratio`. Mixing the two, or using two different ratios, raises an error rather than silently corrupting draws.
+
+A coarse **parent** *may* be re-split (or re-resolved): the slot scheme is recurrence-safe, allocating each new fine cohort a disjoint reserved sub-block while prior descendants are still alive, and recycling a sub-block once its descendants die (up to `MAX_LIVE_COHORTS` concurrent live cohorts per parent). What you cannot do is re-split a **fine sibling** — those are non-participating sub-agents with no body weight — which raises an error.
 :::
+
+
+## Resolving a rare branch: `spawn_fine` {#spawn-fine}
+
+`split` partitions a coarse agent into a full cohort of `ratio` equal sub-draws — so it always materializes `ratio-1` new agents per parent, whether or not the rare event ends up happening. When the event is *very* rare, that is wasteful: most of those fine agents will never experience the outcome you split to resolve.
+
+`sim.people.spawn_fine(parent_uids, n_events, ratio)` is the economical alternative. Instead of partitioning every parent up front, the disease model draws *how many* of each parent's `ratio` notional sub-people experienced the rare event this step, and `spawn_fine` materializes only those successes:
+
+- For each parent, the model supplies `n_events[i] = k` in `[0, ratio]` — the number of sub-draws that hit the rare outcome. The model owns this draw (e.g. a binomial over the at-risk bodies).
+- `spawn_fine` creates exactly `k` fine agents per parent at `scale = parent.scale / ratio` (`epi_weight = 0`, tagged `fine`), copying all states and assigning the same CRN-safe, recurrence-safe reserved-block slots as `split`.
+- The parent **stays a whole body** (its `epi_weight` is unchanged and it is *not* tagged `fine`) and sheds the delegated outcome mass: `scale *= (1 - k/ratio)`. This conserves `sum(scale)` — the parent now represents the non-event remainder, and the `k` fine agents represent the resolved successes.
+
+```python
+import numpy as np
+
+# at_risk: whole bodies who could progress this step; ratio = 10.
+# Draw the rare event for each body's `ratio` notional sub-people and count the
+# successes per body (here `progress` is a per-agent ss.bernoulli the model owns).
+ratio = 10
+n_events = np.zeros(len(at_risk), dtype=int)
+for _ in range(ratio):
+    n_events += np.asarray(progress.rvs(at_risk)).astype(int)
+new = sim.people.spawn_fine(at_risk, n_events, ratio)
+```
+
+**Choosing between them:** use `split` when you want the entire downstream trajectory of the selected agents resolved at fine scale (the whole cohort matters); use `spawn_fine` when only the *successes* of a rare branch need to be carried at fine scale and you want to avoid creating agents for events that did not occur. Both keep the parent a whole transmitting/reproducing body and both are governed by the same [one-scheme-per-simulation](#splitting-agents) rule — a simulation uses `split` *or* `spawn_fine` with a single `ratio`, not both.
 
 
 ## Counting is scale-weighted by default
@@ -122,7 +150,7 @@ Vital dynamics and transmission are already weight-aware framework-side, so they
 
 | You write | The framework handles |
 |---|---|
-| `sim.people.split(uids, ratio)` at the rare-event decision | State copying, CRN-safe slots, conservation of both population and bodies |
+| `sim.people.split(uids, ratio)` (partition) or `sim.people.spawn_fine(uids, n_events, ratio)` (resolve successes) at the rare-event decision | State copying, CRN-safe recurrence-safe slots, conservation of both population and bodies |
 | `.count()` / `people.count()` to count for results | Scale-weighting every result automatically |
 | `ss.Result(..., flow=fn)` to declare event counts | Auto-filling flows scale-weighted each step |
 | (nothing extra) | Demographics on `epi_weight`; the split parent stays a whole transmitting/reproducing body while siblings are excluded |
