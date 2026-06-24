@@ -18,6 +18,7 @@ starsim-rust-port skill; to check portability, use the rust-portability-linter
 agent.
 """
 from .validate import compare, ValidationReport, TIERS
-from .modules import SIS, RandomNet, available
+from .modules import SIS, SIR, RandomNet, Births, Deaths, run_engine, all_native, available
 
-__all__ = ['compare', 'ValidationReport', 'TIERS', 'SIS', 'RandomNet', 'available']
+__all__ = ['compare', 'ValidationReport', 'TIERS', 'SIS', 'SIR', 'RandomNet',
+           'Births', 'Deaths', 'run_engine', 'all_native', 'available']

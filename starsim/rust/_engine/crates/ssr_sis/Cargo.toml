@@ -1,0 +1,8 @@
+[package]
+name = "ssr_sis"
+version = "0.1.0"
+edition = "2021"
+description = "SIS disease module for the Starsim fast modular Rust engine"
+
+[dependencies]
+ssr_core = { path = "../ssr_core" }

@@ -1,0 +1,8 @@
+[package]
+name = "ssr_randomnet"
+version = "0.1.0"
+edition = "2021"
+description = "RandomNet module for the Starsim fast modular Rust engine"
+
+[dependencies]
+ssr_core = { path = "../ssr_core" }

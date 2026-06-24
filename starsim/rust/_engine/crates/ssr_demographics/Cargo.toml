@@ -1,0 +1,8 @@
+[package]
+name = "ssr_demographics"
+version = "0.1.0"
+edition = "2021"
+description = "Births and Deaths demographics modules for the Starsim fast modular Rust engine"
+
+[dependencies]
+ssr_core = { path = "../ssr_core" }

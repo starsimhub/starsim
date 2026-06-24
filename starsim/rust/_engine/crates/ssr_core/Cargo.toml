@@ -1,0 +1,7 @@
+[package]
+name = "ssr_core"
+version = "0.1.0"
+edition = "2021"
+description = "Core types, RNG, traits, and loop driver for the Starsim fast modular Rust engine"
+
+[lib]

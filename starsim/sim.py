@@ -490,7 +490,7 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True):
+    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, engine=None):
         """
         Run the model -- the main method for running a simulation.
 
@@ -499,9 +499,23 @@ class Sim(ss.Base):
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
             shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
+            engine (str): execution engine: 'python' (default loop), 'rust' (the fast native engine, requires all modules to be ``starsim.rust`` modules), or None to auto-detect (rust iff every module is ssr-native)
         """
         # Initialization steps
         if not self.initialized: self.init() # Automatically initialize if not initialized
+
+        # Optionally dispatch the whole run to the native Rust engine. Guarded so
+        # a missing/broken engine never breaks a normal (engine=None) Python run.
+        if engine is None or engine == 'rust':
+            try:
+                import starsim.rust as ssr
+                use_rust = (engine == 'rust') or ssr.all_native(self)
+            except ImportError:
+                if engine == 'rust':
+                    raise
+                use_rust = False
+            if use_rust:
+                return ssr.run_engine(self, verbose=verbose)
         if verbose is not None:
             self._orig_verbose = self.verbose
             self.verbose = verbose

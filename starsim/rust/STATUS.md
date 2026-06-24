@@ -5,6 +5,78 @@ execution where it pays off, with a validation harness guaranteeing the Rust
 path matches the Python one. This document records what exists today and what
 remains.
 
+## Update (fast modular engine)
+
+After measuring that byte-identical reproduction caps at ~1.1–1.8x (the cost of
+reproducing numpy's PCG64 + CRN exactly), a second engine was built that trades
+byte-identity for speed and modularity:
+
+- **`starsim/rust/_engine/`** — a Cargo workspace. `ssr_core` (xoshiro RNG,
+  shared state, `Disease`/`Network` traits, loop driver) + one crate per module
+  (`ssr_sis`, `ssr_sir`, `ssr_randomnet`) + `ssr_py` (PyO3 + a name→constructor
+  registry). Modules compose at runtime via trait objects.
+- **Statistical match, not byte-identical:** vs `ss.SIS` over 12 seeds, the mean
+  epidemic curve matches to **0.0% on peak, 0.3% on equilibrium**.
+- **Speed: 4.5x @ 20k, 3.7x @ 100k** — at 100k the modular engine (0.84s) is
+  *faster* than the monolithic reference `sis_rust.rs` (1.10s on this machine).
+- **Modularity proven:** adding `ssr_sir` recompiled only `ssr_sir` + `ssr_py`
+  (3.65s); `ssr_core`/`ssr_sis`/`ssr_randomnet` were cached. The same built
+  engine composes SIS+RandomNet and SIR+RandomNet.
+
+This is now the recommended direction for performance. The byte-identical
+`_crate/` work below remains valid and reusable (and is the right choice if exact
+reproducibility is ever required). The rest of this document describes that
+earlier work.
+
+### Bridge: the literal `ssr.SIS()` API
+
+`ss.Sim(diseases=ssr.SIS(), networks=ssr.RandomNet()).run()` now works and is
+**3.1x** faster (100k/dur=100), matching pure Python statistically (0.1% on
+peak/equilibrium), with `sim.results` populated so `sim.plot()` works.
+
+- `ssr.SIS`/`ssr.SIR`/`ssr.RandomNet` subclass their `ss` counterparts (so they
+  prototype like normal modules) and carry an `_engine_spec()`.
+- `starsim.rust.run_engine(sim)` extracts effective params, runs `ssr_engine`,
+  and writes results back into `sim.results`.
+- `Sim.run(..., engine=None)`: `engine=None` auto-detects (rust iff every module
+  is ssr-native), `'rust'` forces it, `'python'` forces the classic loop. The
+  dispatch is additive and guarded, so normal sims are unaffected.
+
+**This is the CRN toggle:** `.run()` → fast non-CRN engine (dev); 
+`.run(engine='python')` → full CRN, reproducible (final).
+
+### Engine modules (current)
+
+Diseases: `SIS`, `SIR`. Networks: `RandomNet`. Demographics: `Births`, `Deaths`
+(dynamic population — births append agents, deaths flip `alive`; the loop grows
+every module's per-agent arrays on births, and modules skip dead agents). All
+compose via the bridge, e.g.:
+
+```python
+ss.Sim(diseases=ssr.SIS(), networks=ssr.RandomNet(),
+       demographics=[ssr.Births(birth_rate=30), ssr.Deaths(death_rate=10)]).run()
+```
+
+Validated statistically vs pure Python: no demographics 0.1%; with births+deaths
+~2% on peak/equilibrium. Not yet ported: SEIR (no `ss.SEIR` reference) and
+mixing pools (a group force-of-infection route, not pairwise edges — needs a
+transmission-route abstraction).
+
+### Pure-Python speed levers (measured)
+
+The 3.6x gap decomposes as **1.6x language × 2.4x RNG/CRN algorithm**, so most
+of it is algorithmic and partly recoverable in Python:
+
+- **Non-CRN transmission in pure Python: 1.4x** (the bridge's Rust path gives
+  3.1x with the same toggle, so it's the better non-CRN option).
+- **`Dist.rvs` hot path:** `trans_rng.rvs` ≈ 3120µs = ~1497µs irreducible numpy
+  CRN work + ~1623µs Python wrapper. A safe `combine2_rvs` fast path (2-dist
+  case, skips `nb.typed.List`) is applied in `distributions.py` (~4%,
+  correctness-preserving, all tests pass). The larger remaining wrapper cost is
+  the per-dist `process_pars`; closing the rest in Python realistically needs
+  numba/JAX on the loop (the `docs/examples/translations/` `jax_cpu` hits 0.94s,
+  near Rust).
+
 ## TL;DR
 
 - The hard problem — reproducing numpy's RNG bit-for-bit in Rust — is **solved
@@ -112,8 +184,9 @@ starsim/rust/
                          #   multi_random_rvs, permutation, MultiRandomRng,
                          #   SisRandomNetSim (native loop)
     Cargo.toml, pyproject.toml
+  tests/                 # runnable USAGE EXAMPLES (01_quickstart ... 05_low_level_engine) + README
 
-tests/devtests_rust/     # spikes, validation tests, benchmarks
+tests/devtests_rust/     # spikes, validation tests, benchmarks (dev, not examples)
 ```
 
 ### Building the crate

@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ssr_core",
+    "crates/ssr_sis",
+    "crates/ssr_sir",
+    "crates/ssr_randomnet",
+    "crates/ssr_demographics",
+    "crates/ssr_py",
+]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

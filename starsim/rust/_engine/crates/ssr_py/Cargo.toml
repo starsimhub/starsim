@@ -1,0 +1,18 @@
+[package]
+name = "ssr_py"
+version = "0.1.0"
+edition = "2021"
+description = "PyO3 bindings + module registry for the Starsim fast modular Rust engine"
+
+[lib]
+name = "ssr_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+numpy = "0.22"
+ssr_core = { path = "../ssr_core" }
+ssr_sis = { path = "../ssr_sis" }
+ssr_sir = { path = "../ssr_sir" }
+ssr_randomnet = { path = "../ssr_randomnet" }
+ssr_demographics = { path = "../ssr_demographics" }
