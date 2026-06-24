@@ -241,8 +241,12 @@ class Infection(Disease):
         networks = []
         betamap = self.validate_beta()
 
-        rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-        rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+        # Compute effective transmissibility and susceptibility directly on the raw
+        # (full-length) arrays. This avoids the gather/scatter, full-length astype copy,
+        # and extra wrapper allocations of the Arr math operators; edges only ever index
+        # living agents, so stale raw values for inactive agents are never used.
+        rel_trans = self.rel_trans.asnew(self.infectious.raw * self.rel_trans.raw, copy=False)
+        rel_sus   = self.rel_sus.asnew(self.susceptible.raw * self.rel_sus.raw, copy=False)
 
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
