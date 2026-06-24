@@ -1636,6 +1636,15 @@ class multi_random(sc.prettyobj):
         rvs = rand_ints / int_max
         return rvs
 
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True)
+    def combine2_rvs(a, b, int_type, int_max):
+        """ Fast path for the common two-distribution case (avoids nb.typed.List, ~550us/call) """
+        ra = a.view(int_type)
+        rb = b.view(int_type)
+        rand_ints = np.bitwise_xor(ra*rb, ra-rb)
+        return rand_ints / int_max
+
     def rvs(self, *args):
         """ Get random variates from each of the underlying distributions and combine them efficiently """
         # Validation
@@ -1646,10 +1655,13 @@ class multi_random(sc.prettyobj):
             raise ValueError(errormsg)
 
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
-        rvs_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
         int_type = ss.dtypes.rand_uint
         int_max = np.iinfo(int_type).max
-        rvs = self.combine_rvs(rvs_list, int_type, int_max)
+        if n_dists == 2: # Common case (e.g. pairwise transmission): skip the costly nb.typed.List build
+            rvs = self.combine2_rvs(rvs_list[0], rvs_list[1], int_type, int_max)
+        else:
+            nb_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
+            rvs = self.combine_rvs(nb_list, int_type, int_max)
         return rvs
 
 
