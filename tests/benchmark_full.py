@@ -24,7 +24,7 @@ def make_run_sim():
     # Make the components
     sir = ss.SIS()
     hiv = ssl.diseases.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0,0]}
+    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'prenatal': [0.2, 0], 'random': [0,0]}
     networks = [ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()]
 
     # Make the sim
