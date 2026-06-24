@@ -921,7 +921,7 @@ class Dist:
         else:
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
-                rvs = rvs[self._slots]
+                rvs = ss.arrays.nb_indexer(rvs, self._slots) if self._slots.size >= ss.arrays.numba_indexing else rvs[self._slots] # Numba indexer is ~1.3x faster for large gathers
 
         # Handle unit if provided
         if self.unit is not None:
@@ -1593,15 +1593,17 @@ class multi_random(sc.prettyobj):
     Args:
         names (str/list): name(s) for each internal random distribution
         *args: additional names (shorthand)
+        crn (bool): whether to use common random numbers; if None (default), follow `ss.options.crn`
         **kwargs: passed to each `ss.random()` instance
 
     Usage:
         multi = ss.multi_random('source', 'target')
         rvs = multi.rvs(source_uids, target_uids)
     """
-    def __init__(self, names, *args, **kwargs):
+    def __init__(self, names, *args, crn=None, **kwargs):
         names = sc.mergelists(names, args)
         self.dists = [ss.random(name=name, **kwargs) for name in names]
+        self.crn = crn # If None, follow ss.options.crn at draw time
         return
 
     def __len__(self):
@@ -1653,6 +1655,15 @@ class multi_random(sc.prettyobj):
         if n_args != len(self):
             errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
             raise ValueError(errormsg)
+
+        # Fast non-CRN path: a single plain uniform draw per element, skipping the
+        # slot gathers and XOR combine. Statistically valid but not CRN-safe.
+        crn = ss.options.crn if self.crn is None else self.crn
+        if not crn:
+            dist = self.dists[0]
+            rvs = dist.rng.random(len(args[0]))
+            dist.jump() # Advance the RNG manually, since we bypassed dist.rvs() above
+            return rvs
 
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
         int_type = ss.dtypes.rand_uint

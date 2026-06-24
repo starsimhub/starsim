@@ -323,6 +323,36 @@ def test_combine_rands(do_plot=False):
     return c
 
 
+@sc.timer()
+def test_crn_option():
+    """ The opt-in non-CRN fast path (ss.options.crn=False) for transmission """
+    def run(crn, seed=1):
+        with ss.options.context(crn=crn):
+            sim = ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
+                         n_agents=2000, dur=30, rand_seed=seed, verbose=0)
+            sim.run()
+        return sim.results['sis']['n_infected'].values
+
+    assert ss.options.crn is True, 'CRN should be the default'
+
+    # CRN is reproducible, and is the default (not changed by toggling the option back)
+    assert np.array_equal(run(True), run(True)), 'CRN path should be reproducible'
+
+    # Non-CRN is reproducible given the same seed, but differs from CRN (it is a different RNG path)
+    fast = run(False)
+    assert np.array_equal(fast, run(False)), 'Non-CRN path should be reproducible for a fixed seed'
+    assert not np.array_equal(fast, run(True)), 'Non-CRN path should differ from the CRN path'
+
+    # Statistically equivalent: similar epidemic size at the end
+    crn_eq = run(True)[-5:].mean()
+    fast_eq = fast[-5:].mean()
+    assert np.isclose(crn_eq, fast_eq, rtol=0.1), f'Epidemic sizes should be similar: {crn_eq} vs {fast_eq}'
+
+    # Per-instance override works independently of the global option
+    assert ss.multi_random('a', 'b', crn=False).crn is False
+    return fast
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -335,6 +365,7 @@ if __name__ == '__main__':
     o5 = test_worlds(do_plot=do_plot)
     o6 = test_independence(do_plot=do_plot)
     o7 = test_combine_rands(do_plot=do_plot)
+    o8 = test_crn_option()
 
     T.toc()
 

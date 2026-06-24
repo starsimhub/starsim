@@ -133,6 +133,9 @@ class Options(sc.objdict):
         optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only).'
         options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
 
+        optdesc.crn = 'If True (default), use common random numbers (CRN) for transmission. Set False for a faster non-CRN draw (one plain uniform per edge); statistically identical but not CRN-safe across scenarios.'
+        options.crn = sc.parse_env('STARSIM_CRN', True, bool)
+
         return optdesc, options
 
     def __call__(self, *args, **kwargs):
