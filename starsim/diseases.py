@@ -240,7 +240,7 @@ class Infection(Disease):
             transmitted[i] = rel_trans[src[i]] * rel_sus[trg[i]] * beta_per_dt[i] > randvals[i]
         return transmitted
 
-    def compute_transmission(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
+    def compute_transmission(self, src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Compute the probability of a->b transmission for networks (for other routes, the Route handles this) """
         if np.ndim(beta_per_dt) == 0: # net_beta returns a per-edge array, but tolerate a scalar
             beta_per_dt = np.full(len(src), beta_per_dt, dtype=ss_float)
