@@ -57,12 +57,13 @@ for results.
 ### Demographics use `epi_weight`, not `scale`
 
 > **AMENDED 2026-06-25** (see `2026-06-25-fine-agent-competing-risk-death-design.md`):
-> the death *count* still uses `epi_weight` as below, but `Deaths` no longer
-> excludes `fine` agents from the death *draw/selection* — a fine agent faces
-> background death as a **competing risk** on the rare outcome it resolves
-> (excluding it biased resolved outcomes high, e.g. +18% HPV cancer). So below,
-> "excluded from vital dynamics" holds for births/conception and for the death
-> *flow count*, but NOT for death *selection*.
+> the **death** path no longer follows the rule below. `Deaths` (a) does NOT
+> exclude `fine` agents from the death *draw* — a fine agent faces background
+> death as a **competing risk** on the rare outcome it resolves (excluding it
+> biased resolved outcomes high, e.g. +18% HPV cancer); and (b) counts the death
+> *flow* by **`scale`** (people removed), not `epi_weight`. The `epi_weight`
+> convention below still holds for **births / pregnancy / conception** flows (a
+> birth is a whole body reproducing) and for transmission — but NOT for deaths.
 
 `Births`, `Deaths`, and `Pregnancy` count and rate-weight by `epi_weight` instead of `scale`:
 
