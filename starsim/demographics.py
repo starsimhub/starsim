@@ -287,7 +287,15 @@ class Deaths(Demographics):
         p_death = self.make_p_death()  # Get the probability of death for each agent
         self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
         death_uids = self._p_death.filter()
-        death_uids = death_uids[~self.sim.people.fine[death_uids]]  # fine sub-agents are not independent bodies; they don't die of background causes
+        # Fine sub-agents DO face background death: it is a competing risk on the
+        # rare outcome they resolve. Excluding them lets every fine agent survive
+        # its full (often long) disease dwell and reach the outcome, whereas the
+        # whole bodies they sub-resolve would lose a fraction to background death
+        # first — biasing the resolved outcome high (verified: ~+18% cancer /
+        # ~+11% CIN in hpvsim, eliminated by including them here). Their removal
+        # drops their scale from the population (correct); the demographic death
+        # FLOW below stays body-weighted (epi_flows), so a fractional fine death
+        # is a competing-risk event, not a reported whole-body demographic death.
         self.sim.people.request_death(death_uids)
         self.n_deaths = self.sim.people.epi_flows(death_uids)  # body-weighted deaths; == len(death_uids) when epi_weights are 1
         return self.n_deaths
