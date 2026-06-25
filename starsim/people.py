@@ -45,7 +45,6 @@ class People:
         self.version = ss.__version__  # Store version info
         self.initialized = False
         self.n_agents_init = n_agents
-        self.MAX_LIVE_COHORTS = 4  # Max concurrent live fine-descendant cohorts per parent (for spawn_fine recurrence)
 
         # Handle the four fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, AUIDs for tracking alive agents, and agents' parents
@@ -408,13 +407,12 @@ class People:
 
         Each input agent is retained (keeping its slot, hence its CRN trajectory) and
         `ratio - 1` sibling copies are created. All `ratio` resolved agents have their
-        `scale` divided by `ratio`. Sibling slots come from a deterministic, recurrence-safe
-        reserved block keyed by the parent's slot via `_reserved_fine_slots` (each parent owns
-        MAX_LIVE_COHORTS sub-blocks of width `ratio-1`, picking the lowest sub-block free of live
-        descendants). This is collision-free by construction and a pure function of the parent,
-        so fine-agent draws are reproducible across scenarios and independent of split
-        order/volume. This is what the prior hpvsim attempt lacked: it grew agents with default
-        (sequential) slots, which are order-dependent.
+        `scale` divided by `ratio`. Sibling slots come from a dense, self-recycling pool
+        (`_fine_slots`): the lowest free slots >= `_split_slot_offset` not occupied by a
+        live fine agent. This is collision-free within a step and reproducible within a run,
+        but (unlike the prior parent-keyed reserved-block scheme) is NOT CRN-stable across
+        scenarios. The dense pool keeps `slot.max()` ~ O(n) regardless of ratio or sim
+        length, so fine-agent Dist draws cost the same as ordinary draws.
 
         Args:
             uids (uids): coarse agents to split (must not already be fine-scale)
@@ -427,21 +425,14 @@ class People:
         ratio = int(ratio)
         if ratio < 2 or len(uids) == 0:
             return ss.uids()
-        # Re-splitting fine siblings is unsupported: they are sub-agents with no body weight
-        # and splitting them would collide with the parent's reserved block. Parents may be
-        # re-split (recurrence-safe: _reserved_fine_slots picks a new sub-block each time).
+        # Re-splitting fine siblings is unsupported: they are sub-agents with no body weight.
+        # Parents may be re-split (the dense pool reuses dead descendants' slots automatically).
         if self.fine[uids].any():
             raise ValueError('split() received fine agents; re-splitting a fine sibling is unsupported')
 
         n_sib = ratio - 1
 
-        # The reserved sub-blocks (_reserved_fine_slots, width n_sib) are collision-free across
-        # parents only when the block width n_sib is constant; a second call with a different
-        # ratio, or a mix with spawn_fine (which reserves width ratio rather than ratio-1),
-        # would overlap blocks and silently correlate fine agents. Enforce one scheme + ratio per sim.
-        self._claim_resolution_scheme('split', ratio)
-
-        new_slots, parent_map = self._reserved_fine_slots(uids, np.full(len(uids), n_sib), n_sib)
+        new_slots, parent_map = self._fine_slots(uids, np.full(len(uids), n_sib))
 
         new_uids = self.grow(len(new_slots), new_slots)
         for state in self.states.values():
@@ -449,7 +440,7 @@ class People:
         self.parent[new_uids] = parent_map
 
         # Result axis: divide scale across all `ratio` resolved sub-draws (parent + siblings).
-        # parent_map from _reserved_fine_slots is grouped per parent (repeat, not tile).
+        # parent_map from _fine_slots is grouped per parent (repeat, not tile).
         new_scale = self.scale[uids] / ratio
         self.scale[uids] = new_scale
         self.scale[new_uids] = np.repeat(new_scale, n_sib)
@@ -461,49 +452,36 @@ class People:
         self.fine[new_uids] = True
         return new_uids
 
-    def _claim_resolution_scheme(self, scheme, ratio):
-        """Enforce one multiscale resolution scheme + one ratio per sim, so the
-        reserved-block slot ranges of split (width ratio-1) and spawn_fine (width
-        ratio) never overlap."""
-        prev = getattr(self, '_resolution_scheme', None)
-        if prev is None:
-            self._resolution_scheme = (scheme, ratio)
-        elif prev != (scheme, ratio):
-            raise ValueError(f'this sim already uses resolution scheme {prev}; '
-                             f'cannot also use {(scheme, ratio)} (reserved slot blocks would collide)')
-        return
+    def _fine_slots(self, parent_uids, counts):
+        """Dense, recycling slots for fine descendants (split/spawn_fine).
 
-    def _reserved_fine_slots(self, parent_uids, counts, width):
-        """CRN-safe, recurrence-safe reserved-block slots for fine descendants.
-
-        Each parent owns MAX_LIVE_COHORTS sub-blocks of `width` slots. For each parent we
-        pick the lowest sub-block not currently occupied by a LIVE fine descendant (so a
-        recurring parent gets a disjoint block while prior descendants live, and reuses a
-        sub-block once its descendants die). Returns (new_slots, parent_map) aligned
-        element-wise.
-        """
-        offset = self._split_slot_offset
-        mlc = int(self.MAX_LIVE_COHORTS)
-        slots_out = []
-        parents_out = []
-        for p, k in zip(parent_uids, np.asarray(counts)):
-            if k <= 0:
-                continue
-            base = offset + int(self.slot[p]) * (width * mlc)
-            # sub-blocks occupied by this parent's LIVE fine descendants
-            desc = ((self.parent == int(p)) & self.fine & self.alive).uids
-            occupied = set(((int(self.slot[d]) - base) // width) for d in desc
-                           if 0 <= (int(self.slot[d]) - base) < width * mlc)
-            episode = next((e for e in range(mlc) if e not in occupied), None)
-            if episode is None:
-                raise ValueError(f'parent slot {int(self.slot[p])} already has {mlc} live fine '
-                                 f'cohorts (MAX_LIVE_COHORTS); cannot allocate another')
-            sub = base + episode * width
-            slots_out.append(np.arange(sub, sub + int(k)))
-            parents_out.append(np.full(int(k), int(p)))
-        if not slots_out:
+        Allocates counts.sum() slots as the lowest free slots >= _split_slot_offset
+        not occupied by a LIVE fine agent; dead fine agents' slots are reused
+        automatically. Returns (slots, parent_map) aligned element-wise, with
+        parent_map = repeat(parent_uids, counts) driving the state-copy. Slots are
+        dense (slots.max() ~ offset + peak concurrent fine, O(n)) and NOT parent-keyed,
+        so fine-agent Dist draws cost the same as ordinary draws. Reproducible within
+        a run; not CRN-stable across scenarios (fine agents do not need that)."""
+        counts = np.asarray(counts, dtype=int)
+        keep = counts > 0
+        parent_uids = ss.uids(parent_uids)[keep]
+        counts = counts[keep]
+        n = int(counts.sum())
+        if n == 0:
             return np.array([], dtype=int), ss.uids()
-        return np.concatenate(slots_out), ss.uids(np.concatenate(parents_out))
+        offset = self._split_slot_offset
+        # Slot *values* of every live fine agent (index slot by the uids of fine & alive;
+        # indexing an IndexArr with a BoolArr returns uids, not the stored values).
+        live = np.asarray(self.slot[(self.fine & self.alive).uids]).astype(int)
+        live = live[live >= offset]
+        # Window must hold >= n free slots AND cover every live slot (live slots can sit
+        # above offset+len(live)+n when low slots recycled while higher ones survive).
+        hi = max(offset + len(live) + n, int(live.max()) if len(live) else offset)
+        free_mask = np.ones(hi - offset + 1, dtype=bool)
+        free_mask[live - offset] = False
+        free = (offset + np.nonzero(free_mask)[0][:n]).astype(int)
+        parent_map = ss.uids(np.repeat(parent_uids, counts))
+        return free, parent_map
 
     def spawn_fine(self, parent_uids, n_events, ratio):
         """
@@ -512,9 +490,9 @@ class People:
         scale) as opposed to split()'s population partition.
 
         For each parent with `n_events[i] = k > 0`, create `k` fine agents at
-        `scale = parent.scale/ratio` (epi_weight 0, fine=True), with CRN-safe
-        reserved-block slots keyed by the parent (`offset + parent_slot*ratio + j`),
-        copying all states. The parent stays a whole body (epi_weight unchanged,
+        `scale = parent.scale/ratio` (epi_weight 0, fine=True), with dense recycling
+        slots from `_fine_slots` (lowest free slots >= offset, reusing dead fine
+        agents' slots), copying all states. The parent stays a whole body (epi_weight unchanged,
         not fine) and sheds the delegated mass: `scale *= (1 - k/ratio)`, conserving
         sum(scale). The disease model owns the event draw and supplies the counts.
 
@@ -542,15 +520,11 @@ class People:
         if not keep.any():
             return ss.uids()
 
-        # One resolution scheme per sim: spawn_fine reserves block width `ratio`
-        # (split reserves ratio-1); mixing would overlap reserved blocks.
-        # Claim after the all-zero early return so a vacuous call does not lock in the scheme.
-        self._claim_resolution_scheme('spawn_fine', ratio)
         par = parent_uids[keep]
         k = n_events[keep]
         par_scale = self.scale[par].copy()
 
-        new_slots, parent_map = self._reserved_fine_slots(par, k, ratio)
+        new_slots, parent_map = self._fine_slots(par, k)
 
         new_uids = self.grow(len(new_slots), new_slots)
         for state in self.states.values():

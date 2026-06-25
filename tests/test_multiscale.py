@@ -51,7 +51,7 @@ def test_split_mechanics_count_scale_and_copy():
     assert len(new_uids) == len(uids) * (ratio - 1)
     # conservation: each resolved agent carries 1/ratio of the parent's scale
     assert np.allclose(ppl.scale[uids], orig_scale / ratio)
-    # _reserved_fine_slots groups by parent (repeat, not tile): [p0_s0, p0_s1, p1_s0, p1_s1, ...]
+    # _fine_slots groups by parent (repeat, not tile): [p0_s0, p0_s1, p1_s0, p1_s1, ...]
     assert np.allclose(ppl.scale[new_uids], np.repeat(orig_scale / ratio, ratio - 1))
     # siblings are exact state copies of their parent (grouped by parent)
     assert np.allclose(ppl.age[new_uids], np.repeat(orig_age, ratio - 1))
@@ -84,42 +84,31 @@ def test_split_rejects_resplit():
     assert len(new) == len(uids) * 2  # ratio-1 siblings per parent
 
 
-def test_split_rejects_mixed_ratio():
-    # The deterministic reserved-block scheme is collision-free only when the
-    # sibling-block width (ratio-1) is constant; a second call with a different
-    # ratio would overlap blocks and silently correlate fine agents. Reject it.
+def test_split_allows_mixed_ratio():
+    # The dense pool is a single shared free-list, so split may be called at any
+    # ratio (and may coexist with spawn_fine): there is no width-collision concern.
     ppl = make_people(n=100)
-    ppl.split(ss.uids([1]), 5)
-    try:
-        ppl.split(ss.uids([2]), 3)   # different ratio -> would collide
-        assert False, "expected ValueError on mixed ratio"
-    except ValueError:
-        pass
-    # same ratio on a different cohort is fine
-    new = ppl.split(ss.uids([3]), 5)
-    assert len(new) == 4
+    a = ppl.split(ss.uids([1]), 5)
+    b = ppl.split(ss.uids([2]), 3)   # different ratio -> fine in the dense scheme
+    assert len(a) == 4 and len(b) == 2
+    # all fine slots distinct (no collision across the differing ratios)
+    fine = ppl.auids[ppl.fine[ppl.auids]]
+    fs = np.asarray(ppl.slot[fine])
+    assert len(np.unique(fs)) == len(fs)
 
 
-def test_split_slots_are_deterministic_function_of_parent():
-    # FAILURE MODE A (unit-level): the slots a parent produces must NOT depend on
-    # call order or on which other agents are split alongside it.
-    ppl_a = make_people(n=100)
-    new_a = ppl_a.split(ss.uids([10, 20, 30]), 3)
-    slots_a = {}
-    for u in new_a:
-        slots_a.setdefault(parent_slot(ppl_a, u), []).append(int(ppl_a.slot[u]))
-
-    # Same parents, different call order + an extra unrelated split interleaved
-    ppl_b = make_people(n=100)
-    ppl_b.split(ss.uids([99]), 3)                  # unrelated split first
-    new_b = ppl_b.split(ss.uids([30, 10, 20]), 3)  # reversed order
-    slots_b = {}
-    for u in new_b:
-        slots_b.setdefault(parent_slot(ppl_b, u), []).append(int(ppl_b.slot[u]))
-
-    for ps, slots in slots_a.items():
-        assert sorted(slots) == sorted(slots_b[ps]), \
-            "fine-agent slots must be a pure function of the parent slot"
+def test_split_slots_are_dense_and_above_offset():
+    # Dense semantics: fine slots are packed at the lowest free slots >= the offset,
+    # collision-free, and bounded ~O(n) (NOT parent-keyed sparse). Order may change the
+    # specific slot a parent gets (CRN-keyed-to-parent is intentionally dropped), but the
+    # allocation stays dense and disjoint.
+    ppl = make_people(n=100)
+    offset = ppl._split_slot_offset
+    new = ppl.split(ss.uids([10, 20, 30]), 3)
+    fs = np.asarray(ppl.slot[new])
+    assert (fs >= offset).all()                       # all in the fine band
+    assert len(np.unique(fs)) == len(fs)              # collision-free
+    assert fs.max() - offset < len(new) + 1           # dense (packed at lowest free slots)
 
 
 # ---------------------------------------------------------------------------
@@ -236,23 +225,10 @@ def test_split_reproducible_across_reruns():
     assert assigned(7) == assigned(7)
 
 
-def test_split_invariant_to_unrelated_scenario_change():
-    # FAILURE MODE A (2): an unrelated split of OTHER agents (even earlier in the run)
-    # must not change the fine slots assigned to the target cohort. Slots are a pure
-    # function of the parent slot, so the assignment is invariant.
-    def target_assignment(extra_split_slots):
-        target = SplitSubset([10, 11, 12, 13, 14], ratio=5, ti_split=2, name='target')
-        ivs = [target]
-        if extra_split_slots:
-            # Same ratio as target (one ratio per sim); disjoint parent slots -> disjoint blocks.
-            ivs.append(SplitSubset(extra_split_slots, ratio=5, ti_split=1, name='extra'))  # unrelated, earlier
-        ss.Sim(n_agents=200, diseases='sir', networks='random', dur=8, rand_seed=7,
-               interventions=ivs).run()
-        return target.assigned
-
-    a = target_assignment(None)
-    b = target_assignment([120, 121, 122])
-    assert a == b, "fine slots for the target cohort must be invariant to unrelated splits"
+# (Removed test_split_invariant_to_unrelated_scenario_change: the dense pool is
+#  intentionally NOT CRN-stable across scenarios — fine-agent slots depend on the
+#  set of live fine agents at allocation time, not on the parent. Within-run
+#  reproducibility is covered by test_split_reproducible_across_reruns.)
 
 
 # ---------------------------------------------------------------------------
@@ -600,29 +576,20 @@ def test_split_parent_reproduces_as_whole_body():
 # Task 2: spawn_fine CRN reproducibility + non-perturbation (failure modes A, B)
 # ---------------------------------------------------------------------------
 
-def test_spawn_fine_slots_deterministic_function_of_parent():
-    def fine_slots_by_parent(order):
+def test_spawn_fine_slots_are_dense_and_reproducible_within_run():
+    # Dense semantics: spawn_fine slots are packed at the lowest free slots >= offset,
+    # collision-free, and reproducible for a fixed allocation order within a run. (They
+    # are NOT a pure function of the parent — CRN-keyed-to-parent is intentionally dropped.)
+    def run():
         ppl = make_people(n=100)
-        new = ppl.spawn_fine(ss.uids(order), np.array([2, 3, 1]), 4)
-        out = {}
-        for u in new:
-            ps = int(ppl.slot[ss.uids([int(ppl.parent[u])])][0])
-            out.setdefault(ps, []).append(int(ppl.slot[u]))
-        return {k: sorted(v) for k, v in out.items()}
-    a = fine_slots_by_parent([10, 20, 30])
-    # reversed order + matching counts must give identical slots per parent
-    def reversed_run():
-        ppl = make_people(n=100)
-        ppl.spawn_fine(ss.uids([99]), np.array([2]), 4)        # unrelated spawn first
-        new = ppl.spawn_fine(ss.uids([30, 20, 10]), np.array([1, 3, 2]), 4)
-        out = {}
-        for u in new:
-            ps = int(ppl.slot[ss.uids([int(ppl.parent[u])])][0])
-            out.setdefault(ps, []).append(int(ppl.slot[u]))
-        return {k: sorted(v) for k, v in out.items()}
-    b = reversed_run()
-    for ps, slots in a.items():
-        assert slots == b[ps], 'fine slots must be a pure function of parent slot + index'
+        new = ppl.spawn_fine(ss.uids([10, 20, 30]), np.array([2, 3, 1]), 4)
+        return sorted(int(ppl.slot[u]) for u in new), ppl._split_slot_offset
+    a, offset = run()
+    b, _ = run()
+    assert a == b                                   # identical fixed-order allocation
+    assert all(s >= offset for s in a)              # all in the fine band
+    assert len(set(a)) == len(a)                    # collision-free
+    assert max(a) - offset < len(a) + 1             # dense (packed at lowest free slots)
 
 
 def test_spawn_fine_does_not_perturb_other_agents():
@@ -742,33 +709,28 @@ def test_spawn_fine_absent_is_bit_identical():
 
 
 # ---------------------------------------------------------------------------
-# Task 5: one-scheme-per-sim guard — split and spawn_fine cannot mix
+# Dense pool: split and spawn_fine may coexist at any ratio (no scheme guard)
 # ---------------------------------------------------------------------------
 
-def test_split_and_spawn_fine_cannot_mix():
+def test_split_and_spawn_fine_can_coexist():
+    # The shared dense pool has no width-collision concern, so split and spawn_fine
+    # may be used in the same sim at any ratio without error.
     ppl = make_people(n=100)
-    ppl.split(ss.uids([1, 2]), 5)
-    try:
-        ppl.spawn_fine(ss.uids([3]), np.array([1]), 5)  # different scheme, same offset region
-        assert False, 'expected ValueError mixing split + spawn_fine'
-    except ValueError:
-        pass
-    # spawn_fine-only sim: a second spawn_fine with the same ratio is fine
-    ppl2 = make_people(n=100)
-    ppl2.spawn_fine(ss.uids([1]), np.array([1]), 5)
-    new = ppl2.spawn_fine(ss.uids([2]), np.array([2]), 5)
-    assert len(new) == 2
+    a = ppl.split(ss.uids([1, 2]), 5)
+    b = ppl.spawn_fine(ss.uids([3]), np.array([1]), 5)   # different scheme, same region: fine now
+    assert len(a) == 8 and len(b) == 1
+    # all fine slots remain distinct across the two schemes
+    fine = ppl.auids[ppl.fine[ppl.auids]]
+    fs = np.asarray(ppl.slot[fine])
+    assert len(np.unique(fs)) == len(fs)
 
 
-def test_all_zero_spawn_fine_does_not_claim_scheme():
-    # Minor #1 regression: an all-zero n_events spawn_fine must not claim the
-    # resolution scheme, so a subsequent split with a different ratio must not
-    # be blocked by the vacuous all-zero call.
+def test_all_zero_spawn_fine_is_noop():
+    # An all-zero n_events spawn_fine creates nothing and is a no-op; a subsequent
+    # split at a different ratio succeeds (no scheme is ever claimed).
     ppl = make_people(n=100)
-    # all-zero call — no agents created, must be a no-op (scheme NOT claimed)
     result = ppl.spawn_fine(ss.uids([1, 2]), np.array([0, 0]), 4)
     assert len(result) == 0
-    # now split with a DIFFERENT ratio — must succeed (no scheme was claimed above)
     new = ppl.split(ss.uids([3, 4]), 7)
     assert len(new) == 12  # (7-1) * 2 parents
 
@@ -788,27 +750,30 @@ def test_spawn_fine_recurrence_disjoint_slots_while_descendants_live():
     assert not (s1 & s2)                              # NO live-live slot collision
 
 
-def test_spawn_fine_recurrence_reuses_block_when_descendants_dead():
+def test_spawn_fine_recycles_slots_when_descendants_dead():
     ppl = make_people(n=100)
     p = ss.uids([7])
     f1 = ppl.spawn_fine(p, np.array([2]), 5)
+    s1 = set(int(ppl.slot[u]) for u in f1)
     ppl.request_death(f1); ppl.step_die(); ppl.remove_dead()  # episode-1 cohort dies
     f2 = ppl.spawn_fine(p, np.array([2]), 5)
-    # block recycled: episode-2 reuses episode-1's sub-block (no range growth)
-    assert set(int(ppl.slot[u]) for u in f2) == {int(ppl.slot[u]) for u in f1} or \
-           min(int(ppl.slot[u]) for u in f2) <= max(int(ppl.slot[u]) for u in f1)
+    s2 = set(int(ppl.slot[u]) for u in f2)
+    # Dead fine agents drop out of (fine & alive), so their slots are the lowest free
+    # ones and get reused: episode-2 reuses exactly episode-1's slots (no range growth).
+    assert s2 == s1
 
 
-def test_spawn_fine_bound_raises_after_max_live_cohorts():
+def test_spawn_fine_no_cohort_cap():
+    # The MAX_LIVE_COHORTS raise is gone: a parent may accumulate many live cohorts
+    # with no error (the dense pool just keeps packing into the lowest free slots).
     ppl = make_people(n=100)
     p = ss.uids([7])
-    for _ in range(ppl.MAX_LIVE_COHORTS):
-        ppl.spawn_fine(p, np.array([1]), 5)           # 4 live cohorts
-    try:
-        ppl.spawn_fine(p, np.array([1]), 5)           # 5th while all 4 alive
-        assert False, 'expected ValueError exceeding MAX_LIVE_COHORTS'
-    except ValueError:
-        pass
+    for _ in range(20):                               # far more than the old cap of 4
+        ppl.spawn_fine(p, np.array([1]), 5)
+    fine = ppl.auids[ppl.fine[ppl.auids]]
+    assert len(fine) == 20                            # all cohorts materialized, no raise
+    fs = np.asarray(ppl.slot[fine])
+    assert len(np.unique(fs)) == len(fs)              # and all collision-free
 
 
 def test_spawn_fine_recurrence_reproducible():
@@ -865,3 +830,120 @@ def test_spawn_fine_variance_survives_recurrence():
     truth = P_RARE * N
     res = np.array([resolved_two_episodes(s) for s in range(N_SEEDS)])
     assert abs(res.mean() - truth) / truth < 0.15       # unbiased across episodes
+
+
+# ---------------------------------------------------------------------------
+# Dense recycled fine-slot pool: the slot-band-blowup fix (design 2026-06-25)
+# ---------------------------------------------------------------------------
+
+def _high_recurrence_run(ppl, n_parents, n_episodes, ratio=10, cohort=2):
+    """ Spawn `cohort` fine agents per parent for `n_episodes`, killing the prior
+    episode's cohort each round (so slots can recycle), tracking the live fine-slot
+    high-water mark per episode. Returns (peaks, prev_cohort). """
+    parents = ss.uids(np.arange(n_parents))
+    peaks = []
+    prev = ss.uids()
+    for _ in range(n_episodes):
+        if len(prev):                                   # kill the previous cohort so its slots free up
+            ppl.request_death(prev); ppl.step_die(); ppl.remove_dead()
+        prev = ppl.spawn_fine(parents, np.full(n_parents, cohort), ratio)
+        live = ppl.slot[ppl.fine & ppl.alive]
+        peaks.append(int(live.max()) if len(live) else ppl._split_slot_offset)
+    return peaks, prev
+
+
+def test_dense_bound_no_cohort_cap_no_blowup():
+    # The core win: after a long, high-recurrence multiscale run the live fine-slot
+    # span stays bounded ~O(n) (NOT O(n*ratio*MAX_LIVE_COHORTS)), and NO cohort-cap
+    # error occurs (the MAX_LIVE_COHORTS raise is gone).
+    n = 400
+    ppl = make_people(n=n)
+    peaks, _ = _high_recurrence_run(ppl, n_parents=n, n_episodes=200, ratio=12, cohort=2)
+    span = max(peaks) - ppl._split_slot_offset
+    # Dense bound: peak live fine = n_parents * cohort = 800; well under 2*n_agents... but
+    # n here is small relative to the cohort, so bound against peak concurrent fine instead.
+    assert span < 2 * n + n            # O(n), not O(n * ratio * mlc) ~ tens of millions
+    assert not hasattr(ppl, 'MAX_LIVE_COHORTS')  # attribute removed entirely
+
+
+def test_dense_bound_via_sim_long_recurrence():
+    # End-to-end through a Sim: after a long run with repeated spawn_fine on the whole
+    # population, slot[fine & alive].max() - offset stays < 2 * n_agents (dense bound).
+    N = 500
+    class Recur(ss.Intervention):
+        def __init__(self, ratio=12, name=None):
+            super().__init__(name=name); self.ratio = ratio; self.prev = ss.uids()
+        def step(self):
+            ppl = self.sim.people
+            if len(self.prev):
+                ppl.request_death(self.prev)            # retire last episode's cohort
+            whole = ppl.auids[~ppl.fine[ppl.auids]]
+            if len(whole):
+                self.prev = ppl.spawn_fine(whole, np.ones(len(whole), dtype=int), self.ratio)
+    sim = ss.Sim(n_agents=N, diseases='sir', networks='random', dur=60, rand_seed=1,
+                 interventions=Recur(ratio=12))
+    sim.run()
+    ppl = sim.people
+    live = ppl.slot[ppl.fine & ppl.alive]
+    if len(live):
+        span = int(live.max()) - ppl._split_slot_offset
+        assert span < 2 * N            # dense O(n) bound, flat in ratio and sim length
+
+
+def test_recycling_plateau():
+    # The live-fine-slot high-water mark must plateau over a long run (dead agents'
+    # slots are reused) rather than growing unboundedly with episode count.
+    n = 300
+    ppl = make_people(n=n)
+    peaks, _ = _high_recurrence_run(ppl, n_parents=n, n_episodes=150, ratio=10, cohort=2)
+    # late-run peaks must not exceed early-run peaks (no growth: pure recycling)
+    early = max(peaks[:10])
+    late = max(peaks[-10:])
+    assert late <= early                # plateaued (recycled), not growing
+
+
+def test_collision_free_within_step():
+    # At the end of a run with many live fine agents, no two share a slot.
+    n = 400
+    ppl = make_people(n=n)
+    # several distinct live cohorts coexisting (no deaths between episodes)
+    parents = ss.uids(np.arange(n))
+    for _ in range(5):
+        ppl.spawn_fine(parents, np.full(n, 1), 10)
+    fine_alive = ppl.fine & ppl.alive
+    slots = np.asarray(ppl.slot[fine_alive])
+    assert len(np.unique(slots)) == int(fine_alive.sum())   # all distinct
+
+
+def test_within_run_reproducibility():
+    # Same seed -> identical results across two runs (within-run reproducibility holds
+    # even though fine slots are not CRN-stable across scenarios).
+    def run():
+        sim = ss.Sim(n_agents=400, diseases='sir', networks='random', dur=10, rand_seed=5,
+                     interventions=SplitEveryone(ratio=5))
+        sim.run()
+        return np.asarray(sim.results.sir.new_infections)
+    assert np.array_equal(run(), run(), equal_nan=True)
+
+
+def test_ss_only_multiscale_conserves_scale():
+    # Sanity: a plain ss multiscale sim (split + a rare spawn_fine event) runs and
+    # conserves sum(scale) end to end.
+    class SplitThenSpawn(ss.Intervention):
+        def __init__(self, name=None):
+            super().__init__(name=name)
+        def step(self):
+            ppl = self.sim.people
+            if self.sim.ti == 1:
+                ppl.split(ppl.auids.copy(), 4)
+            elif self.sim.ti == 3:
+                whole = ppl.auids[~ppl.fine[ppl.auids]][:20]
+                if len(whole):
+                    ppl.spawn_fine(whole, np.ones(len(whole), dtype=int), 4)
+    sim = ss.Sim(n_agents=500, diseases='sir', networks='random', dur=8, rand_seed=1,
+                 interventions=SplitThenSpawn())
+    sim.init()
+    before = sim.people.scale[sim.people.auids].sum()
+    sim.run()
+    after = sim.people.scale[sim.people.auids].sum()
+    assert np.isclose(before, after, rtol=1e-6)   # represented population conserved
