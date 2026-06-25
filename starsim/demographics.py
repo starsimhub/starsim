@@ -293,11 +293,18 @@ class Deaths(Demographics):
         # whole bodies they sub-resolve would lose a fraction to background death
         # first — biasing the resolved outcome high (verified: ~+18% cancer /
         # ~+11% CIN in hpvsim, eliminated by including them here). Their removal
-        # drops their scale from the population (correct); the demographic death
-        # FLOW below stays body-weighted (epi_flows), so a fractional fine death
-        # is a competing-risk event, not a reported whole-body demographic death.
+        # drops their scale from the population (correct).
         self.sim.people.request_death(death_uids)
-        self.n_deaths = self.sim.people.epi_flows(death_uids)  # body-weighted deaths; == len(death_uids) when epi_weights are 1
+        # People-space death count: a death removes the agent's `scale` from the
+        # result population (a fine agent = 1/ratio of a person, a shrunk split
+        # parent = its <1 scale), so the reported flow is scale-weighted to match
+        # what leaves `n_alive` (== len(death_uids) when every scale is 1). NOTE
+        # the deliberate asymmetry with births/pregnancies, which stay
+        # epi_weight-counted: a death removes a (fractional) person, whereas a
+        # birth is a whole body reproducing (one body -> one baby, regardless of
+        # its result-scale; fine agents never reproduce). See
+        # docs/superpowers/specs/2026-06-25-fine-agent-competing-risk-death-design.md.
+        self.n_deaths = self.sim.people.scale_flows(death_uids)
         return self.n_deaths
 
     def update_results(self):
