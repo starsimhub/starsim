@@ -287,9 +287,24 @@ class Deaths(Demographics):
         p_death = self.make_p_death()  # Get the probability of death for each agent
         self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
         death_uids = self._p_death.filter()
-        death_uids = death_uids[~self.sim.people.fine[death_uids]]  # fine sub-agents are not independent bodies; they don't die of background causes
+        # Fine sub-agents DO face background death: it is a competing risk on the
+        # rare outcome they resolve. Excluding them lets every fine agent survive
+        # its full (often long) disease dwell and reach the outcome, whereas the
+        # whole bodies they sub-resolve would lose a fraction to background death
+        # first — biasing the resolved outcome high (verified: ~+18% cancer /
+        # ~+11% CIN in hpvsim, eliminated by including them here). Their removal
+        # drops their scale from the population (correct).
         self.sim.people.request_death(death_uids)
-        self.n_deaths = self.sim.people.epi_flows(death_uids)  # body-weighted deaths; == len(death_uids) when epi_weights are 1
+        # People-space death count: a death removes the agent's `scale` from the
+        # result population (a fine agent = 1/ratio of a person, a shrunk split
+        # parent = its <1 scale), so the reported flow is scale-weighted to match
+        # what leaves `n_alive` (== len(death_uids) when every scale is 1). NOTE
+        # the deliberate asymmetry with births/pregnancies, which stay
+        # epi_weight-counted: a death removes a (fractional) person, whereas a
+        # birth is a whole body reproducing (one body -> one baby, regardless of
+        # its result-scale; fine agents never reproduce). See
+        # docs/superpowers/specs/2026-06-25-fine-agent-competing-risk-death-design.md.
+        self.n_deaths = self.sim.people.scale_flows(death_uids)
         return self.n_deaths
 
     def update_results(self):
