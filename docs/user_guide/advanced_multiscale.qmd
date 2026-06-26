@@ -59,17 +59,17 @@ The split produces one cohort of `ratio` agents from each parent, with a deliber
 
 That asymmetry is the point: the woman keeps transmitting HPV and bearing children as one whole person, while *only her cancer outcome* is resolved across the `ratio` sub-draws. Total transmission and reproduction are unchanged.
 
+One exception to "fine agents are excluded from vital dynamics": **background death applies to fine agents too**, as a *competing risk* on the outcome they resolve. A fine sub-draw can take years-to-decades to reach its rare outcome, during which the person it represents could die of other causes — exactly as a whole body would. Excluding fine agents from background death would let every one survive to the outcome and bias the resolved rate high (measured ~+18% for HPV cancer). So `Deaths` draws fine agents at the same per-agent mortality, and the death *flow* is counted by `scale` (a fine agent's death removes its `1/ratio` of a person). Reproduction stays whole-body (one body bears one child regardless of its `scale`); only death — a competing risk that removes a fractional person — is resolved at fine scale.
+
 What `split` does for you:
 
 - **Copies all module states** from each parent to its siblings, so they begin as identical replicas at the moment of the split.
-- **Assigns CRN-safe slots** to the new agents, derived deterministically from the parent's slot — so the siblings draw *independent* trajectories (variance drops) yet the assignment is *reproducible* across scenarios (the property that makes [common random numbers](advanced_random.qmd) work). The parent keeps its slot, so its own trajectory is bit-identical to a no-split run.
+- **Assigns slots** to the new siblings from a dense, self-recycling pool (the lowest free slots above the reserved newborn range, reusing the slots of fine agents that have since died) — so the siblings draw *independent* trajectories (variance drops). The parent keeps its own slot, so its trajectory is bit-identical to a no-split run. Slot assignment is deterministic and reproducible *within a run* (same seed → same result); it is **not** keyed to the parent, so fine-agent draws are not common across scenarios that change the split structure (e.g. a different `ratio`) — a deliberate trade for an allocation whose largest slot stays O(n) instead of growing with population × ratio.
 - **Sets the two weights** as above and tags the siblings `fine`; networks and demographics then exclude the fine siblings automatically, while the parent participates normally.
 
 ::: {.callout-important}
-## One resolution scheme per simulation
-The reserved-slot scheme is collision-free only when the whole simulation uses a single primitive (`split` *or* `spawn_fine`) with a single `ratio`. Mixing the two, or using two different ratios, raises an error rather than silently corrupting draws.
-
-A coarse **parent** *may* be re-split (or re-resolved): the slot scheme is recurrence-safe, allocating each new fine cohort a disjoint reserved sub-block while prior descendants are still alive, and recycling a sub-block once its descendants die (up to `MAX_LIVE_COHORTS` concurrent live cohorts per parent). What you cannot do is re-split a **fine sibling** — those are non-participating sub-agents with no body weight — which raises an error.
+## Re-splitting and mixing
+A coarse **parent** *may* be re-split (or re-resolved) any number of times: the dense slot pool simply hands each new fine cohort the lowest currently-free slots and reclaims a slot once its fine agent dies, so there is no per-parent cohort cap. `split` and `spawn_fine` may also be mixed at any `ratio` within one simulation — they draw from the same pool, so there is no collision and no one-scheme-per-simulation restriction. What you cannot do is re-split a **fine sibling** — those are non-participating sub-agents with no body weight — which raises an error.
 :::
 
 
@@ -80,7 +80,7 @@ A coarse **parent** *may* be re-split (or re-resolved): the slot scheme is recur
 `sim.people.spawn_fine(parent_uids, n_events, ratio)` is the economical alternative. Instead of partitioning every parent up front, the disease model draws *how many* of each parent's `ratio` notional sub-people experienced the rare event this step, and `spawn_fine` materializes only those successes:
 
 - For each parent, the model supplies `n_events[i] = k` in `[0, ratio]` — the number of sub-draws that hit the rare outcome. The model owns this draw (e.g. a binomial over the at-risk bodies).
-- `spawn_fine` creates exactly `k` fine agents per parent at `scale = parent.scale / ratio` (`epi_weight = 0`, tagged `fine`), copying all states and assigning the same CRN-safe, recurrence-safe reserved-block slots as `split`.
+- `spawn_fine` creates exactly `k` fine agents per parent at `scale = parent.scale / ratio` (`epi_weight = 0`, tagged `fine`), copying all states and drawing slots from the same dense recycling pool as `split`.
 - The parent **stays a whole body** (its `epi_weight` is unchanged and it is *not* tagged `fine`) and sheds the delegated outcome mass: `scale *= (1 - k/ratio)`. This conserves `sum(scale)` — the parent now represents the non-event remainder, and the `k` fine agents represent the resolved successes.
 
 ```python
