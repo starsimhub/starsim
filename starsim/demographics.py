@@ -88,8 +88,8 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=float, scale=True,  summarize_by='sum',  label='New births'), # float for scale-weighted (fractional) counts
-            ss.Result('cumulative', dtype=float, scale=True,  summarize_by='last', label='Cumulative births'),
+            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'), # body-weighted (epi_flows): integer count of whole-body births
+            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
             ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
         return
@@ -651,21 +651,22 @@ class Pregnancy(Demographics):
         """
         super().init_results()
 
-        scaling_kw = dict(dtype=float, scale=True) # float to hold scale-weighted (fractional) counts under multiscale
+        body_kw = dict(dtype=int, scale=True)       # body-weighted (epi_flows): integer counts of whole-body vital-dynamics events
+        scaling_kw = dict(dtype=float, scale=True)  # scale-weighted (count()): float to hold fractional counts under multiscale
         nonscaling_kw = dict(dtype=float, scale=False)
         self.derived_results = ['n_fecund', 'n_fertile', 'n_susceptible']
 
         # Define results
         results = sc.autolist()
         results += [
-            ss.Result('pregnancies',     **scaling_kw, label='New pregnancies', summarize_by='sum'),
-            ss.Result('births',          **scaling_kw, label='New births', summarize_by='sum'),
-            ss.Result('n_preterm',       **scaling_kw, label='Preterm births', auto_plot=False),
-            ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births', auto_plot=False),
-            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
-            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
-            ss.Result('neonatal_deaths', **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
-            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('pregnancies',     **body_kw, label='New pregnancies', summarize_by='sum'),
+            ss.Result('births',          **body_kw, label='New births', summarize_by='sum'),
+            ss.Result('n_preterm',       **body_kw, label='Preterm births', auto_plot=False),
+            ss.Result('n_very_preterm',  **body_kw, label='Very preterm births', auto_plot=False),
+            ss.Result('miscarriages',    **body_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
+            ss.Result('stillbirths',     **body_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
+            ss.Result('neonatal_deaths', **body_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('maternal_deaths', **body_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
             ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate', auto_plot=False),
             ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate', auto_plot=False),
             ss.Result('cbr',             **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),

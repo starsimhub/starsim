@@ -564,7 +564,7 @@ class Sim(ss.Base):
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result): # Note: since Result is a NumPy array, "res" and self.results[key] are not the same object
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
-                    self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+                    self.results[reskey] = ss.scale_result(self.results[reskey], self.pars.pop_scale) # int-preserving when exact
                 if np.all(res == res[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
         self.results_ready = True # Results are ready to use

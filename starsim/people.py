@@ -69,7 +69,7 @@ class People:
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
             ss.FloatArr('scale', default=1.0), # Result weight: people represented in outputs (count/scale_flows/results)
-            ss.FloatArr('epi_weight', default=1.0), # Demographic & transmission weight: whole people for vital dynamics + transmission participation
+            ss.IntArr('epi_weight', default=1), # Demographic & transmission weight: whole people (1) for vital dynamics + transmission; 0 for non-participating fine sub-agents. Integer participation flag, not fractional.
             ss.BoolArr('fine', default=False), # True for non-participating fine-scale sub-agents created by People.split() (BoolArr, not BoolState, so no auto n_fine result)
         ]
         states.extend(extra_states)
@@ -448,7 +448,7 @@ class People:
         # non-participating sub-agents (epi_weight 0, tagged fine -> excluded from transmission
         # and vital dynamics). This keeps total transmission/reproduction consistent: the cohort
         # contributes one body (the parent), while its outcome is resolved across `ratio` sub-draws.
-        self.epi_weight[new_uids] = 0.0
+        self.epi_weight[new_uids] = 0
         self.fine[new_uids] = True
         return new_uids
 
@@ -532,7 +532,7 @@ class People:
         self.parent[new_uids] = parent_map
 
         self.scale[new_uids] = np.repeat(par_scale / ratio, k)
-        self.epi_weight[new_uids] = 0.0
+        self.epi_weight[new_uids] = 0
         self.fine[new_uids] = True
         # Shed the delegated outcome mass from the parents (conserves sum(scale)).
         self.scale[par] = par_scale * (1 - k / ratio)

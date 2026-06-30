@@ -773,7 +773,7 @@ class Module(Base):
         # Scale results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
+                self.results[reskey] = ss.scale_result(self.results[reskey], self.sim.pars.pop_scale) # int-preserving when exact
         return
 
     def to_json(self):

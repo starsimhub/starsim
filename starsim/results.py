@@ -9,6 +9,21 @@ import matplotlib.pyplot as plt
 
 
 
+def scale_result(arr, factor):
+    """
+    Multiply a result by the population scale factor, preserving integer dtype when
+    the result is integer-valued and the factor is integral (i.e. the scaling is exact).
+
+    Body-weighted vital-dynamics flows (births, pregnancies, etc.) are integer counts;
+    with an integral `pop_scale` (the default 1.0 included) they should stay integer
+    rather than being promoted to float by the multiply. A fractional `pop_scale`
+    necessarily yields a float result.
+    """
+    if np.issubdtype(arr.dtype, np.integer) and float(factor).is_integer():
+        return arr * int(factor)
+    return arr * factor
+
+
 class Result(ss.BaseArr):
     """
     Array-like container for holding sim results.
