@@ -24,7 +24,7 @@ def fisher_yates_shuffle(arr, randvals):
 
     Note: `randvals` is consumed in order (`randvals[k]` for the k-th swap), not indexed
     by position. This means that changing the array length (e.g. adding one agent) shifts
-    every swap, so the shuffle is *not* random-number safe -- matching `ss.RandomNet`'s
+    every swap, so the shuffle is *not* random-number safe -- matching `ss.RandomExactNet`'s
     intended behavior (see `ss.RandomSafeNet` for the CRN-safe version).
     """
     n = arr.shape[0]
@@ -567,7 +567,7 @@ class StaticNet(Network):
         pass
 
 
-class RandomNet(DynamicNetwork):
+class RandomExactNet(DynamicNetwork):
     """
     Random connectivity between agents
 
@@ -590,7 +590,7 @@ class RandomNet(DynamicNetwork):
             beta = 1.0,
         )
         self.update_pars(pars, **kwargs)
-        self.dist = ss.Dist(distname='RandomNet') # Default RNG
+        self.dist = ss.Dist(distname='RandomNet') # Default RNG; name kept as 'RandomNet' (not the class name) so results stay reproducible across the rename, and shared with the RandomNet subclass
         return
 
     def get_edges(self, inds, n_contacts):
@@ -666,29 +666,29 @@ class RandomNet(DynamicNetwork):
         return
 
 
-class RandomFastNet(RandomNet):
+class RandomNet(RandomExactNet):
     """
-    A faster, approximate version of `ss.RandomNet`
+    A faster, approximate version of `ss.RandomExactNet`
 
-    Identical to `ss.RandomNet` except that the target end of each edge is drawn
+    Identical to `ss.RandomExactNet` except that the target end of each edge is drawn
     uniformly at random, rather than via a shuffle of the source stubs. This is
     roughly 1.8x faster at generating edges, but the per-agent degree is no longer
     fixed: the source side of each edge is still exactly `n_contacts`, while the
     target side is Poisson-distributed (mean `n_contacts`). Agents therefore have
-    somewhat more variable numbers of contacts than with `ss.RandomNet`.
+    somewhat more variable numbers of contacts than with `ss.RandomExactNet`.
 
-    Note: like `ss.RandomNet`, this is not random-number safe; see `ss.RandomSafeNet`
+    Note: like `ss.RandomExactNet`, this is not random-number safe; see `ss.RandomSafeNet`
     for the CRN-safe (but slower) version.
     """
     def get_edges(self, inds, n_contacts):
-        """ Find edges by drawing the target of each edge uniformly at random (see `ss.RandomNet.get_edges`) """
+        """ Find edges by drawing the target of each edge uniformly at random (see `ss.RandomExactNet.get_edges`) """
         source = np.repeat(inds, n_contacts)
         if len(source):
             idx = self.dist.rng.integers(0, len(inds), len(source)) # A random target agent for each source stub
             target = inds[idx]
         else:
             target = source
-        self.dist.jump() # Reset the RNG manually, as in RandomNet.get_edges
+        self.dist.jump() # Reset the RNG manually, as in RandomExactNet.get_edges
         return source, target
 
 
@@ -696,15 +696,15 @@ class RandomSafeNet(DynamicNetwork):
     """
     Create a CRN-safe, O(N) random network
 
-    This network is similar to `ss.RandomNet()`, but is random-number safe
+    This network is similar to `ss.RandomExactNet()`, but is random-number safe
     (i.e., the addition of a single new agent will not perturb the entire rest
-    of the network). However, it is somewhat slower than `ss.RandomNet()`,
+    of the network). However, it is somewhat slower than `ss.RandomExactNet()`,
     so should be used where CRN safety is important (e.g., scenario analysis).
 
-    Note: `ss.RandomNet` uses `n_contacts`, which is the total number of contacts
+    Note: `ss.RandomExactNet` uses `n_contacts`, which is the total number of contacts
     per agent. `ss.RandomSafeNet` uses `n_edges`, which is the total number of
     *edges* per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges.
-    For example, `ss.RandomNet(n_contacts=10)` will give (nearly) identical results
+    For example, `ss.RandomExactNet(n_contacts=10)` will give (nearly) identical results
     to `ss.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
     a distribution, `n_edges` can only be an integer.
 
