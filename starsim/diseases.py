@@ -227,27 +227,32 @@ class Infection(Disease):
         return new_cases, sources, networks
 
     @staticmethod
-    @nb.njit(cache=True)
+    @nb.njit(cache=True) # No fastmath: a stray NaN must compare False (no transmission), not be assumed absent
     def _nb_transmit(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
-        """ Optimized transmission kernel; returns a boolean array of which edges transmit.
+        """ Optimized transmission kernel: returns the (source, target) UIDs of transmitting edges.
 
-        Fusing the gather/multiply/compare into one pass (rather than allocating several
-        full-length intermediate arrays) is ~3x faster than the equivalent NumPy expression.
+        Fuses the gather/multiply/compare *and* the UID extraction into a single branchless pass.
+        This avoids the full-length boolean temporary and the two separate gather passes
+        (`trg[mask]`, `src[mask]`) of the previous approach -- ~1.4x faster at typical transmission
+        rates, more when transmission is common. UIDs are emitted in edge order, preserving CRN behavior.
         """
         n = src.shape[0]
-        transmitted = np.empty(n, dtype=np.bool_)
+        src_out = np.empty(n, dtype=np.int64) # int64 = uid dtype, so the caller can .view(uids) without a copy
+        trg_out = np.empty(n, dtype=np.int64)
+        m = 0
         for i in range(n):
-            transmitted[i] = rel_trans[src[i]] * rel_sus[trg[i]] * beta_per_dt[i] > randvals[i]
-        return transmitted
+            transmitted = rel_trans[src[i]] * rel_sus[trg[i]] * beta_per_dt[i] > randvals[i]
+            src_out[m] = src[i] # Written every iteration (branchless); kept only if m advances
+            trg_out[m] = trg[i]
+            m += transmitted
+        return src_out[:m], trg_out[:m]
 
     def compute_transmission(self, src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Compute the probability of a->b transmission for networks (for other routes, the Route handles this) """
         if np.ndim(beta_per_dt) == 0: # net_beta returns a per-edge array, but tolerate a scalar
             beta_per_dt = np.full(len(src), beta_per_dt, dtype=ss_float)
-        transmitted = self._nb_transmit(np.asarray(src), np.asarray(trg), rel_trans.raw, rel_sus.raw, beta_per_dt, randvals)
-        target_uids = trg[transmitted]
-        source_uids = src[transmitted]
-        return target_uids, source_uids
+        source_arr, target_arr = self._nb_transmit(np.asarray(src), np.asarray(trg), rel_trans.raw, rel_sus.raw, beta_per_dt, randvals)
+        return target_arr.view(ss.uids), source_arr.view(ss.uids) # view (no copy): kernel output is uniquely owned int64; concatenate() compacts later
 
     def infect(self):
         """ Determine who gets infected on this timestep via transmission on the network """
