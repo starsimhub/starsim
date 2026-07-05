@@ -104,7 +104,8 @@ class HouseholdNet(ss.Network):
             ]
         self.define_states(*states)
         self.p_fractional_age = ss.uniform()
-        self.n_households = 0 
+        self.n_households = 0
+        self._dhs_parsed = None  # Cached (sizes, ages_flat, sexes_flat, offsets, has_sex) from the DHS data
         return
 
     def init_pre(self, sim):
@@ -121,65 +122,87 @@ class HouseholdNet(ss.Network):
         self.sim.people.age[:] = self.sim.people.age + self.p_fractional_age.rvs(self.sim.people.auids)
         return
 
+    def _parse_dhs(self):
+        """ Parse the DHS age/sex strings into flat arrays once, and cache the result.
+
+        Returns (sizes, ages_flat, sexes_flat, offsets, has_sex) where ages_flat/sexes_flat are
+        the members of every household concatenated end to end, offsets[r] gives the start of
+        household r within them, and sizes[r] its member count.
+        """
+        if self._dhs_parsed is None:
+            dhs = self.dhs_data
+            ages_list = [np.array(a.split(', '), dtype=float) for a in dhs['ages']]
+            sizes = np.array([len(a) for a in ages_list])
+            ages_flat = np.concatenate(ages_list)
+            offsets = np.concatenate([[0], np.cumsum(sizes)])  # length len(dhs)+1
+            has_sex = 'sexes' in dhs.columns
+            sexes_flat = np.concatenate([np.array(s.split(', '), dtype=int) for s in dhs['sexes']]) if has_sex else None
+            self._dhs_parsed = (sizes, ages_flat, sexes_flat, offsets, has_sex)
+        return self._dhs_parsed
+
     def add_pairs(self):
-        """ Generate contacts by assigning agents to households from the data """
+        """ Generate contacts by assigning agents to households sampled from the data.
+
+        Households are drawn uniformly at random (with replacement) until they cover the whole
+        population, exactly as the reference algorithm, but sampling, age/sex assignment, edge
+        creation, and head-of-household selection are all vectorized rather than looped per
+        household. Results are statistically equivalent but not bit-identical to the loop version
+        (the random draws differ).
+        """
         ppl = self.sim.people
         pop_size = len(ppl)
-        dhs = self.dhs_data
+        sizes, ages_flat, sexes_flat, offsets, has_sex = self._parse_dhs()
+        n_dhs = len(sizes)
 
-        n_remaining = len(ppl)
-        p1 = []
-        p2 = []
-        clusters = []  # Record each household's uids so the FHOH loop below need not rescan household_ids == cid
-        triu_cache = {}  # Cache i<j index pairs by cluster size; sizes are small repeated integers
-        while n_remaining > 0:
-            self.n_households += 1
+        # Sample households (uniform, with replacement) until their members cover the population
+        n_est = int(pop_size/sizes.mean()*1.25) + 16
+        rows = np.random.choice(n_dhs, size=n_est) # TODO: make CRN-safe
+        while sizes[rows].sum() < pop_size:
+            rows = np.concatenate([rows, np.random.choice(n_dhs, size=n_est)]) # TODO: make CRN-safe
+        n_hh = int(np.searchsorted(np.cumsum(sizes[rows]), pop_size)) + 1
+        rows = rows[:n_hh]
+        hsize = sizes[rows].copy()
+        hsize[-1] -= int(hsize.sum() - pop_size)  # Truncate the last household so the total is exactly pop_size
+        self.n_households = n_hh
 
-            # Sample a household from the data
-            rand_row = np.random.choice(len(dhs)) # TODO: make CRN-safe
-            household_data = dhs.iloc[rand_row]
-            age_data = household_data['ages']
-            sex_data = None
-            if 'sexes' in household_data.keys():
-                sex_data = household_data['sexes']
+        # Assign contiguous agent blocks to households
+        all_uids = ss.uids(np.arange(pop_size))
+        hh_ids = np.repeat(np.arange(n_hh), hsize)
+        self.household_ids[all_uids] = hh_ids
 
-            age_data = np.array([float(x) for x in age_data.split(', ')], dtype=float)
-            cluster_size = len(age_data)
+        # Gather each member's age (and sex) via a vectorized ragged gather into ages_flat
+        seg_start = np.cumsum(hsize) - hsize                          # output position where each household starts
+        intra = np.arange(pop_size) - np.repeat(seg_start, hsize)     # 0..size-1 within each household
+        gather = np.repeat(offsets[rows], hsize) + intra
+        ppl.age[all_uids] = ages_flat[gather]
+        if has_sex:
+            ppl.female[all_uids] = (sexes_flat[gather] == 2)
 
-            if cluster_size > n_remaining:
-                cluster_size = n_remaining
-
-            cluster_uids = ss.uids((pop_size - n_remaining) + np.arange(cluster_size))
-
-            ppl.age[cluster_uids] = age_data[0:cluster_size]
-            if sex_data is not None:
-                sex_data = np.array([int(x) for x in sex_data.split(', ')])
-                ppl.female[cluster_uids] = (sex_data[0:cluster_size] == 2)
-            self.household_ids[cluster_uids] = self.n_households - 1 # Zero based indexing for actual IDs
-            clusters.append(cluster_uids)
-
-            # Add symmetric pairwise contacts in each cluster (all i<j pairs, in row-major order)
-            if cluster_size not in triu_cache:
-                triu_cache[cluster_size] = np.triu_indices(cluster_size, k=1)
-            ii, jj = triu_cache[cluster_size]
-            p1.append(cluster_uids[ii])
-            p2.append(cluster_uids[jj])
-            n_remaining -= cluster_size
-
-        p1 = np.concatenate(p1) if p1 else np.empty(0, dtype=ss.dtypes.int)
-        p2 = np.concatenate(p2) if p2 else np.empty(0, dtype=ss.dtypes.int)
+        # Build all within-household edges (every i<j pair), batched by household size
+        p1_list, p2_list = [], []
+        for s in np.unique(hsize):
+            if s < 2:
+                continue
+            starts = seg_start[hsize == s]
+            ii, jj = np.triu_indices(s, k=1)
+            p1_list.append((starts[:, None] + ii[None, :]).ravel())
+            p2_list.append((starts[:, None] + jj[None, :]).ravel())
+        p1 = np.concatenate(p1_list) if p1_list else np.empty(0, dtype=ss.dtypes.int)
+        p2 = np.concatenate(p2_list) if p2_list else np.empty(0, dtype=ss.dtypes.int)
         beta = np.ones(len(p1), dtype=ss.dtypes.float)
         self.append(p1=p1, p2=p2, beta=beta)
 
         if self.dynamic:
-            # Find a female head of household between ages 15 and 50, iterating the recorded
-            # clusters rather than rescanning household_ids == cid for every household (O(N) each).
-            for cluster_uids in clusters:
-                female_uids = cluster_uids[
-                    ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
-                if len(female_uids) > 0:
-                    fhoh = np.random.choice(a=female_uids) # TODO: make CRN-safe
-                    self.fhoh[ss.uids(fhoh)] = True
+            # Assign one random eligible female (age 15-50) as head of each household: give every
+            # eligible agent a random score and pick the highest-scoring one within each household.
+            ages = ppl.age[all_uids]
+            elig = ppl.female[all_uids] & (ages >= 15) & (ages <= 50)
+            score = np.random.random(pop_size) # TODO: make CRN-safe
+            score[~elig] = -1.0
+            best = np.full(n_hh, -1.0)
+            np.maximum.at(best, hh_ids, score)
+            is_head = elig & (score == best[hh_ids])
+            self.fhoh[all_uids[is_head]] = True
         return
 
     def step(self):
