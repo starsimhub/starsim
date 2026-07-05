@@ -422,6 +422,9 @@ class Arr(BaseArr):
             active = disease.state.isin([State.MILD, State.SEVERE]).uids
         """
         values = np.atleast_1d(sc.toarray(values)) # Normalize scalars/lists/arrays to 1D (matches np.isin for other inputs)
+        if values.dtype == object: # A set, dict, or generator is wrapped as a single object, which np.isin would silently treat as no-match; be louder
+            errormsg = f'isin() expects a scalar or array-like object (list/tuple/array), not {values}'
+            raise TypeError(errormsg)
         raw = self.raw # Always size N, so the result has correct full-size raw
         n = len(values)
         if n == 0:
