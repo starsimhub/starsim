@@ -4,24 +4,37 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.5.0 (2026-07-05)
-This release provides several major performance improvements. Specifically:
+This release provides several major performance improvements, focused on random number generation, networks, and pregnancy. On a representative large simulation (50,000 agents, 100 years, SIS on a random network with births and deaths), the random number changes alone make the default configuration roughly 1.4x faster, or about 2x faster with common random numbers disabled (`ss.options.crn = False`); the network, transmission, and pregnancy changes described below provide further ~1.3x speedups on top of this, for a total of ~1.8-2.6x speedups.
 
 ### Common random numbers
-- TBC
+- Common random numbers (CRN) work by giving each agent a "slot" and drawing one random number per slot, so that the same agent makes the same decision regardless of what other agents do. Previously this was implemented by drawing `slots.max()+1` numbers and keeping only those at the requested slots. Because newborn agents are assigned slots spread over a wide range (up to `slot_scale` times the population size), this could mean generating up to 5x more random numbers than were actually needed. The default CRN path now generates only the number of values needed, via a counter-based hash (`ss.distributions.hash_uniforms()`, a Numba-compiled [splitmix64](https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64) algorithm keyed by the distribution seed and draw index) that maps each slot directly to a uniform value. This preserves CRN reproducibility while removing the redundant draws.
+- Added a new `crn` option (`ss.options.crn`, default `True`). Setting `ss.options.crn = False` skips the slot machinery entirely. This is not CRN-safe across scenarios, but is statistically valid and considerably faster; it is useful when reproducibility across counterfactual scenarios is not required.
+- Sped up `ss.multi_random` (used for pairwise transmission probabilities) by including a dedicated fast path for the common two-distribution case that avoids constructing a typed list on each call.
+- *Regression*: the `single_rng` option has been removed. Its purpose was to demonstrate the "single centralized RNG" behavior of other agent-based modeling frameworks; use `ss.options.crn = False` instead, which is both faster and demonstrates the same stochastic-branching problem. (Note, however, that it does *not* use a single RNG; this option is no longer available.)
+- *Regression*: because the default CRN mechanism changed, the exact random values produced for agent-indexed draws are different from previous versions. Results remain statistically equivalent and CRN reproducibility is preserved, but stored regression baselines will need to be regenerated.
 
 ### RandomNet and HouseholdNet
-- TBC
+- *Regression*: `ss.RandomNet` is now a faster (~1.8x), approximate network in which the target end of each edge is drawn independently. The per-agent degree is therefore only approximately Poisson rather than exact. The previous exact behavior is available as the new `ss.RandomExactNet`; switch to it if you rely on the exact degree distribution.
+- Edge generation for random networks now uses an in-place Fisher-Yates shuffle (`ss.networks.fisher_yates_shuffle()`) instead of `np.random.permutation`, about 1.3x faster.
+- Networks whose edges last a single timestep (`dur=0`, e.g. `ss.RandomNet`) now regenerate edges via a zero-copy fast path that avoids concatenating onto the previous edge list each step.
+- `ssl.networks.HouseholdNet` initialization was fully vectorized (roughly 10-19x faster at large population sizes), replacing per-row pandas access and Python loops with batched NumPy operations for household assignment, edge construction, and female-head-of-household selection.
+- `HouseholdNet.add_births()` (called every step) was rewritten to locate each newborn's household members with a single vectorized `np.searchsorted` and build all new edges at once, replacing a per-step `np.split` over every household. This is bit-for-bit identical to the previous behavior but ~30% faster in high-turnover simulations.
 
 ### Pregnancy
-- TBC
+- `ss.Pregnancy` conception now intersects the eligible agents with the fecund population by boolean masking rather than the `&` operator (which routes through `np.intersect1d`, a sort), and `set_rel_sus()` now computes the susceptible mask once rather than recomputing the full fecund/fertile/pregnant chain.
 
 ### Other changes
-- starsim.library top level import
-- TBC
+- `starsim.library` now exports its contents at the top level, so classes can be accessed either via their submodule (e.g. `ssl.networks.HouseholdNet`, `ssl.diseases.Cholera`) or directly (e.g. `ssl.HouseholdNet`, `ssl.Cholera`), like core Starsim.
+- The disease transmission step now uses a Numba-compiled kernel (`_nb_transmit`) that identifies transmitting edges in a single branchless pass and returns its result as a zero-copy view, about 1.4x faster at typical transmission densities. Effective transmissibility and susceptibility are computed directly on the raw state arrays, avoiding intermediate `Arr` wrapper allocations.
+- Extracting the UIDs of a boolean state (`Arr.true()`, `Arr.uids`, and boolean filtering) now uses a branchless Numba compaction kernel above a threshold number of elements.
+- The `numba_indexing` threshold (the array size above which Numba is used instead of NumPy for indexing) was lowered from 5000 to 2000, since Numba wins for both gather and compaction above ~2000 elements.
+- Added `tests/benchmark_large.py` and associated benchmark data for tracking performance on larger simulations.
 
 ### Regression information
-- TBC
-- *GitHub info*: PR [1344](https://github.com/starsimhub/starsim/pull/1344)
+- The default random number values for agent-indexed draws have changed (see "Common random numbers" above); results are statistically equivalent but not bit-for-bit identical, and baselines should be regenerated.
+- `ss.RandomNet` is now approximate; use `ss.RandomExactNet` for the previous exact-degree behavior.
+- The `single_rng` option has been removed; use `ss.options.crn = False` instead.
+- *GitHub info*: PR [1378](https://github.com/starsimhub/starsim/pull/1378)
 
 
 ## Version 3.4.0 (2026-06-21)
@@ -643,20 +656,20 @@ This has significantly changed how modules are initialized; what was
 previously:
 
     def __init__(self, pars=None, **kwargs):
-
+    
         pars = ss.omergeleft(pars,
             dur_inf = 6,
             init_prev = 0.01,
             p_death = 0.01,
             beta = 0.5,
         )
-
+    
         par_dists = ss.omergeleft(par_dists,
             dur_inf = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death = ss.bernoulli,
         )
-
+    
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
 is now:
