@@ -3,6 +3,27 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.5.0 (2026-07-05)
+This release provides several major performance improvements. Specifically:
+
+### Common random numbers
+- TBC
+
+### RandomNet and HouseholdNet
+- TBC
+
+### Pregnancy
+- TBC
+
+### Other changes
+- starsim.library top level import
+- TBC
+
+### Regression information
+- TBC
+- *GitHub info*: PR [1344](https://github.com/starsimhub/starsim/pull/1344)
+
+
 ## Version 3.4.0 (2026-06-21)
 This release introduces the **Starsim library** (`starsim.library`), which absorbs the former standalone `starsim_examples` package. This release also adds memory, reproducibility, and usability improvements along with numerous bugfixes.
 
