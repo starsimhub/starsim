@@ -129,15 +129,15 @@ class HouseholdNet(ss.Network):
 
         # Women already pregnant at initialization were captured by the DHS survey in
         # their current household, so treat that as their post-move-out-decision state:
-        # schedule the next check at delivery. Without this, `ti_move_out_check` defaults
-        # to -inf, so every pregnant non-head becomes eligible on the first step and
-        # ~prob_move_out of them move into new households simultaneously, distorting the
-        # input household size distribution. (Pregnancy is a demographics module, so it is
-        # initialized before networks and its states are populated by this point.)
+        # mark them as already evaluated for their current pregnancy. Without this,
+        # `ti_move_out_check` defaults to -inf, so every pregnant non-head becomes eligible
+        # on the first step and ~prob_move_out of them move into new households simultaneously,
+        # distorting the input household size distribution. (Pregnancy is a demographics module,
+        # so it is initialized before networks and its states are populated by this point.)
         if self.dynamic:
             preg = self.sim.people.pregnancy
             preg_uids = preg.pregnant.uids
-            self.ti_move_out_check[preg_uids] = self._delivery_ti(preg, preg_uids)
+            self.ti_move_out_check[preg_uids] = preg.ti_pregnant[preg_uids]
         return
 
     def _parse_dhs(self):
@@ -293,26 +293,20 @@ class HouseholdNet(ss.Network):
 
         return len(birth_uids)
 
-    def _delivery_ti(self, preg, uids):
-        """Convert pregnancy ``ti_delivery`` (an index in the pregnancy module's own timeline)
-        into sim timesteps, for comparison against ``self.sim.ti``.
-
-        ``ti_delivery`` counts pregnancy-module timesteps. If the pregnancy module runs on a
-        different dt than the sim (e.g. ``ss.Pregnancy(dt=ss.months(3))``), comparing that index
-        directly to ``self.sim.ti`` mis-times move-outs: pregnant non-heads become re-eligible far
-        too often, over-fragmenting households and badly distorting household transmission. The dt
-        ratio rescales to sim timesteps, and is exactly 1.0 in the usual case where the pregnancy
-        dt equals the sim dt (so this is a no-op there)."""
-        ratio = preg.t.dt.years / self.sim.t.dt.years
-        return preg.ti_delivery[uids] * ratio
-
     def create_new_households(self):
         """
         Find females that are pregnant and not a head of household.
         Move them and a randomly sampled male partner to a new household.
         """
         ppl = self.sim.people
-        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.pregnant & (self.ti_move_out_check <= self.sim.ti))
+        # Evaluate each pregnancy for move-out exactly once (at its start). `ti_move_out_check`
+        # stores the `ti_pregnant` of the pregnancy a woman was last evaluated for; she is eligible
+        # only when her current `ti_pregnant` is newer than that. This is dt-agnostic: comparing
+        # against `ti_pregnant` (rather than the sim timestep vs. `ti_delivery`) avoids mis-timed,
+        # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
+        # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
+        # to the previous logic when pregnancy dt == sim dt.
+        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.pregnant & (self.ti_move_out_check < ppl.pregnancy.ti_pregnant))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)
         if len(moving_out) > 0:
             self.fhoh[moving_out] = True
@@ -330,7 +324,7 @@ class HouseholdNet(ss.Network):
             self.household_ids[moving_out] = new_cids
             self.household_ids[partners] = new_cids
 
-        self.ti_move_out_check[potential_movers] = self._delivery_ti(ppl.pregnancy, potential_movers)
+        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_pregnant[potential_movers]
         return
 
     @staticmethod
