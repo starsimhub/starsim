@@ -108,10 +108,10 @@ class HouseholdNet(ss.Network):
                 ss.FloatArr('ti_move_out_check', default='-inf'),
             ]
         self.define_states(*states)
-        self.p_fractional_age = ss.uniform()
-        self.p_household = ss.randint()            # Which DHS household to draw when building the network (high set once data is parsed)
-        self.p_head = ss.random()                  # Per-agent score for selecting the female head of each household
-        self.p_partner = ss.choice(replace=False)  # Which male partner moves out with a pregnant non-head female
+        self.rng_fractional_age = ss.uniform()
+        self.rng_household = ss.randint()            # Which DHS household to draw when building the network (high set once data is parsed)
+        self.rng_head = ss.random()                  # Per-agent score for selecting the female head of each household
+        self.rng_partner = ss.choice(replace=False)  # Which male partner moves out with a pregnant non-head female
         self.n_households = 0
         self._dhs_parsed = None  # Cached (sizes, ages_flat, sexes_flat, offsets, has_sex) from the DHS data
         return
@@ -124,8 +124,9 @@ class HouseholdNet(ss.Network):
 
     def init_post(self, add_pairs=True):
         super().init_post(add_pairs)
+        ppl = self.sim.people
         # DHS age data is in integer years; add a random fractional age for realism
-        self.sim.people.age[:] = self.sim.people.age + self.p_fractional_age.rvs(self.sim.people.auids)
+        ppl.age[:] = ppl.age + self.rng_fractional_age.rvs(ppl.auids)
 
         # Women already pregnant at initialization were captured by the DHS survey in
         # their current household, so treat that as their post-move-out-decision state:
@@ -135,7 +136,7 @@ class HouseholdNet(ss.Network):
         # distorting the input household size distribution. (Pregnancy is a demographics module,
         # so it is initialized before networks and its states are populated by this point.)
         if self.dynamic:
-            preg = self.sim.people.pregnancy
+            preg = ppl.pregnancy
             preg_uids = preg.pregnant.uids
             self.ti_move_out_check[preg_uids] = preg.ti_pregnant[preg_uids]
         return
@@ -175,11 +176,11 @@ class HouseholdNet(ss.Network):
         # Sample household rows (uniform in [0, n_dhs), with replacement) until their members cover the
         # population. Draws use the network's own RNG stream rather than the global np.random, so they are
         # reproducible and don't perturb other modules; scalar-size draws aren't slot-based, so not CRN-safe.
-        self.p_household.set(high=n_dhs)  # high isn't known until the data is parsed, so set it here
+        self.rng_household.set(high=n_dhs)  # high isn't known until the data is parsed, so set it here
         n_est = int(pop_size/sizes.mean()*1.25) + 16
-        rows = self.p_household.rvs(n_est)
+        rows = self.rng_household.rvs(n_est)
         while sizes[rows].sum() < pop_size:
-            rows = np.concatenate([rows, self.p_household.rvs(n_est)])
+            rows = np.concatenate([rows, self.rng_household.rvs(n_est)])
         n_hh = int(np.searchsorted(np.cumsum(sizes[rows]), pop_size)) + 1
         rows = rows[:n_hh]
         hsize = sizes[rows].copy()
@@ -218,7 +219,7 @@ class HouseholdNet(ss.Network):
             # eligible agent a random score and pick the highest-scoring one within each household.
             ages = ppl.age[all_uids]
             elig = ppl.female[all_uids] & (ages >= 15) & (ages <= 50)
-            score = self.p_head.rvs(all_uids)  # Per-agent CRN-safe (slot-based) random score
+            score = self.rng_head.rvs(all_uids)  # Per-agent CRN-safe (slot-based) random score
             score[~elig] = -1.0
             best = np.full(n_hh, -1.0)
             np.maximum.at(best, hh_ids, score)
@@ -239,8 +240,7 @@ class HouseholdNet(ss.Network):
         return
 
     def add_births(self):
-        sim = self.sim
-        ppl = sim.people
+        ppl = self.sim.people
 
         # Find agents born during the sim (have a parent), already delivered
         # (age >= 0), and not yet assigned to a household (household_ids is NaN).
@@ -311,8 +311,8 @@ class HouseholdNet(ss.Network):
         if len(moving_out) > 0:
             self.fhoh[moving_out] = True
             potential_partners = ss.uids(ppl.male & (ppl.age > 15) & (ppl.age < 50))
-            self.p_partner.set(a=potential_partners)  # Choose distinct partners from the eligible males
-            partners = ss.uids(self.p_partner.rvs(len(moving_out)))
+            self.rng_partner.set(a=potential_partners)  # Choose distinct partners from the eligible males
+            partners = ss.uids(self.rng_partner.rvs(len(moving_out)))
             to_remove = ss.uids.concatenate([moving_out, partners])
             self.remove_uids(to_remove)
             beta = np.ones(len(moving_out), dtype=ss.dtypes.float)
