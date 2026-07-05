@@ -28,22 +28,22 @@ class HouseholdNet(ss.Network):
     added to their mother's household network.
 
     Args:
-        dhs_data (DataFrame): A pandas or Sciris dataframe with columns ``hh_id``
-            and ``ages``. Optionally also ``sexes``. The ``ages`` column should
-            contain comma-separated age strings (e.g. ``"72, 17, 30"``). If
-            ``sexes`` is included, it should contain comma-separated values
+        dhs_data (DataFrame): A pandas or Sciris dataframe with columns `hh_id`
+            and `ages`. Optionally also `sexes`. The `ages` column should
+            contain comma-separated age strings (e.g. `"72, 17, 30"`). If
+            `sexes` is included, it should contain comma-separated values
             using DHS convention (1 = male, 2 = female) with the same number
-            of entries as ``ages``.
-        dynamic (bool): If ``True`` (default), households evolve over time:
+            of entries as `ages`.
+        dynamic (bool): If `True` (default), households evolve over time:
             one female is assigned as head of each household, pregnant non-head
             females may move out to form new households, and births are added to
-            the mother's household. Requires the ``Pregnancy`` module. If
-            ``False``, the network is static and ``step()`` is a no-op.
+            the mother's household. Requires the `Pregnancy` module. If
+            `False`, the network is static and `step()` is a no-op.
         prob_move_out (float): Probability a non-head female moves out to start
             her own household, evaluated once at the start of each pregnancy.
-            Default 0.7. Only used when ``dynamic=True``.
+            Default 0.7. Only used when `dynamic=True`.
         update_freq (int): How often (in timesteps) to update the network.
-            Default 1. Only used when ``dynamic=True``.
+            Default 1. Only used when `dynamic=True`.
 
     The expected dataframe format is::
 
@@ -59,8 +59,8 @@ class HouseholdNet(ss.Network):
 
     1. Register and request access at https://dhsprogram.com
     2. Download a Household Recode (HR) dataset in Stata format
-       (e.g. ``XXHR7xDT.zip``)
-    3. Use ``HouseholdNet.load_dhs()`` to extract the data::
+       (e.g. `XXHR7xDT.zip`)
+    3. Use `HouseholdNet.load_dhs()` to extract the data::
 
         import starsim as ss; import starsim.library as ssl
         dhs_data = ssl.networks.HouseholdNet.load_dhs('XXHR7xDT/XXHR7xFL.DTA')
@@ -104,7 +104,8 @@ class HouseholdNet(ss.Network):
             ]
         self.define_states(*states)
         self.p_fractional_age = ss.uniform()
-        self.n_households = 0 
+        self.n_households = 0
+        self._dhs_parsed = None  # Cached (sizes, ages_flat, sexes_flat, offsets, has_sex) from the DHS data
         return
 
     def init_pre(self, sim):
@@ -121,60 +122,87 @@ class HouseholdNet(ss.Network):
         self.sim.people.age[:] = self.sim.people.age + self.p_fractional_age.rvs(self.sim.people.auids)
         return
 
+    def _parse_dhs(self):
+        """ Parse the DHS age/sex strings into flat arrays once, and cache the result.
+
+        Returns (sizes, ages_flat, sexes_flat, offsets, has_sex) where ages_flat/sexes_flat are
+        the members of every household concatenated end to end, offsets[r] gives the start of
+        household r within them, and sizes[r] its member count.
+        """
+        if self._dhs_parsed is None:
+            dhs = self.dhs_data
+            ages_list = [np.array(a.split(', '), dtype=float) for a in dhs['ages']]
+            sizes = np.array([len(a) for a in ages_list])
+            ages_flat = np.concatenate(ages_list)
+            offsets = np.concatenate([[0], np.cumsum(sizes)])  # length len(dhs)+1
+            has_sex = 'sexes' in dhs.columns
+            sexes_flat = np.concatenate([np.array(s.split(', '), dtype=int) for s in dhs['sexes']]) if has_sex else None
+            self._dhs_parsed = (sizes, ages_flat, sexes_flat, offsets, has_sex)
+        return self._dhs_parsed
+
     def add_pairs(self):
-        """ Generate contacts by assigning agents to households from the data """
+        """ Generate contacts by assigning agents to households sampled from the data.
+
+        Households are drawn uniformly at random (with replacement) until they cover the whole
+        population, exactly as the reference algorithm, but sampling, age/sex assignment, edge
+        creation, and head-of-household selection are all vectorized rather than looped per
+        household. Results are statistically equivalent but not bit-identical to the loop version
+        (the random draws differ).
+        """
         ppl = self.sim.people
         pop_size = len(ppl)
-        dhs = self.dhs_data
+        sizes, ages_flat, sexes_flat, offsets, has_sex = self._parse_dhs()
+        n_dhs = len(sizes)
 
-        n_remaining = len(ppl)
-        p1 = []
-        p2 = []
-        while n_remaining > 0:
-            self.n_households += 1
+        # Sample households (uniform, with replacement) until their members cover the population
+        n_est = int(pop_size/sizes.mean()*1.25) + 16
+        rows = np.random.choice(n_dhs, size=n_est) # TODO: make CRN-safe
+        while sizes[rows].sum() < pop_size:
+            rows = np.concatenate([rows, np.random.choice(n_dhs, size=n_est)]) # TODO: make CRN-safe
+        n_hh = int(np.searchsorted(np.cumsum(sizes[rows]), pop_size)) + 1
+        rows = rows[:n_hh]
+        hsize = sizes[rows].copy()
+        hsize[-1] -= int(hsize.sum() - pop_size)  # Truncate the last household so the total is exactly pop_size
+        self.n_households = n_hh
 
-            # Sample a household from the data
-            rand_row = np.random.choice(len(dhs)) # TODO: make CRN-safe
-            household_data = dhs.iloc[rand_row]
-            age_data = household_data['ages']
-            sex_data = None
-            if 'sexes' in household_data.keys():
-                sex_data = household_data['sexes']
+        # Assign contiguous agent blocks to households
+        all_uids = ss.uids(np.arange(pop_size))
+        hh_ids = np.repeat(np.arange(n_hh), hsize)
+        self.household_ids[all_uids] = hh_ids
 
-            age_data = np.array([float(x) for x in age_data.split(', ')], dtype=float)
-            cluster_size = len(age_data)
+        # Gather each member's age (and sex) via a vectorized ragged gather into ages_flat
+        seg_start = np.cumsum(hsize) - hsize                          # output position where each household starts
+        intra = np.arange(pop_size) - np.repeat(seg_start, hsize)     # 0..size-1 within each household
+        gather = np.repeat(offsets[rows], hsize) + intra
+        ppl.age[all_uids] = ages_flat[gather]
+        if has_sex:
+            ppl.female[all_uids] = (sexes_flat[gather] == 2)
 
-            if cluster_size > n_remaining:
-                cluster_size = n_remaining
-
-            cluster_uids = ss.uids((pop_size - n_remaining) + np.arange(cluster_size))
-
-            ppl.age[cluster_uids] = age_data[0:cluster_size]
-            if sex_data is not None:
-                sex_data = np.array([int(x) for x in sex_data.split(', ')])
-                ppl.female[cluster_uids] = (sex_data[0:cluster_size] == 2)
-            self.household_ids[cluster_uids] = self.n_households - 1 # Zero based indexing for actual IDs
-
-            # Add symmetric pairwise contacts in each cluster
-            for i in cluster_uids:
-                for j in cluster_uids:
-                    if j > i:
-                        p1.append(i)
-                        p2.append(j)
-            n_remaining -= cluster_size
-
+        # Build all within-household edges (every i<j pair), batched by household size
+        p1_list, p2_list = [], []
+        for s in np.unique(hsize):
+            if s < 2:
+                continue
+            starts = seg_start[hsize == s]
+            ii, jj = np.triu_indices(s, k=1)
+            p1_list.append((starts[:, None] + ii[None, :]).ravel())
+            p2_list.append((starts[:, None] + jj[None, :]).ravel())
+        p1 = np.concatenate(p1_list) if p1_list else np.empty(0, dtype=ss.dtypes.int)
+        p2 = np.concatenate(p2_list) if p2_list else np.empty(0, dtype=ss.dtypes.int)
         beta = np.ones(len(p1), dtype=ss.dtypes.float)
         self.append(p1=p1, p2=p2, beta=beta)
 
         if self.dynamic:
-            # Find a female head of household between ages 15 and 50
-            for cid in range(self.n_households):
-                cluster_uids = ss.uids(self.household_ids == cid)
-                female_uids = cluster_uids[
-                    ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
-                if len(female_uids) > 0:
-                    fhoh = np.random.choice(a=female_uids) # TODO: make CRN-safe
-                    self.fhoh[ss.uids(fhoh)] = True
+            # Assign one random eligible female (age 15-50) as head of each household: give every
+            # eligible agent a random score and pick the highest-scoring one within each household.
+            ages = ppl.age[all_uids]
+            elig = ppl.female[all_uids] & (ages >= 15) & (ages <= 50)
+            score = np.random.random(pop_size) # TODO: make CRN-safe
+            score[~elig] = -1.0
+            best = np.full(n_hh, -1.0)
+            np.maximum.at(best, hh_ids, score)
+            is_head = elig & (score == best[hh_ids])
+            self.fhoh[all_uids[is_head]] = True
         return
 
     def step(self):
@@ -209,19 +237,38 @@ class HouseholdNet(ss.Network):
         # included when looking up household members
         self.household_ids[birth_uids] = self.household_ids[mat_uids]
 
-        p1 = []
-        p2 = []
-        for new_uid, mat_uid in zip(birth_uids, mat_uids):
-            hh_contacts = ss.uids(self.household_ids == self.household_ids[mat_uid])
-            hh_contacts = hh_contacts[hh_contacts != new_uid]  # Exclude self-loops
-            p1.append(hh_contacts)
-            p2.append([new_uid] * len(hh_contacts))
+        # Sort alive agents by household id so each household's members form a contiguous slice
+        # of `sorted_uids` (ascending uid within a household, since argsort is stable).
+        auids = ppl.auids
+        hvals = self.household_ids[auids]
+        valid = ~np.isnan(hvals)
+        auids = auids[valid]
+        hvals = hvals[valid]
+        order = np.argsort(hvals, kind='stable')
+        sorted_uids = auids[order]
+        sorted_h = hvals[order]
 
-        if p1:
-            p1 = ss.uids.concatenate(p1)
-            p2 = ss.uids.concatenate(p2)
+        # For every newborn, locate its household's member slice [lo, hi) in one vectorized pass,
+        # then gather all birth edges at once (no per-household split, no per-birth Python loop).
+        mat_hids = self.household_ids[mat_uids]
+        lo = np.searchsorted(sorted_h, mat_hids, side='left')
+        hi = np.searchsorted(sorted_h, mat_hids, side='right')
+        counts = hi - lo
+        counts[np.isnan(mat_hids)] = 0  # Mother has no household; no contacts to add (matches prior behavior)
+
+        # Ragged gather: newborn i connects to sorted_uids[lo_i : lo_i+counts_i]
+        total = int(counts.sum())
+        seg_start = np.repeat(np.cumsum(counts) - counts, counts)  # output start of each newborn's block
+        gather = np.repeat(lo, counts) + (np.arange(total) - seg_start)
+        p1 = sorted_uids[gather]                          # household members (contacts)
+        p2 = np.repeat(np.asarray(birth_uids), counts)    # the newborn for each contact
+        keep = p1 != p2                                   # exclude self-loops
+        p1 = p1[keep]
+        p2 = p2[keep]
+
+        if len(p1):
             beta = np.ones(len(p1), dtype=ss.dtypes.float)
-            self.append(p1=p1, p2=p2, beta=beta)
+            self.append(p1=ss.uids(p1), p2=ss.uids(p2), beta=beta)
 
         return len(birth_uids)
 
@@ -256,20 +303,20 @@ class HouseholdNet(ss.Network):
     def load_dhs(path):
         """
         Load a DHS Household Recode (HR) Stata file and return a dataframe
-        suitable for use with ``HouseholdNet``.
+        suitable for use with `HouseholdNet`.
 
-        Reads the wide-format HR file, extracts per-member age (``HV105``)
-        and sex (``HV104``) columns, filters to valid entries (age <= 95 and
-        sex in [1, 2]), and returns a dataframe with columns ``hh_id``,
-        ``ages``, and ``sexes``.
+        Reads the wide-format HR file, extracts per-member age (`HV105`)
+        and sex (`HV104`) columns, filters to valid entries (age <= 95 and
+        sex in [1, 2]), and returns a dataframe with columns `hh_id`,
+        `ages`, and `sexes`.
 
         Args:
             path (str/Path): Path to a DHS Household Recode Stata file
-                (e.g. ``XXHR7xFL.DTA``).
+                (e.g. `XXHR7xFL.DTA`).
 
         Returns:
-            sc.dataframe: A dataframe with columns ``hh_id``, ``ages``, and
-            ``sexes`` ready for use with ``HouseholdNet(dhs_data=...)``.
+            sc.dataframe: A dataframe with columns `hh_id`, `ages`, and
+            `sexes` ready for use with `HouseholdNet(dhs_data=...)`.
 
         Examples:
             ```python

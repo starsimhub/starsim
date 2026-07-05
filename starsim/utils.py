@@ -257,8 +257,8 @@ def parse_age_range(age_string) -> tuple:
     Parse an age range string into lower and upper bounds.
 
     Extracts the numeric bounds from a variety of age range formats. Note that
-    bracket/interval notation (e.g. ``[15,25)`` vs ``(15,25]``) is accepted but
-    the brackets are stripped — all formats return a plain ``(lower, upper)``
+    bracket/interval notation (e.g. `[15,25)` vs `(15,25]`) is accepted but
+    the brackets are stripped — all formats return a plain `(lower, upper)`
     tuple. To get a boolean mask that respects bracket semantics (inclusive vs
     exclusive bounds), use :func:`apply_age_range` instead.
 
@@ -272,18 +272,18 @@ def parse_age_range(age_string) -> tuple:
         (15.0, 25.0)
 
     Supported formats:
-        - ``'5-9'`` or ``'5 to 9'``
-        - ``'<5'`` — returns ``(0.0, 5.0)``
-        - ``'95+'`` — returns ``(95.0, np.inf)``
-        - ``'>95'`` — returns ``(95.0, np.inf)``
-        - ``'[15,25)'``, ``'(15,25]'``, ``'[15,25]'``, ``'(15,25)'`` — bracket
-          notation; brackets are stripped, returns ``(15.0, 25.0)`` in all cases
+        - `'5-9'` or `'5 to 9'`
+        - `'<5'` — returns `(0.0, 5.0)`
+        - `'95+'` — returns `(95.0, np.inf)`
+        - `'>95'` — returns `(95.0, np.inf)`
+        - `'[15,25)'`, `'(15,25]'`, `'[15,25]'`, `'(15,25)'` — bracket
+          notation; brackets are stripped, returns `(15.0, 25.0)` in all cases
 
     Args:
         age_string: a string specifying an age range
 
     Returns:
-        A tuple ``(lower, upper)`` as floats.
+        A tuple `(lower, upper)` as floats.
     """
     s = str(age_string).strip()
 
@@ -324,17 +324,17 @@ def parse_age_range(age_string) -> tuple:
 
 def apply_age_range(age_string, arr):
     """
-    Return a boolean mask for values in ``arr`` that fall within the age range.
+    Return a boolean mask for values in `arr` that fall within the age range.
 
-    For bracket/interval notation, respects inclusive ``[`` ``]`` vs exclusive
-    ``(`` ``)`` bounds. For other formats, uses standard conventions:
+    For bracket/interval notation, respects inclusive `[` `]` vs exclusive
+    `(` `)` bounds. For other formats, uses standard conventions:
 
-        - ``'5-9'``, ``'5 to 9'`` → ``[5, 9)`` (inclusive lower, exclusive upper)
-        - ``'<5'`` → ``[0, 5)``
-        - ``'>95'`` → ``(95, inf)``
-        - ``'95+'`` → ``[95, inf)``
-        - ``'[15,25)'`` → ``>= 15`` and ``< 25``
-        - ``'(15,25]'`` → ``> 15`` and ``<= 25``
+        - `'5-9'`, `'5 to 9'` → `[5, 9)` (inclusive lower, exclusive upper)
+        - `'<5'` → `[0, 5)`
+        - `'>95'` → `(95, inf)`
+        - `'95+'` → `[95, inf)`
+        - `'[15,25)'` → `>= 15` and `< 25`
+        - `'(15,25]'` → `> 15` and `<= 25`
 
     Example usage::
 
@@ -348,7 +348,7 @@ def apply_age_range(age_string, arr):
         arr: a numeric array to filter
 
     Returns:
-        A boolean array of the same shape as ``arr``.
+        A boolean array of the same shape as `arr`.
     """
     s = str(age_string).strip()
 

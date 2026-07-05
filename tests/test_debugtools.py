@@ -86,7 +86,8 @@ def test_mock_objects():
     # Initializing Arrs -- can use it, but cannot grow it since mock slots can't grow
     o.arr = ss.FloatArr('my_arr', default=o.dist, mock=mock)
     assert len(o.arr) == mock, 'Arr did not have expected length of {mock}'
-    assert np.isclose(o.arr.mean(), μ, atol=atol), f'Arr did not have expected mean value of {μ}'
+    arr_atol = 3 * 2 / np.sqrt(mock) # 3 sigma of the sample mean (std=2, n=mock); atol=0.1 would be <1 sigma
+    assert np.isclose(o.arr.mean(), μ, atol=arr_atol), f'Arr did not have expected mean value of {μ}'
 
     # Initializing People
     o.ppl = ss.People(n_agents=mock, mock=True)

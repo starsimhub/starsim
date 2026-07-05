@@ -69,6 +69,34 @@ def test_random():
 
 
 @sc.timer()
+def test_randomfast():
+    sc.heading('Testing the (default, fast) RandomNet vs the exact RandomExactNet')
+    n_contacts = 10
+
+    s1 = ss.Sim(n_agents=medium, networks=ss.RandomExactNet(n_contacts=n_contacts), rand_seed=1).init()
+    s2 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
+    nw1 = s1.networks[0]
+    nw2 = s2.networks[0]
+
+    # Same number of edges as RandomExactNet, and the mean degree matches n_contacts
+    assert len(nw1) == len(nw2), 'RandomNet should produce the same number of edges as RandomExactNet'
+    deg = np.bincount(np.concatenate([np.asarray(nw2.p1), np.asarray(nw2.p2)]), minlength=medium)
+    assert np.isclose(deg.mean(), n_contacts, rtol=0.05), f'Mean degree should be ~{n_contacts}, not {deg.mean()}'
+
+    # The fast version has variable (Poisson-like) degree, unlike RandomExactNet's fixed degree
+    deg1 = np.bincount(np.concatenate([np.asarray(nw1.p1), np.asarray(nw1.p2)]), minlength=medium)
+    assert deg1.std() == 0, 'RandomExactNet should have fixed degree'
+    assert deg.std() > 1, 'RandomNet should have variable degree'
+
+    # Reproducible given the same seed
+    s3 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
+    assert np.array_equal(nw2.p2, s3.networks[0].p2), 'RandomNet should be reproducible for a fixed seed'
+
+    o = sc.objdict(nw1=nw1, nw2=nw2)
+    return o
+
+
+@sc.timer()
 def test_randomsafe():
     sc.heading('Testing the RandomSafe network')
 
@@ -336,6 +364,7 @@ if __name__ == '__main__':
     # Run tests
     man  = test_manual()
     rand = test_random()
+    fast = test_randomfast()
     safe = test_randomsafe()
     stat = test_static()
     erdo = test_erdosrenyi()

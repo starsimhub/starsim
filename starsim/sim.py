@@ -37,9 +37,9 @@ class Sim(ss.Base):
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
     Note:
-        Modules can be supplied either via individual keyword arguments (``diseases``, ``networks``, etc.)
-        or all together via the ``modules`` argument. When using ``modules``, Starsim automatically sorts
-        them by type. The individual kwargs and ``modules`` can be mixed; they are merged together.
+        Modules can be supplied either via individual keyword arguments (`diseases`, `networks`, etc.)
+        or all together via the `modules` argument. When using `modules`, Starsim automatically sorts
+        them by type. The individual kwargs and `modules` can be mixed; they are merged together.
 
     Examples:
         ```python
@@ -628,11 +628,11 @@ class Sim(ss.Base):
         for saved files.
 
         After shrinking, each module is expected to be smaller than
-        ``size_limit*(base_size + n_timesteps)`` KB. The ``base_size`` term covers the
+        `size_limit*(base_size + n_timesteps)` KB. The `base_size` term covers the
         fixed structural overhead of a module (parameters, results metadata, etc.) that
         does not depend on the simulation length, expressed as a number of timesteps'
-        worth of allowance; the ``n_timesteps`` term covers the per-timestep results that
-        legitimately grow with the simulation; and ``size_limit`` scales both. A module
+        worth of allowance; the `n_timesteps` term covers the per-timestep results that
+        legitimately grow with the simulation; and `size_limit` scales both. A module
         exceeding this is most likely still holding a per-agent array that failed to shrink.
 
         Args:

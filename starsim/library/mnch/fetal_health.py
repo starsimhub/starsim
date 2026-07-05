@@ -6,15 +6,15 @@ and how to implement treatment that reverses fetal damage. They are designed
 to be extended for real applications.
 
 Architecture:
-    - ``fetal_infection`` (Connector): watches for infections in pregnant women
+    - `fetal_infection` (Connector): watches for infections in pregnant women
       and applies fetal damage (preterm risk via timing shifts, low birth weight
       via growth restriction). Damage is applied both at conception (if already
       infected) and during pregnancy (if newly infected).
-    - ``treat_pregnant`` (Intervention): treats infected pregnant women within a
+    - `treat_pregnant` (Intervention): treats infected pregnant women within a
       specified year range and partially reverses fetal damage.
 
-Both modules require ``ssl.mnch.FetalHealth()`` in the sim's ``custom`` modules and
-``ss.Pregnancy()`` in demographics. The connector also requires the target
+Both modules require `ssl.mnch.FetalHealth()` in the sim's `custom` modules and
+`ss.Pregnancy()` in demographics. The connector also requires the target
 disease (default: SIR) to be present.
 
 Usage::
@@ -32,9 +32,9 @@ Usage::
     )
     sim.run()
 
-To extend for a different disease, subclass ``fetal_infection`` and override
-``_apply_damage`` with disease-specific logic (e.g. stage-dependent penalties).
-To extend ``treat_pregnant``, subclass and override ``step()`` with custom
+To extend for a different disease, subclass `fetal_infection` and override
+`_apply_damage` with disease-specific logic (e.g. stage-dependent penalties).
+To extend `treat_pregnant`, subclass and override `step()` with custom
 eligibility criteria or reversal logic.
 """
 
@@ -56,24 +56,24 @@ class FetalHealth(ss.Module):
     Preterm classification is handled by the Pregnancy module (based on
     gestational age at birth). This module focuses on the weight/growth axis.
 
-    Integrates with Pregnancy via callbacks: Pregnancy calls ``on_conception``
-    when new pregnancies begin and ``on_delivery`` when births occur. External
+    Integrates with Pregnancy via callbacks: Pregnancy calls `on_conception`
+    when new pregnancies begin and `on_delivery` when births occur. External
     modules (e.g. disease connectors) can register their own callbacks via
-    ``add_conception_callback`` to act on new pregnancies after baseline
+    `add_conception_callback` to act on new pregnancies after baseline
     initialization.
 
-    During pregnancy, ``weight_percentile``, ``growth_restriction``,
-    ``timing_shift``, and ``n_exposures`` are tracked on the mother. At
-    delivery, ``birth_weight``, ``lbw``, ``vlbw``, and ``sga`` are stored
+    During pregnancy, `weight_percentile`, `growth_restriction`,
+    `timing_shift`, and `n_exposures` are tracked on the mother. At
+    delivery, `birth_weight`, `lbw`, `vlbw`, and `sga` are stored
     on the newborn.
 
     Each pregnancy gets a baseline weight percentile drawn at conception.
     Two modification levers are available:
 
-        1. **Delivery timing**: bring ``ti_delivery`` forward (preterm birth risk)
+        1. **Delivery timing**: bring `ti_delivery` forward (preterm birth risk)
         2. **Growth restriction**: accumulate fractional weight reduction
 
-    At delivery: ``birth_weight = baseline_for_GA × percentile × (1 - restriction)``
+    At delivery: `birth_weight = baseline_for_GA × percentile × (1 - restriction)`
 
     Args:
         weight_by_ga (array):           Nx2 array of [gestational_age_weeks, weight_grams]
@@ -150,7 +150,7 @@ class FetalHealth(ss.Module):
     def add_conception_callback(self, fn):
         """
         Register a function to be called when new pregnancies are detected.
-        The function receives ``(uids,)`` after baseline initialization.
+        The function receives `(uids,)` after baseline initialization.
         """
         self._conception_callbacks.append(fn)
         return
@@ -236,7 +236,7 @@ class FetalHealth(ss.Module):
         Bring delivery forward for pregnant women.
 
         Uses a one-way ratchet: delivery can only be brought forward, never
-        pushed back. The actual shift applied is tracked in ``timing_shift``.
+        pushed back. The actual shift applied is tracked in `timing_shift`.
 
         Args:
             uids: UIDs of pregnant women
@@ -264,7 +264,7 @@ class FetalHealth(ss.Module):
         """
         Apply fractional growth restriction (cumulative, diminishing).
 
-        Positive penalties use diminishing returns: ``current + (1-current) * penalty``.
+        Positive penalties use diminishing returns: `current + (1-current) * penalty`.
         Negative penalties (growth boost, e.g. GDM macrosomia) are additive.
 
         Args:
@@ -328,7 +328,7 @@ class FetalHealth(ss.Module):
         Compute birth weight at delivery.
 
         Override this method to customize the birth weight formula. The
-        interpolation function can be swapped via ``pars.interp_fn``.
+        interpolation function can be swapped via `pars.interp_fn`.
 
         Returns:
             tuple: (birth_weights, ga_weeks) arrays
@@ -355,7 +355,7 @@ class treat_pregnant(ss.Intervention):
     treats a fraction of them (curing infection), and reverses a portion of
     the accumulated fetal damage (growth restriction and timing shift).
 
-    Treatment only applies between ``start_year`` and ``end_year``. If not
+    Treatment only applies between `start_year` and `end_year`. If not
     specified, defaults to the full simulation period.
 
     Args:
@@ -443,10 +443,10 @@ class fetal_infection(ss.Connector):
     Damage is applied at two points:
     1. At conception, if the mother is already infected (via a conception callback
        registered with FetalHealth).
-    2. During pregnancy, when a new infection occurs (detected in ``step()``
-       by checking ``ti_infected == self.ti``).
+    2. During pregnancy, when a new infection occurs (detected in `step()`
+       by checking `ti_infected == self.ti`).
 
-    Requires ``ssl.mnch.FetalHealth()`` in ``custom`` and an SIR disease in ``diseases``.
+    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease in `diseases`.
 
     Pars:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)

@@ -28,6 +28,22 @@ def nb_indexer(arr, inds):
     """ Roughly 30% faster than NumPy for large numbers of indices (>10k) """
     return arr[inds]
 
+@nb.njit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
+def nb_true(auids, vals, want):
+    """ Return the UIDs where `bool(vals[k])` equals `want` (True for true(), False for false()).
+
+    ~4-5x faster than `auids[vals.astype(bool)]` for large arrays: a single branchless pass
+    with no intermediate mask allocation. `vals[k] != 0` matches `.astype(bool)` for every dtype,
+    including NaN floats (NaN != 0 is True, i.e. NaN is truthy), so results are identical.
+    """
+    n = auids.shape[0]
+    out = np.empty(n, dtype=auids.dtype)
+    m = 0
+    for k in range(n):
+        out[m] = auids[k] # Written every iteration (branchless); only kept if m advances
+        m += (vals[k] != 0) == want
+    return out[:m]
+
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
@@ -671,11 +687,19 @@ class Arr(BaseArr):
 
     def true(self):
         """ Efficiently convert truthy values to UIDs """
-        return self.auids[self.values.astype(bool)]
+        vals = self.values
+        auids = self.auids
+        if vals.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
+            return uids(nb_true(auids.view(np.ndarray), vals, True))
+        return auids[vals.astype(bool)]
 
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
-        return self.auids[~self.values.astype(bool)]
+        vals = self.values
+        auids = self.auids
+        if vals.size >= numba_indexing:
+            return uids(nb_true(auids.view(np.ndarray), vals, False))
+        return auids[~vals.astype(bool)]
 
     def to_json(self):
         """ Export to JSON """
@@ -874,16 +898,16 @@ class uids(np.ndarray):
 
     The following operators are supported:
 
-    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
-    - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
-    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use ``+`` instead to keep them).
-    - ``&`` / ``&=``: intersection
-    - ``^`` / ``^=``: symmetric difference
+    - `+` / `+=`: if the RHS is a `uids`, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. `uids([1,2]) + 1` → `uids([2,3])`). Concatenation preserves duplicates.
+    - `-` / `-=`: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
+    - `|` / `|=`: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use `+` instead to keep them).
+    - `&` / `&=`: intersection
+    - `^` / `^=`: symmetric difference
 
     Note: because `uids` is a subclass of `np.ndarray`, set-like in-place operators
-    (``+=`` with a ``uids`` RHS, ``-=``, ``|=``, ``&=``, ``^=``) must return a new array and rebind
-    the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
-    and preserves ``id(self)``.
+    (`+=` with a `uids` RHS, `-=`, `|=`, `&=`, `^=`) must return a new array and rebind
+    the variable. However, `+=` with a scalar or array RHS modifies the array in-place
+    and preserves `id(self)`.
 
     Examples:
         ```python
@@ -940,13 +964,13 @@ class uids(np.ndarray):
         return out
 
     def concat(self, other):
-        """ Deprecated — use ``uids.concatenate()`` instead """
+        """ Deprecated — use `uids.concatenate()` instead """
         ss.warn('uids.concat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return self.concatenate(other)
 
     @classmethod
     def cat(cls, *args):
-        """ Deprecated — use ``uids.concatenate()`` instead """
+        """ Deprecated — use `uids.concatenate()` instead """
         ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return uids.concatenate(*args)
 

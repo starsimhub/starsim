@@ -92,7 +92,7 @@ from .modules import (
 t('networks') # Slow import due to networkx
 from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
+    StaticNet, RandomExactNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool,
 )
