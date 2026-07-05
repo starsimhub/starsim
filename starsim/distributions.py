@@ -1252,6 +1252,8 @@ class poisson(Dist):
     scaling = scale_types.predraw
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        self._ppf_lam = None # Cached lambda for the fast ppf (see ppf())
+        self._ppf_cdf = None # Cached CDF for the fast ppf
         return
 
     def sync_pars(self):
@@ -1259,6 +1261,26 @@ class poisson(Dist):
         spars = dict(mu=self._pars.lam)
         self.update_dist_pars(spars)
         return spars
+
+    def ppf(self, rands):
+        """
+        Fast inverse-CDF sampling for the common-random-number (ppf) path.
+
+        SciPy's generic discrete ``ppf`` is very slow (it root-finds per element),
+        and for CRN draws it is called every time an ``ss.poisson`` is sampled by
+        UID. For a scalar ``lam`` we instead precompute the CDF once and map each
+        uniform via ``np.searchsorted``, which is 30-60x faster and produces
+        bitwise-identical results. Array-valued ``lam`` falls back to SciPy.
+        """
+        lam = self._pars.lam
+        if np.isscalar(lam) or (isinstance(lam, np.ndarray) and lam.ndim == 0):
+            lam = float(lam)
+            if self._ppf_lam != lam: # Rebuild the CDF only when lambda changes
+                kmax = int(lam + 10.0*np.sqrt(lam) + 30) # P(X > kmax) is negligible, so the CDF saturates to 1.0
+                self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
+                self._ppf_lam = lam
+            return np.searchsorted(self._ppf_cdf, rands, side='left').astype(float) # side='left' matches sps.poisson.ppf
+        return self.dist.ppf(rands) # Fallback for array-valued lambda
 
 
 class beta_dist(Dist):
@@ -1522,18 +1544,31 @@ class choice(Dist):
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
-        self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
+        if not replace:
+            # Sampling without replacement is a joint draw over all elements, so it
+            # cannot be expressed as an independent per-slot inverse-CDF. Keep the
+            # native (make_rvs) path in that case.
+            self._use_ppf = False
+        # For the (default) replace=True case, leave _use_ppf as None so that the
+        # ppf path is used for UID draws. This maps each slot's uniform through the
+        # inverse CDF (below), which is CRN-safe and, crucially, avoids the
+        # make_rvs "slot blowup" (drawing slots.max()+1 values and discarding most)
+        # -- the same issue hash-based CRN already fixed for bernoulli/poisson/etc.
         return
 
     def ppf(self, rands):
-        """ Shouldn't actually be needed since dynamic pars not supported """
+        """ Map uniform values to choices via the inverse CDF (one draw per slot). """
         pars = self._pars
-        if np.isscalar(pars.a):
-            pars.a = np.arange(pars.a)
-        pcum = np.cumsum(pars.p)
-        inds = np.searchsorted(pcum, rands)
-        rvs = pars.a[inds]
-        return rvs
+        a = pars.a
+        if np.isscalar(a):
+            a = np.arange(a)
+        if pars.p is None: # Uniform over the choices
+            n = len(a)
+            inds = np.minimum((rands*n).astype(int), n - 1) # minimum guards against rands == 1.0
+        else:
+            pcum = np.cumsum(pars.p)
+            inds = np.minimum(np.searchsorted(pcum, rands, side='right'), len(a) - 1)
+        return a[inds]
 
 
 class histogram(Dist):

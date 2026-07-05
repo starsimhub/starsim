@@ -338,7 +338,7 @@ class PregnancyPars(ss.Pars):
 
         # Parameters related to newborn agents
         self.sex_ratio = ss.bernoulli(0.5)  # Ratio of babies born female
-        self.slot_scale = 100 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents; larger reduces slot collisions, and (unlike previously) no longer costs extra random draws thanks to hash-based CRN
+        self.slot_scale = 10 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents; larger reduces slot collisions, and (unlike previously) no longer costs extra random draws thanks to hash-based CRN
         self.min_slots = 100  # Minimum number of slots, useful if the population size is very small
 
         # Classification thresholds

@@ -120,6 +120,18 @@ class HouseholdNet(ss.Network):
         super().init_post(add_pairs)
         # DHS age data is in integer years; add a random fractional age for realism
         self.sim.people.age[:] = self.sim.people.age + self.p_fractional_age.rvs(self.sim.people.auids)
+
+        # Women already pregnant at initialization were captured by the DHS survey in
+        # their current household, so treat that as their post-move-out-decision state:
+        # schedule the next check at delivery. Without this, `ti_move_out_check` defaults
+        # to -inf, so every pregnant non-head becomes eligible on the first step and
+        # ~prob_move_out of them move into new households simultaneously, distorting the
+        # input household size distribution. (Pregnancy is a demographics module, so it is
+        # initialized before networks and its states are populated by this point.)
+        if self.dynamic:
+            preg = self.sim.people.pregnancy
+            preg_uids = preg.pregnant.uids
+            self.ti_move_out_check[preg_uids] = preg.ti_delivery[preg_uids]
         return
 
     def _parse_dhs(self):
