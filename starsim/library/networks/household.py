@@ -109,7 +109,7 @@ class HouseholdNet(ss.Network):
             ]
         self.define_states(*states)
         self.p_fractional_age = ss.uniform()
-        self.p_household = ss.random()             # Which DHS household to draw when building the network
+        self.p_household = ss.randint()            # Which DHS household to draw when building the network (high set once data is parsed)
         self.p_head = ss.random()                  # Per-agent score for selecting the female head of each household
         self.p_partner = ss.choice(replace=False)  # Which male partner moves out with a pregnant non-head female
         self.n_households = 0
@@ -172,20 +172,14 @@ class HouseholdNet(ss.Network):
         sizes, ages_flat, sexes_flat, offsets, has_sex = self._parse_dhs()
         n_dhs = len(sizes)
 
-        # Sample households (uniform, with replacement) until their members cover the population.
-        # Draws use the network's own RNG stream rather than the global np.random, so they are
-        # reproducible and don't perturb other modules; not slot-based, so not fully CRN-safe.
-        def sample_rows(n):
-            """ Draw n household indices uniformly in [0, n_dhs) """
-            # Scale a uniform draw rather than use ss.randint: n_dhs isn't known at __init__ (it comes
-            # from the data), and randint's ppf treats high as inclusive, so it could return n_dhs (out of bounds)
-            inds = (self.p_household.rvs(n) * n_dhs).astype(ss.dtypes.int)
-            return np.minimum(inds, n_dhs - 1)  # Guard against the rare rvs value rounding up to n_dhs
-
+        # Sample household rows (uniform in [0, n_dhs), with replacement) until their members cover the
+        # population. Draws use the network's own RNG stream rather than the global np.random, so they are
+        # reproducible and don't perturb other modules; scalar-size draws aren't slot-based, so not CRN-safe.
+        self.p_household.set(high=n_dhs)  # high isn't known until the data is parsed, so set it here
         n_est = int(pop_size/sizes.mean()*1.25) + 16
-        rows = sample_rows(n_est)
+        rows = self.p_household.rvs(n_est)
         while sizes[rows].sum() < pop_size:
-            rows = np.concatenate([rows, sample_rows(n_est)])
+            rows = np.concatenate([rows, self.p_household.rvs(n_est)])
         n_hh = int(np.searchsorted(np.cumsum(sizes[rows]), pop_size)) + 1
         rows = rows[:n_hh]
         hsize = sizes[rows].copy()
@@ -224,7 +218,7 @@ class HouseholdNet(ss.Network):
             # eligible agent a random score and pick the highest-scoring one within each household.
             ages = ppl.age[all_uids]
             elig = ppl.female[all_uids] & (ages >= 15) & (ages <= 50)
-            score = np.array(self.p_head.rvs(all_uids), dtype=float)  # Per-agent CRN-safe (slot-based) random score
+            score = self.p_head.rvs(all_uids)  # Per-agent CRN-safe (slot-based) random score
             score[~elig] = -1.0
             best = np.full(n_hh, -1.0)
             np.maximum.at(best, hh_ids, score)

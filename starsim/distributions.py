@@ -1360,14 +1360,12 @@ class randint(Dist):
     Args:
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
-        allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
     scaling = scale_types.predraw
     valid_pars = ['low', 'high', 'dtype']
 
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
-        self.allow_time = allow_time
         if len(args):
             if len(args) == 1:
                 high = args[0]
@@ -1394,8 +1392,8 @@ class randint(Dist):
 
     def ppf(self, rands):
         p = self._pars
-        rvs = rands * (p.high + 1 - p.low) + p.low
-        rvs = rvs.astype(p.dtype)
+        rvs = rands * (p.high - p.low) + p.low  # Map [0,1) to [low, high), matching np.random.integers (exclusive high)
+        rvs = np.minimum(rvs, p.high - 1).astype(p.dtype)  # Clamp guards against rands rounding up to high
         return rvs
 
 class rand_raw(Dist):
