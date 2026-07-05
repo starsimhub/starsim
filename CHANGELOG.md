@@ -15,25 +15,31 @@ This release provides several major performance improvements, focused on random 
 
 ### RandomNet and HouseholdNet
 - *Regression*: `ss.RandomNet` is now a faster (~1.8x), approximate network in which the target end of each edge is drawn independently. The per-agent degree is therefore only approximately Poisson rather than exact. The previous exact behavior is available as the new `ss.RandomExactNet`; switch to it if you rely on the exact degree distribution.
-- Edge generation for random networks now uses an in-place Fisher-Yates shuffle (`ss.networks.fisher_yates_shuffle()`) instead of `np.random.permutation`, about 1.3x faster.
+- Edge generation for `ss.RandomExact` networks (what were previously called `ss.Random`) now uses an in-place Fisher-Yates shuffle (`ss.networks.fisher_yates_shuffle()`) instead of `np.random.permutation`, about 1.3x faster.
 - Networks whose edges last a single timestep (`dur=0`, e.g. `ss.RandomNet`) now regenerate edges via a zero-copy fast path that avoids concatenating onto the previous edge list each step.
-- `ssl.networks.HouseholdNet` initialization was fully vectorized (roughly 10-19x faster at large population sizes), replacing per-row pandas access and Python loops with batched NumPy operations for household assignment, edge construction, and female-head-of-household selection.
-- `HouseholdNet.add_births()` (called every step) was rewritten to locate each newborn's household members with a single vectorized `np.searchsorted` and build all new edges at once, replacing a per-step `np.split` over every household. This is bit-for-bit identical to the previous behavior but ~30% faster in high-turnover simulations.
+- `ssl.HouseholdNet` initialization is now fully vectorized across household assignment, edge construction, and female-head-of-household selection, for a performance improvement of 10-20x for large populations.
+- `ssl.HouseholdNet.add_births()` was also vectorized, for a performance improvement of ~1.3x in high-turnover simulations.
 
 ### Pregnancy
-- `ss.Pregnancy` conception now intersects the eligible agents with the fecund population by boolean masking rather than the `&` operator (which routes through `np.intersect1d`, a sort), and `set_rel_sus()` now computes the susceptible mask once rather than recomputing the full fecund/fertile/pregnant chain.
+- The `ss.Pregnancy` conception logic was optimized, for a ~20% performance improvement.
+- *Regression*: the default `slot_scale` for `ss.Pregnancy` was increased from 5 to 100. Newborns are assigned a random slot in the range `[n_agents, slot_scale·n_agents]`; a larger range reduces the chance that two newborns share a slot (and therefore make identical random draws). Previously a larger `slot_scale` also meant proportionally more random draws, but with the new hash-based CRN the number of draws no longer depends on the slot range, so the default was raised to reduce these collision artifacts at no performance cost. This changes results for models with pregnancy.
 
-### Other changes
-- `starsim.library` now exports its contents at the top level, so classes can be accessed either via their submodule (e.g. `ssl.networks.HouseholdNet`, `ssl.diseases.Cholera`) or directly (e.g. `ssl.HouseholdNet`, `ssl.Cholera`), like core Starsim.
+### Other performance optimizations
+
 - The disease transmission step now uses a Numba-compiled kernel (`_nb_transmit`) that identifies transmitting edges in a single branchless pass and returns its result as a zero-copy view, about 1.4x faster at typical transmission densities. Effective transmissibility and susceptibility are computed directly on the raw state arrays, avoiding intermediate `Arr` wrapper allocations.
 - Extracting the UIDs of a boolean state (`Arr.true()`, `Arr.uids`, and boolean filtering) now uses a branchless Numba compaction kernel above a threshold number of elements.
 - The `numba_indexing` threshold (the array size above which Numba is used instead of NumPy for indexing) was lowered from 5000 to 2000, since Numba wins for both gather and compaction above ~2000 elements.
+
+### Other changes
+
+- `starsim.library` now exports its contents at the top level, so classes can be accessed either via their submodule (e.g. `ssl.networks.HouseholdNet`, `ssl.diseases.Cholera`) or directly (e.g. `ssl.HouseholdNet`, `ssl.Cholera`), like core Starsim.
 - Added `tests/benchmark_large.py` and associated benchmark data for tracking performance on larger simulations.
 
 ### Regression information
 - The default random number values for agent-indexed draws have changed (see "Common random numbers" above); results are statistically equivalent but not bit-for-bit identical, and baselines should be regenerated.
 - `ss.RandomNet` is now approximate; use `ss.RandomExactNet` for the previous exact-degree behavior.
 - The `single_rng` option has been removed; use `ss.options.crn = False` instead.
+- The default `slot_scale` for `ss.Pregnancy` was increased from 5 to 100, which changes results for models with pregnancy.
 - *GitHub info*: PR [1378](https://github.com/starsimhub/starsim/pull/1378)
 
 

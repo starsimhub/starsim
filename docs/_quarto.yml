@@ -238,6 +238,7 @@ interlinks:
     matplotlib: [plt]
     sciris: [sc]
     starsim: [null, ss]
+    starsim.library: [ssl]
 
 execute:
   freeze: auto # Only re-execute notebooks that have changed

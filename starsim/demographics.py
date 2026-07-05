@@ -338,7 +338,7 @@ class PregnancyPars(ss.Pars):
 
         # Parameters related to newborn agents
         self.sex_ratio = ss.bernoulli(0.5)  # Ratio of babies born female
-        self.slot_scale = 5 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+        self.slot_scale = 100 # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents; larger reduces slot collisions, and (unlike previously) no longer costs extra random draws thanks to hash-based CRN
         self.min_slots = 100  # Minimum number of slots, useful if the population size is very small
 
         # Classification thresholds
@@ -377,7 +377,7 @@ class Pregnancy(Demographics):
         p_survive_maternal_death (float): probability that an unborn agent will survive death of the mother (default 0)
         sex_ratio (float): probability of female births (default 0.5)
         burnin (bool): whether to seed pregnancies from before simulation start (default true)
-        slot_scale (float): scale factor for assigning slots to newborn agents (default 5)
+        slot_scale (float): scale factor for assigning slots to newborn agents (default 100)
         min_slots (int): minimum number of slots for newborn agents (default 100)
         preterm_threshold (dur): gestational age below which preterm is declared (default 37w)
         very_preterm_threshold (dur): gestational age below which very preterm is declared (default 32w)
