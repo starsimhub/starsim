@@ -28,22 +28,22 @@ class HouseholdNet(ss.Network):
     added to their mother's household network.
 
     Args:
-        dhs_data (DataFrame): A pandas or Sciris dataframe with columns ``hh_id``
-            and ``ages``. Optionally also ``sexes``. The ``ages`` column should
-            contain comma-separated age strings (e.g. ``"72, 17, 30"``). If
-            ``sexes`` is included, it should contain comma-separated values
+        dhs_data (DataFrame): A pandas or Sciris dataframe with columns `hh_id`
+            and `ages`. Optionally also `sexes`. The `ages` column should
+            contain comma-separated age strings (e.g. `"72, 17, 30"`). If
+            `sexes` is included, it should contain comma-separated values
             using DHS convention (1 = male, 2 = female) with the same number
-            of entries as ``ages``.
-        dynamic (bool): If ``True`` (default), households evolve over time:
+            of entries as `ages`.
+        dynamic (bool): If `True` (default), households evolve over time:
             one female is assigned as head of each household, pregnant non-head
             females may move out to form new households, and births are added to
-            the mother's household. Requires the ``Pregnancy`` module. If
-            ``False``, the network is static and ``step()`` is a no-op.
+            the mother's household. Requires the `Pregnancy` module. If
+            `False`, the network is static and `step()` is a no-op.
         prob_move_out (float): Probability a non-head female moves out to start
             her own household, evaluated once at the start of each pregnancy.
-            Default 0.7. Only used when ``dynamic=True``.
+            Default 0.7. Only used when `dynamic=True`.
         update_freq (int): How often (in timesteps) to update the network.
-            Default 1. Only used when ``dynamic=True``.
+            Default 1. Only used when `dynamic=True`.
 
     The expected dataframe format is::
 
@@ -59,8 +59,8 @@ class HouseholdNet(ss.Network):
 
     1. Register and request access at https://dhsprogram.com
     2. Download a Household Recode (HR) dataset in Stata format
-       (e.g. ``XXHR7xDT.zip``)
-    3. Use ``HouseholdNet.load_dhs()`` to extract the data::
+       (e.g. `XXHR7xDT.zip`)
+    3. Use `HouseholdNet.load_dhs()` to extract the data::
 
         import starsim as ss; import starsim.library as ssl
         dhs_data = ssl.networks.HouseholdNet.load_dhs('XXHR7xDT/XXHR7xFL.DTA')
@@ -256,20 +256,20 @@ class HouseholdNet(ss.Network):
     def load_dhs(path):
         """
         Load a DHS Household Recode (HR) Stata file and return a dataframe
-        suitable for use with ``HouseholdNet``.
+        suitable for use with `HouseholdNet`.
 
-        Reads the wide-format HR file, extracts per-member age (``HV105``)
-        and sex (``HV104``) columns, filters to valid entries (age <= 95 and
-        sex in [1, 2]), and returns a dataframe with columns ``hh_id``,
-        ``ages``, and ``sexes``.
+        Reads the wide-format HR file, extracts per-member age (`HV105`)
+        and sex (`HV104`) columns, filters to valid entries (age <= 95 and
+        sex in [1, 2]), and returns a dataframe with columns `hh_id`,
+        `ages`, and `sexes`.
 
         Args:
             path (str/Path): Path to a DHS Household Recode Stata file
-                (e.g. ``XXHR7xFL.DTA``).
+                (e.g. `XXHR7xFL.DTA`).
 
         Returns:
-            sc.dataframe: A dataframe with columns ``hh_id``, ``ages``, and
-            ``sexes`` ready for use with ``HouseholdNet(dhs_data=...)``.
+            sc.dataframe: A dataframe with columns `hh_id`, `ages`, and
+            `sexes` ready for use with `HouseholdNet(dhs_data=...)`.
 
         Examples:
             ```python

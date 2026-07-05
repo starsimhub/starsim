@@ -336,27 +336,27 @@ class Infection(Disease):
         Default implementation for assigning congenital outcomes during in-utero
         infection (called when transmission occurs via PrenatalNet).
 
-        Does nothing unless the disease defines ``birth_outcome_keys`` and
-        ``birth_outcomes`` in its pars. Diseases that need fully custom logic
+        Does nothing unless the disease defines `birth_outcome_keys` and
+        `birth_outcomes` in its pars. Diseases that need fully custom logic
         (e.g. syphilis, which has stage-dependent outcomes) can override this
         method entirely.
 
-        To use the default implementation, define in the disease's ``__init__``:
+        To use the default implementation, define in the disease's `__init__`:
 
             self.define_pars(
                 birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
                 birth_outcomes     = sc.objdict(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
             )
 
-        Each outcome name needs a matching ``ti_<name>`` FloatArr state; non-lethal
+        Each outcome name needs a matching `ti_<name>` FloatArr state; non-lethal
         outcomes also need a BoolArr of the same name. Death outcomes ('miscarriage',
-        'neonatal_deaths', 'stillborn') fire via ``request_death``; others set a bool state.
+        'neonatal_deaths', 'stillborn') fire via `request_death`; others set a bool state.
 
         For state- or GA-dependent probabilities, provide multiple keyed
-        distributions in ``birth_outcomes`` and override
-        ``_assign_congenital_outcomes``.
+        distributions in `birth_outcomes` and override
+        `_assign_congenital_outcomes`.
 
-        Call ``step_congenital`` from the disease's ``step_state()`` to
+        Call `step_congenital` from the disease's `step_state()` to
         execute the scheduled events each timestep.
         """
         if not hasattr(self.pars, 'birth_outcomes') or self.pars.birth_outcomes is None:
@@ -392,7 +392,7 @@ class Infection(Disease):
         """
         Override point for diseases with state- or GA-dependent outcome probabilities.
         Must return an integer array of outcome indices (one per target_uid),
-        corresponding to ``self.pars.birth_outcome_keys``.
+        corresponding to `self.pars.birth_outcome_keys`.
         """
         raise NotImplementedError(
             'Subclass must implement _assign_congenital_outcomes or use a single '
@@ -401,10 +401,10 @@ class Infection(Disease):
 
     def step_congenital(self):
         """
-        Execute scheduled congenital events whose ``ti_<key>`` has arrived.
+        Execute scheduled congenital events whose `ti_<key>` has arrived.
 
-        Does nothing unless the disease defines ``birth_outcome_keys`` in its
-        pars. Call from the disease's ``step_state()``; see ``set_congenital``
+        Does nothing unless the disease defines `birth_outcome_keys` in its
+        pars. Call from the disease's `step_state()`; see `set_congenital`
         for setup details.
         """
         if not hasattr(self.pars, 'birth_outcome_keys'):

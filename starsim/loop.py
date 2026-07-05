@@ -307,7 +307,7 @@ class Loop:
         return sc.dataframe(rows, columns=cols)
 
     def _insert_into_plan(self, func, label=None, match_fn=None, before=False):
-        """ Insert into ``self.plan`` without recording the insertion for replay """
+        """ Insert into `self.plan` without recording the insertion for replay """
         if label:
             match_fn = lambda plan: plan.label == label
 

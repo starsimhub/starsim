@@ -516,9 +516,12 @@ class Pregnancy(Demographics):
         """
         ppl = self.sim.people
 
-        # Apply filter UIDS and get ages
-        uids = self.fecund
-        if filter_uids is not None: uids = filter_uids & uids
+        # Apply filter UIDS and get ages. When filter_uids is provided, intersect with the
+        # fecund via boolean masking (O(len(filter_uids))) rather than filter_uids & fecund,
+        # which routes through np.intersect1d (a sort, O(n log n)); the result is re-indexed by
+        # filter_uids below, so the ordering of `uids` here does not affect the returned values.
+        fecund = self.fecund
+        uids = fecund if filter_uids is None else filter_uids[fecund[filter_uids]]
         age = ppl.age[uids]
 
         # Get data, check it's in the right form
@@ -687,8 +690,9 @@ class Pregnancy(Demographics):
         Set relative susceptibility to pregnancy. Note that rel_sus isn't used in this module,
         but it's a key ingredient for derived modules that compute pregnancies based on exposure.
         """
-        self.rel_sus[self.susceptible] = 1.0
-        self.rel_sus[~self.susceptible] = 0.0
+        sus = self.susceptible  # Compute once; ~self.susceptible would recompute the whole fecund/fertile/pregnant chain
+        self.rel_sus[sus] = 1.0
+        self.rel_sus[~sus] = 0.0
         return
 
     def updates_pre(self, uids=None, upper_age=None):
@@ -768,12 +772,12 @@ class Pregnancy(Demographics):
         return
 
     def add_conception_callback(self, fn):
-        """ Register a function ``fn(uids)`` to be called after new pregnancies are created """
+        """ Register a function `fn(uids)` to be called after new pregnancies are created """
         self._conception_callbacks.append(fn)
         return
 
     def add_delivery_callback(self, fn):
-        """ Register a function ``fn(mother_uids, newborn_uids)`` to be called after delivery """
+        """ Register a function `fn(mother_uids, newborn_uids)` to be called after delivery """
         self._delivery_callbacks.append(fn)
         return
 

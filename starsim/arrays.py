@@ -898,16 +898,16 @@ class uids(np.ndarray):
 
     The following operators are supported:
 
-    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
-    - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
-    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use ``+`` instead to keep them).
-    - ``&`` / ``&=``: intersection
-    - ``^`` / ``^=``: symmetric difference
+    - `+` / `+=`: if the RHS is a `uids`, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. `uids([1,2]) + 1` → `uids([2,3])`). Concatenation preserves duplicates.
+    - `-` / `-=`: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
+    - `|` / `|=`: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use `+` instead to keep them).
+    - `&` / `&=`: intersection
+    - `^` / `^=`: symmetric difference
 
     Note: because `uids` is a subclass of `np.ndarray`, set-like in-place operators
-    (``+=`` with a ``uids`` RHS, ``-=``, ``|=``, ``&=``, ``^=``) must return a new array and rebind
-    the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
-    and preserves ``id(self)``.
+    (`+=` with a `uids` RHS, `-=`, `|=`, `&=`, `^=`) must return a new array and rebind
+    the variable. However, `+=` with a scalar or array RHS modifies the array in-place
+    and preserves `id(self)`.
 
     Examples:
         ```python
@@ -964,13 +964,13 @@ class uids(np.ndarray):
         return out
 
     def concat(self, other):
-        """ Deprecated — use ``uids.concatenate()`` instead """
+        """ Deprecated — use `uids.concatenate()` instead """
         ss.warn('uids.concat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return self.concatenate(other)
 
     @classmethod
     def cat(cls, *args):
-        """ Deprecated — use ``uids.concatenate()`` instead """
+        """ Deprecated — use `uids.concatenate()` instead """
         ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return uids.concatenate(*args)
 

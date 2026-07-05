@@ -992,7 +992,7 @@ class PrenatalNet(Network):
 
 
 class MaternalNet(PrenatalNet):
-    """ Alias for ``PrenatalNet``, kept for backwards compatibility """
+    """ Alias for `PrenatalNet`, kept for backwards compatibility """
     pass
 
 

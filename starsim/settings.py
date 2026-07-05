@@ -418,7 +418,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
     """
     Helper function to load custom fonts for plotting -- (usually) not for the user.
 
-    Note: if fonts don't load, try running ``ss.settings.load_fonts(rebuild=True)``,
+    Note: if fonts don't load, try running `ss.settings.load_fonts(rebuild=True)`,
     and/or rebooting the system.
 
     Args:
