@@ -25,6 +25,44 @@ def str2int(string, modulo=1_000_000_000):
     return seed
 
 
+# Constants for the splitmix64 hash used by hash_uniforms() (see below)
+_GOLDEN = np.uint64(0x9e3779b97f4a7c15)
+_MIX1   = np.uint64(0xbf58476d1ce4e5b9)
+_MIX2   = np.uint64(0x94d049bb133111eb)
+_INV53  = np.float64(1.0 / 9007199254740992.0) # 2^-53, to map a 53-bit int to [0, 1)
+_U30, _U27, _U31, _U11 = np.uint64(30), np.uint64(27), np.uint64(31), np.uint64(11)
+
+@nb.njit(nb.float64[:](nb.int64, nb.int64, nb.uint64[:]), cache=True)
+def hash_uniforms(seed, ind, slots):
+    """
+    Generate one uniform random number in [0, 1) per slot via a counter-based (splitmix64)
+    hash keyed by (seed, ind); not for the user.
+
+    This is the engine behind Starsim's common random numbers (CRN). Because each output
+    depends only on its slot (plus the per-draw key), the same slot always yields the same
+    value regardless of how many other agents are drawn -- so structural differences between
+    scenarios don't ripple into unrelated agents. Unlike the stream-based approach (draw
+    `slots.max()+1` numbers and gather), this generates exactly `len(slots)` numbers, avoiding
+    the `slot_scale` blowup.
+    """
+    # Derive a per-draw key by mixing the distribution seed with the draw index
+    x = (np.uint64(seed) ^ (np.uint64(ind) * _GOLDEN)) + _GOLDEN
+    x = (x ^ (x >> _U30)) * _MIX1
+    x = (x ^ (x >> _U27)) * _MIX2
+    key = x ^ (x >> _U31)
+
+    # Hash each slot to a uniform
+    n = slots.shape[0]
+    out = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        z = (slots[i] + key) * _GOLDEN
+        z = (z ^ (z >> _U30)) * _MIX1
+        z = (z ^ (z >> _U27)) * _MIX2
+        z = z ^ (z >> _U31)
+        out[i] = np.float64(z >> _U11) * _INV53
+    return out
+
+
 def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
@@ -130,11 +168,6 @@ class Dists(sc.prettyobj):
     def jump(self, to=None, delta=1, force=False):
         """ Advance all RNGs, e.g. to call "to", by jumping """
         out = sc.autolist()
-
-        # Do not jump if centralized
-        if ss.options.single_rng:
-            return out
-
         for dist in self.dists.values():
             out += dist.jump(to=to, delta=delta, force=force)
         return out
@@ -147,11 +180,6 @@ class Dists(sc.prettyobj):
             ti (int): if specified, jump to this timestep (default: current sim timestep)
         """
         out = sc.autolist()
-
-        # Do not jump if centralized
-        if ss.options.single_rng:
-            return out
-
         for dist in self.dists.values():
             out += dist.jump_dt(ti=ti, force=force)
         return out
@@ -487,10 +515,6 @@ class Dist:
     def jump(self, to=None, delta=1, force=False):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
 
-        # Do not jump if centralized # TODO: remove
-        if ss.options.single_rng:
-            return self.state
-
         # Validation
         jumps = to if (to is not None) else self.ind + delta
         if self.ind > jumps and not force:
@@ -543,10 +567,7 @@ class Dist:
         self.process_seed(trace, seed)
 
         # Create the actual RNG
-        if ss.options.single_rng:
-            self.rng = np.random.mtrand._rand # If single_rng, return the centralized numpy random number instance
-        else:
-            self.rng = np.random.default_rng(seed=self.seed)
+        self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
 
         # Handle the sim, module, and slots
@@ -655,14 +676,21 @@ class Dist:
         else:
             uids = ss.uids(n)
             if len(uids):
-                if self.slots is None:
-                    errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
-                    raise ValueError(errormsg)
-                slots = self.slots[uids]
-                if len(slots): # Handle case where uids is boolean
-                    size = slots.max() + 1
+                if not ss.options.crn:
+                    # Fast non-CRN path: draw exactly one number per UID directly, with no
+                    # slot gather. This avoids the slot_scale "blowup" (drawing slots.max()+1
+                    # numbers and discarding most of them). Statistically valid but not CRN-safe.
+                    slots = None
+                    size = len(uids)
                 else:
-                    size = 0
+                    if self.slots is None:
+                        errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
+                        raise ValueError(errormsg)
+                    slots = self.slots[uids]
+                    if len(slots): # Handle case where uids is boolean
+                        size = slots.max() + 1
+                    else:
+                        size = 0
             else:
                 slots = np.array([])
                 size = 0
@@ -848,19 +876,13 @@ class Dist:
 
     def rand(self, size):
         """ Simple way to get simple random numbers """
-        if ss.options.single_rng:
-            return np.random.mtrand._rand.random(size).astype(ss.dtypes.float)
         return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
 
     def make_rvs(self):
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
-            if ss.options.single_rng:
-                dtype = self._pars.pop('dtype', None)
             rvs = rvs_func(size=self._size, **self._pars)
-            if ss.options.single_rng and dtype:
-                rvs = rvs.astype(dtype)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
@@ -885,12 +907,10 @@ class Dist:
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
-        if not self.ready and self.strict and not ss.options.single_rng:
+        if not self.ready and self.strict:
             raise DistNotReadyError(self)
 
         # Figure out size, UIDs, and slots
-        if ss.options.single_rng and not (np.isscalar(n) or isinstance(n, tuple)):
-            n = len(n) # If centralized, treat n as a size
         size, slots = self.process_size(n)
 
         # Check if size is 0, then we can return -- but still count the call and jump/reset
@@ -915,8 +935,16 @@ class Dist:
         self.process_pars()
 
         # Actually get the random numbers
-        if self._use_ppf:
-            rands = self.rand(size)[slots] # Get random values
+        if slots is not None and self._use_ppf is not False:
+            # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
+            # Generates exactly len(uids) numbers (no slot_scale blowup) while preserving CRN.
+            # (choice/histogram set _use_ppf=False and keep the native path below.)
+            rands = hash_uniforms(self.seed, self.ind, self._slots.astype(np.uint64))
+            rvs = self.ppf(rands) # Convert to actual values via the PPF
+        elif self._use_ppf:
+            rands = self.rand(size)
+            if slots is not None: # In non-CRN mode, size == len(uids) and no gather is needed
+                rands = rands[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
             rvs = self.make_rvs() # Or, just get regular values
@@ -1331,10 +1359,8 @@ class randint(Dist):
         if high is None:
             high = np.iinfo(ss.dtypes.rand_int).max
 
-        if ss.options.single_rng: # randint because we're accessing via numpy.random
-            super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
-        else: # integers instead of randint because interfacing a numpy.random.Generator
-            super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
+        # integers (rather than randint) because we interface a numpy.random.Generator
+        super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
         return
 
     def convert_timepars(self):
@@ -1347,7 +1373,7 @@ class randint(Dist):
     def ppf(self, rands):
         p = self._pars
         rvs = rands * (p.high + 1 - p.low) + p.low
-        rvs = rvs.astype(self.dtype)
+        rvs = rvs.astype(p.dtype)
         return rvs
 
 class rand_raw(Dist):
@@ -1359,10 +1385,7 @@ class rand_raw(Dist):
     scaling = scale_types.false
 
     def make_rvs(self):
-        if ss.options.single_rng:
-            return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
-        else:
-            return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
+        return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
 
 
 class weibull(Dist):

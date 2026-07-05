@@ -130,10 +130,7 @@ class Options(sc.objdict):
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
-        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only).'
-        options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
-
-        optdesc.crn = 'If True (default), use common random numbers (CRN) for transmission. Set False for a faster non-CRN draw (one plain uniform per edge); statistically identical but not CRN-safe across scenarios.'
+        optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
         return optdesc, options
