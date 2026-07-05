@@ -237,9 +237,8 @@ class HouseholdNet(ss.Network):
         # included when looking up household members
         self.household_ids[birth_uids] = self.household_ids[mat_uids]
 
-        # Build a household_id -> member uids map once (O(N log N)) rather than scanning
-        # household_ids == hid for every newborn (O(births * N)). Members within each group
-        # stay in ascending uid order, matching the previous per-birth boolean scan.
+        # Sort alive agents by household id so each household's members form a contiguous slice
+        # of `sorted_uids` (ascending uid within a household, since argsort is stable).
         auids = ppl.auids
         hvals = self.household_ids[auids]
         valid = ~np.isnan(hvals)
@@ -248,27 +247,28 @@ class HouseholdNet(ss.Network):
         order = np.argsort(hvals, kind='stable')
         sorted_uids = auids[order]
         sorted_h = hvals[order]
-        split_at = np.nonzero(np.diff(sorted_h))[0] + 1
-        member_groups = np.split(sorted_uids, split_at)
-        group_hids = sorted_h[np.concatenate(([0], split_at))] if len(sorted_h) else np.empty(0)
-        hmap = {int(hid): grp for hid, grp in zip(group_hids, member_groups)}
 
+        # For every newborn, locate its household's member slice [lo, hi) in one vectorized pass,
+        # then gather all birth edges at once (no per-household split, no per-birth Python loop).
         mat_hids = self.household_ids[mat_uids]
-        p1 = []
-        p2 = []
-        for new_uid, mat_hid in zip(birth_uids, mat_hids):
-            if np.isnan(mat_hid):  # Mother has no household; no contacts to add (matches prior behavior)
-                continue
-            members = hmap[int(mat_hid)]
-            hh_contacts = members[members != new_uid]  # Exclude self-loops
-            p1.append(hh_contacts)
-            p2.append(np.full(len(hh_contacts), new_uid))
+        lo = np.searchsorted(sorted_h, mat_hids, side='left')
+        hi = np.searchsorted(sorted_h, mat_hids, side='right')
+        counts = hi - lo
+        counts[np.isnan(mat_hids)] = 0  # Mother has no household; no contacts to add (matches prior behavior)
 
-        if p1:
-            p1 = ss.uids.concatenate(p1)
-            p2 = ss.uids.concatenate(p2)
+        # Ragged gather: newborn i connects to sorted_uids[lo_i : lo_i+counts_i]
+        total = int(counts.sum())
+        seg_start = np.repeat(np.cumsum(counts) - counts, counts)  # output start of each newborn's block
+        gather = np.repeat(lo, counts) + (np.arange(total) - seg_start)
+        p1 = sorted_uids[gather]                          # household members (contacts)
+        p2 = np.repeat(np.asarray(birth_uids), counts)    # the newborn for each contact
+        keep = p1 != p2                                   # exclude self-loops
+        p1 = p1[keep]
+        p2 = p2[keep]
+
+        if len(p1):
             beta = np.ones(len(p1), dtype=ss.dtypes.float)
-            self.append(p1=p1, p2=p2, beta=beta)
+            self.append(p1=ss.uids(p1), p2=ss.uids(p2), beta=beta)
 
         return len(birth_uids)
 
