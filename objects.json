@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 744,
+  "count": 750,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -393,6 +393,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/arrays.html#starsim.arrays.nb_indexer",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.arrays.nb_true",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.nb_true",
       "dispname": "-"
     },
     {
@@ -2116,6 +2124,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.distributions.hash_uniforms",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.hash_uniforms",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.distributions.histogram",
       "domain": "py",
       "role": "class",
@@ -2177,6 +2193,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.make_dist",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.multi_random.combine2_rvs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.multi_random.combine2_rvs",
       "dispname": "-"
     },
     {
@@ -3500,11 +3524,27 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.networks.RandomNet.add_pairs",
+      "name": "starsim.networks.RandomExactNet.add_pairs",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/networks.html#starsim.networks.RandomNet.add_pairs",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.RandomExactNet.get_edges",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet.get_edges",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.RandomExactNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet",
       "dispname": "-"
     },
     {
@@ -3617,6 +3657,14 @@
       "role": "class",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.StaticNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.fisher_yates_shuffle",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.fisher_yates_shuffle",
       "dispname": "-"
     },
     {
@@ -8028,6 +8076,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.multi_random.combine2_rvs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.multi_random.combine2_rvs",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.multi_random.combine_rvs",
       "domain": "py",
       "role": "function",
@@ -9292,11 +9348,27 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.RandomNet.add_pairs",
+      "name": "starsim.RandomExactNet.add_pairs",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/networks.html#starsim.networks.RandomNet.add_pairs",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.RandomExactNet.get_edges",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet.get_edges",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.RandomExactNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet",
       "dispname": "-"
     },
     {

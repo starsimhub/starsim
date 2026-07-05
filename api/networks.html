@@ -670,19 +670,26 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#parameters-12" id="toc-parameters-12" class="nav-link" data-scroll-target="#parameters-12">Parameters</a></li>
   </ul></li>
   <li><a href="#starsim.networks.PrenatalNet" id="toc-starsim.networks.PrenatalNet" class="nav-link" data-scroll-target="#starsim.networks.PrenatalNet">PrenatalNet</a></li>
-  <li><a href="#starsim.networks.RandomNet" id="toc-starsim.networks.RandomNet" class="nav-link" data-scroll-target="#starsim.networks.RandomNet">RandomNet</a>
+  <li><a href="#starsim.networks.RandomExactNet" id="toc-starsim.networks.RandomExactNet" class="nav-link" data-scroll-target="#starsim.networks.RandomExactNet">RandomExactNet</a>
   <ul class="collapse">
   <li><a href="#parameters-13" id="toc-parameters-13" class="nav-link" data-scroll-target="#parameters-13">Parameters</a></li>
   <li><a href="#methods-7" id="toc-methods-7" class="nav-link" data-scroll-target="#methods-7">Methods</a>
   <ul class="collapse">
-  <li><a href="#starsim.networks.RandomNet.add_pairs" id="toc-starsim.networks.RandomNet.add_pairs" class="nav-link" data-scroll-target="#starsim.networks.RandomNet.add_pairs">add_pairs</a></li>
+  <li><a href="#starsim.networks.RandomExactNet.add_pairs" id="toc-starsim.networks.RandomExactNet.add_pairs" class="nav-link" data-scroll-target="#starsim.networks.RandomExactNet.add_pairs">add_pairs</a></li>
+  <li><a href="#starsim.networks.RandomExactNet.get_edges" id="toc-starsim.networks.RandomExactNet.get_edges" class="nav-link" data-scroll-target="#starsim.networks.RandomExactNet.get_edges">get_edges</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#starsim.networks.RandomNet" id="toc-starsim.networks.RandomNet" class="nav-link" data-scroll-target="#starsim.networks.RandomNet">RandomNet</a>
+  <ul class="collapse">
+  <li><a href="#methods-8" id="toc-methods-8" class="nav-link" data-scroll-target="#methods-8">Methods</a>
+  <ul class="collapse">
   <li><a href="#starsim.networks.RandomNet.get_edges" id="toc-starsim.networks.RandomNet.get_edges" class="nav-link" data-scroll-target="#starsim.networks.RandomNet.get_edges">get_edges</a></li>
   </ul></li>
   </ul></li>
   <li><a href="#starsim.networks.RandomSafeNet" id="toc-starsim.networks.RandomSafeNet" class="nav-link" data-scroll-target="#starsim.networks.RandomSafeNet">RandomSafeNet</a>
   <ul class="collapse">
   <li><a href="#parameters-15" id="toc-parameters-15" class="nav-link" data-scroll-target="#parameters-15">Parameters</a></li>
-  <li><a href="#methods-8" id="toc-methods-8" class="nav-link" data-scroll-target="#methods-8">Methods</a>
+  <li><a href="#methods-9" id="toc-methods-9" class="nav-link" data-scroll-target="#methods-9">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.networks.RandomSafeNet.add_pairs" id="toc-starsim.networks.RandomSafeNet.add_pairs" class="nav-link" data-scroll-target="#starsim.networks.RandomSafeNet.add_pairs">add_pairs</a></li>
   <li><a href="#starsim.networks.RandomSafeNet.form_pairs" id="toc-starsim.networks.RandomSafeNet.form_pairs" class="nav-link" data-scroll-target="#starsim.networks.RandomSafeNet.form_pairs">form_pairs</a></li>
@@ -692,14 +699,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </ul></li>
   <li><a href="#starsim.networks.Route" id="toc-starsim.networks.Route" class="nav-link" data-scroll-target="#starsim.networks.Route">Route</a>
   <ul class="collapse">
-  <li><a href="#methods-9" id="toc-methods-9" class="nav-link" data-scroll-target="#methods-9">Methods</a>
+  <li><a href="#methods-10" id="toc-methods-10" class="nav-link" data-scroll-target="#methods-10">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.networks.Route.compute_transmission" id="toc-starsim.networks.Route.compute_transmission" class="nav-link" data-scroll-target="#starsim.networks.Route.compute_transmission">compute_transmission</a></li>
   </ul></li>
   </ul></li>
   <li><a href="#starsim.networks.SexualNetwork" id="toc-starsim.networks.SexualNetwork" class="nav-link" data-scroll-target="#starsim.networks.SexualNetwork">SexualNetwork</a>
   <ul class="collapse">
-  <li><a href="#methods-10" id="toc-methods-10" class="nav-link" data-scroll-target="#methods-10">Methods</a>
+  <li><a href="#methods-11" id="toc-methods-11" class="nav-link" data-scroll-target="#methods-11">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.networks.SexualNetwork.active" id="toc-starsim.networks.SexualNetwork.active" class="nav-link" data-scroll-target="#starsim.networks.SexualNetwork.active">active</a></li>
   <li><a href="#starsim.networks.SexualNetwork.available" id="toc-starsim.networks.SexualNetwork.available" class="nav-link" data-scroll-target="#starsim.networks.SexualNetwork.available">available</a></li>
@@ -710,6 +717,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#examples-4" id="toc-examples-4" class="nav-link" data-scroll-target="#examples-4">Examples</a></li>
   </ul></li>
+  </ul></li>
+  <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
+  <ul>
+  <li><a href="#starsim.networks.fisher_yates_shuffle" id="toc-starsim.networks.fisher_yates_shuffle" class="nav-link" data-scroll-target="#starsim.networks.fisher_yates_shuffle">fisher_yates_shuffle</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -781,22 +792,26 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Prenatal transmission network</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.networks.RandomNet">RandomNet</a></td>
+<td><a href="#starsim.networks.RandomExactNet">RandomExactNet</a></td>
 <td>Random connectivity between agents</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.networks.RandomNet">RandomNet</a></td>
+<td>A faster, approximate version of <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a></td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.networks.RandomSafeNet">RandomSafeNet</a></td>
 <td>Create a CRN-safe, O(N) random network</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.networks.Route">Route</a></td>
 <td>A transmission route – e.g., a network, mixing pool, environmental transmission, etc.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.networks.SexualNetwork">SexualNetwork</a></td>
 <td>Base class for all sexual networks</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.networks.StaticNet">StaticNet</a></td>
 <td>A network class of static partnerships converted from a networkx graph. There’s no formation of new partnerships</td>
 </tr>
@@ -1902,9 +1917,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Prenatal transmission network</p>
 <p>Although edges change over time, the edges are managed via ss.Pregnancy as pregnancies start and finish. The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.</p>
 </section>
-<section id="starsim.networks.RandomNet" class="level3">
-<h3 class="anchored" data-anchor-id="starsim.networks.RandomNet">RandomNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb55"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>networks.RandomNet(pars<span class="op">=</span><span class="va">None</span>, n_contacts<span class="op">=</span>_, dur<span class="op">=</span>_, beta<span class="op">=</span>_, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="starsim.networks.RandomExactNet" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.networks.RandomExactNet">RandomExactNet</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb55"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>networks.RandomExactNet(pars<span class="op">=</span><span class="va">None</span>, n_contacts<span class="op">=</span>_, dur<span class="op">=</span>_, beta<span class="op">=</span>_, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Random connectivity between agents</p>
 <section id="parameters-13" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-13">Parameters</h4>
@@ -1951,23 +1966,23 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
-<td><a href="#starsim.networks.RandomNet.add_pairs">add_pairs</a></td>
+<td><a href="#starsim.networks.RandomExactNet.add_pairs">add_pairs</a></td>
 <td>Generate edges</td>
 </tr>
 <tr class="even">
-<td><a href="#starsim.networks.RandomNet.get_edges">get_edges</a></td>
+<td><a href="#starsim.networks.RandomExactNet.get_edges">get_edges</a></td>
 <td>Efficiently find edges</td>
 </tr>
 </tbody>
 </table>
-<section id="starsim.networks.RandomNet.add_pairs" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.networks.RandomNet.add_pairs">add_pairs</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb56"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a>networks.RandomNet.add_pairs()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="starsim.networks.RandomExactNet.add_pairs" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.networks.RandomExactNet.add_pairs">add_pairs</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb56"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a>networks.RandomExactNet.add_pairs()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Generate edges</p>
 </section>
-<section id="starsim.networks.RandomNet.get_edges" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.networks.RandomNet.get_edges">get_edges</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb57"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a>networks.RandomNet.get_edges(inds, n_contacts)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="starsim.networks.RandomExactNet.get_edges" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.networks.RandomExactNet.get_edges">get_edges</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb57"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a>networks.RandomExactNet.get_edges(inds, n_contacts)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Efficiently find edges</p>
 <p>Note that because of the shuffling operation, each person is assigned 2N contacts (i.e.&nbsp;if a person has 5 contacts, they appear 5 times in the ‘source’ array and 5 times in the ‘target’ array). Therefore, the <code>n_contacts</code> argument to this function should be HALF of the total contacts a person is expected to have, if both the source and target array outputs are used (e.g.&nbsp;for social contacts)</p>
 <p>adjusted_number_of_contacts = np.round(n_contacts / 2).astype(ss.dtype.int)</p>
@@ -2021,12 +2036,41 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 </section>
 </section>
+<section id="starsim.networks.RandomNet" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.networks.RandomNet">RandomNet</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>networks.RandomNet(pars<span class="op">=</span><span class="va">None</span>, n_contacts<span class="op">=</span>_, dur<span class="op">=</span>_, beta<span class="op">=</span>_, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>A faster, approximate version of <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a></p>
+<p>Identical to <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a> except that the target end of each edge is drawn uniformly at random, rather than via a shuffle of the source stubs. This is roughly 1.8x faster at generating edges, but the per-agent degree is no longer fixed: the source side of each edge is still exactly <code>n_contacts</code>, while the target side is Poisson-distributed (mean <code>n_contacts</code>). Agents therefore have somewhat more variable numbers of contacts than with <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a>.</p>
+<p>Note: like <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a>, this is not random-number safe; see <a href="../api/networks.html#starsim.networks.RandomSafeNet" title="0"><code>ss.RandomSafeNet</code></a> for the CRN-safe (but slower) version.</p>
+<section id="methods-8" class="level4">
+<h4 class="anchored" data-anchor-id="methods-8">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.networks.RandomNet.get_edges">get_edges</a></td>
+<td>Find edges by drawing the target of each edge uniformly at random (see <a href="../api/networks.html#starsim.networks.RandomExactNet.get_edges" title="0"><code>ss.RandomExactNet.get_edges</code></a>)</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.networks.RandomNet.get_edges" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.networks.RandomNet.get_edges">get_edges</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb59"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>networks.RandomNet.get_edges(inds, n_contacts)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Find edges by drawing the target of each edge uniformly at random (see <a href="../api/networks.html#starsim.networks.RandomExactNet.get_edges" title="0"><code>ss.RandomExactNet.get_edges</code></a>)</p>
+</section>
+</section>
+</section>
 <section id="starsim.networks.RandomSafeNet" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.RandomSafeNet">RandomSafeNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet(pars<span class="op">=</span><span class="va">None</span>, n_edges<span class="op">=</span>_, dur<span class="op">=</span>_, beta<span class="op">=</span>_, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet(pars<span class="op">=</span><span class="va">None</span>, n_edges<span class="op">=</span>_, dur<span class="op">=</span>_, beta<span class="op">=</span>_, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a CRN-safe, O(N) random network</p>
-<p>This network is similar to <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet()</code></a>, but is random-number safe (i.e., the addition of a single new agent will not perturb the entire rest of the network). However, it is somewhat slower than <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet()</code></a>, so should be used where CRN safety is important (e.g., scenario analysis).</p>
-<p>Note: <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a> uses <code>n_contacts</code>, which is the total number of contacts per agent. <a href="../api/networks.html#starsim.networks.RandomSafeNet" title="0"><code>ss.RandomSafeNet</code></a> uses <code>n_edges</code>, which is the total number of <em>edges</em> per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges. For example, <code>ss.RandomNet(n_contacts=10)</code> will give (nearly) identical results to <code>ss.RandomSafeNet(n_edges=5)</code>. In addition, whereas <code>n_contacts</code> can be a distribution, <code>n_edges</code> can only be an integer.</p>
+<p>This network is similar to <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet()</code></a>, but is random-number safe (i.e., the addition of a single new agent will not perturb the entire rest of the network). However, it is somewhat slower than <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet()</code></a>, so should be used where CRN safety is important (e.g., scenario analysis).</p>
+<p>Note: <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a> uses <code>n_contacts</code>, which is the total number of contacts per agent. <a href="../api/networks.html#starsim.networks.RandomSafeNet" title="0"><code>ss.RandomSafeNet</code></a> uses <code>n_edges</code>, which is the total number of <em>edges</em> per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges. For example, <code>ss.RandomExactNet(n_contacts=10)</code> will give (nearly) identical results to <code>ss.RandomSafeNet(n_edges=5)</code>. In addition, whereas <code>n_contacts</code> can be a distribution, <code>n_edges</code> can only be an integer.</p>
 <section id="parameters-15" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-15">Parameters</h4>
 <table class="caption-top table">
@@ -2060,8 +2104,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tbody>
 </table>
 </section>
-<section id="methods-8" class="level4">
-<h4 class="anchored" data-anchor-id="methods-8">Methods</h4>
+<section id="methods-9" class="level4">
+<h4 class="anchored" data-anchor-id="methods-9">Methods</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2090,32 +2134,32 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.networks.RandomSafeNet.add_pairs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.RandomSafeNet.add_pairs">add_pairs</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb59"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.add_pairs()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.add_pairs()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Generate edges</p>
 </section>
 <section id="starsim.networks.RandomSafeNet.form_pairs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.RandomSafeNet.form_pairs">form_pairs</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.form_pairs(debug<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb62"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.form_pairs(debug<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>From a 2N input array, return 2N-2 nearest-neighbor pairs</p>
 </section>
 <section id="starsim.networks.RandomSafeNet.plot_matrix" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.RandomSafeNet.plot_matrix">plot_matrix</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.plot_matrix(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb63"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.plot_matrix(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot the distance matrix used for forming pairs: only ±1 from the diagonal is used</p>
 </section>
 <section id="starsim.networks.RandomSafeNet.rep_rand" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.RandomSafeNet.rep_rand">rep_rand</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb62"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.rep_rand(uids, sort<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb64"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a>networks.RandomSafeNet.rep_rand(uids, sort<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Reproducible repeated random numbers</p>
 </section>
 </section>
 </section>
 <section id="starsim.networks.Route" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.Route">Route</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb63"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a>networks.Route(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb65"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a>networks.Route(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A transmission route – e.g., a network, mixing pool, environmental transmission, etc.</p>
-<section id="methods-9" class="level4">
-<h4 class="anchored" data-anchor-id="methods-9">Methods</h4>
+<section id="methods-10" class="level4">
+<h4 class="anchored" data-anchor-id="methods-10">Methods</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2132,22 +2176,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.networks.Route.compute_transmission" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.Route.compute_transmission">compute_transmission</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb64"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a>networks.Route.compute_transmission(</span>
-<span id="cb64-2"><a href="#cb64-2" aria-hidden="true" tabindex="-1"></a>    rel_sus,</span>
-<span id="cb64-3"><a href="#cb64-3" aria-hidden="true" tabindex="-1"></a>    rel_trans,</span>
-<span id="cb64-4"><a href="#cb64-4" aria-hidden="true" tabindex="-1"></a>    disease_beta,</span>
-<span id="cb64-5"><a href="#cb64-5" aria-hidden="true" tabindex="-1"></a>    disease<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb64-6"><a href="#cb64-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb66"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a>networks.Route.compute_transmission(</span>
+<span id="cb66-2"><a href="#cb66-2" aria-hidden="true" tabindex="-1"></a>    rel_sus,</span>
+<span id="cb66-3"><a href="#cb66-3" aria-hidden="true" tabindex="-1"></a>    rel_trans,</span>
+<span id="cb66-4"><a href="#cb66-4" aria-hidden="true" tabindex="-1"></a>    disease_beta,</span>
+<span id="cb66-5"><a href="#cb66-5" aria-hidden="true" tabindex="-1"></a>    disease<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb66-6"><a href="#cb66-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Compute transmission probabilities along this route (must be overridden by subclasses).</p>
 </section>
 </section>
 </section>
 <section id="starsim.networks.SexualNetwork" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.SexualNetwork">SexualNetwork</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb65"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb67"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Base class for all sexual networks</p>
-<section id="methods-10" class="level4">
-<h4 class="anchored" data-anchor-id="methods-10">Methods</h4>
+<section id="methods-11" class="level4">
+<h4 class="anchored" data-anchor-id="methods-11">Methods</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2172,39 +2216,63 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.networks.SexualNetwork.active" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.SexualNetwork.active">active</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb66"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork.active(people)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb68"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork.active(people)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return boolean array of agents who are alive, participating, and past sexual debut.</p>
 </section>
 <section id="starsim.networks.SexualNetwork.available" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.SexualNetwork.available">available</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb67"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork.available(people, sex)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb69"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork.available(people, sex)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return UIDs of active agents of the given sex who are not currently partnered.</p>
 </section>
 <section id="starsim.networks.SexualNetwork.net_beta" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.networks.SexualNetwork.net_beta">net_beta</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb68"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork.net_beta(disease_beta<span class="op">=</span><span class="va">None</span>, inds<span class="op">=</span><span class="va">None</span>, disease<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb70"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork.net_beta(disease_beta<span class="op">=</span><span class="va">None</span>, inds<span class="op">=</span><span class="va">None</span>, disease<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Compute per-edge transmission probability accounting for number of sex acts.</p>
 </section>
 </section>
 </section>
 <section id="starsim.networks.StaticNet" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.StaticNet">StaticNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb69"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a>networks.StaticNet(graph<span class="op">=</span><span class="va">None</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb71"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a>networks.StaticNet(graph<span class="op">=</span><span class="va">None</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A network class of static partnerships converted from a networkx graph. There’s no formation of new partnerships and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.</p>
 <p>If “seed=True” is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG. The parameter “n” is supplied automatically to be equal to n_agents.</p>
 <section id="examples-4" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-4">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb70"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate a networkx graph and pass to Starsim</span></span>
-<span id="cb70-2"><a href="#cb70-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> networkx <span class="im">as</span> nx</span>
-<span id="cb70-3"><a href="#cb70-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb70-4"><a href="#cb70-4" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> nx.scale_free_graph(n<span class="op">=</span><span class="dv">10000</span>)</span>
-<span id="cb70-5"><a href="#cb70-5" aria-hidden="true" tabindex="-1"></a>ss.StaticNet(graph<span class="op">=</span>g)</span>
-<span id="cb70-6"><a href="#cb70-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb70-7"><a href="#cb70-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Pass a networkx graph generator to Starsim</span></span>
-<span id="cb70-8"><a href="#cb70-8" aria-hidden="true" tabindex="-1"></a>ss.StaticNet(graph<span class="op">=</span>nx.erdos_renyi_graph, p<span class="op">=</span><span class="fl">0.0001</span>, seed<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-
-
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb72"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb72-1"><a href="#cb72-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate a networkx graph and pass to Starsim</span></span>
+<span id="cb72-2"><a href="#cb72-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> networkx <span class="im">as</span> nx</span>
+<span id="cb72-3"><a href="#cb72-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb72-4"><a href="#cb72-4" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> nx.scale_free_graph(n<span class="op">=</span><span class="dv">10000</span>)</span>
+<span id="cb72-5"><a href="#cb72-5" aria-hidden="true" tabindex="-1"></a>ss.StaticNet(graph<span class="op">=</span>g)</span>
+<span id="cb72-6"><a href="#cb72-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-7"><a href="#cb72-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Pass a networkx graph generator to Starsim</span></span>
+<span id="cb72-8"><a href="#cb72-8" aria-hidden="true" tabindex="-1"></a>ss.StaticNet(graph<span class="op">=</span>nx.erdos_renyi_graph, p<span class="op">=</span><span class="fl">0.0001</span>, seed<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
+</section>
+</section>
+<section id="functions" class="level2">
+<h2 class="anchored" data-anchor-id="functions">Functions</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.networks.fisher_yates_shuffle">fisher_yates_shuffle</a></td>
+<td>In-place Fisher-Yates shuffle using precomputed uniform random values.</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.networks.fisher_yates_shuffle" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.networks.fisher_yates_shuffle">fisher_yates_shuffle</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb73"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb73-1"><a href="#cb73-1" aria-hidden="true" tabindex="-1"></a>networks.fisher_yates_shuffle(arr, randvals)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>In-place Fisher-Yates shuffle using precomputed uniform random values.</p>
+<p>Equivalent to <a href="https://numpy.org/doc/stable/reference/random/generated/numpy.random.permutation.html#np.random.permutation" title="1"><code>np.random.permutation</code></a> (a uniform random shuffle), but ~1.3x faster for the large arrays used in network generation. <code>randvals</code> should be uniform on [0, 1) and the same length as <code>arr</code>.</p>
+<p>Note: <code>randvals</code> is consumed in order (<code>randvals[k]</code> for the k-th swap), not indexed by position. This means that changing the array length (e.g.&nbsp;adding one agent) shifts every swap, so the shuffle is <em>not</em> random-number safe – matching <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a>’s intended behavior (see <a href="../api/networks.html#starsim.networks.RandomSafeNet" title="0"><code>ss.RandomSafeNet</code></a> for the CRN-safe version).</p>
+
+
 </section>
 </section>
 </section>
@@ -2642,7 +2710,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.4.0 (2026-06-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.0 (2026-07-05).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

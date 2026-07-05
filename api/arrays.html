@@ -646,6 +646,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#functions" id="toc-functions" class="nav-link" data-scroll-target="#functions">Functions</a>
   <ul>
   <li><a href="#starsim.arrays.nb_indexer" id="toc-starsim.arrays.nb_indexer" class="nav-link" data-scroll-target="#starsim.arrays.nb_indexer">nb_indexer</a></li>
+  <li><a href="#starsim.arrays.nb_true" id="toc-starsim.arrays.nb_true" class="nav-link" data-scroll-target="#starsim.arrays.nb_true">nb_true</a></li>
   <li><a href="#starsim.arrays.np_indexer" id="toc-starsim.arrays.np_indexer" class="nav-link" data-scroll-target="#starsim.arrays.np_indexer">np_indexer</a></li>
   </ul></li>
   </ul></li>
@@ -1385,6 +1386,10 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
 <td>Roughly 30% faster than NumPy for large numbers of indices (&gt;10k)</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.arrays.nb_true">nb_true</a></td>
+<td>Return the UIDs where <code>bool(vals[k])</code> equals <code>want</code> (True for true(), False for false()).</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.arrays.np_indexer">np_indexer</a></td>
 <td>Much faster than Numba for small numbers of indices (&lt;1k)</td>
 </tr>
@@ -1395,9 +1400,15 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>arrays.nb_indexer(arr, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Roughly 30% faster than NumPy for large numbers of indices (&gt;10k)</p>
 </section>
+<section id="starsim.arrays.nb_true" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.arrays.nb_true">nb_true</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>arrays.nb_true(auids, vals, want)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return the UIDs where <code>bool(vals[k])</code> equals <code>want</code> (True for true(), False for false()).</p>
+<p>~4-5x faster than <code>auids[vals.astype(bool)]</code> for large arrays: a single branchless pass with no intermediate mask allocation. <code>vals[k] != 0</code> matches <code>.astype(bool)</code> for every dtype, including NaN floats (NaN != 0 is True, i.e.&nbsp;NaN is truthy), so results are identical.</p>
+</section>
 <section id="starsim.arrays.np_indexer" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.arrays.np_indexer">np_indexer</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>arrays.np_indexer(arr, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>arrays.np_indexer(arr, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Much faster than Numba for small numbers of indices (&lt;1k)</p>
 
 
@@ -1838,7 +1849,7 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.4.0 (2026-06-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.0 (2026-07-05).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

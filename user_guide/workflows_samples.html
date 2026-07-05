@@ -755,7 +755,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="alert alert-block alert-info">
 These classes are particularly designed to facilitate working with tens of thousands of simulation runs, where other approaches such as those based on the MultiSim class may not be feasible.
 </div>
-<div id="b7d5589d" class="cell" data-execution_count="1">
+<div id="985de48f" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -767,7 +767,7 @@ These classes are particularly designed to facilitate working with tens of thous
 <section id="obtaining-simulation-output" class="level2">
 <h2 class="anchored" data-anchor-id="obtaining-simulation-output">Obtaining simulation output</h2>
 <p>To demonstrate usage of this class, we will first consider constructing the kinds of output that the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class stores. We begin by running a basic simulation using the SIR model:</p>
-<div id="e5ddabed" class="cell" data-execution_count="2">
+<div id="8d3e2ae5" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">5000</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.ndict(ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>)))</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
@@ -778,15 +778,15 @@ These classes are particularly designed to facilitate working with tens of thous
 
   Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.25 s)  ••••———————————————— 22%
+  Running 2010.01.01 (10/51) (0.15 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.29 s)  ••••••••———————————— 41%
+  Running 2020.01.01 (20/51) (0.28 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.32 s)  ••••••••••••———————— 61%
+  Running 2030.01.01 (30/51) (0.42 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.36 s)  ••••••••••••••••———— 80%
+  Running 2040.01.01 (40/51) (0.55 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.39 s)  •••••••••••••••••••• 100%
+  Running 2050.01.01 (50/51) (0.68 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 </div>
@@ -801,7 +801,7 @@ These classes are particularly designed to facilitate working with tens of thous
 <div class="alert alert-block alert-info">
 In real-world use, it is often helpful to write your own function to extract a dataframe of simulation outputs, because typically some of the outputs need to be extracted from custom Analyzers.
 </div>
-<div id="50679ea8" class="cell" data-execution_count="3">
+<div id="1f4eb4ab" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>sim.to_df()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="3">
 <div>
@@ -830,15 +830,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>2000-01-01</td>
-<td>12616.0</td>
-<td>4937.0</td>
-<td>63.0</td>
+<td>12575.0</td>
+<td>4919.0</td>
+<td>81.0</td>
 <td>0.0</td>
-<td>0.012600</td>
-<td>15.0</td>
-<td>15.0</td>
+<td>0.016200</td>
+<td>21.0</td>
+<td>21.0</td>
 <td>5000.0</td>
-<td>2460.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -846,15 +846,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>2001-01-01</td>
-<td>12598.0</td>
-<td>4905.0</td>
-<td>95.0</td>
+<td>12478.0</td>
+<td>4893.0</td>
+<td>107.0</td>
 <td>0.0</td>
-<td>0.019000</td>
-<td>32.0</td>
+<td>0.021400</td>
+<td>26.0</td>
 <td>47.0</td>
 <td>5000.0</td>
-<td>2460.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -862,15 +862,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
 <td>2002-01-01</td>
-<td>12436.0</td>
-<td>4862.0</td>
-<td>138.0</td>
+<td>12667.0</td>
+<td>4845.0</td>
+<td>155.0</td>
 <td>0.0</td>
-<td>0.027600</td>
-<td>43.0</td>
-<td>90.0</td>
+<td>0.031000</td>
+<td>48.0</td>
+<td>95.0</td>
 <td>5000.0</td>
-<td>2460.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -878,15 +878,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
 <td>2003-01-01</td>
-<td>12570.0</td>
-<td>4795.0</td>
-<td>205.0</td>
+<td>12440.0</td>
+<td>4781.0</td>
+<td>219.0</td>
 <td>0.0</td>
-<td>0.041000</td>
-<td>67.0</td>
-<td>157.0</td>
+<td>0.043800</td>
+<td>64.0</td>
+<td>159.0</td>
 <td>5000.0</td>
-<td>2460.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -894,15 +894,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
 <td>2004-01-01</td>
-<td>12525.0</td>
-<td>4699.0</td>
-<td>301.0</td>
+<td>12285.0</td>
+<td>4680.0</td>
+<td>320.0</td>
 <td>0.0</td>
-<td>0.060200</td>
-<td>96.0</td>
-<td>253.0</td>
+<td>0.064000</td>
+<td>101.0</td>
+<td>260.0</td>
 <td>5000.0</td>
-<td>2460.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -910,63 +910,63 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="even">
 <th data-quarto-table-cell-role="th">5</th>
 <td>2005-01-01</td>
-<td>12456.0</td>
-<td>4555.0</td>
-<td>434.0</td>
-<td>11.0</td>
-<td>0.086800</td>
-<td>144.0</td>
-<td>397.0</td>
-<td>5000.0</td>
-<td>2460.0</td>
-<td>0.0</td>
+<td>12428.0</td>
+<td>4551.0</td>
+<td>443.0</td>
+<td>5.0</td>
+<td>0.088600</td>
+<td>129.0</td>
+<td>389.0</td>
+<td>4999.0</td>
+<td>2465.0</td>
+<td>1.0</td>
 <td>0.0</td>
 <td>0.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">6</th>
 <td>2006-01-01</td>
-<td>12662.0</td>
-<td>4373.0</td>
-<td>587.0</td>
-<td>40.0</td>
-<td>0.117400</td>
-<td>182.0</td>
-<td>579.0</td>
-<td>5000.0</td>
-<td>2460.0</td>
+<td>12546.0</td>
+<td>4389.0</td>
+<td>557.0</td>
+<td>53.0</td>
+<td>0.111422</td>
+<td>162.0</td>
+<td>551.0</td>
+<td>4999.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>0.0</td>
+<td>1.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">7</th>
 <td>2007-01-01</td>
-<td>12486.0</td>
-<td>4142.0</td>
-<td>777.0</td>
-<td>80.0</td>
-<td>0.155400</td>
-<td>231.0</td>
-<td>810.0</td>
+<td>12403.0</td>
+<td>4171.0</td>
+<td>737.0</td>
+<td>91.0</td>
+<td>0.147429</td>
+<td>218.0</td>
+<td>769.0</td>
 <td>4999.0</td>
-<td>2460.0</td>
+<td>2465.0</td>
+<td>0.0</td>
+<td>0.0</td>
 <td>1.0</td>
-<td>0.0</td>
-<td>0.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">8</th>
 <td>2008-01-01</td>
-<td>12516.0</td>
-<td>3843.0</td>
-<td>1034.0</td>
-<td>122.0</td>
-<td>0.206841</td>
-<td>299.0</td>
-<td>1109.0</td>
+<td>12432.0</td>
+<td>3908.0</td>
+<td>962.0</td>
+<td>129.0</td>
+<td>0.192438</td>
+<td>263.0</td>
+<td>1032.0</td>
 <td>4999.0</td>
-<td>2459.0</td>
+<td>2465.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>1.0</td>
@@ -974,15 +974,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <td>2009-01-01</td>
-<td>12412.0</td>
-<td>3524.0</td>
-<td>1290.0</td>
-<td>184.0</td>
-<td>0.258052</td>
-<td>319.0</td>
-<td>1428.0</td>
+<td>12367.0</td>
+<td>3599.0</td>
+<td>1209.0</td>
+<td>190.0</td>
+<td>0.241848</td>
+<td>309.0</td>
+<td>1341.0</td>
 <td>4998.0</td>
-<td>2459.0</td>
+<td>2465.0</td>
 <td>1.0</td>
 <td>0.0</td>
 <td>1.0</td>
@@ -990,271 +990,271 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
 <td>2010-01-01</td>
-<td>12658.0</td>
-<td>3128.0</td>
-<td>1597.0</td>
-<td>272.0</td>
-<td>0.319528</td>
-<td>396.0</td>
-<td>1824.0</td>
-<td>4997.0</td>
-<td>2458.0</td>
-<td>1.0</td>
+<td>12497.0</td>
+<td>3243.0</td>
+<td>1471.0</td>
+<td>284.0</td>
+<td>0.294318</td>
+<td>356.0</td>
+<td>1697.0</td>
+<td>4998.0</td>
+<td>2465.0</td>
+<td>0.0</td>
 <td>0.0</td>
 <td>2.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <td>2011-01-01</td>
-<td>12534.0</td>
-<td>2682.0</td>
-<td>1921.0</td>
-<td>393.0</td>
-<td>0.384431</td>
-<td>446.0</td>
-<td>2270.0</td>
+<td>12387.0</td>
+<td>2841.0</td>
+<td>1752.0</td>
+<td>403.0</td>
+<td>0.350540</td>
+<td>402.0</td>
+<td>2099.0</td>
 <td>4996.0</td>
-<td>2458.0</td>
-<td>1.0</td>
+<td>2465.0</td>
+<td>2.0</td>
 <td>0.0</td>
-<td>3.0</td>
+<td>2.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
 <td>2012-01-01</td>
-<td>12634.0</td>
-<td>2276.0</td>
-<td>2159.0</td>
-<td>559.0</td>
-<td>0.432146</td>
-<td>406.0</td>
-<td>2676.0</td>
-<td>4994.0</td>
-<td>2458.0</td>
-<td>2.0</td>
+<td>12471.0</td>
+<td>2411.0</td>
+<td>2050.0</td>
+<td>535.0</td>
+<td>0.410328</td>
+<td>430.0</td>
+<td>2529.0</td>
+<td>4996.0</td>
+<td>2463.0</td>
+<td>0.0</td>
 <td>0.0</td>
 <td>4.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
 <td>2013-01-01</td>
-<td>12498.0</td>
-<td>1882.0</td>
-<td>2346.0</td>
-<td>766.0</td>
-<td>0.469764</td>
-<td>394.0</td>
-<td>3070.0</td>
+<td>12544.0</td>
+<td>2042.0</td>
+<td>2215.0</td>
+<td>737.0</td>
+<td>0.443355</td>
+<td>369.0</td>
+<td>2898.0</td>
 <td>4994.0</td>
-<td>2457.0</td>
+<td>2463.0</td>
+<td>2.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>6.0</td>
+<td>4.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">14</th>
 <td>2014-01-01</td>
-<td>12401.0</td>
-<td>1523.0</td>
-<td>2456.0</td>
-<td>1014.0</td>
-<td>0.491790</td>
-<td>359.0</td>
-<td>3429.0</td>
-<td>4993.0</td>
-<td>2457.0</td>
-<td>1.0</td>
+<td>12675.0</td>
+<td>1707.0</td>
+<td>2317.0</td>
+<td>968.0</td>
+<td>0.463957</td>
+<td>335.0</td>
+<td>3233.0</td>
+<td>4992.0</td>
+<td>2461.0</td>
+<td>2.0</td>
 <td>0.0</td>
 <td>6.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">15</th>
 <td>2015-01-01</td>
-<td>12482.0</td>
-<td>1250.0</td>
-<td>2421.0</td>
-<td>1319.0</td>
-<td>0.484879</td>
-<td>273.0</td>
-<td>3702.0</td>
+<td>12478.0</td>
+<td>1415.0</td>
+<td>2328.0</td>
+<td>1247.0</td>
+<td>0.466346</td>
+<td>292.0</td>
+<td>3525.0</td>
 <td>4990.0</td>
-<td>2456.0</td>
-<td>3.0</td>
+<td>2460.0</td>
+<td>2.0</td>
 <td>0.0</td>
-<td>7.0</td>
+<td>8.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">16</th>
 <td>2016-01-01</td>
-<td>12532.0</td>
-<td>1035.0</td>
-<td>2275.0</td>
-<td>1679.0</td>
-<td>0.455912</td>
-<td>215.0</td>
-<td>3917.0</td>
-<td>4989.0</td>
-<td>2454.0</td>
-<td>1.0</td>
+<td>12509.0</td>
+<td>1210.0</td>
+<td>2196.0</td>
+<td>1580.0</td>
+<td>0.440080</td>
+<td>205.0</td>
+<td>3730.0</td>
+<td>4986.0</td>
+<td>2458.0</td>
+<td>4.0</td>
 <td>0.0</td>
 <td>10.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">17</th>
 <td>2017-01-01</td>
-<td>12585.0</td>
-<td>880.0</td>
-<td>2030.0</td>
-<td>2076.0</td>
-<td>0.406895</td>
-<td>155.0</td>
-<td>4072.0</td>
-<td>4986.0</td>
-<td>2453.0</td>
+<td>12256.0</td>
+<td>1016.0</td>
+<td>2014.0</td>
+<td>1953.0</td>
+<td>0.403931</td>
+<td>194.0</td>
+<td>3924.0</td>
+<td>4983.0</td>
+<td>2455.0</td>
 <td>3.0</td>
 <td>0.0</td>
-<td>11.0</td>
+<td>14.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">18</th>
 <td>2018-01-01</td>
-<td>12364.0</td>
-<td>746.0</td>
-<td>1749.0</td>
-<td>2489.0</td>
-<td>0.350782</td>
-<td>134.0</td>
-<td>4206.0</td>
-<td>4984.0</td>
-<td>2452.0</td>
-<td>2.0</td>
+<td>12359.0</td>
+<td>885.0</td>
+<td>1758.0</td>
+<td>2337.0</td>
+<td>0.352800</td>
+<td>131.0</td>
+<td>4055.0</td>
+<td>4980.0</td>
+<td>2453.0</td>
+<td>3.0</td>
 <td>0.0</td>
-<td>14.0</td>
+<td>17.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">19</th>
 <td>2019-01-01</td>
-<td>12565.0</td>
-<td>649.0</td>
-<td>1449.0</td>
-<td>2877.0</td>
-<td>0.290730</td>
-<td>97.0</td>
-<td>4303.0</td>
-<td>4975.0</td>
+<td>12553.0</td>
+<td>773.0</td>
+<td>1493.0</td>
+<td>2711.0</td>
+<td>0.299799</td>
+<td>112.0</td>
+<td>4167.0</td>
+<td>4977.0</td>
 <td>2452.0</td>
-<td>9.0</td>
+<td>3.0</td>
 <td>0.0</td>
-<td>16.0</td>
+<td>20.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">20</th>
 <td>2020-01-01</td>
-<td>12442.0</td>
-<td>573.0</td>
-<td>1159.0</td>
-<td>3241.0</td>
-<td>0.232965</td>
-<td>76.0</td>
-<td>4379.0</td>
+<td>12458.0</td>
+<td>696.0</td>
+<td>1206.0</td>
+<td>3071.0</td>
+<td>0.242315</td>
+<td>77.0</td>
+<td>4244.0</td>
 <td>4973.0</td>
-<td>2451.0</td>
-<td>2.0</td>
+<td>2450.0</td>
+<td>4.0</td>
 <td>0.0</td>
-<td>25.0</td>
+<td>23.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">21</th>
 <td>2021-01-01</td>
-<td>12325.0</td>
-<td>540.0</td>
-<td>868.0</td>
-<td>3559.0</td>
-<td>0.174543</td>
-<td>33.0</td>
-<td>4412.0</td>
-<td>4967.0</td>
-<td>2451.0</td>
-<td>6.0</td>
+<td>12411.0</td>
+<td>638.0</td>
+<td>933.0</td>
+<td>3401.0</td>
+<td>0.187613</td>
+<td>58.0</td>
+<td>4302.0</td>
+<td>4972.0</td>
+<td>2447.0</td>
+<td>1.0</td>
 <td>0.0</td>
 <td>27.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">22</th>
 <td>2022-01-01</td>
-<td>12465.0</td>
-<td>505.0</td>
-<td>667.0</td>
-<td>3793.0</td>
-<td>0.134286</td>
-<td>35.0</td>
-<td>4447.0</td>
-<td>4965.0</td>
+<td>12453.0</td>
+<td>600.0</td>
+<td>711.0</td>
+<td>3658.0</td>
+<td>0.143001</td>
+<td>38.0</td>
+<td>4340.0</td>
+<td>4969.0</td>
 <td>2447.0</td>
-<td>2.0</td>
+<td>3.0</td>
 <td>0.0</td>
-<td>33.0</td>
+<td>28.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">23</th>
 <td>2023-01-01</td>
-<td>12490.0</td>
-<td>485.0</td>
-<td>500.0</td>
-<td>3979.0</td>
-<td>0.100705</td>
-<td>20.0</td>
-<td>4467.0</td>
-<td>4964.0</td>
-<td>2446.0</td>
-<td>1.0</td>
+<td>12467.0</td>
+<td>574.0</td>
+<td>548.0</td>
+<td>3845.0</td>
+<td>0.110284</td>
+<td>26.0</td>
+<td>4366.0</td>
+<td>4967.0</td>
+<td>2445.0</td>
+<td>2.0</td>
 <td>0.0</td>
-<td>35.0</td>
+<td>31.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">24</th>
 <td>2024-01-01</td>
-<td>12396.0</td>
-<td>479.0</td>
-<td>347.0</td>
-<td>4138.0</td>
-<td>0.069903</td>
-<td>6.0</td>
-<td>4473.0</td>
-<td>4964.0</td>
-<td>2445.0</td>
+<td>12426.0</td>
+<td>551.0</td>
+<td>423.0</td>
+<td>3989.0</td>
+<td>0.085162</td>
+<td>23.0</td>
+<td>4389.0</td>
+<td>4963.0</td>
+<td>2443.0</td>
+<td>4.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>36.0</td>
+<td>33.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">25</th>
 <td>2025-01-01</td>
-<td>12400.0</td>
-<td>468.0</td>
-<td>246.0</td>
-<td>4248.0</td>
-<td>0.049557</td>
-<td>11.0</td>
-<td>4484.0</td>
+<td>12436.0</td>
+<td>539.0</td>
+<td>315.0</td>
+<td>4108.0</td>
+<td>0.063470</td>
+<td>12.0</td>
+<td>4401.0</td>
 <td>4962.0</td>
-<td>2445.0</td>
-<td>2.0</td>
+<td>2441.0</td>
+<td>1.0</td>
 <td>0.0</td>
-<td>36.0</td>
+<td>37.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">26</th>
 <td>2026-01-01</td>
-<td>12420.0</td>
-<td>460.0</td>
-<td>175.0</td>
-<td>4326.0</td>
-<td>0.035268</td>
-<td>8.0</td>
-<td>4492.0</td>
+<td>12451.0</td>
+<td>532.0</td>
+<td>212.0</td>
+<td>4217.0</td>
+<td>0.042725</td>
+<td>7.0</td>
+<td>4408.0</td>
 <td>4961.0</td>
-<td>2444.0</td>
+<td>2440.0</td>
 <td>1.0</td>
 <td>0.0</td>
 <td>38.0</td>
@@ -1262,15 +1262,15 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="even">
 <th data-quarto-table-cell-role="th">27</th>
 <td>2027-01-01</td>
-<td>12511.0</td>
-<td>453.0</td>
-<td>116.0</td>
-<td>4392.0</td>
-<td>0.023382</td>
-<td>7.0</td>
-<td>4499.0</td>
+<td>12383.0</td>
+<td>523.0</td>
+<td>149.0</td>
+<td>4289.0</td>
+<td>0.030034</td>
+<td>9.0</td>
+<td>4417.0</td>
 <td>4961.0</td>
-<td>2443.0</td>
+<td>2440.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>39.0</td>
@@ -1278,370 +1278,370 @@ In real-world use, it is often helpful to write your own function to extract a d
 <tr class="odd">
 <th data-quarto-table-cell-role="th">28</th>
 <td>2028-01-01</td>
-<td>12410.0</td>
-<td>448.0</td>
-<td>82.0</td>
-<td>4431.0</td>
-<td>0.016529</td>
-<td>5.0</td>
-<td>4504.0</td>
-<td>4961.0</td>
-<td>2443.0</td>
-<td>0.0</td>
+<td>12286.0</td>
+<td>517.0</td>
+<td>107.0</td>
+<td>4336.0</td>
+<td>0.021568</td>
+<td>6.0</td>
+<td>4423.0</td>
+<td>4960.0</td>
+<td>2440.0</td>
+<td>1.0</td>
 <td>0.0</td>
 <td>39.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">29</th>
 <td>2029-01-01</td>
-<td>12492.0</td>
-<td>447.0</td>
-<td>56.0</td>
-<td>4458.0</td>
-<td>0.011288</td>
-<td>1.0</td>
-<td>4505.0</td>
-<td>4961.0</td>
-<td>2443.0</td>
+<td>12391.0</td>
+<td>510.0</td>
+<td>83.0</td>
+<td>4367.0</td>
+<td>0.016734</td>
+<td>7.0</td>
+<td>4430.0</td>
+<td>4960.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>39.0</td>
+<td>40.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">30</th>
 <td>2030-01-01</td>
-<td>12537.0</td>
-<td>445.0</td>
-<td>40.0</td>
-<td>4474.0</td>
-<td>0.008063</td>
-<td>2.0</td>
-<td>4507.0</td>
-<td>4959.0</td>
-<td>2443.0</td>
-<td>2.0</td>
+<td>12515.0</td>
+<td>509.0</td>
+<td>55.0</td>
+<td>4396.0</td>
+<td>0.011089</td>
+<td>1.0</td>
+<td>4431.0</td>
+<td>4960.0</td>
+<td>2439.0</td>
 <td>0.0</td>
-<td>39.0</td>
+<td>0.0</td>
+<td>40.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">31</th>
 <td>2031-01-01</td>
-<td>12199.0</td>
-<td>443.0</td>
-<td>31.0</td>
-<td>4484.0</td>
-<td>0.006251</td>
-<td>2.0</td>
-<td>4509.0</td>
-<td>4958.0</td>
-<td>2442.0</td>
+<td>12456.0</td>
+<td>508.0</td>
+<td>40.0</td>
+<td>4411.0</td>
+<td>0.008065</td>
+<td>1.0</td>
+<td>4432.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>1.0</td>
 <td>0.0</td>
-<td>41.0</td>
+<td>40.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">32</th>
 <td>2032-01-01</td>
-<td>12290.0</td>
-<td>440.0</td>
-<td>24.0</td>
-<td>4494.0</td>
-<td>0.004841</td>
+<td>12435.0</td>
+<td>505.0</td>
+<td>32.0</td>
+<td>4422.0</td>
+<td>0.006453</td>
 <td>3.0</td>
-<td>4512.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4435.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">33</th>
 <td>2033-01-01</td>
-<td>12387.0</td>
-<td>439.0</td>
-<td>20.0</td>
-<td>4499.0</td>
-<td>0.004034</td>
+<td>12410.0</td>
+<td>504.0</td>
+<td>26.0</td>
+<td>4429.0</td>
+<td>0.005243</td>
 <td>1.0</td>
-<td>4513.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4436.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">34</th>
 <td>2034-01-01</td>
-<td>12299.0</td>
-<td>438.0</td>
-<td>16.0</td>
-<td>4504.0</td>
-<td>0.003227</td>
-<td>1.0</td>
-<td>4514.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>12457.0</td>
+<td>504.0</td>
+<td>15.0</td>
+<td>4440.0</td>
+<td>0.003025</td>
+<td>0.0</td>
+<td>4436.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">35</th>
 <td>2035-01-01</td>
-<td>12533.0</td>
-<td>438.0</td>
+<td>12489.0</td>
+<td>503.0</td>
 <td>11.0</td>
-<td>4509.0</td>
-<td>0.002219</td>
+<td>4445.0</td>
+<td>0.002218</td>
+<td>1.0</td>
+<td>4437.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
-<td>4514.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">36</th>
 <td>2036-01-01</td>
-<td>12577.0</td>
-<td>437.0</td>
-<td>9.0</td>
-<td>4512.0</td>
-<td>0.001815</td>
-<td>1.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>12425.0</td>
+<td>503.0</td>
+<td>8.0</td>
+<td>4448.0</td>
+<td>0.001613</td>
+<td>0.0</td>
+<td>4437.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">37</th>
 <td>2037-01-01</td>
-<td>12405.0</td>
-<td>437.0</td>
-<td>6.0</td>
-<td>4515.0</td>
-<td>0.001210</td>
+<td>12479.0</td>
+<td>501.0</td>
+<td>8.0</td>
+<td>4450.0</td>
+<td>0.001613</td>
+<td>2.0</td>
+<td>4439.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">38</th>
 <td>2038-01-01</td>
-<td>12471.0</td>
-<td>437.0</td>
-<td>3.0</td>
-<td>4518.0</td>
-<td>0.000605</td>
+<td>12456.0</td>
+<td>500.0</td>
+<td>6.0</td>
+<td>4453.0</td>
+<td>0.001210</td>
+<td>1.0</td>
+<td>4440.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">39</th>
 <td>2039-01-01</td>
-<td>12483.0</td>
-<td>437.0</td>
-<td>3.0</td>
-<td>4518.0</td>
-<td>0.000605</td>
+<td>12365.0</td>
+<td>499.0</td>
+<td>7.0</td>
+<td>4453.0</td>
+<td>0.001412</td>
+<td>1.0</td>
+<td>4441.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">40</th>
 <td>2040-01-01</td>
-<td>12359.0</td>
-<td>437.0</td>
-<td>1.0</td>
-<td>4520.0</td>
-<td>0.000202</td>
+<td>12415.0</td>
+<td>499.0</td>
+<td>5.0</td>
+<td>4455.0</td>
+<td>0.001008</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4441.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">41</th>
 <td>2041-01-01</td>
-<td>12419.0</td>
-<td>437.0</td>
-<td>1.0</td>
-<td>4520.0</td>
-<td>0.000202</td>
+<td>12299.0</td>
+<td>497.0</td>
+<td>7.0</td>
+<td>4455.0</td>
+<td>0.001412</td>
+<td>2.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
 <td>0.0</td>
-<td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">42</th>
 <td>2042-01-01</td>
-<td>12242.0</td>
-<td>437.0</td>
-<td>1.0</td>
-<td>4520.0</td>
-<td>0.000202</td>
+<td>12344.0</td>
+<td>497.0</td>
+<td>7.0</td>
+<td>4455.0</td>
+<td>0.001412</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">43</th>
 <td>2043-01-01</td>
-<td>12449.0</td>
-<td>437.0</td>
+<td>12433.0</td>
+<td>497.0</td>
+<td>5.0</td>
+<td>4457.0</td>
+<td>0.001008</td>
 <td>0.0</td>
-<td>4521.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">44</th>
 <td>2044-01-01</td>
-<td>12400.0</td>
-<td>437.0</td>
+<td>12316.0</td>
+<td>497.0</td>
+<td>2.0</td>
+<td>4460.0</td>
+<td>0.000403</td>
 <td>0.0</td>
-<td>4521.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">45</th>
 <td>2045-01-01</td>
-<td>12324.0</td>
-<td>437.0</td>
+<td>12278.0</td>
+<td>497.0</td>
+<td>2.0</td>
+<td>4460.0</td>
+<td>0.000403</td>
 <td>0.0</td>
-<td>4521.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">46</th>
 <td>2046-01-01</td>
-<td>12445.0</td>
-<td>437.0</td>
+<td>12370.0</td>
+<td>497.0</td>
+<td>1.0</td>
+<td>4461.0</td>
+<td>0.000202</td>
 <td>0.0</td>
-<td>4521.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">47</th>
 <td>2047-01-01</td>
-<td>12368.0</td>
-<td>437.0</td>
+<td>12379.0</td>
+<td>497.0</td>
 <td>0.0</td>
-<td>4521.0</td>
+<td>4462.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">48</th>
 <td>2048-01-01</td>
-<td>12479.0</td>
-<td>437.0</td>
+<td>12313.0</td>
+<td>497.0</td>
 <td>0.0</td>
-<td>4521.0</td>
+<td>4462.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">49</th>
 <td>2049-01-01</td>
-<td>12304.0</td>
-<td>437.0</td>
+<td>12439.0</td>
+<td>497.0</td>
 <td>0.0</td>
-<td>4521.0</td>
+<td>4462.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">50</th>
 <td>2050-01-01</td>
-<td>12485.0</td>
-<td>437.0</td>
+<td>12427.0</td>
+<td>497.0</td>
 <td>0.0</td>
-<td>4521.0</td>
+<td>4462.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>4515.0</td>
-<td>4958.0</td>
-<td>2441.0</td>
+<td>4443.0</td>
+<td>4959.0</td>
+<td>2439.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>42.0</td>
+<td>41.0</td>
 </tr>
 </tbody>
 </table>
@@ -1653,7 +1653,7 @@ In real-world use, it is often helpful to write your own function to extract a d
 <section id="scalarsummary-outputs" class="level3">
 <h3 class="anchored" data-anchor-id="scalarsummary-outputs">Scalar/summary outputs</h3>
 <p>We can also consider extracting a summary dictionary of scalar values. For example:</p>
-<div id="1682022b" class="cell" data-execution_count="4">
+<div id="5a2520b4" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> {}</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">'seed'</span>] <span class="op">=</span> sim.pars[<span class="st">'rand_seed'</span>]</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">'p_death'</span>] <span class="op">=</span> sim.diseases[<span class="dv">0</span>].pars.p_death.pars.p</span>
@@ -1661,7 +1661,7 @@ In real-world use, it is often helpful to write your own function to extract a d
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">'cum_deaths'</span>] <span class="op">=</span> <span class="bu">sum</span>(sim.results.new_deaths)</span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="4">
-<pre><code>{'seed': 0, 'p_death': 0.01, 'cum_infections': 4515.0, 'cum_deaths': 42.0}</code></pre>
+<pre><code>{'seed': 0, 'p_death': 0.01, 'cum_infections': 4443.0, 'cum_deaths': 41.0}</code></pre>
 </div>
 </div>
 <div class="alert alert-warning alert-info">
@@ -1671,7 +1671,7 @@ Notice how in the example above, the summary contains both simulation inputs (se
 <section id="running-the-model" class="level3">
 <h3 class="anchored" data-anchor-id="running-the-model">Running the model</h3>
 <p>For usage at scale, the steps of creating a simulation, running it and producing these outputs are usually encapsulated in functions:</p>
-<div id="bda1a5de" class="cell" data-execution_count="5">
+<div id="b8d87bb8" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_sim(seed, p_death):</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">2000</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>))</span>
@@ -1697,16 +1697,16 @@ Notice how in the example above, the summary contains both simulation inputs (se
 The functions above could be combined into a single function. However, in real world usage it is often convenient to be able to construct a simulation independently of running it (e.g., for diagnostic purposes or to allow running the sim in a range of different ways). The suggested structure above, with a <code>get_sim()</code> function and a <code>run_sim()</code> function are recommended as standard practice.
 </div>
 <p>Now running a simulation for a given beta/seed value and returning the processed outputs can be done in a single step:</p>
-<div id="4406e97e" class="cell" data-execution_count="6">
+<div id="21ee0275" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Scalar output</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>df, summary <span class="op">=</span> run_sim(<span class="dv">0</span>, <span class="fl">0.2</span>)<span class="op">;</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="6">
-<pre><code>{'seed': 0, 'p_death': 0.2, 'cum_infections': 1840.0, 'cum_deaths': 352.0}</code></pre>
+<pre><code>{'seed': 0, 'p_death': 0.2, 'cum_infections': 1855.0, 'cum_deaths': 415.0}</code></pre>
 </div>
 </div>
 <p>We can produce all of the samples associated with a scenario by iterating over the input seed values. This is being done in a basic loop here, but could be done in more sophistical ways to leverage parallel computing (e.g., with <code>sc.parallelize</code> for single host parallelization, or with <code>celery</code> for distributed computation).</p>
-<div id="e295217c" class="cell" data-execution_count="7">
+<div id="4fbb5371" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run a collection of sims</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">20</span></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> np.arange(n)</span>
@@ -1717,7 +1717,7 @@ The functions above could be combined into a single function. However, in real w
 <section id="saving-and-loading-the-samples" class="level2">
 <h2 class="anchored" data-anchor-id="saving-and-loading-the-samples">Saving and loading the samples</h2>
 <p>We have now produced simulation outputs (dataframes and summary statistics) for 20 simulation runs. The <code>outputs</code> here are a list of tuples, containing the dataframe and dictionary outputs for each sample. This list can be passed to the <code>cvv.Samples</code> class to produce a single compressed file on disk:</p>
-<div id="2253d158" class="cell" data-execution_count="8">
+<div id="bf919fe2" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>resultsdir <span class="op">=</span> Path(<span class="st">'results'</span>)</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>resultsdir.mkdir(exist_ok<span class="op">=</span><span class="va">True</span>, parents<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>ss.Samples.new(resultsdir, outputs, identifiers<span class="op">=</span>[<span class="st">"p_death"</span>])</span>
@@ -1734,7 +1734,7 @@ The functions above could be combined into a single function. However, in real w
 The <code>Samples</code> file internally contains metadata recording the identifiers. When <code>Samples</code> are accessed using the <code>Dataset</code> class, they can be accessed via the internal metadata. Therefore for a typical workflow, the file name largely doesn’t matter, and it usually doesn’t need to be manually specified.
 </div>
 <p>The saved file can be loaded and accessed via the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class. <strong>Importantly, individual files can be extracted from a <code>.zip</code> file without decompressing the entire archive</strong>. This means that loading the summary dataframe and using it to selectively load the full outputs for individual runs can be done efficiently. For example, loading retrieving a single result from a <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> file would take a similar amount of time regardless of whether the file contained 10 samples or 100000 samples.</p>
-<div id="51780b9c" class="cell" data-execution_count="9">
+<div id="cfda63a4" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the samples</span></span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>)</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>res.summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1761,122 +1761,122 @@ The <code>Samples</code> file internally contains metadata recording the identif
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1840.0</td>
-<td>352.0</td>
+<td>1855.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1855.0</td>
-<td>381.0</td>
+<td>1845.0</td>
+<td>366.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1830.0</td>
-<td>351.0</td>
+<td>1828.0</td>
+<td>343.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1826.0</td>
-<td>344.0</td>
+<td>1812.0</td>
+<td>361.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1861.0</td>
-<td>370.0</td>
+<td>1863.0</td>
+<td>352.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">5</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1860.0</td>
-<td>384.0</td>
+<td>1878.0</td>
+<td>394.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">6</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1853.0</td>
-<td>374.0</td>
+<td>1845.0</td>
+<td>385.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">7</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1860.0</td>
-<td>361.0</td>
+<td>1851.0</td>
+<td>374.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">8</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1855.0</td>
-<td>369.0</td>
+<td>1824.0</td>
+<td>351.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1835.0</td>
-<td>362.0</td>
+<td>1850.0</td>
+<td>376.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1832.0</td>
-<td>368.0</td>
+<td>1853.0</td>
+<td>372.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1848.0</td>
-<td>368.0</td>
+<td>1860.0</td>
+<td>347.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1851.0</td>
-<td>396.0</td>
+<td>1874.0</td>
+<td>381.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1826.0</td>
-<td>338.0</td>
+<td>1820.0</td>
+<td>382.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">14</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1857.0</td>
-<td>366.0</td>
+<td>1848.0</td>
+<td>367.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">15</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1814.0</td>
-<td>360.0</td>
+<td>1867.0</td>
+<td>352.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">16</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1817.0</td>
-<td>356.0</td>
+<td>1832.0</td>
+<td>369.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">17</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1863.0</td>
-<td>375.0</td>
+<td>1861.0</td>
+<td>394.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">18</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1838.0</td>
-<td>387.0</td>
+<td>1835.0</td>
+<td>362.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">19</th>
 <th data-quarto-table-cell-role="th">0.2</th>
-<td>1872.0</td>
-<td>388.0</td>
+<td>1833.0</td>
+<td>380.0</td>
 </tr>
 </tbody>
 </table>
@@ -1885,35 +1885,35 @@ The <code>Samples</code> file internally contains metadata recording the identif
 </div>
 </div>
 <p>When the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> file was created, a dictionary of scalars was provided for each result. These are automatically used to populate a ‘summary’ dataframe, where each identifier (and the seed) are used as the index, and the remaining keys appear as columns, as shown above. As a shortcut, columns of the summary dataframe can be accessed by indexing the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object directly, without having to access the <code>.summary</code> attribute e.g.,</p>
-<div id="1a83122f" class="cell" data-execution_count="10">
+<div id="a6f43109" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>res[<span class="st">'cum_infections'</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="10">
 <pre><code>seed  p_death
-0     0.2        1840.0
-1     0.2        1855.0
-2     0.2        1830.0
-3     0.2        1826.0
-4     0.2        1861.0
-5     0.2        1860.0
-6     0.2        1853.0
-7     0.2        1860.0
-8     0.2        1855.0
-9     0.2        1835.0
-10    0.2        1832.0
-11    0.2        1848.0
-12    0.2        1851.0
-13    0.2        1826.0
-14    0.2        1857.0
-15    0.2        1814.0
-16    0.2        1817.0
-17    0.2        1863.0
-18    0.2        1838.0
-19    0.2        1872.0
+0     0.2        1855.0
+1     0.2        1845.0
+2     0.2        1828.0
+3     0.2        1812.0
+4     0.2        1863.0
+5     0.2        1878.0
+6     0.2        1845.0
+7     0.2        1851.0
+8     0.2        1824.0
+9     0.2        1850.0
+10    0.2        1853.0
+11    0.2        1860.0
+12    0.2        1874.0
+13    0.2        1820.0
+14    0.2        1848.0
+15    0.2        1867.0
+16    0.2        1832.0
+17    0.2        1861.0
+18    0.2        1835.0
+19    0.2        1833.0
 Name: cum_infections, dtype: float64</code></pre>
 </div>
 </div>
 <p>Each simulation is uniquely identified by its seed, and the time series dataframe for each simulation can be accessed by indexing the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object with the seed:</p>
-<div id="9dedb544" class="cell" data-execution_count="11">
+<div id="a8c7429b" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="11">
 <div>
@@ -1958,15 +1958,15 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2000-01-01</th>
 <td>0</td>
-<td>5025.0</td>
-<td>1975.0</td>
-<td>25.0</td>
+<td>5078.0</td>
+<td>1976.0</td>
+<td>24.0</td>
 <td>0.0</td>
-<td>0.012500</td>
-<td>8.0</td>
-<td>8.0</td>
+<td>0.012000</td>
+<td>7.0</td>
+<td>7.0</td>
 <td>2000.0</td>
-<td>983.0</td>
+<td>996.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -1974,15 +1974,15 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2001-01-01</th>
 <td>1</td>
-<td>5065.0</td>
-<td>1964.0</td>
-<td>36.0</td>
+<td>5008.0</td>
+<td>1971.0</td>
+<td>29.0</td>
 <td>0.0</td>
-<td>0.018000</td>
-<td>11.0</td>
-<td>19.0</td>
+<td>0.014500</td>
+<td>5.0</td>
+<td>12.0</td>
 <td>2000.0</td>
-<td>983.0</td>
+<td>996.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -1990,15 +1990,15 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2002-01-01</th>
 <td>2</td>
-<td>4991.0</td>
-<td>1943.0</td>
-<td>57.0</td>
+<td>5081.0</td>
+<td>1959.0</td>
+<td>41.0</td>
 <td>0.0</td>
-<td>0.028500</td>
-<td>21.0</td>
-<td>40.0</td>
+<td>0.020500</td>
+<td>12.0</td>
+<td>24.0</td>
 <td>2000.0</td>
-<td>983.0</td>
+<td>996.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -2006,15 +2006,15 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2003-01-01</th>
 <td>3</td>
-<td>5101.0</td>
-<td>1915.0</td>
-<td>85.0</td>
+<td>4907.0</td>
+<td>1929.0</td>
+<td>71.0</td>
 <td>0.0</td>
-<td>0.042500</td>
-<td>28.0</td>
-<td>68.0</td>
+<td>0.035500</td>
+<td>30.0</td>
+<td>54.0</td>
 <td>2000.0</td>
-<td>983.0</td>
+<td>996.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -2022,15 +2022,15 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2004-01-01</th>
 <td>4</td>
-<td>5033.0</td>
-<td>1877.0</td>
-<td>123.0</td>
+<td>4939.0</td>
+<td>1896.0</td>
+<td>104.0</td>
 <td>0.0</td>
-<td>0.061500</td>
-<td>38.0</td>
-<td>106.0</td>
+<td>0.052000</td>
+<td>33.0</td>
+<td>87.0</td>
 <td>2000.0</td>
-<td>983.0</td>
+<td>996.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -2038,15 +2038,15 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2005-01-01</th>
 <td>5</td>
-<td>4916.0</td>
-<td>1838.0</td>
-<td>158.0</td>
-<td>4.0</td>
-<td>0.079000</td>
-<td>39.0</td>
-<td>145.0</td>
+<td>4954.0</td>
+<td>1861.0</td>
+<td>137.0</td>
+<td>2.0</td>
+<td>0.068500</td>
+<td>35.0</td>
+<td>122.0</td>
 <td>2000.0</td>
-<td>983.0</td>
+<td>996.0</td>
 <td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
@@ -2054,722 +2054,722 @@ Name: cum_infections, dtype: float64</code></pre>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2006-01-01</th>
 <td>6</td>
-<td>5077.0</td>
-<td>1772.0</td>
-<td>213.0</td>
-<td>12.0</td>
-<td>0.106500</td>
-<td>66.0</td>
-<td>211.0</td>
-<td>1997.0</td>
-<td>983.0</td>
-<td>3.0</td>
+<td>5052.0</td>
+<td>1814.0</td>
+<td>173.0</td>
+<td>13.0</td>
+<td>0.086500</td>
+<td>47.0</td>
+<td>169.0</td>
+<td>2000.0</td>
+<td>996.0</td>
+<td>0.0</td>
 <td>0.0</td>
 <td>0.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2007-01-01</th>
 <td>7</td>
-<td>4966.0</td>
-<td>1695.0</td>
-<td>269.0</td>
-<td>27.0</td>
-<td>0.134702</td>
-<td>77.0</td>
-<td>288.0</td>
-<td>1991.0</td>
-<td>980.0</td>
-<td>6.0</td>
+<td>4958.0</td>
+<td>1750.0</td>
+<td>223.0</td>
+<td>25.0</td>
+<td>0.111500</td>
+<td>64.0</td>
+<td>233.0</td>
+<td>1998.0</td>
+<td>996.0</td>
+<td>2.0</td>
 <td>0.0</td>
-<td>3.0</td>
+<td>0.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2008-01-01</th>
 <td>8</td>
-<td>4912.0</td>
-<td>1613.0</td>
-<td>338.0</td>
-<td>37.0</td>
-<td>0.169764</td>
-<td>82.0</td>
-<td>370.0</td>
-<td>1988.0</td>
-<td>977.0</td>
-<td>3.0</td>
+<td>5015.0</td>
+<td>1662.0</td>
+<td>297.0</td>
+<td>35.0</td>
+<td>0.148649</td>
+<td>88.0</td>
+<td>321.0</td>
+<td>1994.0</td>
+<td>995.0</td>
+<td>4.0</td>
 <td>0.0</td>
-<td>9.0</td>
+<td>2.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2009-01-01</th>
 <td>9</td>
-<td>4943.0</td>
-<td>1482.0</td>
-<td>442.0</td>
-<td>58.0</td>
-<td>0.222334</td>
-<td>131.0</td>
-<td>501.0</td>
-<td>1982.0</td>
-<td>975.0</td>
-<td>6.0</td>
+<td>4954.0</td>
+<td>1548.0</td>
+<td>389.0</td>
+<td>50.0</td>
+<td>0.195085</td>
+<td>114.0</td>
+<td>435.0</td>
+<td>1987.0</td>
+<td>992.0</td>
+<td>7.0</td>
 <td>0.0</td>
-<td>12.0</td>
+<td>6.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2010-01-01</th>
 <td>10</td>
-<td>5104.0</td>
-<td>1321.0</td>
-<td>572.0</td>
-<td>80.0</td>
-<td>0.288597</td>
-<td>161.0</td>
-<td>662.0</td>
-<td>1973.0</td>
-<td>973.0</td>
-<td>9.0</td>
+<td>4991.0</td>
+<td>1410.0</td>
+<td>501.0</td>
+<td>69.0</td>
+<td>0.252139</td>
+<td>138.0</td>
+<td>573.0</td>
+<td>1980.0</td>
+<td>990.0</td>
+<td>7.0</td>
 <td>0.0</td>
-<td>18.0</td>
+<td>13.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2011-01-01</th>
 <td>11</td>
-<td>4930.0</td>
-<td>1147.0</td>
-<td>702.0</td>
-<td>115.0</td>
-<td>0.355803</td>
-<td>174.0</td>
-<td>836.0</td>
-<td>1964.0</td>
-<td>969.0</td>
-<td>9.0</td>
+<td>4890.0</td>
+<td>1273.0</td>
+<td>601.0</td>
+<td>99.0</td>
+<td>0.303535</td>
+<td>137.0</td>
+<td>710.0</td>
+<td>1973.0</td>
+<td>988.0</td>
+<td>7.0</td>
 <td>0.0</td>
-<td>27.0</td>
+<td>20.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2012-01-01</th>
 <td>12</td>
-<td>4960.0</td>
-<td>973.0</td>
-<td>819.0</td>
-<td>161.0</td>
-<td>0.417006</td>
-<td>174.0</td>
-<td>1010.0</td>
-<td>1953.0</td>
-<td>967.0</td>
-<td>11.0</td>
+<td>4937.0</td>
+<td>1118.0</td>
+<td>718.0</td>
+<td>125.0</td>
+<td>0.363913</td>
+<td>155.0</td>
+<td>865.0</td>
+<td>1961.0</td>
+<td>984.0</td>
+<td>12.0</td>
 <td>0.0</td>
-<td>36.0</td>
+<td>27.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2013-01-01</th>
 <td>13</td>
-<td>4894.0</td>
-<td>829.0</td>
-<td>900.0</td>
-<td>212.0</td>
-<td>0.460829</td>
-<td>144.0</td>
-<td>1154.0</td>
-<td>1941.0</td>
-<td>961.0</td>
-<td>12.0</td>
+<td>4960.0</td>
+<td>931.0</td>
+<td>848.0</td>
+<td>167.0</td>
+<td>0.432432</td>
+<td>187.0</td>
+<td>1052.0</td>
+<td>1946.0</td>
+<td>976.0</td>
+<td>15.0</td>
 <td>0.0</td>
-<td>47.0</td>
+<td>39.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2014-01-01</th>
 <td>14</td>
-<td>4786.0</td>
-<td>672.0</td>
-<td>969.0</td>
-<td>283.0</td>
-<td>0.499227</td>
-<td>157.0</td>
-<td>1311.0</td>
-<td>1924.0</td>
-<td>956.0</td>
-<td>17.0</td>
+<td>4975.0</td>
+<td>743.0</td>
+<td>961.0</td>
+<td>226.0</td>
+<td>0.493834</td>
+<td>188.0</td>
+<td>1240.0</td>
+<td>1930.0</td>
+<td>970.0</td>
+<td>16.0</td>
 <td>0.0</td>
-<td>59.0</td>
+<td>54.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2015-01-01</th>
 <td>15</td>
-<td>4790.0</td>
-<td>527.0</td>
-<td>1012.0</td>
-<td>366.0</td>
-<td>0.525988</td>
-<td>145.0</td>
-<td>1456.0</td>
-<td>1905.0</td>
-<td>943.0</td>
-<td>19.0</td>
+<td>4875.0</td>
+<td>611.0</td>
+<td>989.0</td>
+<td>303.0</td>
+<td>0.512435</td>
+<td>132.0</td>
+<td>1372.0</td>
+<td>1903.0</td>
+<td>963.0</td>
+<td>27.0</td>
 <td>0.0</td>
-<td>76.0</td>
+<td>70.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2016-01-01</th>
 <td>16</td>
-<td>4779.0</td>
-<td>415.0</td>
-<td>978.0</td>
-<td>489.0</td>
-<td>0.513386</td>
+<td>4756.0</td>
+<td>499.0</td>
+<td>965.0</td>
+<td>419.0</td>
+<td>0.507094</td>
 <td>112.0</td>
-<td>1568.0</td>
-<td>1882.0</td>
-<td>937.0</td>
-<td>23.0</td>
+<td>1484.0</td>
+<td>1883.0</td>
+<td>949.0</td>
+<td>20.0</td>
 <td>0.0</td>
-<td>95.0</td>
+<td>97.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2017-01-01</th>
 <td>17</td>
-<td>4766.0</td>
-<td>335.0</td>
-<td>910.0</td>
-<td>600.0</td>
-<td>0.483528</td>
-<td>80.0</td>
-<td>1648.0</td>
-<td>1845.0</td>
-<td>927.0</td>
-<td>37.0</td>
+<td>4654.0</td>
+<td>393.0</td>
+<td>936.0</td>
+<td>521.0</td>
+<td>0.497079</td>
+<td>106.0</td>
+<td>1590.0</td>
+<td>1850.0</td>
+<td>944.0</td>
+<td>33.0</td>
 <td>0.0</td>
-<td>118.0</td>
+<td>117.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2018-01-01</th>
 <td>18</td>
-<td>4627.0</td>
-<td>282.0</td>
-<td>792.0</td>
-<td>739.0</td>
-<td>0.429268</td>
-<td>53.0</td>
-<td>1701.0</td>
-<td>1813.0</td>
-<td>914.0</td>
-<td>32.0</td>
+<td>4593.0</td>
+<td>318.0</td>
+<td>880.0</td>
+<td>626.0</td>
+<td>0.475676</td>
+<td>75.0</td>
+<td>1665.0</td>
+<td>1824.0</td>
+<td>928.0</td>
+<td>26.0</td>
 <td>0.0</td>
-<td>155.0</td>
+<td>150.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2019-01-01</th>
 <td>19</td>
-<td>4677.0</td>
-<td>240.0</td>
-<td>661.0</td>
-<td>875.0</td>
-<td>0.364589</td>
-<td>42.0</td>
-<td>1743.0</td>
-<td>1776.0</td>
-<td>899.0</td>
-<td>37.0</td>
+<td>4606.0</td>
+<td>262.0</td>
+<td>779.0</td>
+<td>748.0</td>
+<td>0.427083</td>
+<td>56.0</td>
+<td>1721.0</td>
+<td>1789.0</td>
+<td>912.0</td>
+<td>35.0</td>
 <td>0.0</td>
-<td>187.0</td>
+<td>176.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2020-01-01</th>
 <td>20</td>
-<td>4510.0</td>
-<td>205.0</td>
-<td>546.0</td>
-<td>1003.0</td>
-<td>0.307432</td>
-<td>35.0</td>
-<td>1778.0</td>
-<td>1754.0</td>
-<td>885.0</td>
-<td>22.0</td>
+<td>4410.0</td>
+<td>218.0</td>
+<td>634.0</td>
+<td>899.0</td>
+<td>0.354388</td>
+<td>44.0</td>
+<td>1765.0</td>
+<td>1751.0</td>
+<td>889.0</td>
+<td>38.0</td>
 <td>0.0</td>
-<td>224.0</td>
+<td>211.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2021-01-01</th>
 <td>21</td>
-<td>4357.0</td>
-<td>190.0</td>
-<td>424.0</td>
-<td>1118.0</td>
-<td>0.241733</td>
-<td>15.0</td>
-<td>1793.0</td>
-<td>1732.0</td>
-<td>877.0</td>
-<td>22.0</td>
+<td>4434.0</td>
+<td>192.0</td>
+<td>502.0</td>
+<td>1021.0</td>
+<td>0.286693</td>
+<td>26.0</td>
+<td>1791.0</td>
+<td>1715.0</td>
+<td>872.0</td>
+<td>36.0</td>
 <td>0.0</td>
-<td>246.0</td>
+<td>249.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2022-01-01</th>
 <td>22</td>
-<td>4339.0</td>
-<td>178.0</td>
-<td>303.0</td>
-<td>1226.0</td>
-<td>0.174942</td>
-<td>12.0</td>
-<td>1805.0</td>
-<td>1707.0</td>
-<td>871.0</td>
-<td>25.0</td>
+<td>4324.0</td>
+<td>169.0</td>
+<td>404.0</td>
+<td>1118.0</td>
+<td>0.235569</td>
+<td>23.0</td>
+<td>1814.0</td>
+<td>1691.0</td>
+<td>861.0</td>
+<td>24.0</td>
 <td>0.0</td>
-<td>268.0</td>
+<td>285.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2023-01-01</th>
 <td>23</td>
-<td>4314.0</td>
-<td>167.0</td>
-<td>230.0</td>
-<td>1295.0</td>
-<td>0.134739</td>
-<td>11.0</td>
-<td>1816.0</td>
-<td>1692.0</td>
-<td>858.0</td>
-<td>15.0</td>
+<td>4197.0</td>
+<td>157.0</td>
+<td>287.0</td>
+<td>1215.0</td>
+<td>0.169722</td>
+<td>12.0</td>
+<td>1826.0</td>
+<td>1659.0</td>
+<td>850.0</td>
+<td>32.0</td>
 <td>0.0</td>
-<td>293.0</td>
+<td>309.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2024-01-01</th>
 <td>24</td>
-<td>4209.0</td>
-<td>157.0</td>
-<td>168.0</td>
-<td>1356.0</td>
-<td>0.099291</td>
-<td>10.0</td>
-<td>1826.0</td>
-<td>1681.0</td>
-<td>852.0</td>
-<td>11.0</td>
+<td>4127.0</td>
+<td>145.0</td>
+<td>224.0</td>
+<td>1272.0</td>
+<td>0.135021</td>
+<td>12.0</td>
+<td>1838.0</td>
+<td>1641.0</td>
+<td>833.0</td>
+<td>18.0</td>
 <td>0.0</td>
-<td>308.0</td>
+<td>341.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2025-01-01</th>
 <td>25</td>
-<td>4220.0</td>
-<td>150.0</td>
-<td>118.0</td>
-<td>1406.0</td>
-<td>0.070196</td>
-<td>7.0</td>
-<td>1833.0</td>
-<td>1674.0</td>
-<td>850.0</td>
-<td>7.0</td>
+<td>4080.0</td>
+<td>137.0</td>
+<td>156.0</td>
+<td>1331.0</td>
+<td>0.095064</td>
+<td>8.0</td>
+<td>1846.0</td>
+<td>1624.0</td>
+<td>824.0</td>
+<td>17.0</td>
 <td>0.0</td>
-<td>319.0</td>
+<td>359.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2026-01-01</th>
 <td>26</td>
-<td>4222.0</td>
-<td>146.0</td>
-<td>79.0</td>
-<td>1440.0</td>
-<td>0.047192</td>
-<td>4.0</td>
-<td>1837.0</td>
-<td>1665.0</td>
-<td>847.0</td>
-<td>9.0</td>
+<td>4098.0</td>
+<td>134.0</td>
+<td>105.0</td>
+<td>1370.0</td>
+<td>0.064655</td>
+<td>3.0</td>
+<td>1849.0</td>
+<td>1609.0</td>
+<td>819.0</td>
+<td>15.0</td>
 <td>0.0</td>
-<td>326.0</td>
+<td>376.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2027-01-01</th>
 <td>27</td>
-<td>4213.0</td>
-<td>145.0</td>
-<td>59.0</td>
-<td>1457.0</td>
-<td>0.035435</td>
+<td>3983.0</td>
+<td>133.0</td>
+<td>71.0</td>
+<td>1396.0</td>
+<td>0.044127</td>
 <td>1.0</td>
-<td>1838.0</td>
-<td>1661.0</td>
-<td>843.0</td>
-<td>4.0</td>
+<td>1850.0</td>
+<td>1600.0</td>
+<td>812.0</td>
+<td>9.0</td>
 <td>0.0</td>
-<td>335.0</td>
+<td>391.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2028-01-01</th>
 <td>28</td>
-<td>4163.0</td>
-<td>143.0</td>
-<td>44.0</td>
-<td>1470.0</td>
-<td>0.026490</td>
-<td>2.0</td>
-<td>1840.0</td>
-<td>1657.0</td>
-<td>841.0</td>
-<td>4.0</td>
+<td>3994.0</td>
+<td>132.0</td>
+<td>48.0</td>
+<td>1413.0</td>
+<td>0.030000</td>
+<td>1.0</td>
+<td>1851.0</td>
+<td>1593.0</td>
+<td>807.0</td>
+<td>7.0</td>
 <td>0.0</td>
-<td>339.0</td>
+<td>400.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2029-01-01</th>
 <td>29</td>
-<td>4172.0</td>
-<td>143.0</td>
-<td>28.0</td>
-<td>1483.0</td>
-<td>0.016898</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1654.0</td>
-<td>837.0</td>
+<td>3943.0</td>
+<td>131.0</td>
+<td>31.0</td>
+<td>1428.0</td>
+<td>0.019460</td>
+<td>1.0</td>
+<td>1852.0</td>
+<td>1590.0</td>
+<td>803.0</td>
 <td>3.0</td>
 <td>0.0</td>
-<td>343.0</td>
+<td>407.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2030-01-01</th>
 <td>30</td>
-<td>4203.0</td>
-<td>143.0</td>
-<td>22.0</td>
-<td>1487.0</td>
-<td>0.013301</td>
+<td>4030.0</td>
+<td>131.0</td>
+<td>21.0</td>
+<td>1436.0</td>
+<td>0.013208</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1652.0</td>
-<td>835.0</td>
+<td>1852.0</td>
+<td>1588.0</td>
+<td>800.0</td>
 <td>2.0</td>
 <td>0.0</td>
-<td>346.0</td>
+<td>410.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2031-01-01</th>
 <td>31</td>
-<td>4120.0</td>
-<td>143.0</td>
-<td>13.0</td>
-<td>1493.0</td>
-<td>0.007869</td>
+<td>3927.0</td>
+<td>130.0</td>
+<td>12.0</td>
+<td>1445.0</td>
+<td>0.007557</td>
+<td>1.0</td>
+<td>1853.0</td>
+<td>1587.0</td>
+<td>800.0</td>
+<td>1.0</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1649.0</td>
-<td>835.0</td>
-<td>3.0</td>
-<td>0.0</td>
-<td>348.0</td>
+<td>412.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2032-01-01</th>
 <td>32</td>
-<td>4087.0</td>
-<td>143.0</td>
-<td>8.0</td>
-<td>1498.0</td>
-<td>0.004851</td>
+<td>3955.0</td>
+<td>129.0</td>
+<td>9.0</td>
+<td>1448.0</td>
+<td>0.005671</td>
+<td>1.0</td>
+<td>1854.0</td>
+<td>1586.0</td>
+<td>800.0</td>
+<td>1.0</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1649.0</td>
-<td>834.0</td>
-<td>0.0</td>
-<td>0.0</td>
-<td>351.0</td>
+<td>413.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2033-01-01</th>
 <td>33</td>
-<td>4090.0</td>
-<td>143.0</td>
-<td>3.0</td>
-<td>1502.0</td>
-<td>0.001819</td>
+<td>4008.0</td>
+<td>129.0</td>
+<td>4.0</td>
+<td>1453.0</td>
+<td>0.002522</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>834.0</td>
-<td>1.0</td>
+<td>1854.0</td>
+<td>1586.0</td>
+<td>799.0</td>
 <td>0.0</td>
-<td>351.0</td>
+<td>0.0</td>
+<td>414.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2034-01-01</th>
 <td>34</td>
-<td>4112.0</td>
-<td>143.0</td>
-<td>2.0</td>
-<td>1503.0</td>
-<td>0.001214</td>
+<td>3976.0</td>
+<td>129.0</td>
+<td>3.0</td>
+<td>1454.0</td>
+<td>0.001892</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1854.0</td>
+<td>1586.0</td>
+<td>799.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>414.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2035-01-01</th>
 <td>35</td>
-<td>4182.0</td>
-<td>143.0</td>
+<td>4007.0</td>
+<td>128.0</td>
+<td>3.0</td>
+<td>1454.0</td>
+<td>0.001892</td>
+<td>1.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>799.0</td>
+<td>1.0</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
-<td>0.0</td>
-<td>0.0</td>
-<td>352.0</td>
+<td>414.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2036-01-01</th>
 <td>36</td>
-<td>4165.0</td>
-<td>143.0</td>
+<td>3996.0</td>
+<td>128.0</td>
+<td>3.0</td>
+<td>1454.0</td>
+<td>0.001893</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2037-01-01</th>
 <td>37</td>
-<td>4214.0</td>
-<td>143.0</td>
+<td>4000.0</td>
+<td>128.0</td>
+<td>2.0</td>
+<td>1455.0</td>
+<td>0.001262</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2038-01-01</th>
 <td>38</td>
-<td>4193.0</td>
-<td>143.0</td>
+<td>4033.0</td>
+<td>128.0</td>
+<td>1.0</td>
+<td>1456.0</td>
+<td>0.000631</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2039-01-01</th>
 <td>39</td>
-<td>4098.0</td>
-<td>143.0</td>
+<td>3985.0</td>
+<td>128.0</td>
+<td>1.0</td>
+<td>1456.0</td>
+<td>0.000631</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2040-01-01</th>
 <td>40</td>
-<td>4099.0</td>
-<td>143.0</td>
+<td>3903.0</td>
+<td>128.0</td>
+<td>1.0</td>
+<td>1456.0</td>
+<td>0.000631</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2041-01-01</th>
 <td>41</td>
-<td>4135.0</td>
-<td>143.0</td>
+<td>3951.0</td>
+<td>128.0</td>
+<td>1.0</td>
+<td>1456.0</td>
+<td>0.000631</td>
 <td>0.0</td>
-<td>1505.0</td>
-<td>0.000000</td>
-<td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2042-01-01</th>
 <td>42</td>
-<td>3992.0</td>
-<td>143.0</td>
+<td>3946.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2043-01-01</th>
 <td>43</td>
-<td>4125.0</td>
-<td>143.0</td>
+<td>3958.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2044-01-01</th>
 <td>44</td>
-<td>4138.0</td>
-<td>143.0</td>
+<td>3890.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2045-01-01</th>
 <td>45</td>
-<td>4102.0</td>
-<td>143.0</td>
+<td>3954.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2046-01-01</th>
 <td>46</td>
-<td>4097.0</td>
-<td>143.0</td>
+<td>3905.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2047-01-01</th>
 <td>47</td>
-<td>4112.0</td>
-<td>143.0</td>
+<td>3933.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2048-01-01</th>
 <td>48</td>
-<td>4124.0</td>
-<td>143.0</td>
+<td>4003.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">2049-01-01</th>
 <td>49</td>
-<td>4139.0</td>
-<td>143.0</td>
+<td>3926.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2050-01-01</th>
 <td>50</td>
-<td>4186.0</td>
-<td>143.0</td>
+<td>4005.0</td>
+<td>128.0</td>
 <td>0.0</td>
-<td>1505.0</td>
+<td>1457.0</td>
 <td>0.000000</td>
 <td>0.0</td>
-<td>1840.0</td>
-<td>1648.0</td>
-<td>833.0</td>
+<td>1855.0</td>
+<td>1585.0</td>
+<td>798.0</td>
 <td>0.0</td>
 <td>0.0</td>
-<td>352.0</td>
+<td>415.0</td>
 </tr>
 </tbody>
 </table>
@@ -2785,7 +2785,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <section id="plotting-summary-quantities" class="level3">
 <h3 class="anchored" data-anchor-id="plotting-summary-quantities">Plotting summary quantities</h3>
 <p>Often it’s useful to be able plot distributions of summary quantities, such as the total infections. This can be performed by directly indexing the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object and then using the appropriate plotting command:</p>
-<div id="0e4c6685" class="cell" data-execution_count="12">
+<div id="96696d75" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>plt.hist(res[<span class="st">'cum_infections'</span>], density<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Total infections'</span>)</span>
@@ -2796,7 +2796,7 @@ Name: cum_infections, dtype: float64</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-13-output-2.png" width="598" height="431" class="figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-13-output-2.png" width="615" height="431" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -2805,13 +2805,13 @@ Name: cum_infections, dtype: float64</code></pre>
 <section id="plotting-time-series" class="level3">
 <h3 class="anchored" data-anchor-id="plotting-time-series">Plotting time series</h3>
 <p>Time series plots can be obtained by accessing the dataframes associated with each seed, and then plotting quantities from those. For convenience, iterating over the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object will automatically iterate over all of the dataframes associated with each seed. For example:</p>
-<div id="3ba6680e" class="cell" data-execution_count="13">
+<div id="cb5ebbee" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    plt.plot(df[<span class="st">'sir_new_infections'</span>], color<span class="op">=</span><span class="st">'b'</span>, alpha<span class="op">=</span><span class="fl">0.1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="workflows_samples_files/figure-html/cell-14-output-1.png" width="590" height="414" class="figure-img"></p>
+<p><img src="workflows_samples_files/figure-html/cell-14-output-1.png" width="590" height="411" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -2827,173 +2827,173 @@ Name: cum_infections, dtype: float64</code></pre>
 <li><code>for df in res</code> - iterate over time series dataframes</li>
 </ul>
 <p>Sometimes it is useful to have access to both the summary dictionary and the time series dataframe associated with a single sample. These can be accessed using the <code>get</code> method, which takes in a seed, and returns both outputs for that seed together:</p>
-<div id="0ea5a251" class="cell" data-execution_count="14">
+<div id="d380ca4a" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>res.get(<span class="dv">0</span>) <span class="co"># Retrieve both summary quantities and dataframes</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="14">
 <pre><code>(#0. 'p_death':        0.2
- #1. 'cum_infections': 1840.0
- #2. 'cum_deaths':     352.0,
+ #1. 'cum_infections': 1855.0
+ #2. 'cum_deaths':     415.0,
              Unnamed: 0  randomnet_n_edges  sir_n_susceptible  sir_n_infected  \
  timevec                                                                        
- 2000-01-01           0             5025.0             1975.0            25.0   
- 2001-01-01           1             5065.0             1964.0            36.0   
- 2002-01-01           2             4991.0             1943.0            57.0   
- 2003-01-01           3             5101.0             1915.0            85.0   
- 2004-01-01           4             5033.0             1877.0           123.0   
- 2005-01-01           5             4916.0             1838.0           158.0   
- 2006-01-01           6             5077.0             1772.0           213.0   
- 2007-01-01           7             4966.0             1695.0           269.0   
- 2008-01-01           8             4912.0             1613.0           338.0   
- 2009-01-01           9             4943.0             1482.0           442.0   
- 2010-01-01          10             5104.0             1321.0           572.0   
- 2011-01-01          11             4930.0             1147.0           702.0   
- 2012-01-01          12             4960.0              973.0           819.0   
- 2013-01-01          13             4894.0              829.0           900.0   
- 2014-01-01          14             4786.0              672.0           969.0   
- 2015-01-01          15             4790.0              527.0          1012.0   
- 2016-01-01          16             4779.0              415.0           978.0   
- 2017-01-01          17             4766.0              335.0           910.0   
- 2018-01-01          18             4627.0              282.0           792.0   
- 2019-01-01          19             4677.0              240.0           661.0   
- 2020-01-01          20             4510.0              205.0           546.0   
- 2021-01-01          21             4357.0              190.0           424.0   
- 2022-01-01          22             4339.0              178.0           303.0   
- 2023-01-01          23             4314.0              167.0           230.0   
- 2024-01-01          24             4209.0              157.0           168.0   
- 2025-01-01          25             4220.0              150.0           118.0   
- 2026-01-01          26             4222.0              146.0            79.0   
- 2027-01-01          27             4213.0              145.0            59.0   
- 2028-01-01          28             4163.0              143.0            44.0   
- 2029-01-01          29             4172.0              143.0            28.0   
- 2030-01-01          30             4203.0              143.0            22.0   
- 2031-01-01          31             4120.0              143.0            13.0   
- 2032-01-01          32             4087.0              143.0             8.0   
- 2033-01-01          33             4090.0              143.0             3.0   
- 2034-01-01          34             4112.0              143.0             2.0   
- 2035-01-01          35             4182.0              143.0             0.0   
- 2036-01-01          36             4165.0              143.0             0.0   
- 2037-01-01          37             4214.0              143.0             0.0   
- 2038-01-01          38             4193.0              143.0             0.0   
- 2039-01-01          39             4098.0              143.0             0.0   
- 2040-01-01          40             4099.0              143.0             0.0   
- 2041-01-01          41             4135.0              143.0             0.0   
- 2042-01-01          42             3992.0              143.0             0.0   
- 2043-01-01          43             4125.0              143.0             0.0   
- 2044-01-01          44             4138.0              143.0             0.0   
- 2045-01-01          45             4102.0              143.0             0.0   
- 2046-01-01          46             4097.0              143.0             0.0   
- 2047-01-01          47             4112.0              143.0             0.0   
- 2048-01-01          48             4124.0              143.0             0.0   
- 2049-01-01          49             4139.0              143.0             0.0   
- 2050-01-01          50             4186.0              143.0             0.0   
+ 2000-01-01           0             5078.0             1976.0            24.0   
+ 2001-01-01           1             5008.0             1971.0            29.0   
+ 2002-01-01           2             5081.0             1959.0            41.0   
+ 2003-01-01           3             4907.0             1929.0            71.0   
+ 2004-01-01           4             4939.0             1896.0           104.0   
+ 2005-01-01           5             4954.0             1861.0           137.0   
+ 2006-01-01           6             5052.0             1814.0           173.0   
+ 2007-01-01           7             4958.0             1750.0           223.0   
+ 2008-01-01           8             5015.0             1662.0           297.0   
+ 2009-01-01           9             4954.0             1548.0           389.0   
+ 2010-01-01          10             4991.0             1410.0           501.0   
+ 2011-01-01          11             4890.0             1273.0           601.0   
+ 2012-01-01          12             4937.0             1118.0           718.0   
+ 2013-01-01          13             4960.0              931.0           848.0   
+ 2014-01-01          14             4975.0              743.0           961.0   
+ 2015-01-01          15             4875.0              611.0           989.0   
+ 2016-01-01          16             4756.0              499.0           965.0   
+ 2017-01-01          17             4654.0              393.0           936.0   
+ 2018-01-01          18             4593.0              318.0           880.0   
+ 2019-01-01          19             4606.0              262.0           779.0   
+ 2020-01-01          20             4410.0              218.0           634.0   
+ 2021-01-01          21             4434.0              192.0           502.0   
+ 2022-01-01          22             4324.0              169.0           404.0   
+ 2023-01-01          23             4197.0              157.0           287.0   
+ 2024-01-01          24             4127.0              145.0           224.0   
+ 2025-01-01          25             4080.0              137.0           156.0   
+ 2026-01-01          26             4098.0              134.0           105.0   
+ 2027-01-01          27             3983.0              133.0            71.0   
+ 2028-01-01          28             3994.0              132.0            48.0   
+ 2029-01-01          29             3943.0              131.0            31.0   
+ 2030-01-01          30             4030.0              131.0            21.0   
+ 2031-01-01          31             3927.0              130.0            12.0   
+ 2032-01-01          32             3955.0              129.0             9.0   
+ 2033-01-01          33             4008.0              129.0             4.0   
+ 2034-01-01          34             3976.0              129.0             3.0   
+ 2035-01-01          35             4007.0              128.0             3.0   
+ 2036-01-01          36             3996.0              128.0             3.0   
+ 2037-01-01          37             4000.0              128.0             2.0   
+ 2038-01-01          38             4033.0              128.0             1.0   
+ 2039-01-01          39             3985.0              128.0             1.0   
+ 2040-01-01          40             3903.0              128.0             1.0   
+ 2041-01-01          41             3951.0              128.0             1.0   
+ 2042-01-01          42             3946.0              128.0             0.0   
+ 2043-01-01          43             3958.0              128.0             0.0   
+ 2044-01-01          44             3890.0              128.0             0.0   
+ 2045-01-01          45             3954.0              128.0             0.0   
+ 2046-01-01          46             3905.0              128.0             0.0   
+ 2047-01-01          47             3933.0              128.0             0.0   
+ 2048-01-01          48             4003.0              128.0             0.0   
+ 2049-01-01          49             3926.0              128.0             0.0   
+ 2050-01-01          50             4005.0              128.0             0.0   
  
              sir_n_recovered  sir_prevalence  sir_new_infections  \
  timevec                                                           
- 2000-01-01              0.0        0.012500                 8.0   
- 2001-01-01              0.0        0.018000                11.0   
- 2002-01-01              0.0        0.028500                21.0   
- 2003-01-01              0.0        0.042500                28.0   
- 2004-01-01              0.0        0.061500                38.0   
- 2005-01-01              4.0        0.079000                39.0   
- 2006-01-01             12.0        0.106500                66.0   
- 2007-01-01             27.0        0.134702                77.0   
- 2008-01-01             37.0        0.169764                82.0   
- 2009-01-01             58.0        0.222334               131.0   
- 2010-01-01             80.0        0.288597               161.0   
- 2011-01-01            115.0        0.355803               174.0   
- 2012-01-01            161.0        0.417006               174.0   
- 2013-01-01            212.0        0.460829               144.0   
- 2014-01-01            283.0        0.499227               157.0   
- 2015-01-01            366.0        0.525988               145.0   
- 2016-01-01            489.0        0.513386               112.0   
- 2017-01-01            600.0        0.483528                80.0   
- 2018-01-01            739.0        0.429268                53.0   
- 2019-01-01            875.0        0.364589                42.0   
- 2020-01-01           1003.0        0.307432                35.0   
- 2021-01-01           1118.0        0.241733                15.0   
- 2022-01-01           1226.0        0.174942                12.0   
- 2023-01-01           1295.0        0.134739                11.0   
- 2024-01-01           1356.0        0.099291                10.0   
- 2025-01-01           1406.0        0.070196                 7.0   
- 2026-01-01           1440.0        0.047192                 4.0   
- 2027-01-01           1457.0        0.035435                 1.0   
- 2028-01-01           1470.0        0.026490                 2.0   
- 2029-01-01           1483.0        0.016898                 0.0   
- 2030-01-01           1487.0        0.013301                 0.0   
- 2031-01-01           1493.0        0.007869                 0.0   
- 2032-01-01           1498.0        0.004851                 0.0   
- 2033-01-01           1502.0        0.001819                 0.0   
- 2034-01-01           1503.0        0.001214                 0.0   
- 2035-01-01           1505.0        0.000000                 0.0   
- 2036-01-01           1505.0        0.000000                 0.0   
- 2037-01-01           1505.0        0.000000                 0.0   
- 2038-01-01           1505.0        0.000000                 0.0   
- 2039-01-01           1505.0        0.000000                 0.0   
- 2040-01-01           1505.0        0.000000                 0.0   
- 2041-01-01           1505.0        0.000000                 0.0   
- 2042-01-01           1505.0        0.000000                 0.0   
- 2043-01-01           1505.0        0.000000                 0.0   
- 2044-01-01           1505.0        0.000000                 0.0   
- 2045-01-01           1505.0        0.000000                 0.0   
- 2046-01-01           1505.0        0.000000                 0.0   
- 2047-01-01           1505.0        0.000000                 0.0   
- 2048-01-01           1505.0        0.000000                 0.0   
- 2049-01-01           1505.0        0.000000                 0.0   
- 2050-01-01           1505.0        0.000000                 0.0   
+ 2000-01-01              0.0        0.012000                 7.0   
+ 2001-01-01              0.0        0.014500                 5.0   
+ 2002-01-01              0.0        0.020500                12.0   
+ 2003-01-01              0.0        0.035500                30.0   
+ 2004-01-01              0.0        0.052000                33.0   
+ 2005-01-01              2.0        0.068500                35.0   
+ 2006-01-01             13.0        0.086500                47.0   
+ 2007-01-01             25.0        0.111500                64.0   
+ 2008-01-01             35.0        0.148649                88.0   
+ 2009-01-01             50.0        0.195085               114.0   
+ 2010-01-01             69.0        0.252139               138.0   
+ 2011-01-01             99.0        0.303535               137.0   
+ 2012-01-01            125.0        0.363913               155.0   
+ 2013-01-01            167.0        0.432432               187.0   
+ 2014-01-01            226.0        0.493834               188.0   
+ 2015-01-01            303.0        0.512435               132.0   
+ 2016-01-01            419.0        0.507094               112.0   
+ 2017-01-01            521.0        0.497079               106.0   
+ 2018-01-01            626.0        0.475676                75.0   
+ 2019-01-01            748.0        0.427083                56.0   
+ 2020-01-01            899.0        0.354388                44.0   
+ 2021-01-01           1021.0        0.286693                26.0   
+ 2022-01-01           1118.0        0.235569                23.0   
+ 2023-01-01           1215.0        0.169722                12.0   
+ 2024-01-01           1272.0        0.135021                12.0   
+ 2025-01-01           1331.0        0.095064                 8.0   
+ 2026-01-01           1370.0        0.064655                 3.0   
+ 2027-01-01           1396.0        0.044127                 1.0   
+ 2028-01-01           1413.0        0.030000                 1.0   
+ 2029-01-01           1428.0        0.019460                 1.0   
+ 2030-01-01           1436.0        0.013208                 0.0   
+ 2031-01-01           1445.0        0.007557                 1.0   
+ 2032-01-01           1448.0        0.005671                 1.0   
+ 2033-01-01           1453.0        0.002522                 0.0   
+ 2034-01-01           1454.0        0.001892                 0.0   
+ 2035-01-01           1454.0        0.001892                 1.0   
+ 2036-01-01           1454.0        0.001893                 0.0   
+ 2037-01-01           1455.0        0.001262                 0.0   
+ 2038-01-01           1456.0        0.000631                 0.0   
+ 2039-01-01           1456.0        0.000631                 0.0   
+ 2040-01-01           1456.0        0.000631                 0.0   
+ 2041-01-01           1456.0        0.000631                 0.0   
+ 2042-01-01           1457.0        0.000000                 0.0   
+ 2043-01-01           1457.0        0.000000                 0.0   
+ 2044-01-01           1457.0        0.000000                 0.0   
+ 2045-01-01           1457.0        0.000000                 0.0   
+ 2046-01-01           1457.0        0.000000                 0.0   
+ 2047-01-01           1457.0        0.000000                 0.0   
+ 2048-01-01           1457.0        0.000000                 0.0   
+ 2049-01-01           1457.0        0.000000                 0.0   
+ 2050-01-01           1457.0        0.000000                 0.0   
  
              sir_cum_infections  n_alive  n_female  new_deaths  new_emigrants  \
  timevec                                                                        
- 2000-01-01                 8.0   2000.0     983.0         0.0            0.0   
- 2001-01-01                19.0   2000.0     983.0         0.0            0.0   
- 2002-01-01                40.0   2000.0     983.0         0.0            0.0   
- 2003-01-01                68.0   2000.0     983.0         0.0            0.0   
- 2004-01-01               106.0   2000.0     983.0         0.0            0.0   
- 2005-01-01               145.0   2000.0     983.0         0.0            0.0   
- 2006-01-01               211.0   1997.0     983.0         3.0            0.0   
- 2007-01-01               288.0   1991.0     980.0         6.0            0.0   
- 2008-01-01               370.0   1988.0     977.0         3.0            0.0   
- 2009-01-01               501.0   1982.0     975.0         6.0            0.0   
- 2010-01-01               662.0   1973.0     973.0         9.0            0.0   
- 2011-01-01               836.0   1964.0     969.0         9.0            0.0   
- 2012-01-01              1010.0   1953.0     967.0        11.0            0.0   
- 2013-01-01              1154.0   1941.0     961.0        12.0            0.0   
- 2014-01-01              1311.0   1924.0     956.0        17.0            0.0   
- 2015-01-01              1456.0   1905.0     943.0        19.0            0.0   
- 2016-01-01              1568.0   1882.0     937.0        23.0            0.0   
- 2017-01-01              1648.0   1845.0     927.0        37.0            0.0   
- 2018-01-01              1701.0   1813.0     914.0        32.0            0.0   
- 2019-01-01              1743.0   1776.0     899.0        37.0            0.0   
- 2020-01-01              1778.0   1754.0     885.0        22.0            0.0   
- 2021-01-01              1793.0   1732.0     877.0        22.0            0.0   
- 2022-01-01              1805.0   1707.0     871.0        25.0            0.0   
- 2023-01-01              1816.0   1692.0     858.0        15.0            0.0   
- 2024-01-01              1826.0   1681.0     852.0        11.0            0.0   
- 2025-01-01              1833.0   1674.0     850.0         7.0            0.0   
- 2026-01-01              1837.0   1665.0     847.0         9.0            0.0   
- 2027-01-01              1838.0   1661.0     843.0         4.0            0.0   
- 2028-01-01              1840.0   1657.0     841.0         4.0            0.0   
- 2029-01-01              1840.0   1654.0     837.0         3.0            0.0   
- 2030-01-01              1840.0   1652.0     835.0         2.0            0.0   
- 2031-01-01              1840.0   1649.0     835.0         3.0            0.0   
- 2032-01-01              1840.0   1649.0     834.0         0.0            0.0   
- 2033-01-01              1840.0   1648.0     834.0         1.0            0.0   
- 2034-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2035-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2036-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2037-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2038-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2039-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2040-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2041-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2042-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2043-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2044-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2045-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2046-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2047-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2048-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2049-01-01              1840.0   1648.0     833.0         0.0            0.0   
- 2050-01-01              1840.0   1648.0     833.0         0.0            0.0   
+ 2000-01-01                 7.0   2000.0     996.0         0.0            0.0   
+ 2001-01-01                12.0   2000.0     996.0         0.0            0.0   
+ 2002-01-01                24.0   2000.0     996.0         0.0            0.0   
+ 2003-01-01                54.0   2000.0     996.0         0.0            0.0   
+ 2004-01-01                87.0   2000.0     996.0         0.0            0.0   
+ 2005-01-01               122.0   2000.0     996.0         0.0            0.0   
+ 2006-01-01               169.0   2000.0     996.0         0.0            0.0   
+ 2007-01-01               233.0   1998.0     996.0         2.0            0.0   
+ 2008-01-01               321.0   1994.0     995.0         4.0            0.0   
+ 2009-01-01               435.0   1987.0     992.0         7.0            0.0   
+ 2010-01-01               573.0   1980.0     990.0         7.0            0.0   
+ 2011-01-01               710.0   1973.0     988.0         7.0            0.0   
+ 2012-01-01               865.0   1961.0     984.0        12.0            0.0   
+ 2013-01-01              1052.0   1946.0     976.0        15.0            0.0   
+ 2014-01-01              1240.0   1930.0     970.0        16.0            0.0   
+ 2015-01-01              1372.0   1903.0     963.0        27.0            0.0   
+ 2016-01-01              1484.0   1883.0     949.0        20.0            0.0   
+ 2017-01-01              1590.0   1850.0     944.0        33.0            0.0   
+ 2018-01-01              1665.0   1824.0     928.0        26.0            0.0   
+ 2019-01-01              1721.0   1789.0     912.0        35.0            0.0   
+ 2020-01-01              1765.0   1751.0     889.0        38.0            0.0   
+ 2021-01-01              1791.0   1715.0     872.0        36.0            0.0   
+ 2022-01-01              1814.0   1691.0     861.0        24.0            0.0   
+ 2023-01-01              1826.0   1659.0     850.0        32.0            0.0   
+ 2024-01-01              1838.0   1641.0     833.0        18.0            0.0   
+ 2025-01-01              1846.0   1624.0     824.0        17.0            0.0   
+ 2026-01-01              1849.0   1609.0     819.0        15.0            0.0   
+ 2027-01-01              1850.0   1600.0     812.0         9.0            0.0   
+ 2028-01-01              1851.0   1593.0     807.0         7.0            0.0   
+ 2029-01-01              1852.0   1590.0     803.0         3.0            0.0   
+ 2030-01-01              1852.0   1588.0     800.0         2.0            0.0   
+ 2031-01-01              1853.0   1587.0     800.0         1.0            0.0   
+ 2032-01-01              1854.0   1586.0     800.0         1.0            0.0   
+ 2033-01-01              1854.0   1586.0     799.0         0.0            0.0   
+ 2034-01-01              1854.0   1586.0     799.0         0.0            0.0   
+ 2035-01-01              1855.0   1585.0     799.0         1.0            0.0   
+ 2036-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2037-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2038-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2039-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2040-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2041-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2042-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2043-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2044-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2045-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2046-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2047-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2048-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2049-01-01              1855.0   1585.0     798.0         0.0            0.0   
+ 2050-01-01              1855.0   1585.0     798.0         0.0            0.0   
  
              cum_deaths  
  timevec                 
@@ -3004,108 +3004,108 @@ Name: cum_infections, dtype: float64</code></pre>
  2004-01-01         0.0  
  2005-01-01         0.0  
  2006-01-01         0.0  
- 2007-01-01         3.0  
- 2008-01-01         9.0  
- 2009-01-01        12.0  
- 2010-01-01        18.0  
- 2011-01-01        27.0  
- 2012-01-01        36.0  
- 2013-01-01        47.0  
- 2014-01-01        59.0  
- 2015-01-01        76.0  
- 2016-01-01        95.0  
- 2017-01-01       118.0  
- 2018-01-01       155.0  
- 2019-01-01       187.0  
- 2020-01-01       224.0  
- 2021-01-01       246.0  
- 2022-01-01       268.0  
- 2023-01-01       293.0  
- 2024-01-01       308.0  
- 2025-01-01       319.0  
- 2026-01-01       326.0  
- 2027-01-01       335.0  
- 2028-01-01       339.0  
- 2029-01-01       343.0  
- 2030-01-01       346.0  
- 2031-01-01       348.0  
- 2032-01-01       351.0  
- 2033-01-01       351.0  
- 2034-01-01       352.0  
- 2035-01-01       352.0  
- 2036-01-01       352.0  
- 2037-01-01       352.0  
- 2038-01-01       352.0  
- 2039-01-01       352.0  
- 2040-01-01       352.0  
- 2041-01-01       352.0  
- 2042-01-01       352.0  
- 2043-01-01       352.0  
- 2044-01-01       352.0  
- 2045-01-01       352.0  
- 2046-01-01       352.0  
- 2047-01-01       352.0  
- 2048-01-01       352.0  
- 2049-01-01       352.0  
- 2050-01-01       352.0  )</code></pre>
+ 2007-01-01         0.0  
+ 2008-01-01         2.0  
+ 2009-01-01         6.0  
+ 2010-01-01        13.0  
+ 2011-01-01        20.0  
+ 2012-01-01        27.0  
+ 2013-01-01        39.0  
+ 2014-01-01        54.0  
+ 2015-01-01        70.0  
+ 2016-01-01        97.0  
+ 2017-01-01       117.0  
+ 2018-01-01       150.0  
+ 2019-01-01       176.0  
+ 2020-01-01       211.0  
+ 2021-01-01       249.0  
+ 2022-01-01       285.0  
+ 2023-01-01       309.0  
+ 2024-01-01       341.0  
+ 2025-01-01       359.0  
+ 2026-01-01       376.0  
+ 2027-01-01       391.0  
+ 2028-01-01       400.0  
+ 2029-01-01       407.0  
+ 2030-01-01       410.0  
+ 2031-01-01       412.0  
+ 2032-01-01       413.0  
+ 2033-01-01       414.0  
+ 2034-01-01       414.0  
+ 2035-01-01       414.0  
+ 2036-01-01       415.0  
+ 2037-01-01       415.0  
+ 2038-01-01       415.0  
+ 2039-01-01       415.0  
+ 2040-01-01       415.0  
+ 2041-01-01       415.0  
+ 2042-01-01       415.0  
+ 2043-01-01       415.0  
+ 2044-01-01       415.0  
+ 2045-01-01       415.0  
+ 2046-01-01       415.0  
+ 2047-01-01       415.0  
+ 2048-01-01       415.0  
+ 2049-01-01       415.0  
+ 2050-01-01       415.0  )</code></pre>
 </div>
 </div>
 <p>In the same way that it is possible to index the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object directly in order to retrieve columns from the summary dataframe, it is also possible to directly index the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object to get a column of the time series dataframe. In this case, pass a tuple of items to the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object, where the first item is the seed, and the second is a column from the time series dataframe. For example:</p>
-<div id="131ea840" class="cell" data-execution_count="15">
+<div id="fc4c3e0a" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>,<span class="st">'sir_n_infected'</span>] <span class="co"># Equivalent to `res[0]['sir.n_infected']`</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="15">
 <pre><code>timevec
-2000-01-01      25.0
-2001-01-01      36.0
-2002-01-01      57.0
-2003-01-01      85.0
-2004-01-01     123.0
-2005-01-01     158.0
-2006-01-01     213.0
-2007-01-01     269.0
-2008-01-01     338.0
-2009-01-01     442.0
-2010-01-01     572.0
-2011-01-01     702.0
-2012-01-01     819.0
-2013-01-01     900.0
-2014-01-01     969.0
-2015-01-01    1012.0
-2016-01-01     978.0
-2017-01-01     910.0
-2018-01-01     792.0
-2019-01-01     661.0
-2020-01-01     546.0
-2021-01-01     424.0
-2022-01-01     303.0
-2023-01-01     230.0
-2024-01-01     168.0
-2025-01-01     118.0
-2026-01-01      79.0
-2027-01-01      59.0
-2028-01-01      44.0
-2029-01-01      28.0
-2030-01-01      22.0
-2031-01-01      13.0
-2032-01-01       8.0
-2033-01-01       3.0
-2034-01-01       2.0
-2035-01-01       0.0
-2036-01-01       0.0
-2037-01-01       0.0
-2038-01-01       0.0
-2039-01-01       0.0
-2040-01-01       0.0
-2041-01-01       0.0
-2042-01-01       0.0
-2043-01-01       0.0
-2044-01-01       0.0
-2045-01-01       0.0
-2046-01-01       0.0
-2047-01-01       0.0
-2048-01-01       0.0
-2049-01-01       0.0
-2050-01-01       0.0
+2000-01-01     24.0
+2001-01-01     29.0
+2002-01-01     41.0
+2003-01-01     71.0
+2004-01-01    104.0
+2005-01-01    137.0
+2006-01-01    173.0
+2007-01-01    223.0
+2008-01-01    297.0
+2009-01-01    389.0
+2010-01-01    501.0
+2011-01-01    601.0
+2012-01-01    718.0
+2013-01-01    848.0
+2014-01-01    961.0
+2015-01-01    989.0
+2016-01-01    965.0
+2017-01-01    936.0
+2018-01-01    880.0
+2019-01-01    779.0
+2020-01-01    634.0
+2021-01-01    502.0
+2022-01-01    404.0
+2023-01-01    287.0
+2024-01-01    224.0
+2025-01-01    156.0
+2026-01-01    105.0
+2027-01-01     71.0
+2028-01-01     48.0
+2029-01-01     31.0
+2030-01-01     21.0
+2031-01-01     12.0
+2032-01-01      9.0
+2033-01-01      4.0
+2034-01-01      3.0
+2035-01-01      3.0
+2036-01-01      3.0
+2037-01-01      2.0
+2038-01-01      1.0
+2039-01-01      1.0
+2040-01-01      1.0
+2041-01-01      1.0
+2042-01-01      0.0
+2043-01-01      0.0
+2044-01-01      0.0
+2045-01-01      0.0
+2046-01-01      0.0
+2047-01-01      0.0
+2048-01-01      0.0
+2049-01-01      0.0
+2050-01-01      0.0
 Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
@@ -3113,7 +3113,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 <section id="filtering-results" class="level3">
 <h3 class="anchored" data-anchor-id="filtering-results">Filtering results</h3>
 <p>The <code>.seeds</code> attribute contains a listing of seeds, which can be helpful for iteration:</p>
-<div id="182685a2" class="cell" data-execution_count="16">
+<div id="811257f0" class="cell" data-execution_count="16">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>res.seeds</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="16">
 <pre><code>array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
@@ -3121,7 +3121,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
 <p>The seeds are drawn from the summary dataframe, which defines which seeds are accessible via the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object. Therefore, you can drop rows from the summary dataframe to filter the results. For example, suppose we only wanted to analyze simulations with over 4900 deaths. We could retrieve a copy of the summary dataframe that only contains matching simulations:</p>
-<div id="34045c36" class="cell" data-execution_count="17">
+<div id="849a7208" class="cell" data-execution_count="17">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>res.summary.loc[res[<span class="st">'cum_infections'</span>]<span class="op">&gt;</span><span class="dv">4900</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="17">
 <div>
@@ -3150,7 +3150,7 @@ Name: sir_n_infected, dtype: float64</code></pre>
 </div>
 </div>
 <p>We can then make a copy of the results and write the reduced summary dataframe back to that object:</p>
-<div id="473caedc" class="cell" data-execution_count="18">
+<div id="9fefb6a3" class="cell" data-execution_count="18">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>res2 <span class="op">=</span> res.copy()</span>
 <span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>res2.summary <span class="op">=</span> res.summary.loc[res[<span class="st">'cum_infections'</span>]<span class="op">&gt;</span><span class="dv">4900</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
@@ -3158,25 +3158,25 @@ Name: sir_n_infected, dtype: float64</code></pre>
 Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only deep copies the summary dataframe. It does not duplicate the time series dataframes or the cache. For <code>Samples</code> objects, it is therefore generally preferable to use <code>.copy()</code>.
 </div>
 <p>Now notice that there are fewer samples, and the seeds have been filtered:</p>
-<div id="97f59842" class="cell" data-execution_count="19">
+<div id="320cdb5d" class="cell" data-execution_count="19">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="19">
 <pre><code>20</code></pre>
 </div>
 </div>
-<div id="8003cbb0" class="cell" data-execution_count="20">
+<div id="a6b1e76a" class="cell" data-execution_count="20">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(res2)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="20">
 <pre><code>0</code></pre>
 </div>
 </div>
-<div id="a47cfee5" class="cell" data-execution_count="21">
+<div id="b7ad3167" class="cell" data-execution_count="21">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>res2.seeds</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="21">
 <pre><code>array([], dtype=int64)</code></pre>
 </div>
 </div>
-<div id="bff79910" class="cell" data-execution_count="22">
+<div id="af6d063e" class="cell" data-execution_count="22">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>plt.hist(res2[<span class="st">'cum_infections'</span>], density<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Total infections'</span>)</span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Probability density'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -3199,30 +3199,30 @@ Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only
 <section id="applying-functions-and-transformations" class="level3">
 <h3 class="anchored" data-anchor-id="applying-functions-and-transformations">Applying functions and transformations</h3>
 <p>Sometimes it might be necessary to calculate quantities that are derived from the time series dataframes. These could be simple scalar values, such as totals or averages that had not been computed ahead of time, or extracting values from each simulation at a particular point in time. As an alternative to writing a loop that iterates over the seeds, the <code>.apply()</code> method takes in a function and maps it to every dataframe. This makes it quick to construct lists or arrays with scalar values extracted from the time series. For example, suppose we wanted to extract the peak number of people infected from each simulation:</p>
-<div id="34c33baf" class="cell" data-execution_count="23">
+<div id="4fa218a5" class="cell" data-execution_count="23">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>peak_infections <span class="op">=</span> <span class="kw">lambda</span> df: df[<span class="st">'sir_n_infected'</span>].<span class="bu">max</span>()</span>
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">apply</span>(peak_infections)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="23">
-<pre><code>[1012.0,
- 961.0,
- 979.0,
- 955.0,
- 975.0,
- 1003.0,
- 962.0,
- 1065.0,
- 994.0,
- 1003.0,
- 926.0,
- 948.0,
- 988.0,
- 1008.0,
- 992.0,
- 1017.0,
- 987.0,
- 964.0,
+<pre><code>[989.0,
+ 1014.0,
+ 980.0,
  997.0,
- 1004.0]</code></pre>
+ 989.0,
+ 1052.0,
+ 938.0,
+ 1014.0,
+ 953.0,
+ 982.0,
+ 1011.0,
+ 952.0,
+ 953.0,
+ 979.0,
+ 928.0,
+ 1006.0,
+ 910.0,
+ 1052.0,
+ 978.0,
+ 1001.0]</code></pre>
 </div>
 </div>
 </section>
@@ -3237,16 +3237,16 @@ Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only
 <section id="implementation-details" class="level3">
 <h3 class="anchored" data-anchor-id="implementation-details">Implementation details</h3>
 <p>If the file is loaded from a memory buffer, the <code>._zipfile</code> attribute will be populated. A helper property <code>.zipfile</code> is used to access the buffer, so if caching is not used, <code>.zipfile</code> returns the actual file on disk rather than the buffer:</p>
-<div id="dfd78d52" class="cell" data-execution_count="24">
+<div id="d4a7cec9" class="cell" data-execution_count="24">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, memory_buffer<span class="op">=</span><span class="va">True</span>) <span class="co"># Copy the entire file into memory</span></span>
 <span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f92b6414a40&gt; mode='r'&gt;
-&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f92b6414a40&gt; mode='r'&gt;</code></pre>
+<pre><code>&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f551aae33d0&gt; mode='r'&gt;
+&lt;zipfile.ZipFile file=&lt;_io.BytesIO object at 0x7f551aae33d0&gt; mode='r'&gt;</code></pre>
 </div>
 </div>
-<div id="997784f7" class="cell" data-execution_count="25">
+<div id="9030112a" class="cell" data-execution_count="25">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, memory_buffer<span class="op">=</span><span class="va">False</span>) <span class="co"># Copy the entire file into memory</span></span>
 <span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res._zipfile)</span>
 <span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.zipfile)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -3256,14 +3256,14 @@ Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only
 </div>
 </div>
 <p>The dataframes associated with the individual dataframes are cached on access, so <a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_csv.html#pd.read_csv" title="1"><code>pd.read_csv()</code></a> only needs to be called once. The cache starts out empty:</p>
-<div id="aca76322" class="cell" data-execution_count="26">
+<div id="f4c388ed" class="cell" data-execution_count="26">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>res._cache</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="26">
 <pre><code>{}</code></pre>
 </div>
 </div>
 <p>When a dataframe is accessed, it is automatically stored in the cache:</p>
-<div id="6a11c2b8" class="cell" data-execution_count="27">
+<div id="74cd12b6" class="cell" data-execution_count="27">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">0</span>]</span>
 <span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a>res._cache.keys()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="27">
@@ -3271,44 +3271,44 @@ Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only
 </div>
 </div>
 <p>This means that iterating through the dataframes the first time can be slow (but in general, iterating over all dataframes is avoided in favour of either only using summary outputs, or accessing a subset of the runs):</p>
-<div id="26977bfd" class="cell" data-execution_count="28">
+<div id="4bfe4c06" class="cell" data-execution_count="28">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 27.6 ms</code></pre>
+<pre><code>Elapsed time: 26.2 ms</code></pre>
 </div>
 </div>
-<div id="43a1c80a" class="cell" data-execution_count="29">
+<div id="519caeab" class="cell" data-execution_count="29">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb50"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 5.28 ms</code></pre>
+<pre><code>Elapsed time: 5.66 ms</code></pre>
 </div>
 </div>
 <p>The <code>preload</code> option populates the entire cache in advance. This makes creating the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.</p>
-<div id="851bb95b" class="cell" data-execution_count="30">
+<div id="616924a4" class="cell" data-execution_count="30">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>    res <span class="op">=</span> ss.Samples(<span class="st">'results/0.2.zip'</span>, preload<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 30.4 ms</code></pre>
+<pre><code>Elapsed time: 28.6 ms</code></pre>
 </div>
 </div>
-<div id="f88b0c35" class="cell" data-execution_count="31">
+<div id="80c08f8a" class="cell" data-execution_count="31">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 6.46 ms</code></pre>
+<pre><code>Elapsed time: 4.53 ms</code></pre>
 </div>
 </div>
-<div id="e2a40361" class="cell" data-execution_count="32">
+<div id="27d34cb2" class="cell" data-execution_count="32">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb56"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> sc.Timer():</span>
 <span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> df <span class="kw">in</span> res:</span>
 <span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">continue</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Elapsed time: 9.59 ms</code></pre>
+<pre><code>Elapsed time: 4.81 ms</code></pre>
 </div>
 </div>
 <p>Together, these options provide some flexibility in terms of memory and time demands to suit analyses at various different scales.</p>
@@ -3317,12 +3317,12 @@ Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only
 <section id="running-scenarios" class="level2">
 <h2 class="anchored" data-anchor-id="running-scenarios">Running scenarios</h2>
 <p>Suppose we wanted to compare a range of different <code>p_death</code> values and <code>initial</code> values (initial number of infections). We might define these runs as:</p>
-<div id="8100bf33" class="cell" data-execution_count="33">
+<div id="1938acf8" class="cell" data-execution_count="33">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>initials <span class="op">=</span> np.arange(<span class="dv">1</span>,<span class="dv">4</span>)</span>
 <span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>p_deaths <span class="op">=</span> np.arange(<span class="dv">0</span>,<span class="dv">1</span>,<span class="fl">0.25</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Recall that our <code>run_sim()</code> function had an argument for <code>p_death</code>. We can extend this to include the <code>initial</code> parameter too. We can actually generalize this further by passing the parameters as keyword arguments to avoid needing to hard-code all of them. Note that we also need to add the <code>initial</code> value to the summary outputs:</p>
-<div id="c923e310" class="cell" data-execution_count="34">
+<div id="8804b15e" class="cell" data-execution_count="34">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb59"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_sim(seed, <span class="op">**</span>kwargs):</span>
 <span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>    ppl <span class="op">=</span> ss.People(<span class="dv">1000</span>)</span>
 <span id="cb59-3"><a href="#cb59-3" aria-hidden="true" tabindex="-1"></a>    net <span class="op">=</span> ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">5</span>))</span>
@@ -3347,12 +3347,12 @@ Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only
 <span id="cb59-22"><a href="#cb59-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> df, summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>We can now easily run a set of scenarios with different values of <code>p_death</code> and save each one to a separate <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object. Note that when we create the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> objects now, we also want to specify that <code>'init_prev'</code> is one of the identifiers for the scenarios:</p>
-<div id="7489fd1d" class="cell" data-execution_count="35">
+<div id="92906677" class="cell" data-execution_count="35">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Clear the existing results</span></span>
 <span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> file_path <span class="kw">in</span> resultsdir.glob(<span class="st">'*'</span>):</span>
 <span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a>    file_path.unlink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
-<div id="53d6898b" class="cell" data-execution_count="36">
+<div id="33849990" class="cell" data-execution_count="36">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the sweep over initial and p_death</span></span>
 <span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">5</span></span>
 <span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a>seeds <span class="op">=</span> np.arange(n)</span>
@@ -3376,7 +3376,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>The results folder now contains a collection of saved <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> objects. Notice how the automatically selected file names now contain both the <code>p_death</code> value and the <code>initial</code> value, because they were both specified as identifiers. We can load one of these objects in to see how these identifiers are stored and accessed inside the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> class:</p>
-<div id="d851fd45" class="cell" data-execution_count="37">
+<div id="596bb35a" class="cell" data-execution_count="37">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="bu">list</span>(resultsdir.iterdir())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="37">
 <pre><code>[PosixPath('results/0.75-2.zip'),
@@ -3393,18 +3393,18 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
  PosixPath('results/0.0-2.zip')]</code></pre>
 </div>
 </div>
-<div id="8b235486" class="cell" data-execution_count="38">
+<div id="de019dc1" class="cell" data-execution_count="38">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb65"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Samples(<span class="st">'results/0.25-2.zip'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The ‘id’ of a <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> object is a dictionary of the identifiers, which makes it easy to access the input parameters associated with a set of scenario runs:</p>
-<div id="619ef91b" class="cell" data-execution_count="39">
+<div id="1c071fde" class="cell" data-execution_count="39">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb66"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a>res.<span class="bu">id</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="39">
 <pre><code>{'p_death': 0.25, 'initial': 2}</code></pre>
 </div>
 </div>
 <p>The ‘identifier’ is a tuple of these values, which is suitable for use as a dictionary key. This can be useful for accumulating and comparing variables across scenarios:</p>
-<div id="5ef674ef" class="cell" data-execution_count="40">
+<div id="2d7e42d3" class="cell" data-execution_count="40">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb68"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>res.identifier</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="40">
 <pre><code>(0.25, 2)</code></pre>
@@ -3413,7 +3413,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <section id="loading-multiple-scenarios" class="level3">
 <h3 class="anchored" data-anchor-id="loading-multiple-scenarios">Loading multiple scenarios</h3>
 <p>We saw above that we now have a directory full of <code>.zip</code> files corresponding to the various scenario runs. These can be accessed using the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> class, which facilitates accessing multiple instances of <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a>. We can pass the folder containing the results to the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> constructor to load them all:</p>
-<div id="66c57faa" class="cell" data-execution_count="41">
+<div id="6a8b585f" class="cell" data-execution_count="41">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb70"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> ss.Dataset(resultsdir)</span>
 <span id="cb70-2"><a href="#cb70-2" aria-hidden="true" tabindex="-1"></a>results</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="41">
@@ -3424,28 +3424,28 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>The <code>.ids</code> attribute lists all of the values available across scenarios in the results folder:</p>
-<div id="dcfe50b3" class="cell" data-execution_count="42">
+<div id="e1257335" class="cell" data-execution_count="42">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb72"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb72-1"><a href="#cb72-1" aria-hidden="true" tabindex="-1"></a>results.ids</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="42">
 <pre><code>{'p_death': [0.0, 0.25, 0.5, 0.75], 'initial': [1, 2, 3]}</code></pre>
 </div>
 </div>
 <p>The individual results can be accessed by indexing the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> instance using the values of the identifiers. For example:</p>
-<div id="713b646c" class="cell" data-execution_count="43">
+<div id="a31f8a8c" class="cell" data-execution_count="43">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb74"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb74-1"><a href="#cb74-1" aria-hidden="true" tabindex="-1"></a>results[<span class="fl">0.25</span>,<span class="dv">2</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="43">
 <pre><code>&lt;Samples 0.25-2, 5 seeds&gt;</code></pre>
 </div>
 </div>
 <p>This indexing operation is sensitive to the order in which the identifiers are specified. The <code>.get()</code> method allows you to specify them as key-value pairs:</p>
-<div id="434f0fe2" class="cell" data-execution_count="44">
+<div id="bbbe6f32" class="cell" data-execution_count="44">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb76"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a>results.get(initial<span class="op">=</span><span class="dv">2</span>, p_death<span class="op">=</span><span class="fl">0.25</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="44">
 <pre><code>&lt;Samples 0.25-2, 5 seeds&gt;</code></pre>
 </div>
 </div>
 <p>Iterating over the <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> will iterate over the <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> instances contained within it:</p>
-<div id="f7bd7cdf" class="cell" data-execution_count="45">
+<div id="e131e115" class="cell" data-execution_count="45">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb78"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb78-1"><a href="#cb78-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results:</span>
 <span id="cb78-2"><a href="#cb78-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -3464,7 +3464,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>This can be used to extract and compare values across scenarios. For example, we could consider the use case of making a plot that compares total deaths across scenarios:</p>
-<div id="69585b6f" class="cell" data-execution_count="46">
+<div id="68e2a64f" class="cell" data-execution_count="46">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb80"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb80-1"><a href="#cb80-1" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> []</span>
 <span id="cb80-2"><a href="#cb80-2" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> []</span>
 <span id="cb80-3"><a href="#cb80-3" aria-hidden="true" tabindex="-1"></a>yerr <span class="op">=</span> []</span>
@@ -3491,7 +3491,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 <section id="filtering-scenarios" class="level3">
 <h3 class="anchored" data-anchor-id="filtering-scenarios">Filtering scenarios</h3>
 <p>Often plots need to be generated for a subset of scenarios e.g., for sensitivity analysis or to otherwise compare specific scenarios. <a href="../api/samples.html#starsim.samples.Dataset.filter" title="0"><code>Dataset.filter</code></a> returns a new <a href="../api/samples.html#starsim.samples.Dataset" title="0"><code>Dataset</code></a> containing a subset of the results:</p>
-<div id="2b685255" class="cell" data-execution_count="47">
+<div id="09a66a0a" class="cell" data-execution_count="47">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb82"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb82-1"><a href="#cb82-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results.<span class="bu">filter</span>(initial<span class="op">=</span><span class="dv">2</span>):</span>
 <span id="cb82-2"><a href="#cb82-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -3501,7 +3501,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 &lt;Samples 0.75-2, 5 seeds&gt;</code></pre>
 </div>
 </div>
-<div id="d77a9bfa" class="cell" data-execution_count="48">
+<div id="157b73cb" class="cell" data-execution_count="48">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb84"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb84-1"><a href="#cb84-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res <span class="kw">in</span> results.<span class="bu">filter</span>(p_death<span class="op">=</span><span class="fl">0.25</span>):</span>
 <span id="cb84-2"><a href="#cb84-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(res)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -3511,7 +3511,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 <p>This is also a quick and efficient operation, so you can easily embed filtering commands inside the analysis to select subsets of the scenarios for plotting and other output generation. For instance:</p>
-<div id="f408b89b" class="cell" data-execution_count="49">
+<div id="297b3ee1" class="cell" data-execution_count="49">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb86"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb86-1"><a href="#cb86-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res, color <span class="kw">in</span> <span class="bu">zip</span>(results.<span class="bu">filter</span>(initial<span class="op">=</span><span class="dv">2</span>), sc.gridcolors(<span class="dv">4</span>)):</span>
 <span id="cb86-2"><a href="#cb86-2" aria-hidden="true" tabindex="-1"></a>    plt.plot(res[<span class="dv">0</span>].index, np.median([df[<span class="st">'new_deaths'</span>] <span class="cf">for</span> df <span class="kw">in</span> res], axis<span class="op">=</span><span class="dv">0</span>), color<span class="op">=</span>color, label<span class="op">=</span><span class="ss">f'p_death = </span><span class="sc">{</span>res<span class="sc">.</span><span class="bu">id</span>[<span class="st">"p_death"</span>]<span class="sc">}</span><span class="ss">'</span>)</span>
 <span id="cb86-3"><a href="#cb86-3" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
@@ -3529,7 +3529,7 @@ Zip file saved to "/home/runner/work/starsim/starsim/docs/user_guide/results/0.7
 </div>
 </div>
 </div>
-<div id="25a90d82" class="cell" data-execution_count="50">
+<div id="40fcdccf" class="cell" data-execution_count="50">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb88"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb88-1"><a href="#cb88-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> res, color <span class="kw">in</span> <span class="bu">zip</span>(results.<span class="bu">filter</span>(p_death<span class="op">=</span><span class="fl">0.25</span>), sc.gridcolors(<span class="dv">3</span>)):</span>
 <span id="cb88-2"><a href="#cb88-2" aria-hidden="true" tabindex="-1"></a>    plt.plot(res[<span class="dv">0</span>].index, np.median([df[<span class="st">'new_deaths'</span>] <span class="cf">for</span> df <span class="kw">in</span> res], axis<span class="op">=</span><span class="dv">0</span>), color<span class="op">=</span>color, label<span class="op">=</span><span class="ss">f'initial = </span><span class="sc">{</span>res<span class="sc">.</span><span class="bu">id</span>[<span class="st">"initial"</span>]<span class="sc">}</span><span class="ss">'</span>)</span>
 <span id="cb88-3"><a href="#cb88-3" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
@@ -3989,7 +3989,7 @@ Raw values: [0.00000000e+00 2.31481481e-11 4.62962963e-11 6.94444444e-11
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.4.0 (2026-06-21).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.0 (2026-07-05).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
