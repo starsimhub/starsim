@@ -1547,7 +1547,8 @@ class choice(Dist):
         if not replace:
             # Sampling without replacement is a joint draw over all elements, so it
             # cannot be expressed as an independent per-slot inverse-CDF. Keep the
-            # native (make_rvs) path in that case.
+            # native (make_rvs) path in that case, but draw exactly len(uids) values
+            # rather than slots.max()+1 (see process_size below).
             self._use_ppf = False
         # For the (default) replace=True case, leave _use_ppf as None so that the
         # ppf path is used for UID draws. This maps each slot's uniform through the
@@ -1556,12 +1557,28 @@ class choice(Dist):
         # -- the same issue hash-based CRN already fixed for bernoulli/poisson/etc.
         return
 
+    def process_size(self, n=1):
+        """ For replace=False, draw one value per UID (no slot blowup); not for the user """
+        size, slots = super().process_size(n)
+        if not self.pars.replace and slots is not None:
+            # Without replacement can't be slot-indexed CRN (it's a joint draw), and
+            # requesting slots.max()+1 distinct items both blows up and errors once
+            # slots.max() >= len(a). Draw exactly one value per UID instead. Like
+            # ss.options.crn=False, this is statistically valid but not CRN-safe
+            # across scenarios -- which is inherent to sampling without replacement.
+            self._slots = None
+            size = self._size = len(self._uids)
+            slots = None
+        return size, slots
+
     def ppf(self, rands):
         """ Map uniform values to choices via the inverse CDF (one draw per slot). """
         pars = self._pars
         a = pars.a
         if np.isscalar(a):
             a = np.arange(a)
+        else:
+            a = np.asarray(a) # Ensure array indexing works below (e.g. a=[30, 70] passed as a list)
         if pars.p is None: # Uniform over the choices
             n = len(a)
             inds = np.minimum((rands*n).astype(int), n - 1) # minimum guards against rands == 1.0
@@ -1635,7 +1652,11 @@ class histogram(Dist):
             values = values / vsum
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
-        self._use_ppf = False # Set to false since array arguments correspond to bins, not UIDs
+        # Leave _use_ppf as None (the default) so UID draws go through the hash-based
+        # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
+        # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,
+        # avoiding the slot_scale "blowup" (drawing slots.max()+1 and discarding most).
+        # The values/bins arrays are baked into self.dist, not treated as per-UID pars.
         return
 
 
