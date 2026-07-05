@@ -130,6 +130,8 @@ class HouseholdNet(ss.Network):
         n_remaining = len(ppl)
         p1 = []
         p2 = []
+        clusters = []  # Record each household's uids so the FHOH loop below need not rescan household_ids == cid
+        triu_cache = {}  # Cache i<j index pairs by cluster size; sizes are small repeated integers
         while n_remaining > 0:
             self.n_households += 1
 
@@ -154,22 +156,25 @@ class HouseholdNet(ss.Network):
                 sex_data = np.array([int(x) for x in sex_data.split(', ')])
                 ppl.female[cluster_uids] = (sex_data[0:cluster_size] == 2)
             self.household_ids[cluster_uids] = self.n_households - 1 # Zero based indexing for actual IDs
+            clusters.append(cluster_uids)
 
-            # Add symmetric pairwise contacts in each cluster
-            for i in cluster_uids:
-                for j in cluster_uids:
-                    if j > i:
-                        p1.append(i)
-                        p2.append(j)
+            # Add symmetric pairwise contacts in each cluster (all i<j pairs, in row-major order)
+            if cluster_size not in triu_cache:
+                triu_cache[cluster_size] = np.triu_indices(cluster_size, k=1)
+            ii, jj = triu_cache[cluster_size]
+            p1.append(cluster_uids[ii])
+            p2.append(cluster_uids[jj])
             n_remaining -= cluster_size
 
+        p1 = np.concatenate(p1) if p1 else np.empty(0, dtype=ss.dtypes.int)
+        p2 = np.concatenate(p2) if p2 else np.empty(0, dtype=ss.dtypes.int)
         beta = np.ones(len(p1), dtype=ss.dtypes.float)
         self.append(p1=p1, p2=p2, beta=beta)
 
         if self.dynamic:
-            # Find a female head of household between ages 15 and 50
-            for cid in range(self.n_households):
-                cluster_uids = ss.uids(self.household_ids == cid)
+            # Find a female head of household between ages 15 and 50, iterating the recorded
+            # clusters rather than rescanning household_ids == cid for every household (O(N) each).
+            for cluster_uids in clusters:
                 female_uids = cluster_uids[
                     ppl.female[cluster_uids] & (ppl.age[cluster_uids] >= 15) & (ppl.age[cluster_uids] <= 50)]
                 if len(female_uids) > 0:
@@ -209,13 +214,32 @@ class HouseholdNet(ss.Network):
         # included when looking up household members
         self.household_ids[birth_uids] = self.household_ids[mat_uids]
 
+        # Build a household_id -> member uids map once (O(N log N)) rather than scanning
+        # household_ids == hid for every newborn (O(births * N)). Members within each group
+        # stay in ascending uid order, matching the previous per-birth boolean scan.
+        auids = ppl.auids
+        hvals = self.household_ids[auids]
+        valid = ~np.isnan(hvals)
+        auids = auids[valid]
+        hvals = hvals[valid]
+        order = np.argsort(hvals, kind='stable')
+        sorted_uids = auids[order]
+        sorted_h = hvals[order]
+        split_at = np.nonzero(np.diff(sorted_h))[0] + 1
+        member_groups = np.split(sorted_uids, split_at)
+        group_hids = sorted_h[np.concatenate(([0], split_at))] if len(sorted_h) else np.empty(0)
+        hmap = {int(hid): grp for hid, grp in zip(group_hids, member_groups)}
+
+        mat_hids = self.household_ids[mat_uids]
         p1 = []
         p2 = []
-        for new_uid, mat_uid in zip(birth_uids, mat_uids):
-            hh_contacts = ss.uids(self.household_ids == self.household_ids[mat_uid])
-            hh_contacts = hh_contacts[hh_contacts != new_uid]  # Exclude self-loops
+        for new_uid, mat_hid in zip(birth_uids, mat_hids):
+            if np.isnan(mat_hid):  # Mother has no household; no contacts to add (matches prior behavior)
+                continue
+            members = hmap[int(mat_hid)]
+            hh_contacts = members[members != new_uid]  # Exclude self-loops
             p1.append(hh_contacts)
-            p2.append([new_uid] * len(hh_contacts))
+            p2.append(np.full(len(hh_contacts), new_uid))
 
         if p1:
             p1 = ss.uids.concatenate(p1)
