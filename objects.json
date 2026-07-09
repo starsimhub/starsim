@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 750,
+  "count": 753,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -161,6 +161,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/arrays.html#starsim.arrays.Arr.init_vals",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.arrays.Arr.isin",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.Arr.isin",
       "dispname": "-"
     },
     {
@@ -2084,6 +2092,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.distributions.choice.process_size",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choice.process_size",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.distributions.choice",
       "domain": "py",
       "role": "class",
@@ -2265,6 +2281,14 @@
       "role": "class",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.normal",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.poisson.ppf",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.poisson.ppf",
       "dispname": "-"
     },
     {
@@ -6156,6 +6180,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Arr.isin",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.Arr.isin",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Arr.isnan",
       "domain": "py",
       "role": "attribute",
@@ -7972,6 +8004,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.choice.process_size",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choice.process_size",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.choice",
       "domain": "py",
       "role": "class",
@@ -8145,6 +8185,14 @@
       "role": "class",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.normal",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.poisson.ppf",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.poisson.ppf",
       "dispname": "-"
     },
     {
