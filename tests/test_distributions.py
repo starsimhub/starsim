@@ -270,6 +270,47 @@ def test_repeat_slot():
     return draws
 
 
+def test_poisson_ppf():
+    """ The fast Poisson inverse CDF must match SciPy exactly (guards the searchsorted optimization) """
+    sc.heading('Test fast Poisson inverse CDF')
+    import scipy.stats as sps
+    u = np.linspace(1e-4, 1-1e-4, 5000) # Deterministic grid of uniforms spanning (0, 1)
+    for lam in [0.5, 3.7, 10, 50, 200]:
+        d = ss.poisson(lam=lam, strict=False).init(slots=np.arange(10))
+        d.process_pars() # Populate _pars so ppf() can read lam
+        fast = d.ppf(u)
+        ref = sps.poisson.ppf(u, mu=lam)
+        assert np.array_equal(fast, ref), f'Fast Poisson ppf does not match SciPy for lam={lam}'
+        sc.printgreen(f'✓ Poisson ppf matches SciPy for lam={lam}')
+    return fast
+
+
+def test_choice_slots():
+    """ ss.choice over UIDs must stay correct and CRN-safe regardless of slot magnitude (no slots.max()+1 blowup) """
+    sc.heading('Test ss.choice slot handling')
+    a = np.array([10, 20, 30])
+    p = np.array([0.2, 0.3, 0.5])
+
+    # Repeated + very large slots (as for agents born mid-sim with slot_scale=100):
+    # equal slots must yield equal values (CRN), and large slots must not allocate slots.max()+1.
+    slots = np.array([1_000_000, 5, 1_000_000, 5, 999_999])
+    uids = ss.uids(np.arange(len(slots)))
+    d = ss.choice(a=a, p=p, strict=False).init(slots=slots)
+    vals = d.rvs(uids)
+    assert set(np.unique(vals)).issubset(set(a)), 'choice returned values outside a'
+    assert vals[0] == vals[2] and vals[1] == vals[3], 'Equal slots must give equal values (CRN)'
+
+    # Frequencies match p, with slots spread across a large range
+    n = 20000
+    big_slots = np.arange(n) + 1_000_000
+    d2 = ss.choice(a=a, p=p, strict=False).init(slots=big_slots)
+    freq = d2.rvs(ss.uids(np.arange(n)))
+    for val, pexp in zip(a, p):
+        assert np.isclose((freq == val).mean(), pexp, atol=0.02), f'choice frequency off for {val}'
+    sc.printgreen('✓ ss.choice correct and CRN-safe with large slots')
+    return vals
+
+
 def make_mock_modules():
     """ Create mock modules for the tests to use """
     mod = sc.objdict()
@@ -507,8 +548,10 @@ if __name__ == '__main__':
     o7 = test_callable()
     o8 = test_array()
     o9 = test_repeat_slot()
-    o10 = test_timepar_dists()
-    o10 = test_timepar_callable()
-    o11 = test_hist_plotting()
+    o10 = test_poisson_ppf()
+    o11 = test_choice_slots()
+    o12 = test_timepar_dists()
+    o13 = test_timepar_callable()
+    o14 = test_hist_plotting()
 
     T.toc()

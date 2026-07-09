@@ -1252,6 +1252,8 @@ class poisson(Dist):
     scaling = scale_types.predraw
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        self._ppf_lam = None # Cached lambda for the fast ppf (see ppf())
+        self._ppf_cdf = None # Cached CDF for the fast ppf
         return
 
     def sync_pars(self):
@@ -1259,6 +1261,26 @@ class poisson(Dist):
         spars = dict(mu=self._pars.lam)
         self.update_dist_pars(spars)
         return spars
+
+    def ppf(self, rands):
+        """
+        Fast inverse-CDF sampling for the common-random-number (ppf) path.
+
+        SciPy's generic discrete ``ppf`` is very slow (it root-finds per element),
+        and for CRN draws it is called every time an ``ss.poisson`` is sampled by
+        UID. For a scalar ``lam`` we instead precompute the CDF once and map each
+        uniform via ``np.searchsorted``, which is 30-60x faster and produces
+        bitwise-identical results. Array-valued ``lam`` falls back to SciPy.
+        """
+        lam = self._pars.lam
+        if np.isscalar(lam) or (isinstance(lam, np.ndarray) and lam.ndim == 0):
+            lam = float(lam)
+            if self._ppf_lam != lam: # Rebuild the CDF only when lambda changes
+                kmax = int(lam + 10.0*np.sqrt(lam) + 30) # P(X > kmax) is negligible, so the CDF saturates to 1.0
+                self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
+                self._ppf_lam = lam
+            return np.searchsorted(self._ppf_cdf, rands, side='left').astype(float) # side='left' matches sps.poisson.ppf
+        return self.dist.ppf(rands) # Fallback for array-valued lambda
 
 
 class beta_dist(Dist):
@@ -1338,14 +1360,12 @@ class randint(Dist):
     Args:
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
-        allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
     scaling = scale_types.predraw
     valid_pars = ['low', 'high', 'dtype']
 
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
-        self.allow_time = allow_time
         if len(args):
             if len(args) == 1:
                 high = args[0]
@@ -1372,8 +1392,8 @@ class randint(Dist):
 
     def ppf(self, rands):
         p = self._pars
-        rvs = rands * (p.high + 1 - p.low) + p.low
-        rvs = rvs.astype(p.dtype)
+        rvs = rands * (p.high - p.low) + p.low  # Map [0,1) to [low, high), matching np.random.integers (exclusive high)
+        rvs = np.minimum(rvs, p.high - 1).astype(p.dtype)  # Clamp guards against rands rounding up to high
         return rvs
 
 class rand_raw(Dist):
@@ -1522,18 +1542,48 @@ class choice(Dist):
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
-        self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
+        if not replace:
+            # Sampling without replacement is a joint draw over all elements, so it
+            # cannot be expressed as an independent per-slot inverse-CDF. Keep the
+            # native (make_rvs) path in that case, but draw exactly len(uids) values
+            # rather than slots.max()+1 (see process_size below).
+            self._use_ppf = False
+        # For the (default) replace=True case, leave _use_ppf as None so that the
+        # ppf path is used for UID draws. This maps each slot's uniform through the
+        # inverse CDF (below), which is CRN-safe and, crucially, avoids the
+        # make_rvs "slot blowup" (drawing slots.max()+1 values and discarding most)
+        # -- the same issue hash-based CRN already fixed for bernoulli/poisson/etc.
         return
 
+    def process_size(self, n=1):
+        """ For replace=False, draw one value per UID (no slot blowup); not for the user """
+        size, slots = super().process_size(n)
+        if not self.pars.replace and slots is not None:
+            # Without replacement can't be slot-indexed CRN (it's a joint draw), and
+            # requesting slots.max()+1 distinct items both blows up and errors once
+            # slots.max() >= len(a). Draw exactly one value per UID instead. Like
+            # ss.options.crn=False, this is statistically valid but not CRN-safe
+            # across scenarios -- which is inherent to sampling without replacement.
+            self._slots = None
+            size = self._size = len(self._uids)
+            slots = None
+        return size, slots
+
     def ppf(self, rands):
-        """ Shouldn't actually be needed since dynamic pars not supported """
+        """ Map uniform values to choices via the inverse CDF (one draw per slot). """
         pars = self._pars
-        if np.isscalar(pars.a):
-            pars.a = np.arange(pars.a)
-        pcum = np.cumsum(pars.p)
-        inds = np.searchsorted(pcum, rands)
-        rvs = pars.a[inds]
-        return rvs
+        a = pars.a
+        if np.isscalar(a):
+            a = np.arange(a)
+        else:
+            a = np.asarray(a) # Ensure array indexing works below (e.g. a=[30, 70] passed as a list)
+        if pars.p is None: # Uniform over the choices
+            n = len(a)
+            inds = np.minimum((rands*n).astype(int), n - 1) # minimum guards against rands == 1.0
+        else:
+            pcum = np.cumsum(pars.p)
+            inds = np.minimum(np.searchsorted(pcum, rands, side='right'), len(a) - 1)
+        return a[inds]
 
 
 class histogram(Dist):
@@ -1600,7 +1650,11 @@ class histogram(Dist):
             values = values / vsum
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
-        self._use_ppf = False # Set to false since array arguments correspond to bins, not UIDs
+        # Leave _use_ppf as None (the default) so UID draws go through the hash-based
+        # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
+        # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,
+        # avoiding the slot_scale "blowup" (drawing slots.max()+1 and discarding most).
+        # The values/bins arrays are baked into self.dist, not treated as per-UID pars.
         return
 
 

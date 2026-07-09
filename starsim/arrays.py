@@ -400,6 +400,43 @@ class Arr(BaseArr):
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
 
+    def isin(self, values):
+        """
+        Return a `BoolArr` that is True wherever the array's value is in `values`.
+
+        An `Arr`-aware analogue of `numpy.isin` that also picks the faster algorithm:
+        `values` may be a scalar or any array-like of test values. For a small number
+        of test values the equality comparisons are OR-ed together (which avoids the
+        sort/hash overhead of `np.isin` and is faster for the common
+        handful-of-categories case); for larger sets it falls back to `np.isin`. The
+        result is a `BoolArr`, so `.uids`, `[uids]`, and boolean combination all work.
+
+        Args:
+            values: a scalar, or an array-like (list/tuple/array) of values to test against.
+
+        Returns:
+            BoolArr: True wherever the array's value equals one of `values`.
+
+        **Example**:
+
+            active = disease.state.isin([State.MILD, State.SEVERE]).uids
+        """
+        values = np.atleast_1d(sc.toarray(values)) # Normalize scalars/lists/arrays to 1D (matches np.isin for other inputs)
+        if values.dtype == object: # A set, dict, or generator is wrapped as a single object, which np.isin would silently treat as no-match; be louder
+            errormsg = f'isin() expects a scalar or array-like object (list/tuple/array), not {values}'
+            raise TypeError(errormsg)
+        raw = self.raw # Always size N, so the result has correct full-size raw
+        n = len(values)
+        if n == 0:
+            result = np.zeros(raw.shape, dtype=np.bool_)
+        elif n <= 10: # OR-of-equality beats np.isin for small sets (measured crossover ~11)
+            result = (raw == values[0])
+            for v in values[1:]:
+                result |= (raw == v)
+        else:
+            result = np.isin(raw, values)
+        return self.asnew(result, cls=BoolArr, copy=False)
+
     def _math(self, op, other=None, inplace=False, reverse=False):
         """
         Helper function for numeric operations

@@ -3,6 +3,16 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 
+## Version 3.5.1 (2026-07-09)
+- Added `ss.Arr.isin()`, for comparing an array against multiple values. For example, code like `recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)` could now be `recent = self.ti_infected.isin([self.ti, self.ti-1])`.
+- `ss.poisson` now uses precomputed CDFs for a 60x performance gain in some cases.
+- `ss.choice` (with the default `replace=True`) now uses the inverse-CDF/hash path for a ~10x performance gain in some cases.
+- *Regression*: because the `ss.choice` random-number path changed, the exact values produced for `ss.choice` UID draws differ from previous versions (results remain statistically equivalent). Models using `ss.choice` (including `ss.Pregnancy`) will produce different stochastic realizations, and stored regression baselines should be regenerated.
+- *Regression*: fixed a bug in `ss.library.HouseholdNet` where women already pregnant at initialization were all evaluated for moving out on the first timestep.
+- Fixed a bug in `ss.library.HouseholdNet` move-out timing that only manifested when the `ss.Pregnancy` module ran on a coarser `dt` than the sim (e.g. `ss.Pregnancy(dt=ss.months(3))`). Eligibility was determined by comparing `pregnancy.ti_delivery` (an index in the pregnancy module's *own* timeline) against the sim timestep; with mismatched dt, pregnant non-heads became re-eligible far too often, greatly over-fragmenting households and suppressing household transmission (e.g. ~40% fewer infections in a TB model with quarterly pregnancy). Move-out is now evaluated exactly once per pregnancy (keyed to `ti_pregnant`), which is dt-agnostic and bit-identical when the pregnancy dt equals the sim dt.
+- *GitHub info*: PR [1388](https://github.com/starsimhub/starsim/pull/1388)
+
+
 ## Version 3.5.0 (2026-07-05)
 This release provides several major performance improvements, focused on random number generation, networks, and pregnancy. On a representative large simulation (50,000 agents, 100 years, SIS on a random network with births and deaths), the random number changes alone make the default configuration roughly 1.4x faster, or about 2x faster with common random numbers disabled (`ss.options.crn = False`); the network, transmission, and pregnancy changes described below provide further ~1.3x speedups on top of this, for a total of ~1.8-2.6x speedups.
 
@@ -17,12 +27,12 @@ This release provides several major performance improvements, focused on random 
 - *Regression*: `ss.RandomNet` is now a faster (~1.8x), approximate network in which the target end of each edge is drawn independently. The per-agent degree is therefore only approximately Poisson rather than exact. The previous exact behavior is available as the new `ss.RandomExactNet`; switch to it if you rely on the exact degree distribution.
 - Edge generation for `ss.RandomExact` networks (what were previously called `ss.Random`) now uses an in-place Fisher-Yates shuffle (`ss.networks.fisher_yates_shuffle()`) instead of `np.random.permutation`, about 1.3x faster.
 - Networks whose edges last a single timestep (`dur=0`, e.g. `ss.RandomNet`) now regenerate edges via a zero-copy fast path that avoids concatenating onto the previous edge list each step.
-- `ssl.HouseholdNet` initialization is now fully vectorized across household assignment, edge construction, and female-head-of-household selection, for a performance improvement of 10-20x for large populations.
-- `ssl.HouseholdNet.add_births()` was also vectorized, for a performance improvement of ~1.3x in high-turnover simulations.
+- `ss.library.HouseholdNet` initialization is now fully vectorized across household assignment, edge construction, and female-head-of-household selection, for a performance improvement of 10-20x for large populations.
+- `ss.library.HouseholdNet.add_births()` was also vectorized, for a performance improvement of ~1.3x in high-turnover simulations.
 
 ### Pregnancy
 - The `ss.Pregnancy` conception logic was optimized, for a ~20% performance improvement.
-- *Regression*: the default `slot_scale` for `ss.Pregnancy` was increased from 5 to 100. Newborns are assigned a random slot in the range `[n_agents, slot_scale·n_agents]`; a larger range reduces the chance that two newborns share a slot (and therefore make identical random draws). Previously a larger `slot_scale` also meant proportionally more random draws, but with the new hash-based CRN the number of draws no longer depends on the slot range, so the default was raised to reduce these collision artifacts at no performance cost. This changes results for models with pregnancy.
+- *Regression*: the default `slot_scale` for `ss.Pregnancy` was increased from 5 to 10. Newborns are assigned a random slot in the range `[n_agents, slot_scale·n_agents]`; a larger range reduces the chance that two newborns share a slot (and therefore make identical random draws). Previously a larger `slot_scale` also meant proportionally more random draws, but with the new hash-based CRN the number of draws no longer depends on the slot range, so the default was raised to reduce these collision artifacts at no performance cost. This changes results for models with pregnancy.
 
 ### Other performance optimizations
 
@@ -32,7 +42,7 @@ This release provides several major performance improvements, focused on random 
 
 ### Other changes
 
-- `starsim.library` now exports its contents at the top level, so classes can be accessed either via their submodule (e.g. `ssl.networks.HouseholdNet`, `ssl.diseases.Cholera`) or directly (e.g. `ssl.HouseholdNet`, `ssl.Cholera`), like core Starsim.
+- `starsim.library` now exports its contents at the top level, so classes can be accessed either via their submodule (e.g. `ss.library.networks.HouseholdNet`, `ss.library.diseases.Cholera`) or directly (e.g. `ss.library.HouseholdNet`, `ss.library.Cholera`), like core Starsim.
 - Added `tests/benchmark_large.py` and associated benchmark data for tracking performance on larger simulations.
 
 ### Regression information
@@ -47,12 +57,12 @@ This release provides several major performance improvements, focused on random 
 This release introduces the **Starsim library** (`starsim.library`), which absorbs the former standalone `starsim_examples` package. This release also adds memory, reproducibility, and usability improvements along with numerous bugfixes.
 
 ### The Starsim library
-- Example and reference modules that previously lived in the separate `starsim_examples` package are now bundled with Starsim in `starsim.library`, imported as `import starsim.library as ssl`. Unlike core Starsim, the library does *not* export everything at the top level; classes are accessed via their submodule:
-  - Diseases: `ssl.diseases.Cholera`, `ssl.diseases.Ebola`, `ssl.diseases.HIV`, `ssl.diseases.Measles`
-  - Maternal, neonatal, and child health: `ssl.mnch.FetalHealth`, `ssl.mnch.MaternalInfections`, `ssl.mnch.NeonatalSepsis`
-  - Networks: `ssl.networks.HouseholdNet`, `ssl.networks.SpatialNet`, and the theoretical/abstract networks
-- *Regression*: `ss.FetalHealth` and `ss.HouseholdNet` are no longer available at the top level. Instead of `ss.FetalHealth()` and `ss.HouseholdNet()`, use `ssl.mnch.FetalHealth()` and `ssl.networks.HouseholdNet()` (with `import starsim.library as ssl`).
-- *Regression*: `ss.MaternalNet` has been removed. It was a thin alias for the prenatal network (`class MaternalNet(PrenatalNet)`); replace `ss.MaternalNet(...)` with `ss.PrenatalNet(...)`.
+- Example and reference modules that previously lived in the separate `starsim_examples` package are now bundled with Starsim in `starsim.library`, imported as `import starsim.library as ssl`. (or just used as `ss.library`). Like core Starsim, the library exports everything at the top level:
+  - Diseases: `ss.library.Cholera`, `ss.library.Ebola`, `ss.library.HIV`, `ss.library.Measles`
+  - Maternal, neonatal, and child health: `ss.library.FetalHealth`, `ss.library.MaternalInfections`, `ss.library.NeonatalSepsis`
+  - Networks: `ss.library.HouseholdNet`, `ss.library.SpatialNet`, and the theoretical/abstract networks
+- *Regression*: `ss.FetalHealth` and `ss.HouseholdNet` are no longer available at the top level. Instead of `ss.FetalHealth()` and `ss.HouseholdNet()`, use `ss.library.FetalHealth()` and `ss.library.HouseholdNet()` (or `ssl.FetalHealth()` and `ssl.HouseholdNet()` with `import starsim.library as ssl`).
+- *Regression*: `ss.MaternalNet` has been removed. It was a thin alias for the prenatal network; replace `ss.MaternalNet(...)` with `ss.PrenatalNet(...)`.
 - *Regression*: the `gonorrhea` and `syphilis` example diseases have been removed from the package (they are not part of the new library). Full, maintained STI models are available in [STIsim](https://github.com/starsimhub/stisim). Replace `ss.Gonorrhea()` with `import stisim as sti; sti.Gonorrhea()` and the same for syphilis.
 - Standalone example scripts ([LASER](https://laser.idmod.org/) comparisons, language translations, network embedding) have moved out of the package into `docs/examples`.
 

@@ -335,6 +335,35 @@ def test_dynamic_household():
 
 
 @sc.timer()
+def test_household_coarse_pregnancy_dt():
+    """ Regression test: a Pregnancy module running on a coarser dt than the sim must not corrupt
+    HouseholdNet move-out timing.
+
+    Move-out is evaluated once per pregnancy, so the resulting number of households should be
+    ~invariant to the pregnancy module's dt. Previously, HouseholdNet compared
+    pregnancy.ti_delivery (an index in the pregnancy module's own timeline) against sim.ti; when
+    pregnancy ran on a coarser dt (e.g. ss.Pregnancy(dt=ss.months(3))), pregnant non-heads became
+    re-eligible far too often, greatly over-fragmenting households. """
+    sc.heading('Testing HouseholdNet with a coarse-dt Pregnancy module...')
+    dhs_data = make_dhs_data(n=medium)
+
+    def run(preg_dt):
+        household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True, prob_move_out=0.5)
+        preg = ss.Pregnancy(dt=preg_dt)
+        sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
+                     start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1, copy_inputs=False)
+        sim.run()
+        return household.n_households
+
+    n_month   = run(ss.months(1))
+    n_quarter = run(ss.months(3))
+    rel = abs(n_quarter - n_month) / n_month
+    assert rel < 0.15, f'Coarse-dt pregnancy over-fragments households: monthly={n_month}, quarterly={n_quarter} (rel diff {rel:.1%})'
+
+    return n_month, n_quarter
+
+
+@sc.timer()
 def test_other():
     sc.heading('Other network tests...')
 
@@ -372,6 +401,7 @@ if __name__ == '__main__':
     null = test_null()
     hh   = test_household()
     ehh  = test_dynamic_household()
+    ehh2 = test_household_coarse_pregnancy_dt()
     oth  = test_other()
 
     T.toc()
