@@ -4,6 +4,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.5.1 (2026-07-09)
+- Added `ss.Arr.isin()`, for comparing an array against multiple values. For example, code like `recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)` could now be `recent = self.ti_infected.isin([self.ti, self.ti-1])`.
 - `ss.poisson` now uses precomputed CDFs for a 60x performance gain in some cases.
 - `ss.choice` (with the default `replace=True`) now uses the inverse-CDF/hash path for a ~10x performance gain in some cases.
 - *Regression*: because the `ss.choice` random-number path changed, the exact values produced for `ss.choice` UID draws differ from previous versions (results remain statistically equivalent). Models using `ss.choice` (including `ss.Pregnancy`) will produce different stochastic realizations, and stored regression baselines should be regenerated.
