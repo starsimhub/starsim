@@ -328,12 +328,11 @@ class Samples:
         # Handle the zip file name
         if fname is None:
             fname = "-".join(str(row[x]) for x in identifiers[1:]) + ".zip"
-        folder.mkdir(parents=True, exist_ok=True)
 
-        # Save the zip file
-        sc.savezip(folder/fname, data=zipdata, tobytes=False, verbose=verbose)
+        # Save the zip file; savezip sanitizes the path and creates the folder as needed
+        fullpath = sc.savezip(filename=fname, folder=folder, data=zipdata, tobytes=False, verbose=verbose)
 
-        return cls(folder/fname, memory_buffer=False)
+        return cls(fullpath, memory_buffer=False)
 
     def get(self, seed):
         """
