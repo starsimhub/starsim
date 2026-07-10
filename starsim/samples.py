@@ -9,7 +9,7 @@ Hierarchy
 import io
 import zipfile
 import sciris as sc
-
+import pathlib
 
 class Dataset:
     """
@@ -113,7 +113,7 @@ class Samples:
         """
 
         Args:
-            fname: Name of zip file to load
+            fname: Name of zip file to load (could also be an io.BytesIO instance)
             memory_buffer: Load the file into memory. This avoids locking the file on disk and
                            improves performance when loading random parts of the file. This option can be
                            disabled in scripts to reduce memory requirements and improve performance if
@@ -127,11 +127,12 @@ class Samples:
 
         # Copy the file into a memory buffer - mainly so that we don't lock the file
         # on disk, but also this should theoretically improve performance when loading
-        # random parts of the file.
+        # random parts of the file. If fname is already an in-memory buffer, it's used
+        # directly (via the zipfile property) since there's nothing to copy off disk.
         self._fname = fname
         self._zipfile = None
 
-        if memory_buffer:
+        if memory_buffer and not isinstance(fname, io.BytesIO):
             with open(fname, "rb") as f:
                 buffer = io.BytesIO(f.read())
             self._zipfile = zipfile.ZipFile(buffer, mode="r")
