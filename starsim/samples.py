@@ -9,7 +9,6 @@ Hierarchy
 import io
 import zipfile
 import sciris as sc
-import pathlib
 
 class Dataset:
     """
@@ -289,14 +288,19 @@ class Samples:
         return f'seed_{seed}.csv'
 
     @classmethod
-    def new(cls, folder, outputs, identifiers=None, fname=None, verbose=True):
+    def new(cls, outputs, identifiers=None, folder='.', fname=None, verbose=True):
         """
+        Create a new Samples instance
+
+        Pass in outputs (list of tuples (df:pd.DataFrame, summary_row:dict)) to wrap them in a `Samples` instance.
+
         Args:
             folder (path): the folder to save the zip file in
             outputs: A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry 'seed' for the seed
             identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the
                          same value for all samples. This is useful when generating multiple sets of results e.g., for scenarios (optional)
-            fname (str): filename for the zip file; auto-generated from identifiers if not supplied
+            fname (str/BytesIO): filename for the zip file; auto-generated from identifiers if not supplied.
+                                 If an `io.BytesIO` instance is passed, the zip file is created in-memory
             verbose (bool): whether to print the save path (default True)
         """
         zipdata = {} # Store all the data to be written as files inside the zipfile
@@ -325,14 +329,18 @@ class Samples:
         summary.set_index(identifiers, inplace=True)
         zipdata[summary_file] = summary.to_csv()
 
-        # Handle the zip file name
-        if fname is None:
-            fname = "-".join(str(row[x]) for x in identifiers[1:]) + ".zip"
+        if isinstance(fname, io.BytesIO):
+            # Write the zip file directly into the BytesIO instance
+            with zipfile.ZipFile(fname, mode="w") as zf:
+                for key, val in zipdata.items():
+                    zf.writestr(key, val)
+        else:
+            if fname is None:
+                fname = "-".join(str(row[x]) for x in identifiers[1:]) + ".zip"
+            fname = sc.savezip(filename=fname, folder=folder, data=zipdata, tobytes=False, verbose=verbose)
 
-        # Save the zip file; savezip sanitizes the path and creates the folder as needed
-        fullpath = sc.savezip(filename=fname, folder=folder, data=zipdata, tobytes=False, verbose=verbose)
+        return cls(fname, memory_buffer=False)
 
-        return cls(fullpath, memory_buffer=False)
 
     def get(self, seed):
         """
