@@ -3,9 +3,11 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 ## Version 3.5.2 (2026-XX-XX)
-- Fixed a bug (introduced in 3.5.0) where the common-random-number (CRN) hash engine `hash_uniforms()` always returned `float64`, ignoring the configured float precision (`ss.dtypes.float`, which is `float32` by default). Consequently `ss.random` and `ss.uniform` returned `float32` when drawn by count but `float64` when drawn by UID. `hash_uniforms()` now returns `ss.dtypes.float`, matching the native draw path; the mantissa is sized to the float width (24-bit for `float32`, 53-bit for `float64`) so values stay strictly in [0, 1) — a plain `float64`→`float32` cast would round the largest values up to exactly 1.0. The `float64` (64-bit precision) stream is unchanged.
-- Fixed a consequence of the above where `ss.multi_random.rvs()` returned an array of twice the expected length under CRN (the default). The XOR-combine reinterprets the float bytes as unsigned ints; with the sub-draws incorrectly `float64` (8 bytes) but the int view `uint32` (4 bytes), the reinterpretation doubled the element count. With the sub-draws now correctly `float32` the length is preserved, and the combine derives the int width from the float precision rather than assuming it matches `ss.dtypes.rand_uint`. The doubling was masked in Starsim's own transmission code (the kernel reads only the first `len(src)` values) but broke downstream code that stored the full `rvs()` output.
-- *Regression*: because CRN draws now use `float32` uniforms at the default precision (matching the native path), the exact random values for agent-indexed draws differ from 3.5.0–3.5.1. Results remain statistically equivalent and CRN reproducibility is preserved, but stored regression baselines have been regenerated. (64-bit precision is unaffected.)
+- Fixed a bug where `ss.random()` always returned `float64` regardless of the configured type `ss.dtypes.float`
+- Fixed `ss.poisson()` sometimes returning `float64` and sometimes returning an integer. It now always returns `ss.dtypes.int`
+- Fixed `ss.multi_random.rvs()` returning an incorrect number of samples due to type mismatches
+- *Regression*: Because the default CRN mechanism precision has changed to consistently match `ss.dtypes.float`, the exact random values produced for agent-indexed draws are different from 3.5.1
+
 
 ## Version 3.5.1 (2026-07-09)
 - Added `ss.Arr.isin()`, for comparing an array against multiple values. For example, code like `recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)` could now be `recent = self.ti_infected.isin([self.ti, self.ti-1])`.
