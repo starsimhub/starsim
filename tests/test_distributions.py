@@ -558,14 +558,16 @@ def test_dtype_consistency():
         native, crn = path_dtypes(dist)
         assert native == crn == ft, f'{dist.distname}: by-count={native}, by-UID={crn}, expected {ft}'
 
+    # ss.poisson yields integer counts, so both paths must return ss.dtypes.int. Regression: the CRN
+    # ppf cast counts to float64 (`searchsorted(...).astype(float)`) while the native path was int64.
+    native, crn = path_dtypes(ss.poisson(lam=3, name='p'))
+    assert native == crn == ss.dtypes.int, f'poisson: by-count={native}, by-UID={crn}, expected {ss.dtypes.int}'
+
     # Other dists aren't independently vulnerable to this issue, but the two paths must still agree
     for dist in [ss.normal(name='n'), ss.expon(name='e'), ss.lognorm_ex(name='l'),
                  ss.constant(v=1.5, name='c'), ss.bernoulli(p=0.3, name='b')]:
         native, crn = path_dtypes(dist)
         assert native == crn, f'{dist.distname}: by-count path {native} != by-UID path {crn}'
-
-    # NB: ss.poisson has a separate, known discrepancy (native int64 counts vs a float64 CRN ppf
-    # from `searchsorted(...).astype(float)`); it stems from a different cause and is not tested here.
     return
 
 

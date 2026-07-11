@@ -1306,8 +1306,10 @@ class poisson(Dist):
                 kmax = int(lam + 10.0*np.sqrt(lam) + 30) # P(X > kmax) is negligible, so the CDF saturates to 1.0
                 self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
                 self._ppf_lam = lam
-            return np.searchsorted(self._ppf_cdf, rands, side='left').astype(float) # side='left' matches sps.poisson.ppf
-        return self.dist.ppf(rands) # Fallback for array-valued lambda
+            rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
+        else:
+            rvs = self.dist.ppf(rands) # Fallback for array-valued lambda
+        return rvs.astype(ss.dtypes.int) # Poisson yields integer counts, matching the native rvs path (SciPy's ppf returns float)
 
 
 class beta_dist(Dist):
