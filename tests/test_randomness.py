@@ -353,6 +353,33 @@ def test_crn_option():
     return fast
 
 
+@sc.timer()
+def test_multi_random_length():
+    """
+    Confirm multi_random output length
+
+    Tests a regression occurring in 3.5.1 due to dtypes with numba functions
+    """
+    sim = ss.Sim(n_agents=100).init()
+
+    def make_multi(n_dists):
+        mr = ss.multi_random('placeholder')
+        mr.dists = [ss.random(name=f'mr_d{i}') for i in range(n_dists)]
+        mr.init(sim=sim)
+        return mr
+
+    for n_dists in [2, 3]: # 2 dists uses combine2_rvs; 3 dists uses combine_rvs
+        mr = make_multi(n_dists)
+        for size in [1, 5]: # A singleton and a multi-element case are enough to catch 2*n doubling
+            uid_lists = [ss.uids(np.arange(i*size, (i+1)*size)) for i in range(n_dists)]
+            rvs = mr.rvs(*uid_lists)
+            assert len(rvs) == size, f'Expected len {size} but got {len(rvs)} (n_dists={n_dists}); rvs() is returning double-length arrays'
+            assert np.issubdtype(np.asarray(rvs).dtype, np.floating), f'Expected a float dtype, got {np.asarray(rvs).dtype}'
+            assert rvs.min() >= 0 and rvs.max() <= 1, f'Values should be uniforms in [0, 1], got [{rvs.min()}, {rvs.max()}]'
+
+    return
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -366,6 +393,7 @@ if __name__ == '__main__':
     o6 = test_independence(do_plot=do_plot)
     o7 = test_combine_rands(do_plot=do_plot)
     o8 = test_crn_option()
+    o9 = test_multi_random_length()
 
     T.toc()
 
