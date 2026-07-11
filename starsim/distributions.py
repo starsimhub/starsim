@@ -1772,10 +1772,7 @@ class multi_random(sc.prettyobj):
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
 
         # The XOR-combine reinterprets the float bytes as unsigned ints, so the int width must
-        # match the float width. The sub-draws are ss.dtypes.float (the dists honor it on the CRN
-        # path), so the width is set by the float precision -- NOT by ss.dtypes.rand_uint, which is
-        # an independent setting. Deriving it from the float keeps the combine length-preserving
-        # regardless of how the int and float precisions are configured. See combine2_rvs.
+        # match the float width - we need to base it on the width of ss.dtypes.float, not ss.dtypes.rand_uint
         int_type = {4: np.uint32, 8: np.uint64}[np.dtype(ss.dtypes.float).itemsize]
         int_max = np.iinfo(int_type).max
         if n_dists == 2: # Common case (e.g. pairwise transmission): skip the costly nb.typed.List build
