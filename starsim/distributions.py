@@ -1775,7 +1775,14 @@ class multi_random(sc.prettyobj):
 
         # The XOR-combine reinterprets the float bytes as unsigned ints, so the int width must
         # match the float width - we need to base it on the width of ss.dtypes.float, not ss.dtypes.rand_uint
-        int_type = {4: np.uint32, 8: np.uint64}[np.dtype(ss.dtypes.float).itemsize]
+        itemsize = np.dtype(ss.dtypes.float).itemsize
+        if itemsize == 4:
+            int_type = np.uint32
+        elif itemsize == 8:
+            int_type = np.uint64
+        else:
+            errormsg = f'Unexpected float itemsize {itemsize}; expected 4 (float32) or 8 (float64)'
+            raise ValueError(errormsg)
         int_max = np.iinfo(int_type).max
         if n_dists == 2: # Common case (e.g. pairwise transmission): skip the costly nb.typed.List build
             rvs = self.combine2_rvs(rvs_list[0], rvs_list[1], int_type, int_max)
