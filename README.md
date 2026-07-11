@@ -15,7 +15,7 @@ For more information, see the [documentation](https://docs.starsim.org) or the [
 
 ## Requirements
 
-Python 3.10-3.14 or R.
+Python 3.11-3.14 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as [uv](https://github.com/astral-sh/uv) or [Miniconda](https://docs.anaconda.com/miniconda/).
 
