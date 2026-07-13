@@ -1707,7 +1707,7 @@ class multi_random(sc.prettyobj):
         rvs = multi.rvs(source_uids, target_uids)
     """
     def __init__(self, names, *args, crn=None, **kwargs):
-        names = sc.mergelists(names, args)
+        names = sc.mergelists(names, *args)
         self.dists = [ss.random(name=name, **kwargs) for name in names]
         self.crn = crn # If None, follow ss.options.crn at draw time
         return
