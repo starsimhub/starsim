@@ -3,6 +3,7 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 ## Version 3.5.2 (2026-XX-XX)
+- `Timeline.now()` returns durations rather than bare floats, for simulations that use duration-based units.
 
 ## Version 3.5.1 (2026-07-09)
 - Added `ss.Arr.isin()`, for comparing an array against multiple values. For example, code like `recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)` could now be `recent = self.ti_infected.isin([self.ti, self.ti-1])`.
