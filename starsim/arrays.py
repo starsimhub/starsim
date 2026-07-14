@@ -1011,29 +1011,44 @@ class uids(np.ndarray):
         ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return uids.concatenate(*args)
 
+    def _as_int(self, arr):
+        """
+        Return view with integer type and validation
+
+        When performing numpy operations on `uids()`, numpy may change the return type
+        e.g., `np.intersect1d(uids,[])` will promote the result to a `float`. This method
+        ensures that methods returning UIDs will return them as integer types.
+        """
+        if arr.dtype.kind not in ('i', 'u'):
+            # isfinite rejects nan/inf, floor rejects fractions
+            if not (np.isfinite(arr).all() and (arr == np.floor(arr)).all()):
+                raise TypeError(f'UIDs must be integers, but got non-integer values: {arr}')
+            arr = arr.astype(ss_int)
+        return arr.view(self.__class__)
+
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.setdiff1d(self, other, **kw).view(self.__class__)
+        return self._as_int(np.setdiff1d(self, other, **kw))
 
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.intersect1d(self, other, **kw).view(self.__class__)
+        return self._as_int(np.intersect1d(self, other, **kw))
 
     def union(self, other, **kw):
         """ Return all UIDs present in both arrays """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.union1d(self, other, **kw).view(self.__class__)
+        return self._as_int(np.union1d(self, other, **kw))
 
     def xor(self, other, **kw):
         """ Return UIDs present in only one of the arrays """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.setxor1d(self, other, **kw).view(self.__class__)
+        return self._as_int(np.setxor1d(self, other, **kw))
 
     def to_numpy(self):
         """ Return a view as a standard NumPy array """

@@ -318,6 +318,37 @@ def test_uids_operators():
     assert list(a) == [11, 12, 13], '+= with scalar RHS must add element-wise'
     assert id(a) == original_id,    '+= with scalar RHS must preserve id (in-place modification)'
 
+    # Set operators should always return an integer-dtype uids
+    x = ss.uids([1, 2, 3])
+    for label, result in [
+        ('| []',          x | []),
+        ('& []',          x & []),
+        ('- []',          x - []),
+        ('^ []',          x ^ []),
+        ('| uids',        x | ss.uids([3, 4])),
+        ('& uids',        x & ss.uids([2, 3])),
+        ('- uids',        x - ss.uids([2])),
+        ('^ uids',        x ^ ss.uids([3, 4])),
+        ('union([])',     x.union([])),
+        ('intersect([])', x.intersect([])),
+        ('remove([])',    x.remove([])),
+        ('xor([])',       x.xor([])),
+    ]:
+        assert isinstance(result, ss.uids), f'{label} must return a uids'
+        assert result.dtype == ss.dtypes.int, f'{label} must preserve integer dtype, got {result.dtype}'
+
+    # Integer-valued floats are accepted
+    assert (x | [4.0, 5.0]).dtype == ss.dtypes.int, 'integer-valued float RHS must coerce to int'
+
+    # Fractional floats are rejected
+    for bad in [[1.5], [np.nan]]:
+        with pytest.raises(TypeError):
+            _ = x | bad
+
+    # Confirm output can be used for indexing
+    arr = ss.FloatArr('age', raw=np.arange(10, dtype=float), mock=10)
+    _ = arr.raw[x | []]
+
 
 @sc.timer()
 def test_uids_concatenate():
