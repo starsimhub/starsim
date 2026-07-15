@@ -1333,8 +1333,8 @@ class MixingPool(Route):
             return func_or_array(self.sim)
         elif isinstance(func_or_array, ss.uids):
             return func_or_array
-        errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(src)}'
-        raise TypeError()
+        errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(func_or_array)}'
+        raise TypeError(errormsg)
 
     def remove_uids(self, uids):
         """ If UIDs are supplied explicitly, remove them if people die """

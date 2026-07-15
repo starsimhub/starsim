@@ -39,7 +39,7 @@ class Timeline:
 
     - `ti` (int): the current timestep
     - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
-    - `now()` (`ss.date`/float/str): the current time, based on the timevec by default or a different vector if specified
+    - `now()` (`ss.date`/float/str): the current time, based on tvec by default or a different vector if specified
 
     Note: the time vectors include *both* the start and stop endpoints, so `npts`
     (the number of time points) is one more than the number of steps taken. For
@@ -172,7 +172,7 @@ class Timeline:
         Get the current simulation time
 
         Args:
-            key (str): which type of time to get: "time" (default), "year", "date", "tvec", or "str"
+            key (str): which type of time to get: "tvec" (default), "time", "year", "date", or "str"
 
         Examples:
             ```python
@@ -189,7 +189,7 @@ class Timeline:
         if key in [None, 'none', 'str']: # All of these are the default
             if key == 'str':
                 to_str = True
-            key = 'time'
+            key = 'tvec' # Return a typed value (ss.date or ss.dur)
         if not isinstance(key, str):
             errormsg = f'Key must be a string, not {key}'
             raise TypeError(errormsg)

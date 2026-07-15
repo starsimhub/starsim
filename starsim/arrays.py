@@ -379,7 +379,7 @@ class Arr(BaseArr):
         if both_raw:
             result_raw = c
         else:
-            result_raw = np.empty(raw_size, dtype=np.bool_)
+            result_raw = np.empty(self_raw.size, dtype=np.bool_)
             result_raw[inds] = c
 
         if inplace:
@@ -958,16 +958,16 @@ class uids(np.ndarray):
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            return arr.astype(ss_int).view(cls)
+            return cls._ensure_int(arr)
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
             return arr.uids
         elif isinstance(arr, set):
-            return np.fromiter(arr, dtype=ss_int).view(cls)
+            return cls._ensure_int(np.array(list(arr)))
         elif arr is None: # Shortcut to return empty
             return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
-        return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
+        return cls._ensure_int(np.asarray(arr)) # Handle everything else
 
     def concatenate(*args):  # pylint: disable=no-self-argument  # intentionally no `self` so it works as both instance and class method
         """
@@ -995,7 +995,7 @@ class uids(np.ndarray):
 
         # If non-empty arrays remain, concatenate, always using int type
         if valid:
-            out = np.concatenate(valid).astype(ss_int).view(uids)
+            out = uids._ensure_int(np.concatenate(valid))
         else:
             out = uids()
         return out
@@ -1011,29 +1011,52 @@ class uids(np.ndarray):
         ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return uids.concatenate(*args)
 
+    @classmethod
+    def _ensure_int(cls, arr):
+        """
+        Return an integer-typed uids view, validating that the values are valid UIDs.
+
+        UIDs are integer identifiers used for array indexing, so they must be integer-valued.
+        This is called both by the constructor and by operations that can change the dtype:
+        numpy may promote the return type (e.g. `np.intersect1d(uids, [])` returns a `float`),
+        and the constructor may receive float input directly (e.g. `ss.uids([1.5])`).
+
+        Integer input of the correct type is returned as a view with no copy. Other input is
+        accepted only if every value is finite and integer-valued (e.g. an empty list, or `2.0`);
+        genuinely fractional or non-finite values (`1.5`, `nan`, `inf`) are rejected, since they
+        can never index an array.
+        """
+        if arr.dtype == ss_int:
+            return arr.view(cls) # Fast path: already the correct type, no copy needed
+        if arr.dtype.kind not in ('i', 'u'):
+            # Non-integer dtype: isfinite rejects nan/inf, floor rejects fractions
+            if not (np.isfinite(arr).all() and (arr == np.floor(arr)).all()):
+                raise TypeError(f'UIDs must be integers, but got non-integer values: {arr}')
+        return arr.astype(ss_int).view(cls) # Normalize integer width, or cast validated floats
+
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.setdiff1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.setdiff1d(self, other, **kw))
 
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.intersect1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.intersect1d(self, other, **kw))
 
     def union(self, other, **kw):
         """ Return all UIDs present in both arrays """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.union1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.union1d(self, other, **kw))
 
     def xor(self, other, **kw):
         """ Return UIDs present in only one of the arrays """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.setxor1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.setxor1d(self, other, **kw))
 
     def to_numpy(self):
         """ Return a view as a standard NumPy array """
@@ -1043,10 +1066,9 @@ class uids(np.ndarray):
         """ Return unique UIDs; equivalent to np.unique() """
         if return_index:
             arr, index = np.unique(self, return_index=True)
-            return arr.view(self.__class__), index
+            return self._ensure_int(arr), index # index is a position array, not a uids
         else:
-            arr = np.unique(self).view(self.__class__)
-            return arr
+            return self._ensure_int(np.unique(self))
 
     def __array_wrap__(self, out_arr, context=None, return_scalar=False):
         # Guard 1: non-integer dtype → return a plain ndarray.

@@ -127,7 +127,7 @@ We have now produced simulation outputs (dataframes and summary statistics) for 
 ```{python}
 resultsdir = Path('results')
 resultsdir.mkdir(exist_ok=True, parents=True)
-ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
+ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir)
 list(resultsdir.iterdir())
 ```
 
@@ -377,7 +377,7 @@ seeds = np.arange(n)
 for init_prev in initials:
     for p_death in p_deaths:
         outputs = [run_sim(seed, init_prev=init_prev, p_death=p_death) for seed in seeds]
-        ss.Samples.new(resultsdir, outputs, ["p_death", "initial"])
+        ss.Samples.new(outputs, identifiers=["p_death", "initial"], folder=resultsdir)
 ```
 
 The results folder now contains a collection of saved `Samples` objects. Notice how the automatically selected file names now contain both the `p_death` value and the `initial` value, because they were both specified as identifiers. We can load one of these objects in to see how these identifiers are stored and accessed inside the `Samples` class:
