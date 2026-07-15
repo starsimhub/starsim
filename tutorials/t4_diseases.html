@@ -721,7 +721,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="step-1-modifying-disease-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="step-1-modifying-disease-parameters">Step 1: Modifying disease parameters</h2>
 <p>The easiest way to customize a disease is by changing its parameters. Much like sims or networks, a <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>Disease</code></a> can be customized by passing in a <code>pars</code> dictionary containing parameters. Let’s start with a simple SIR model and see how different parameters affect the simulation:</p>
-<div id="06772b24" class="cell" data-execution_count="2">
+<div id="3ff84f42" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
@@ -730,17 +730,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
 
-  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.04 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.06 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.06 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.08 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.08 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.10 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.10 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.13 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.12 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -759,7 +759,7 @@ Figure(896x672)</code></pre>
 <section id="step-2-simulating-multiple-diseases" class="level2">
 <h2 class="anchored" data-anchor-id="step-2-simulating-multiple-diseases">Step 2: Simulating multiple diseases</h2>
 <p>You can add multiple diseases to the same simulation, like so. Here we are making use of a “connector”. A connector is a module in Starsim that tells you how two things relate to one another - in this case, how HIV modifies a person’s transmissibility and susceptibility to SIS and vice versa. Unlike dieases, networks, interventions, etc., connectors don’t have any pre-specified location in the sim. Instead, they can be placed wherever they make the most sense (for example, a connector that mediated how two networks behaved might be placed at the beginning or end of the list of networks; for diseases, it might be placed at the beginning or end of the list of diseases).</p>
-<div id="0664f2ac" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div id="23a437a9" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -808,17 +808,17 @@ Figure(896x672)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
 
-  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.06 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.12 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.12 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.18 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.17 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.24 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.23 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.30 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.28 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -847,7 +847,7 @@ Figure(768x576)</code></pre>
 <p>Now for the fun part - creating your own disease from scratch! Let’s modify the SIR model to create an SEIR model, which adds an “Exposed” state where people are infected but not yet infectious.</p>
 <p>This is a common pattern in epidemiology - think of it as the incubation period before someone becomes contagious.</p>
 <p>If you want to make your own disease, you could either inherit from one of the templates in diseases.py, or you could copy the examples and extend them to capture features of the disease that you want to model. For example, suppose you wanted to change the SIR model to an SEIR model (i.e., add an ‘exposed’ state where people were transmissible but did not yet have symptoms. You might hope that this would be a relatively simple change to make. Here’s how it would look:</p>
-<div id="a5c7b55d" class="cell" data-execution_count="4">
+<div id="c0c19cb0" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -922,7 +922,7 @@ Figure(768x576)</code></pre>
 <li>We rewrote <code>set_prognoses</code> to include the new exposed state.</li>
 </ol>
 <p>Here’s how it would look in practice:</p>
-<div id="25faf924" class="cell" data-execution_count="5">
+<div id="edda64ba" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>seir <span class="op">=</span> SEIR()</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>seir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -931,17 +931,17 @@ Figure(768x576)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
 
-  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.06 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.06 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.13 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.12 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.17 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.17 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.22 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.21 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.26 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.25 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -1409,7 +1409,7 @@ None</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

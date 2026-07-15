@@ -753,7 +753,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="vaccines" class="level2">
 <h2 class="anchored" data-anchor-id="vaccines">Vaccines</h2>
 <p>The simplest product to use is <a href="../api/products.html#starsim.products.simple_vx" title="0"><code>ss.simple_vx</code></a>, a built-in vaccine that reduces an agent’s relative susceptibility (<code>rel_sus</code>). It can be “leaky” (everyone who is vaccinated gets partial protection, the default) or “all-or-nothing” (<code>leaky=False</code>, where a fraction of recipients are fully protected and the rest are not protected at all):</p>
-<div id="2a8e9e0f" class="cell" data-execution_count="1">
+<div id="685f9085" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -783,7 +783,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="diagnostics" class="level2">
 <h2 class="anchored" data-anchor-id="diagnostics">Diagnostics</h2>
 <p>A diagnostic product (<a href="../api/products.html#starsim.products.Dx" title="0"><code>ss.Dx</code></a>) is defined by a dataframe giving the probability of each test result, conditional on an agent’s true disease state. The results are returned in priority order (the <code>hierarchy</code>), with the first listed result taking precedence when an agent could match more than one:</p>
-<div id="e16a25cb" class="cell" data-execution_count="2">
+<div id="c761fce1" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -809,7 +809,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co"># The screening intervention records who tested positive/negative each step</span></span>
 <span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Tested positive on final step:'</span>, <span class="bu">len</span>(sim.interventions.routine_screening.outcomes[<span class="st">'positive'</span>]))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Tested positive on final step: 1735</code></pre>
+<pre><code>Tested positive on final step: 1761</code></pre>
 </div>
 </div>
 <p>Screening is often paired with treatment: agents who test positive become eligible for a treatment intervention (this is the “triage” pattern; see the <a href="../user_guide/modules_interventions.html">Interventions</a> page).</p>
@@ -817,7 +817,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="treatments" class="level2">
 <h2 class="anchored" data-anchor-id="treatments">Treatments</h2>
 <p>A treatment product (<a href="../api/products.html#starsim.products.Tx" title="0"><code>ss.Tx</code></a>) moves agents from one disease state to another with a given efficacy. It’s defined by a dataframe with <code>disease</code>, <code>state</code>, <code>post_state</code>, and <code>efficacy</code> columns. Here we clear infection in an SIS model, returning treated agents to susceptible:</p>
-<div id="70cfacec" class="cell" data-execution_count="3">
+<div id="3519096a" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -853,7 +853,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="writing-a-custom-product">Writing a custom product</h2>
 <p>If the built-in products don’t do what you need, you can write your own by subclassing <a href="../api/products.html#starsim.products.Vx" title="0"><code>ss.Vx</code></a>, <a href="../api/products.html#starsim.products.Dx" title="0"><code>ss.Dx</code></a>, <a href="../api/products.html#starsim.products.Tx" title="0"><code>ss.Tx</code></a>, or <a href="../api/products.html#starsim.products.Product" title="0"><code>ss.Product</code></a> directly and implementing <code>administer()</code>. Vaccine products receive <code>(people, uids)</code>; diagnostics and treatments receive <code>(uids)</code> and return their outcomes.</p>
 <p>The example below is a vaccine whose efficacy is higher for younger agents:</p>
-<div id="d5790e36" class="cell" data-execution_count="4">
+<div id="13fb8340" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1339,7 +1339,7 @@ Tip
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

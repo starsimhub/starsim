@@ -730,7 +730,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </ol>
 <p>All agents have a <code>uid</code> (universal identifier), which corresponds to their position in the array. Starsim keeps track of a list of <code>auids</code> (active UIDs), corresponding to agents who are alive or are otherwise participating in the simulation. This way, Starsim knows to skip over dead agents (or otherwise removed, e.g.&nbsp;from migration) when calculating disease progression, aging, etc.</p>
 <p>In most cases, you shouldn’t need to worry about <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a>, <code>auids</code>, etc. However, this example illustrates how they work:</p>
-<div id="6c243db0" class="cell" data-execution_count="1">
+<div id="7b8fdc16" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
@@ -785,17 +785,17 @@ After running the sim
 
 </span>
 
-Number of agents after run: 1192
+Number of agents after run: 1197
 
-Number of agents who were born: 426.0
+Number of agents who were born: 428.0
 
-Number of agents who died: 223.0
+Number of agents who died: 220.0
 
-Maximum UID: 1425
+Maximum UID: 1427
 
 Size of the raw arrays: 1500
 
-Mean age of alive agents: 38.377014
+Mean age of alive agents: 38.27644
 </pre>
 </div>
 </div>
@@ -804,7 +804,7 @@ Mean age of alive agents: 38.377014
 <section id="creating-default-people" class="level2">
 <h2 class="anchored" data-anchor-id="creating-default-people">Creating default people</h2>
 <p>When you create a sim, it automatically creates <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a>, and you can use the <code>n_agents</code> argument to control the population size:</p>
-<div id="c7818cbc" class="cell" data-execution_count="2">
+<div id="b163157c" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
@@ -829,12 +829,12 @@ Mean age of alive agents: 38.377014
 <section id="creating-custom-people" class="level2">
 <h2 class="anchored" data-anchor-id="creating-custom-people">Creating custom people</h2>
 <p>Rather than relying on the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> to create people, you can create your own <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> and add them to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> as a separate argument. The example below is equivalent to the one immediately above:</p>
-<div id="df0adbae" class="cell" data-execution_count="3">
+<div id="1e57e97e" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>people <span class="op">=</span> ss.People(<span class="dv">1000</span>)</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>people)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The main reason to create custom people is if you want to specify a particular age/sex distribution. The following example creates a population with the age distribution of Nigeria:</p>
-<div id="5a8dee77" class="cell" data-execution_count="4">
+<div id="cc33c39b" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="fl">10e3</span>, age_data<span class="op">=</span>age_data)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, copy_inputs<span class="op">=</span><span class="va">False</span>).init()</span>
@@ -852,7 +852,7 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>Another reason to create custom people is if there are additional attributes that you want to track. Let’s say we want to add a state to track urban/rural status. The example below also illustrates how you can add a stochastic state whose values are sampled from a distribution.</p>
-<div id="0aa3a6fb" class="cell" data-execution_count="5">
+<div id="c4c57b45" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> urban_function(n):</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" Make a function to randomly assign people to urban/rural locations """</span> </span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.random.choice(a<span class="op">=</span>[<span class="va">True</span>, <span class="va">False</span>], p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.5</span>], size<span class="op">=</span>n)</span>
@@ -871,7 +871,7 @@ Number of urban people: 8</code></pre>
 <section id="modifying-people-with-modules" class="level2">
 <h2 class="anchored" data-anchor-id="modifying-people-with-modules">Modifying People with modules</h2>
 <p>We saw an example above of adding a custom state to people. However, a far more common way to add states to people is by adding a module to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>. All the states of the modules will automatically get added to the main <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> instance.</p>
-<div id="353ad78a" class="cell" data-execution_count="6">
+<div id="d54a57bb" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">30</span>)</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>ss.SIS(init_prev<span class="op">=</span><span class="fl">0.1</span>), networks<span class="op">=</span>ss.RandomNet())</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -879,19 +879,19 @@ Number of urban people: 8</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 30 agents
 
-  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.02 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.02 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.04 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.04 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.06 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.06 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.08 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.08 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.10 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.10 s)  •••••••••••••••••••• 100%
 
-Number of infected people: 6</code></pre>
+Number of infected people: 13</code></pre>
 </div>
 </div>
 <p>When states or arrays are added by modules, they are stored as dictionaries under the name of that module.</p>
@@ -900,45 +900,45 @@ Number of infected people: 6</code></pre>
 <section id="debugging-and-analyzing" class="level2">
 <h2 class="anchored" data-anchor-id="debugging-and-analyzing">Debugging and analyzing</h2>
 <p>There are several ways to explore the People object. One way is by exporting to a dataframe:</p>
-<div id="16bfca69" class="cell" data-execution_count="7">
+<div id="f292e25b" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>    uid  slot  alive      age  female  ti_dead  ti_removed  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
-0     0     0   True  31.9029    True      NaN         NaN    1.0                  False            False          True       0.0393            1.0             41.0           52.8384        0.9607
-1     1     1   True  20.1963   False      NaN         NaN    1.0                  False             True         False       0.6272            1.0             24.0           36.6529        0.3728
-2     2     2   True  27.7188   False      NaN         NaN    1.0                  False             True         False       0.5702            1.0             24.0           33.2895        0.4298
-3     3     3   True  19.8975   False      NaN         NaN    1.0                  False             True         False       0.1791            1.0             36.0           46.4265        0.8209
-4     4     4   True  24.3466   False      NaN         NaN    1.0                  False             True         False       0.7392            1.0             16.0           25.1703        0.2608
-5     5     5   True  11.7957    True      NaN         NaN    1.0                  False             True         False       0.2380            1.0             34.0           45.0535        0.7620
-6     6     6   True  32.1198   False      NaN         NaN    1.0                  False             True         False       0.6314            1.0             25.0           33.8887        0.3686
-7     7     7   True  40.9630   False      NaN         NaN    1.0                  False             True         False       0.5079            1.0             31.0           40.7486        0.4921
-8     8     8   True   5.7246    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             49.0           58.6155        1.2912
-9     9     9   True  29.5681    True      NaN         NaN    1.0                  False             True         False       0.4326            1.0             29.0           39.6825        0.5674
-10   10    10   True  12.1764    True      NaN         NaN    1.0                  False             True         False       0.3699            1.0             31.0           40.7095        0.6301
-11   11    11   True  45.5517    True      NaN         NaN    1.0                  False             True         False       0.4908            1.0             31.0           39.9335        0.5092
-12   12    12   True  40.1340   False      NaN         NaN    1.0                  False             True         False       0.3119            1.0             33.0           42.8243        0.6881
-13   13    13   True  42.1071    True      NaN         NaN    1.0                  False             True         False       0.2898            1.0             33.0           42.8717        0.7102
-14   14    14   True   0.2257   False      NaN         NaN    1.0                  False             True         False       0.7310            1.0             16.0           26.6990        0.2690
-15   15    15   True  38.9969    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             48.0           60.7664        1.4491
-16   16    16   True   0.2895    True      NaN         NaN    1.0                  False            False          True       0.2621            1.0             41.0           50.4459        0.7379
-17   17    17   True  46.9728   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             45.0           54.3334        1.3016
-18   18    18   True  45.3351   False      NaN         NaN    1.0                  False             True         False       0.5113            1.0             32.0           39.6744        0.4887
-19   19    19   True  49.2198    True      NaN         NaN    1.0                  False             True         False       0.2923            1.0             35.0           44.3473        0.7077
-20   20    20   True   5.2356   False      NaN         NaN    1.0                  False             True         False       0.3492            1.0             37.0           47.4815        0.6508
-21   21    21   True  51.9528    True      NaN         NaN    1.0                  False             True         False       0.4111            1.0             35.0           44.8223        0.5889
-22   22    22   True   4.7122   False      NaN         NaN    1.0                  False             True         False       0.7566            1.0             14.0           24.3801        0.2434
-23   23    23   True  49.5949   False      NaN         NaN    1.0                  False             True         False       0.4776            1.0             25.0           34.5918        0.5224
-24   24    24   True  22.0317    True      NaN         NaN    1.0                  False             True         False       0.7440            1.0             14.0           24.2597        0.2560
-25   25    25   True  32.0162    True      NaN         NaN    1.0                  False             True         False       0.0750            1.0             37.0           46.8469        0.9250
-26   26    26   True  56.7505    True      NaN         NaN    1.0                  False             True         False       0.5971            1.0             27.0           38.2581        0.4029
-27   27    27   True  27.3852    True      NaN         NaN    1.0                  False             True         False       0.2382            1.0             34.0           43.5922        0.7618
-28   28    28   True  40.8426    True      NaN         NaN    1.0                  False            False          True       0.6747            1.0             50.0           59.6739        1.3253
-29   29    29   True  39.2750   False      NaN         NaN    1.0                  False             True         False       0.3145            1.0             30.0           40.7791        0.6855</code></pre>
+0     0     0   True  31.9029    True      NaN         NaN    1.0                  False            False          True       0.7484            1.0             50.0           59.8571        1.2516
+1     1     1   True  20.1963   False      NaN         NaN    1.0                  False             True         False       0.5669            1.0             27.0           37.2181        0.4331
+2     2     2   True  27.7188   False      NaN         NaN    1.0                  False             True         False       0.6661            1.0             20.0           30.6485        0.3339
+3     3     3   True  19.8975   False      NaN         NaN    1.0                  False            False          True       0.0339            1.0             47.0           57.2078        0.9661
+4     4     4   True  24.3466   False      NaN         NaN    1.0                  False            False          True       0.6207            1.0             50.0           60.2779        1.3793
+5     5     5   True  11.7957    True      NaN         NaN    1.0                  False            False          True       0.0348            1.0             44.0           52.9060        0.9652
+6     6     6   True  32.1198   False      NaN         NaN    1.0                  False             True         False       0.5970            1.0             25.0           33.8887        0.4030
+7     7     7   True  40.9630   False      NaN         NaN    1.0                  False             True         False       0.6766            1.0             20.0           30.9841        0.3234
+8     8     8   True   5.7246    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             46.0           55.9629        1.3415
+9     9     9   True  29.5681    True      NaN         NaN    1.0                  False             True         False       0.4751            1.0             28.0           38.0549        0.5249
+10   10    10   True  12.1764    True      NaN         NaN    1.0                  False             True         False       0.4782            1.0             25.0           35.4281        0.5218
+11   11    11   True  45.5516    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             45.0           53.8901        1.0915
+12   12    12   True  40.1340   False      NaN         NaN    1.0                  False            False          True       0.1427            1.0             44.0           55.7875        0.8573
+13   13    13   True  42.1071    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             40.0           50.2596        1.0585
+14   14    14   True   0.2257   False      NaN         NaN    1.0                  False             True         False       0.3194            1.0             30.0           39.6423        0.6806
+15   15    15   True  38.9969    True      NaN         NaN    1.0                  False            False          True       0.0377            1.0             41.0           50.4552        0.9623
+16   16    16   True   0.2895    True      NaN         NaN    1.0                  False             True         False       0.8835            1.0              7.0           19.2356        0.1165
+17   17    17   True  46.9728   False      NaN         NaN    1.0                  False             True         False       0.6426            1.0             22.0           31.4748        0.3574
+18   18    18   True  45.3351   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             48.0           58.5594        1.2998
+19   19    19   True  49.2198    True      NaN         NaN    1.0                  False             True         False       0.3449            1.0             33.0           43.9905        0.6551
+20   20    20   True   5.2356   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             45.0           55.5389        1.1467
+21   21    21   True  51.9528    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             49.0           61.2050        1.5074
+22   22    22   True   4.7122   False      NaN         NaN    1.0                  False             True         False       0.6753            1.0             22.0           31.8811        0.3247
+23   23    23   True  49.5949   False      NaN         NaN    1.0                  False             True         False       0.1569            1.0             38.0           48.0350        0.8431
+24   24    24   True  22.0317    True      NaN         NaN    1.0                  False             True         False       0.7027            1.0             18.0           28.4578        0.2973
+25   25    25   True  32.0162    True      NaN         NaN    1.0                  False             True         False       0.5097            1.0             30.0           39.3649        0.4903
+26   26    26   True  56.7505    True      NaN         NaN    1.0                  False            False          True       0.7126            1.0             50.0           58.1730        1.2874
+27   27    27   True  27.3852    True      NaN         NaN    1.0                  False             True         False       0.2962            1.0             32.0           42.0070        0.7038
+28   28    28   True  40.8426    True      NaN         NaN    1.0                  False             True         False       0.6661            1.0             20.0           31.7865        0.3339
+29   29    29   True  39.2750   False      NaN         NaN    1.0                  False             True         False       0.7260            1.0             15.0           26.3295        0.2740</code></pre>
 </div>
 </div>
 <p>This is usually too much information to understand directly, but can be useful for producing summary statistics; for example, let’s say we want to understand the relationship between time since recovery and immunity:</p>
-<div id="4b5877bb" class="cell" data-execution_count="8">
+<div id="21ce4098" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>plt.scatter(df[<span class="st">'sis.ti_recovered'</span>], df[<span class="st">'sis.immunity'</span>])</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Time of recovery'</span>)</span>
@@ -953,13 +953,13 @@ Number of infected people: 6</code></pre>
 </div>
 </div>
 <p>Sometimes we want to explore a single agent in more detail. For this, there is a <code>person()</code> method, which will return all the attributes of that particular agent (equivalent to a single row in the dataframe):</p>
-<div id="fd69b58d" class="cell" data-execution_count="9">
+<div id="a8bf0ed1" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>sim.people.person(<span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="9">
 <pre><code>#0. 'uid':                   10
 #1. 'slot':                  10
 #2. 'alive':                 True
-#3. 'age':                   12.176358
+#3. 'age':                   12.176356
 #4. 'female':                True
 #5. 'ti_dead':               nan
 #6. 'ti_removed':            nan
@@ -967,11 +967,11 @@ Number of infected people: 6</code></pre>
 #8. 'randomnet.participant': False
 #9. 'sis.susceptible':       True
 #10. 'sis.infected':          False
-#11. 'sis.rel_sus':           0.3698786
+#11. 'sis.rel_sus':           0.47817636
 #12. 'sis.rel_trans':         1.0
-#13. 'sis.ti_infected':       31.0
-#14. 'sis.ti_recovered':      40.709526
-#15. 'sis.immunity':          0.6301214</code></pre>
+#13. 'sis.ti_infected':       25.0
+#14. 'sis.ti_recovered':      35.428055
+#15. 'sis.immunity':          0.52182364</code></pre>
 </div>
 </div>
 
@@ -1411,7 +1411,7 @@ Number of infected people: 6</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

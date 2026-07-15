@@ -701,7 +701,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <ul>
 <li><code>ti</code> (int): the current timestep</li>
 <li><code>npts</code> (int): the total number of time <em>points</em> in the timeline (one more than the number of steps; see note below)</li>
-<li><code>now()</code> (<a href="../api/time.html#starsim.time.date" title="0"><code>ss.date</code></a>/float/str): the current time, based on the timevec by default or a different vector if specified</li>
+<li><code>now()</code> (<a href="../api/time.html#starsim.time.date" title="0"><code>ss.date</code></a>/float/str): the current time, based on tvec by default or a different vector if specified</li>
 </ul>
 <p>Note: the time vectors include <em>both</em> the start and stop endpoints, so <code>npts</code> (the number of time points) is one more than the number of steps taken. For example, <code>start=0, stop=1, dt=1</code> runs a single step but produces two time points (<code>[0, 1]</code>), since the state is recorded at both the start and the end. Specifying the length via <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> is exactly equivalent to specifying <code>stop</code> (internally, <code>stop = start + dur</code>), so e.g.&nbsp;<code>start=2000, dur=1</code> and <code>start=2000, stop=2001</code> produce identical timelines. See the time user guide for the rationale behind the inclusive endpoint.</p>
 </section>
@@ -803,7 +803,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tr class="odd">
 <td>key</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
-<td>which type of time to get: “time” (default), “year”, “date”, “tvec”, or “str”</td>
+<td>which type of time to get: “tvec” (default), “time”, “year”, “date”, or “str”</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
@@ -1325,7 +1325,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

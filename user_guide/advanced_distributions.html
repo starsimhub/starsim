@@ -855,7 +855,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="how-to-use-starsim-distributions" class="level2">
 <h2 class="anchored" data-anchor-id="how-to-use-starsim-distributions">How to use Starsim distributions</h2>
 <p>Parameters for Starsim distributions can have fixed parameters (the same for all agents) or vary dynamically. We will start with a simple normal distribution with fixed parameters:</p>
-<div id="fc77cf1a" class="cell" data-execution_count="1">
+<div id="d0c3a5c6" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
@@ -874,7 +874,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="drawing-samples">Drawing samples</h3>
 <p>Samples from a distribution can be drawn using the <code>rvs</code> method.</p>
 <p>While possible to request a specific number of samples, as shown below, please know that this is not the preferred way to use distribution in Starsim:</p>
-<div id="3932d3fc" class="cell" data-execution_count="2">
+<div id="099be868" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>draws <span class="op">=</span> d.rvs(<span class="dv">5</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(draws)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -882,7 +882,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>The above approach is better than calling <a href="https://numpy.org/doc/stable/reference/random/index.html#module-numpy.random" title="1"><code>numpy.random</code></a> directly, but still not ideal because it does not allow for dynamic parameter nor low-noise sampling. Therefore, please instead call the <code>rvs</code> method with the unique identifiers (uids) of the agents for which you need samples. Alternatively, you can pass a boolean mask of length equal to the number of agents in the simulation:</p>
-<div id="41e28283" class="cell" data-execution_count="3">
+<div id="413b6e34" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a> <span class="co"># Create a simulation for context</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a> <span class="co"># [you will not need to do this when working within the framework]</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">10</span>).init()</span>
@@ -915,7 +915,7 @@ Draws for all agents (0, 1, 2, ..., n_agents): [ 8  7  0  0  0  6 -6 -6  1 -7]</
 <section id="visualizing-distributions" class="level3">
 <h3 class="anchored" data-anchor-id="visualizing-distributions">Visualizing distributions</h3>
 <p>Let’s take a look at the distribution by plotting a histogram of samples:</p>
-<div id="961285e9" class="cell" data-execution_count="4">
+<div id="a7c90a03" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> d.plot_hist(n<span class="op">=</span><span class="dv">1000</span>, bins<span class="op">=</span><span class="dv">30</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
@@ -929,7 +929,7 @@ Draws for all agents (0, 1, 2, ..., n_agents): [ 8  7  0  0  0  6 -6 -6  1 -7]</
 <section id="extracting-distribution-statistics" class="level3">
 <h3 class="anchored" data-anchor-id="extracting-distribution-statistics">Extracting distribution statistics</h3>
 <p>We can quickly calculate statistics of the distribution by accessing the underlying “dist” property of the distribution:</p>
-<div id="54c4e053" class="cell" data-execution_count="5">
+<div id="16e01898" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>underlying_dist <span class="op">=</span> d.dist</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Mean:"</span>, underlying_dist.mean())</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Standard Deviation:"</span>, underlying_dist.std())</span>
@@ -977,7 +977,7 @@ Standard Deviation: 1.0
 </tbody>
 </table>
 <p>You can change these parameters away from their defaults by passing in a different distribution, as demonstrated below:</p>
-<div id="44bf6e77" class="cell" data-execution_count="6">
+<div id="0a603e94" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the init_prev parameter to randomly infect 15% of the population</span></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    init_prev <span class="op">=</span> ss.bernoulli(p<span class="op">=</span><span class="fl">0.15</span>),</span>
@@ -995,9 +995,9 @@ Standard Deviation: 1.0
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 100 agents
 
-  Running 0.0 ( 0/16) (0.00 s)  •——————————————————— 6%
+  Running years(0) ( 0/16) (0.00 s)  •——————————————————— 6%
 
-  Running 10.0 (10/16) (0.03 s)  •••••••••••••——————— 69%
+  Running years(10) (10/16) (0.03 s)  •••••••••••••——————— 69%
 Figure(896x672)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1010,7 +1010,7 @@ Figure(896x672)</code></pre>
 </div>
 <p>It’s easy to inspect distributions, for example <code>dur_inf</code> of the <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>SIR</code></a> module using <code>plot_hist</code>.</p>
 <p><strong>NOTE:</strong> in the code below that we access <code>dur_inf</code> at <code>sim.diseases.sir.pars</code> rather than at <code>sir.pars</code> (referencing the module in the previous cell) because Starsim makes a copy. The <code>sir</code> is not initialized and does not have the <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> context.</p>
-<div id="e3c63e8b" class="cell" data-execution_count="7">
+<div id="ebf86284" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>rvs <span class="op">=</span> sim.diseases.sir.pars.dur_inf.plot_hist()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
@@ -1032,7 +1032,7 @@ Figure(896x672)</code></pre>
 <li><a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a>: The unique IDs of the agents being processed</li>
 </ol>
 <p>It should return a numpy array of the same length as <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a> containing the parameter value for each agent, or a scalar if the parameter is the same for all agents.</p>
-<div id="ac1ef795" class="cell" data-execution_count="8">
+<div id="0452ea23" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> set_p_by_age(<span class="va">self</span>, sim, uids):</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> np.full(<span class="bu">len</span>(uids), fill_value<span class="op">=</span><span class="fl">0.10</span>)  <span class="co"># Default 10% infection probability</span></span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    p[sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>] <span class="op">=</span> <span class="fl">0.25</span>  <span class="co"># 25% for ages &lt; 15</span></span>
@@ -1063,13 +1063,13 @@ Agent 7 | Age: 40.96 |  Infection Seed Probability: 10%
 Agent 8 | Age:  5.72 |  Infection Seed Probability: 25%
 Agent 9 | Age: 29.57 |  Infection Seed Probability: 10%
 
-  Running 2000.01.01 ( 0/31) (0.00 s)  ———————————————————— 3%
+  Running 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
 
-  Running 2010.01.01 (10/31) (0.01 s)  •••••••————————————— 35%
+  Running 2010 (10/31) (0.01 s)  •••••••————————————— 35%
 
-  Running 2020.01.01 (20/31) (0.01 s)  •••••••••••••——————— 68%
+  Running 2020 (20/31) (0.01 s)  •••••••••••••——————— 68%
 
-  Running 2030.01.01 (30/31) (0.02 s)  •••••••••••••••••••• 100%
+  Running 2030 (30/31) (0.02 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="8">
@@ -1081,7 +1081,7 @@ Agent 9 | Age: 29.57 |  Infection Seed Probability: 10%
 <h2 class="anchored" data-anchor-id="example-starsim-intervention-using-dynamic-distributions">Example Starsim intervention using dynamic distributions</h2>
 <p>To demonstrate the use and power of distributions in the Starsim framework, we next create an intervention that delivers a vaccine to a random subset of agents using a Bernoulli distribution. The default distribution will be fixed, the same for all agents, but we’ll make it a parameter to that the user can change it without having to modify the source code.</p>
 <p><strong>NOTE:</strong> That we create the distribution only one time in the <code>__init__</code> method of the intervention. Here, the distribution is part of the parameters, so will appear at <code>self.pars.p_vx</code>. Alternatively, we could create a distribution between <code>update_pars</code> and <code>return</code>, as noted. Please avoid recreating a Starsim distribution on every time step.</p>
-<div id="c503d60d" class="cell" data-execution_count="9">
+<div id="b6e1a6b8" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyVx(ss.Intervention):</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -1119,7 +1119,7 @@ Agent 9 | Age: 29.57 |  Infection Seed Probability: 10%
 <span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results.new_vx[sim.ti] <span class="op">=</span> <span class="bu">len</span>(vx_uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Now that we have created the intervention, we can configure it with a custom <code>p_vx_func</code> in “user space” and run the simulation.</p>
-<div id="5d83cd4d" class="cell" data-execution_count="10">
+<div id="98d42351" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> p_vx_func(<span class="va">self</span>, sim, uids):</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Set the probability of vaccination for each agent in uids</span></span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This is the "dynamic" callable for p_vx</span></span>
@@ -1146,9 +1146,9 @@ Agent 9 | Age: 29.57 |  Infection Seed Probability: 10%
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 1000 agents
 
-  Running 0.0 ( 0/11) (0.00 s)  •——————————————————— 9%
+  Running years(0) ( 0/11) (0.00 s)  •——————————————————— 9%
 
-  Running 10.0 (10/11) (0.04 s)  •••••••••••••••••••• 100%
+  Running years(10) (10/11) (0.04 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -1598,7 +1598,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

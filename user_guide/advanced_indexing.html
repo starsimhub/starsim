@@ -760,7 +760,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li><code>values</code>: Contains data for active agents only (indexed by position in auids)</li>
 </ul>
 <p>Let’s see this in action:</p>
-<div id="9efb6bd9" class="cell" data-execution_count="1">
+<div id="37993feb" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -784,26 +784,26 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10 agents
 
-  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.03 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.04 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.04 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.06 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.06 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.08 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.08 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.09 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.09 s)  •••••••••••••••••••• 100%
 
-Number of agents: 9
-UIDs: &lt;IndexArr "uid", len=9, [0 1 2 3 5 6 7 8 9]&gt;
-Active UIDs (auids): [0 1 2 3 5 6 7 8 9]
+Number of agents: 10
+UIDs: &lt;IndexArr "uid", len=10, [0 1 2 3 4 5 6 7 8 9]&gt;
+Active UIDs (auids): [0 1 2 3 4 5 6 7 8 9]
 All UIDs: [0 1 2 3 4 5 6 7 8 9]
-Alive: [ True  True  True  True False  True  True  True  True  True]
-Ages (values): &lt;FloatArr "age", len=9, [31.902855  20.196327  27.718803  19.897545  11.795713  32.119804  40.96303    5.7246494 29.568056 ]&gt;
-Ages (raw): [31.902855  20.196327  27.718803  19.897545  24.346598  11.795713
- 32.119804  40.96303    5.7246494 29.568056 ]</code></pre>
+Alive: [ True  True  True  True  True  True  True  True  True  True]
+Ages (values): &lt;FloatArr "age", len=10, [31.902851  20.196325  27.718803  19.897545  24.346598  11.7957115 32.119804  40.963028   5.7246494 29.568054 ]&gt;
+Ages (raw): [31.902851  20.196325  27.718803  19.897545  24.346598  11.7957115
+ 32.119804  40.963028   5.7246494 29.568054 ]</code></pre>
 </div>
 </div>
 </section>
@@ -820,7 +820,7 @@ Ages (raw): [31.902855  20.196327  27.718803  19.897545  24.346598  11.795713
 </ul></li>
 </ul>
 <p>Let’s demonstrate this:</p>
-<div id="c8a4f625" class="cell" data-execution_count="2">
+<div id="de68422f" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"After simulation:"</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Total agents ever created: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.uid.raw)<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Active agents: </span><span class="sc">{</span><span class="bu">len</span>(sim.people.auids)<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -835,11 +835,11 @@ Ages (raw): [31.902855  20.196327  27.718803  19.897545  24.346598  11.795713
 <div class="cell-output cell-output-stdout">
 <pre><code>After simulation:
 Total agents ever created: 10
-Active agents: 9
-Active UIDs: [0 1 2 3 5 6 7 8 9]
+Active agents: 10
+Active UIDs: [0 1 2 3 4 5 6 7 8 9]
 
-Mean age (active agents): 24.43
-Mean age (manual calculation): 24.43
+Mean age (active agents): 24.42
+Mean age (manual calculation): 24.42
 Mean age (all agents, including dead): 24.42</code></pre>
 </div>
 </div>
@@ -849,7 +849,7 @@ Mean age (all agents, including dead): 24.42</code></pre>
 <p>Here are examples of correct and incorrect ways to index Starsim arrays:</p>
 <section id="correct-indexing-patterns" class="level3">
 <h3 class="anchored" data-anchor-id="correct-indexing-patterns">Correct indexing patterns</h3>
-<div id="7a4870f1" class="cell" data-execution_count="3">
+<div id="13dc0d9b" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># ✅ Using integer indices (works on active agents)</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>age_of_first_active <span class="op">=</span> sim.people.age[<span class="dv">0</span>]</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Age of first active agent: </span><span class="sc">{</span>age_of_first_active<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -870,10 +870,10 @@ Mean age (all agents, including dead): 24.42</code></pre>
 <span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Alive UIDs: </span><span class="sc">{</span>alive_uids<span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Dead UIDs: </span><span class="sc">{</span>dead_uids<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Age of first active agent: 31.902854919433594
-Ages of UIDs [0 1 2]: [31.902855 20.196327 27.718803]
-Ages of female agents: [31.902855  11.795713   5.7246494 29.568056 ]
-Alive UIDs: [0 1 2 3 5 6 7 8 9]
+<pre><code>Age of first active agent: 31.902851104736328
+Ages of UIDs [0 1 2]: [31.902851 20.196325 27.718803]
+Ages of female agents: [31.902851  11.7957115  5.7246494 29.568054 ]
+Alive UIDs: [0 1 2 3 4 5 6 7 8 9]
 Dead UIDs: []</code></pre>
 </div>
 </div>
@@ -881,7 +881,7 @@ Dead UIDs: []</code></pre>
 <section id="incorrect-indexing-patterns" class="level3">
 <h3 class="anchored" data-anchor-id="incorrect-indexing-patterns">Incorrect indexing patterns</h3>
 <p>These examples show what <strong>NOT</strong> to do:</p>
-<div id="f8dc7d0a" class="cell" data-execution_count="4">
+<div id="5bcb5a62" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># ❌ Don't index with raw lists of integers - this is ambiguous!</span></span>
@@ -897,8 +897,8 @@ Dead UIDs: []</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>This raises an error:
 &lt;class 'TypeError'&gt; Indexing an Arr (age) by ([0, 1, 2]) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.
-Mean age: 24.431864
-Mean age (values): 24.431864
+Mean age: 24.423338
+Mean age (values): 24.423338
 Mean age (raw): 24.423338</code></pre>
 </div>
 </div>
@@ -1374,7 +1374,7 @@ Mean age (raw): 24.423338</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

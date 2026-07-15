@@ -725,7 +725,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>The most straightforward way to use connectors is to define a custom class that inherits from <a href="../api/connectors.html#starsim.connectors.Connector" title="0"><code>ss.Connector</code></a> and implements a <code>step()</code> method. This method is called during each simulation timestep and can modify disease parameters based on the current state of the simulation.</p>
 <p>Here’s a simple example showing how HIV and “SIS” diseases can interact, and also illustrates how you would use an analyzer to compare the two simulations:</p>
-<div id="ebbd7dff" class="cell" data-execution_count="1">
+<div id="82037ede" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
@@ -848,7 +848,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="advanced-usage-with-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage-with-parameters">Advanced usage with parameters</h2>
 <p>For more complex interactions, you can define parameters in your connector class to control the strength and nature of the interactions. Here’s an example showing bi-directional interactions between HIV and SIS:</p>
-<div id="74d881cd" class="cell" data-execution_count="2">
+<div id="77fe2fbb" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HIV_SIS(ss.Connector):</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Advanced connector showing bi-directional interactions between HIV and SIS.</span></span>
@@ -950,10 +950,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>
 Final infection counts:
-HIV infections - Without connector: 141.0
-HIV infections - With connector: 190.0
-SIS infections - Without connector: 28.0
-SIS infections - With connector: 249.0</code></pre>
+HIV infections - Without connector: 177.0
+HIV infections - With connector: 204.0
+SIS infections - Without connector: 45.0
+SIS infections - With connector: 241.0</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
@@ -974,7 +974,7 @@ SIS infections - With connector: 249.0</code></pre>
 <section id="combining-connectors-with-interventions" class="level2">
 <h2 class="anchored" data-anchor-id="combining-connectors-with-interventions">Combining connectors with interventions</h2>
 <p>Connectors can work alongside interventions to model complex treatment scenarios. Here’s an example that combines the HIV-SIS connector with a treatment intervention:</p>
-<div id="56c33944" class="cell" data-execution_count="3">
+<div id="5039856f" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> TreatSIS(ss.Intervention):</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    TreatSIS treatment intervention for SIS.</span></span>
@@ -1110,21 +1110,21 @@ Final results summary:
 
 Baseline (no connector, no treatment):
 
-  HIV: 141 current,  238 cumulative
+  HIV: 177 current,  310 cumulative
 
-  SIS:  28 current,  246 cumulative
+  SIS:  45 current,  292 cumulative
 
 With connector only:
 
-  HIV: 190 current,  307 cumulative
+  HIV: 204 current,  348 cumulative
 
-  SIS: 249 current,  840 cumulative
+  SIS: 241 current,  830 cumulative
 
 Connector + treatment:
 
-  HIV: 152 current,  263 cumulative
+  HIV: 169 current,  302 cumulative
 
-  SIS:   0 current,  251 cumulative
+  SIS:   0 current,  254 cumulative
 </pre>
 </div>
 </div>
@@ -1567,7 +1567,7 @@ Connector + treatment:
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

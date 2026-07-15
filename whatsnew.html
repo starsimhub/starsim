@@ -653,6 +653,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul>
+  <li><a href="#version-3.5.2-2026-07-14" id="toc-version-3.5.2-2026-07-14" class="nav-link" data-scroll-target="#version-3.5.2-2026-07-14">Version 3.5.2 (2026-07-14)</a></li>
   <li><a href="#version-3.5.1-2026-07-09" id="toc-version-3.5.1-2026-07-09" class="nav-link" data-scroll-target="#version-3.5.1-2026-07-09">Version 3.5.1 (2026-07-09)</a></li>
   <li><a href="#version-3.5.0-2026-07-05" id="toc-version-3.5.0-2026-07-05" class="nav-link" data-scroll-target="#version-3.5.0-2026-07-05">Version 3.5.0 (2026-07-05)</a>
   <ul>
@@ -819,16 +820,42 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
-<p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms “Migration” or “Regression”.</p>
+<p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term “Regression”. Changes that may require update to downstream code are flagged with the term “Migration”.</p>
+<section id="version-3.5.2-2026-07-14" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.5.2-2026-07-14">Version 3.5.2 (2026-07-14)</h2>
+<ul>
+<li>Starsim v3.5.0 added several optimizations affecting how random numbers are drawn. However, these changes introduced several <code>dtype</code>-related bugs that have been fixed in this release:
+<ul>
+<li>Fixed a bug where <a href="./api/distributions.html#starsim.distributions.random" title="0"><code>ss.random()</code></a> always returned <code>float64</code> regardless of the configured type <code>ss.dtypes.float</code>.</li>
+<li>Fixed <a href="./api/distributions.html#starsim.distributions.poisson" title="0"><code>ss.poisson()</code></a> sometimes returning <code>float64</code> and sometimes returning an integer. It now always returns <code>ss.dtypes.int</code>.</li>
+<li>Fixed <a href="./api/distributions.html#starsim.distributions.multi_random.rvs" title="0"><code>ss.multi_random.rvs()</code></a> returning an incorrect number of samples due to type mismatches.</li>
+<li><em>Regression</em>: Because the default CRN mechanism precision has changed to consistently match <code>ss.dtypes.float</code>, the exact random values produced for agent-indexed draws are different from v3.5.1.</li>
+</ul></li>
+<li><a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids()</code></a> now performs additional validation to more consistently ensure it only contains integers.
+<ul>
+<li><em>Migration</em>: Previously <code>ss.uids([1.5])</code> would convert the input to an integer and thus return <code>ss.uids([1])</code>. However, because this usage would often reflect an error, this operation will now raise a <a href="https://docs.python.org/3/library/exceptions.html#TypeError" title="1"><code>TypeError</code></a> to prevent inadvertent conversion of floats silently succeeding. To maintain previous functionality, convert the input to integers before calling <a href="./api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids()</code></a>.</li>
+</ul></li>
+<li><a href="./api/timeline.html#starsim.timeline.Timeline.now" title="0"><code>Timeline.now()</code></a> returns durations rather than bare floats, for simulations that use duration-based units.</li>
+<li>Made the <code>folder</code> argument of <a href="./api/samples.html#starsim.samples.Samples" title="0"><code>ss.Samples</code></a> optional, and moved it from first to third.
+<ul>
+<li><em>Migration:</em> Positionally-created Samples should use kwargs instead, e.g.&nbsp;<code>ss.Samples(resultsdir, outputs)</code> should be changed to <code>ss.Samples(outputs, folder=resultsdir)</code>.</li>
+</ul></li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1393">1393</a></li>
+</ul>
+</section>
 <section id="version-3.5.1-2026-07-09" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.5.1-2026-07-09">Version 3.5.1 (2026-07-09)</h2>
 <ul>
 <li>Added <a href="./api/arrays.html#starsim.arrays.Arr.isin" title="0"><code>ss.Arr.isin()</code></a>, for comparing an array against multiple values. For example, code like <code>recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)</code> could now be <code>recent = self.ti_infected.isin([self.ti, self.ti-1])</code>.</li>
 <li><a href="./api/distributions.html#starsim.distributions.poisson" title="0"><code>ss.poisson</code></a> now uses precomputed CDFs for a 60x performance gain in some cases.</li>
-<li><a href="./api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice</code></a> (with the default <code>replace=True</code>) now uses the inverse-CDF/hash path for a ~10x performance gain in some cases.</li>
+<li><a href="./api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice</code></a> (with the default <code>replace=True</code>) now uses the inverse-CDF/hash path for a ~10x performance gain in some cases.
+<ul>
 <li><em>Regression</em>: because the <a href="./api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice</code></a> random-number path changed, the exact values produced for <a href="./api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice</code></a> UID draws differ from previous versions (results remain statistically equivalent). Models using <a href="./api/distributions.html#starsim.distributions.choice" title="0"><code>ss.choice</code></a> (including <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a>) will produce different stochastic realizations, and stored regression baselines should be regenerated.</li>
-<li><em>Regression</em>: fixed a bug in <code>ss.library.HouseholdNet</code> where women already pregnant at initialization were all evaluated for moving out on the first timestep.</li>
-<li>Fixed a bug in <code>ss.library.HouseholdNet</code> move-out timing that only manifested when the <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> module ran on a coarser <code>dt</code> than the sim (e.g.&nbsp;<code>ss.Pregnancy(dt=ss.months(3))</code>). Eligibility was determined by comparing <code>pregnancy.ti_delivery</code> (an index in the pregnancy module’s <em>own</em> timeline) against the sim timestep; with mismatched dt, pregnant non-heads became re-eligible far too often, greatly over-fragmenting households and suppressing household transmission (e.g.&nbsp;~40% fewer infections in a TB model with quarterly pregnancy). Move-out is now evaluated exactly once per pregnancy (keyed to <code>ti_pregnant</code>), which is dt-agnostic and bit-identical when the pregnancy dt equals the sim dt.</li>
+</ul></li>
+<li>Fixed a bug in <code>ss.library.HouseholdNet</code> move-out timing that only manifested when the <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> module ran on a coarser <code>dt</code> than the sim (e.g.&nbsp;<code>ss.Pregnancy(dt=ss.months(3))</code>). Eligibility was determined by comparing <code>pregnancy.ti_delivery</code> (an index in the pregnancy module’s <em>own</em> timeline) against the sim timestep; with mismatched dt, pregnant non-heads became re-eligible far too often, greatly over-fragmenting households and suppressing household transmission (e.g.&nbsp;~40% fewer infections in a TB model with quarterly pregnancy). Move-out is now evaluated exactly once per pregnancy (keyed to <code>ti_pregnant</code>), which is dt-agnostic and bit-identical when the pregnancy dt equals the sim dt.
+<ul>
+<li><em>Regression</em>: This fix will change the results obtained from using this module.</li>
+</ul></li>
 <li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1388">1388</a></li>
 </ul>
 </section>
@@ -841,7 +868,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Common random numbers (CRN) work by giving each agent a “slot” and drawing one random number per slot, so that the same agent makes the same decision regardless of what other agents do. Previously this was implemented by drawing <code>slots.max()+1</code> numbers and keeping only those at the requested slots. Because newborn agents are assigned slots spread over a wide range (up to <code>slot_scale</code> times the population size), this could mean generating up to 5x more random numbers than were actually needed. The default CRN path now generates only the number of values needed, via a counter-based hash (<a href="./api/distributions.html#starsim.distributions.hash_uniforms" title="0"><code>ss.distributions.hash_uniforms()</code></a>, a Numba-compiled <a href="https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64">splitmix64</a> algorithm keyed by the distribution seed and draw index) that maps each slot directly to a uniform value. This preserves CRN reproducibility while removing the redundant draws.</li>
 <li>Added a new <code>crn</code> option (<code>ss.options.crn</code>, default <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a>). Setting <code>ss.options.crn = False</code> skips the slot machinery entirely. This is not CRN-safe across scenarios, but is statistically valid and considerably faster; it is useful when reproducibility across counterfactual scenarios is not required.</li>
 <li>Sped up <a href="./api/distributions.html#starsim.distributions.multi_random" title="0"><code>ss.multi_random</code></a> (used for pairwise transmission probabilities) by including a dedicated fast path for the common two-distribution case that avoids constructing a typed list on each call.</li>
-<li><em>Regression</em>: the <code>single_rng</code> option has been removed. Its purpose was to demonstrate the “single centralized RNG” behavior of other agent-based modeling frameworks; use <code>ss.options.crn = False</code> instead, which is both faster and demonstrates the same stochastic-branching problem. (Note, however, that it does <em>not</em> use a single RNG; this option is no longer available.)</li>
+<li><em>Migration</em>: the <code>single_rng</code> option has been removed. Its purpose was to demonstrate the “single centralized RNG” behavior of other agent-based modeling frameworks; use <code>ss.options.crn = False</code> instead, which is both faster and demonstrates the same stochastic-branching problem. (Note, however, that it does <em>not</em> use a single RNG; this option is no longer available.)</li>
 <li><em>Regression</em>: because the default CRN mechanism changed, the exact random values produced for agent-indexed draws are different from previous versions. Results remain statistically equivalent and CRN reproducibility is preserved, but stored regression baselines will need to be regenerated.</li>
 </ul>
 </section>
@@ -900,9 +927,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Maternal, neonatal, and child health: <code>ss.library.FetalHealth</code>, <code>ss.library.MaternalInfections</code>, <code>ss.library.NeonatalSepsis</code></li>
 <li>Networks: <code>ss.library.HouseholdNet</code>, <code>ss.library.SpatialNet</code>, and the theoretical/abstract networks</li>
 </ul></li>
-<li><em>Regression</em>: <code>ss.FetalHealth</code> and <code>ss.HouseholdNet</code> are no longer available at the top level. Instead of <code>ss.FetalHealth()</code> and <code>ss.HouseholdNet()</code>, use <code>ss.library.FetalHealth()</code> and <code>ss.library.HouseholdNet()</code> (or <code>ssl.FetalHealth()</code> and <code>ssl.HouseholdNet()</code> with <code>import starsim.library as ssl</code>).</li>
-<li><em>Regression</em>: <a href="./api/networks.html#starsim.networks.MaternalNet" title="0"><code>ss.MaternalNet</code></a> has been removed. It was a thin alias for the prenatal network; replace <code>ss.MaternalNet(...)</code> with <code>ss.PrenatalNet(...)</code>.</li>
-<li><em>Regression</em>: the <code>gonorrhea</code> and <code>syphilis</code> example diseases have been removed from the package (they are not part of the new library). Full, maintained STI models are available in <a href="https://github.com/starsimhub/stisim">STIsim</a>. Replace <code>ss.Gonorrhea()</code> with <code>import stisim as sti; sti.Gonorrhea()</code> and the same for syphilis.</li>
+<li><em>Migration</em>: <code>ss.FetalHealth</code> and <code>ss.HouseholdNet</code> are no longer available at the top level. Instead of <code>ss.FetalHealth()</code> and <code>ss.HouseholdNet()</code>, use <code>ss.library.FetalHealth()</code> and <code>ss.library.HouseholdNet()</code> (or <code>ssl.FetalHealth()</code> and <code>ssl.HouseholdNet()</code> with <code>import starsim.library as ssl</code>).</li>
+<li><em>Migration</em>: <a href="./api/networks.html#starsim.networks.MaternalNet" title="0"><code>ss.MaternalNet</code></a> has been removed. It was a thin alias for the prenatal network; replace <code>ss.MaternalNet(...)</code> with <code>ss.PrenatalNet(...)</code>.</li>
+<li><em>Migration</em>: the <code>gonorrhea</code> and <code>syphilis</code> example diseases have been removed from the package (they are not part of the new library). Full, maintained STI models are available in <a href="https://github.com/starsimhub/stisim">STIsim</a>. Replace <code>ss.Gonorrhea()</code> with <code>import stisim as sti; sti.Gonorrhea()</code> and the same for syphilis.</li>
 <li>Standalone example scripts (<a href="https://laser.idmod.org/">LASER</a> comparisons, language translations, network embedding) have moved out of the package into <code>docs/examples</code>.</li>
 </ul>
 </section>
@@ -1005,7 +1032,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>New results: <code>miscarriages</code>, <code>stillbirths</code>, <code>nnds</code>, <code>n_preterm</code>, <code>n_very_preterm</code>, <code>preterm_rate</code>.</li>
 <li>New states on newborns: <code>preterm</code>, <code>very_preterm</code>, <code>neonatal_death</code>.</li>
 <li>Removed unused <code>_p_miscarriage</code> and <code>_p_stillbirth</code> placeholder distributions.</li>
-<li><strong>Migration</strong>: <code>n_pregnancies_this_step</code> and <code>n_births_this_step</code> counters removed; use results directly.</li>
+<li><em>Migration</em>: <code>n_pregnancies_this_step</code> and <code>n_births_this_step</code> counters removed; use results directly (e.g.&nbsp;<code>new_pregnancies</code>).</li>
 </ul>
 </section>
 <section id="generic-congenital-outcome-framework" class="level3">
@@ -1095,7 +1122,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="version-3.1.0-2026-02-12" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.1.0-2026-02-12">Version 3.1.0 (2026-02-12)</h2>
 <ul>
-<li><em>Regression information</em>: See <code>docs/migration/v3.0_v3.1.md</code> for a detailed, LLM-friendly migration guide.</li>
+<li><em>Migration information</em>: See <code>docs/migration/v3.0_v3.1.md</code> for a detailed, LLM-friendly migration guide.</li>
 <li>Added new functionality to the <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module:
 <ul>
 <li>Renamed <code>make_p_fertility()</code> -&gt; <code>make_p_conceive()</code></li>
@@ -2481,7 +2508,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -725,7 +725,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="where-results-live" class="level2">
 <h2 class="anchored" data-anchor-id="where-results-live">Where results live</h2>
 <p>After a sim has run, all of its outputs are stored in <code>sim.results</code>, which is a nested structure. Each module adds its own group of results, and there are also some sim-level results (such as <code>n_alive</code>):</p>
-<div id="8eada90b" class="cell" data-execution_count="1">
+<div id="29e10acc" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -742,11 +742,11 @@ SIR results:   ['timevec', 'n_susceptible', 'n_infected', 'n_recovered', 'preval
 </div>
 </div>
 <p>You access an individual result by drilling down through the module name:</p>
-<div id="7b1b8697" class="cell" data-execution_count="2">
+<div id="ee321846" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>new_infections <span class="op">=</span> sim.results.sir.new_infections</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(new_infections)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Result(SIR.new_infections: min=0, mean=38.5294, max=358)</code></pre>
+<pre><code>Result(SIR.new_infections: min=0, mean=38.7843, max=385)</code></pre>
 </div>
 </div>
 </section>
@@ -783,7 +783,7 @@ SIR results:   ['timevec', 'n_susceptible', 'n_infected', 'n_recovered', 'preval
 </tr>
 </tbody>
 </table>
-<div id="a28728da" class="cell" data-execution_count="3">
+<div id="c87affe8" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.sir.new_infections</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use it like an array</span></span>
@@ -795,8 +795,8 @@ SIR results:   ['timevec', 'n_susceptible', 'n_infected', 'n_recovered', 'preval
 <span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Label:    </span><span class="sc">{</span>res<span class="sc">.</span>label<span class="sc">}</span><span class="ss">'</span>)</span>
 <span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'First date: </span><span class="sc">{</span>res<span class="sc">.</span>timevec[<span class="dv">0</span>]<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Peak new infections: 358
-Total infections:    1965
+<pre><code>Peak new infections: 385
+Total infections:    1978
 Final timestep:      0
 Label:    New infections
 First date: 2000.01.01</code></pre>
@@ -806,7 +806,7 @@ First date: 2000.01.01</code></pre>
 <section id="plotting-results" class="level2">
 <h2 class="anchored" data-anchor-id="plotting-results">Plotting results</h2>
 <p>The quickest way to see everything is <code>sim.plot()</code>, which plots all results flagged for automatic plotting:</p>
-<div id="2ebe4291" class="cell" data-execution_count="4">
+<div id="774dbfd0" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(896x672)</code></pre>
@@ -820,7 +820,7 @@ First date: 2000.01.01</code></pre>
 </div>
 </div>
 <p>You can plot a single module’s results, or even a single result on its own:</p>
-<div id="3477ac74" class="cell" data-execution_count="5">
+<div id="e77cef2c" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Just the SIR results</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -834,7 +834,7 @@ First date: 2000.01.01</code></pre>
 </div>
 </div>
 </div>
-<div id="24b9378e" class="cell" data-execution_count="6">
+<div id="55fc0913" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># A single result, with its label and time axis handled automatically</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>sim.results.sir.new_infections.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -852,7 +852,7 @@ First date: 2000.01.01</code></pre>
 <section id="exporting-results" class="level2">
 <h2 class="anchored" data-anchor-id="exporting-results">Exporting results</h2>
 <p>To get results into a pandas dataframe — for example, to save to CSV or analyze further — use <code>to_df()</code>. This works at the level of a single module:</p>
-<div id="44b2048d" class="cell" data-execution_count="7">
+<div id="94e581ae" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.results.sir.to_df()</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>df.head()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="7">
@@ -876,52 +876,52 @@ First date: 2000.01.01</code></pre>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>2000-01-01</td>
-<td>1980.0</td>
-<td>20.0</td>
+<td>1975.0</td>
+<td>25.0</td>
 <td>0.0</td>
-<td>0.0100</td>
-<td>7.0</td>
-<td>7.0</td>
+<td>0.0125</td>
+<td>12.0</td>
+<td>12.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>2001-01-01</td>
-<td>1954.0</td>
-<td>46.0</td>
+<td>1941.0</td>
+<td>59.0</td>
 <td>0.0</td>
-<td>0.0230</td>
-<td>26.0</td>
-<td>33.0</td>
+<td>0.0295</td>
+<td>34.0</td>
+<td>46.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
 <td>2002-01-01</td>
-<td>1918.0</td>
-<td>82.0</td>
+<td>1882.0</td>
+<td>118.0</td>
 <td>0.0</td>
-<td>0.0410</td>
-<td>36.0</td>
-<td>69.0</td>
+<td>0.0590</td>
+<td>59.0</td>
+<td>105.0</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
 <td>2003-01-01</td>
-<td>1849.0</td>
-<td>151.0</td>
+<td>1777.0</td>
+<td>223.0</td>
 <td>0.0</td>
-<td>0.0755</td>
-<td>69.0</td>
-<td>138.0</td>
+<td>0.1115</td>
+<td>105.0</td>
+<td>210.0</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
 <td>2004-01-01</td>
-<td>1716.0</td>
-<td>284.0</td>
+<td>1607.0</td>
+<td>393.0</td>
 <td>0.0</td>
-<td>0.1420</td>
-<td>133.0</td>
-<td>271.0</td>
+<td>0.1965</td>
+<td>170.0</td>
+<td>380.0</td>
 </tr>
 </tbody>
 </table>
@@ -930,7 +930,7 @@ First date: 2000.01.01</code></pre>
 </div>
 </div>
 <p>or for the whole sim at once, which flattens every module’s results into one wide dataframe:</p>
-<div id="2ff9b0f8" class="cell" data-execution_count="8">
+<div id="37f86749" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.to_df()</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Columns:'</span>, <span class="bu">list</span>(df.columns))</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>df.head()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -965,12 +965,12 @@ First date: 2000.01.01</code></pre>
 <th data-quarto-table-cell-role="th">0</th>
 <td>2000-01-01</td>
 <td>10000.0</td>
-<td>1980.0</td>
-<td>20.0</td>
+<td>1975.0</td>
+<td>25.0</td>
 <td>0.0</td>
-<td>0.0100</td>
-<td>7.0</td>
-<td>7.0</td>
+<td>0.0125</td>
+<td>12.0</td>
+<td>12.0</td>
 <td>2000.0</td>
 <td>980.0</td>
 <td>0.0</td>
@@ -981,12 +981,12 @@ First date: 2000.01.01</code></pre>
 <th data-quarto-table-cell-role="th">1</th>
 <td>2001-01-01</td>
 <td>10000.0</td>
-<td>1954.0</td>
-<td>46.0</td>
+<td>1941.0</td>
+<td>59.0</td>
 <td>0.0</td>
-<td>0.0230</td>
-<td>26.0</td>
-<td>33.0</td>
+<td>0.0295</td>
+<td>34.0</td>
+<td>46.0</td>
 <td>2000.0</td>
 <td>980.0</td>
 <td>0.0</td>
@@ -997,12 +997,12 @@ First date: 2000.01.01</code></pre>
 <th data-quarto-table-cell-role="th">2</th>
 <td>2002-01-01</td>
 <td>10000.0</td>
-<td>1918.0</td>
-<td>82.0</td>
+<td>1882.0</td>
+<td>118.0</td>
 <td>0.0</td>
-<td>0.0410</td>
-<td>36.0</td>
-<td>69.0</td>
+<td>0.0590</td>
+<td>59.0</td>
+<td>105.0</td>
 <td>2000.0</td>
 <td>980.0</td>
 <td>0.0</td>
@@ -1013,12 +1013,12 @@ First date: 2000.01.01</code></pre>
 <th data-quarto-table-cell-role="th">3</th>
 <td>2003-01-01</td>
 <td>10000.0</td>
-<td>1849.0</td>
-<td>151.0</td>
+<td>1777.0</td>
+<td>223.0</td>
 <td>0.0</td>
-<td>0.0755</td>
-<td>69.0</td>
-<td>138.0</td>
+<td>0.1115</td>
+<td>105.0</td>
+<td>210.0</td>
 <td>2000.0</td>
 <td>980.0</td>
 <td>0.0</td>
@@ -1029,12 +1029,12 @@ First date: 2000.01.01</code></pre>
 <th data-quarto-table-cell-role="th">4</th>
 <td>2004-01-01</td>
 <td>10000.0</td>
-<td>1716.0</td>
-<td>284.0</td>
+<td>1607.0</td>
+<td>393.0</td>
 <td>0.0</td>
-<td>0.1420</td>
-<td>133.0</td>
-<td>271.0</td>
+<td>0.1965</td>
+<td>170.0</td>
+<td>380.0</td>
 <td>2000.0</td>
 <td>980.0</td>
 <td>0.0</td>
@@ -1052,7 +1052,7 @@ First date: 2000.01.01</code></pre>
 <section id="results-across-multiple-runs" class="level2">
 <h2 class="anchored" data-anchor-id="results-across-multiple-runs">Results across multiple runs</h2>
 <p>When you run many sims with <a href="../user_guide/workflows_run.html"><span><code>ss.MultiSim</code></span></a>, you usually want summary statistics across the runs rather than each run individually. Calling <code>reduce()</code> (or the convenience methods <code>mean()</code> / <code>median()</code>) combines the runs and populates the <code>low</code> and <code>high</code> uncertainty bounds on each result:</p>
-<div id="3eaa800b" class="cell" data-execution_count="9">
+<div id="89262e39" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>), n_runs<span class="op">=</span><span class="dv">5</span>)</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>msim.run()</span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>msim.<span class="bu">reduce</span>()</span>
@@ -1515,7 +1515,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

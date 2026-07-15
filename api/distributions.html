@@ -2638,9 +2638,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.distributions.hash_uniforms" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.distributions.hash_uniforms">hash_uniforms</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb95"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb95-1"><a href="#cb95-1" aria-hidden="true" tabindex="-1"></a>distributions.hash_uniforms(seed, ind, slots)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb95"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb95-1"><a href="#cb95-1" aria-hidden="true" tabindex="-1"></a>distributions.hash_uniforms(seed, ind, slots, dtype<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Generate one uniform random number in [0, 1) per slot via a counter-based (splitmix64) hash keyed by (seed, ind); not for the user.</p>
 <p>This is the engine behind Starsim’s common random numbers (CRN). Because each output depends only on its slot (plus the per-draw key), the same slot always yields the same value regardless of how many other agents are drawn – so structural differences between scenarios don’t ripple into unrelated agents. Unlike the stream-based approach (draw <code>slots.max()+1</code> numbers and gather), this generates exactly <code>len(slots)</code> numbers, avoiding the <code>slot_scale</code> blowup.</p>
+<p>The result is returned at <code>dtype</code> (default <code>ss.dtypes.float</code>) so the CRN path matches the dtype of the native draw path (<a href="../api/distributions.html#starsim.distributions.Dist.rand" title="0"><code>Dist.rand</code></a>). The mantissa width is matched to the float width (24-bit for float32, 53-bit for float64) so every value stays strictly &lt; 1 – a plain float64-&gt;float32 cast would round the largest values up to exactly 1.0 and break the [0, 1) contract (e.g.&nbsp;<code>expon.ppf(1.0)</code> is inf). The float64 stream is unchanged from earlier versions.</p>
 </section>
 <section id="starsim.distributions.link_dists" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.distributions.link_dists">link_dists</h3>
@@ -3103,7 +3104,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

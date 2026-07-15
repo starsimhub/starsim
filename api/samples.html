@@ -755,7 +755,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td><a href="#starsim.samples.Samples.new">new</a></td>
-<td></td>
+<td>Create a new Samples instance</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.samples.Samples.preload">preload</a></td>
@@ -865,7 +865,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.samples.Samples.new" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.samples.Samples.new">new</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.new(folder, outputs, identifiers<span class="op">=</span><span class="va">None</span>, fname<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>samples.Samples.new(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    outputs,</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    identifiers<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    folder<span class="op">=</span><span class="st">'.'</span>,</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    fname<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Create a new Samples instance</p>
+<p>Pass in outputs (list of tuples (df:pd.DataFrame, summary_row:dict)) to wrap them in a <a href="../api/samples.html#starsim.samples.Samples" title="0"><code>Samples</code></a> instance.</p>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
 <table class="caption-top table">
@@ -879,27 +887,27 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
-<td>folder</td>
-<td><code>path</code></td>
-<td>the folder to save the zip file in</td>
-<td><em>required</em></td>
-</tr>
-<tr class="even">
 <td>outputs</td>
 <td></td>
 <td>A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry ‘seed’ for the seed</td>
 <td><em>required</em></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>identifiers</td>
 <td></td>
 <td>A list of columns to use as identifiers. These should appear in the summary dataframe and should have the same value for all samples. This is useful when generating multiple sets of results e.g., for scenarios (optional)</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
+<tr class="odd">
+<td>folder</td>
+<td><code>path</code></td>
+<td>the folder to save the zip file in</td>
+<td><code>'.'</code></td>
+</tr>
 <tr class="even">
 <td>fname</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
-<td>filename for the zip file; auto-generated from identifiers if not supplied</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <code>BytesIO</code></td>
+<td>filename for the zip file; auto-generated from identifiers if not supplied. If an <a href="https://docs.python.org/3/library/io.html#io.BytesIO" title="1"><code>io.BytesIO</code></a> instance is passed, the zip file is created in-memory</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
@@ -1358,7 +1366,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

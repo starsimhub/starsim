@@ -721,7 +721,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="overview-of-people" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-people">Overview of People</h2>
 <p>More details on the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> class can be easily exported to a dataframe, e.g.:</p>
-<div id="355cf6d9" class="cell" data-execution_count="1">
+<div id="bad0e8b5" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -732,20 +732,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10 agents
    uid  slot  alive        age  female  ti_dead  ti_removed  scale
-0    0     0   True  31.902855    True      NaN         NaN    1.0
-1    1     1   True  20.196327   False      NaN         NaN    1.0
+0    0     0   True  31.902851    True      NaN         NaN    1.0
+1    1     1   True  20.196325   False      NaN         NaN    1.0
 2    2     2   True  27.718803   False      NaN         NaN    1.0
 3    3     3   True  19.897545   False      NaN         NaN    1.0
 4    4     4   True  24.346598   False      NaN         NaN    1.0
-5    5     5   True  11.795713    True      NaN         NaN    1.0
+5    5     5   True  11.795712    True      NaN         NaN    1.0
 6    6     6   True  32.119804   False      NaN         NaN    1.0
-7    7     7   True  40.963032   False      NaN         NaN    1.0
+7    7     7   True  40.963028   False      NaN         NaN    1.0
 8    8     8   True   5.724649    True      NaN         NaN    1.0
-9    9     9   True  29.568056    True      NaN         NaN    1.0</code></pre>
+9    9     9   True  29.568054    True      NaN         NaN    1.0</code></pre>
 </div>
 </div>
 <p>When a module is added to a sim, this can add additional states to people. Tracking and updating the states of people is one of the main ways in which Starsim models disease dynamics. For example:</p>
-<div id="36dc6613" class="cell" data-execution_count="2">
+<div id="b6044551" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">20</span>, diseases<span class="op">=</span><span class="bu">dict</span>(<span class="bu">type</span><span class="op">=</span><span class="st">'sis'</span>, init_prev<span class="op">=</span><span class="fl">0.2</span>), networks<span class="op">=</span><span class="st">'random'</span>)</span>
@@ -755,39 +755,39 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 20 agents
 
-  Running 2000.01.01 ( 0/51) (0.00 s)  ———————————————————— 2%
+  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
 
-  Running 2010.01.01 (10/51) (0.03 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.03 s)  ••••———————————————— 22%
 
-  Running 2020.01.01 (20/51) (0.05 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.05 s)  ••••••••———————————— 41%
 
-  Running 2030.01.01 (30/51) (0.07 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.07 s)  ••••••••••••———————— 61%
 
-  Running 2040.01.01 (40/51) (0.09 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.09 s)  ••••••••••••••••———— 80%
 
-  Running 2050.01.01 (50/51) (0.11 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.11 s)  •••••••••••••••••••• 100%
 
     uid  slot  alive      age  female  ti_dead  ti_removed  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
-0     0     0   True  31.9029    True      NaN         NaN    1.0                  False             True         False       0.6815            1.0             20.0           29.1871        0.3185
-1     1     1   True  20.1963   False      NaN         NaN    1.0                  False             True         False       0.6500            1.0             23.0           32.9363        0.3500
-2     2     2   True  27.7188   False      NaN         NaN    1.0                  False             True         False       0.2791            1.0             33.0           42.4973        0.7209
-3     3     3   True  19.8975   False      NaN         NaN    1.0                  False             True         False       0.7647            1.0             13.0           22.8441        0.2353
-4     4     4   True  24.3466   False      NaN         NaN    1.0                  False             True         False       0.2078            1.0             37.0           47.1396        0.7922
-5     5     5   True  11.7957    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             45.0           54.3671        1.1761
-6     6     6   True  32.1198   False      NaN         NaN    1.0                  False             True         False       0.3699            1.0             31.0           46.0567        0.6301
-7     7     7   True  40.9630   False      NaN         NaN    1.0                  False             True         False       0.3721            1.0             30.0           40.0729        0.6279
-8     8     8   True   5.7246    True      NaN         NaN    1.0                  False             True         False       0.6816            1.0             18.0           27.9961        0.3184
-9     9     9   True  29.5681    True      NaN         NaN    1.0                  False             True         False       0.6454            1.0             24.0           33.0742        0.3546
-10   10    10   True  12.1764    True      NaN         NaN    1.0                  False             True         False       0.4554            1.0             26.0           33.9385        0.5446
-11   11    11   True  45.5517    True      NaN         NaN    1.0                  False             True         False       0.6480            1.0             22.0           31.8456        0.3520
-12   12    12   True  40.1340   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             46.0           55.2693        1.1527
-13   13    13   True  42.1071    True      NaN         NaN    1.0                  False            False          True       0.0515            1.0             40.0           50.2596        0.9485
-14   14    14   True   0.2257   False      NaN         NaN    1.0                  False             True         False       0.6753            1.0             22.0           33.1491        0.3247
-15   15    15   True  38.9969    True      NaN         NaN    1.0                  False            False          True       0.0866            1.0             38.0           50.0402        0.9134
-16   16    16   True   0.2895    True      NaN         NaN    1.0                  False             True         False       0.4854            1.0             26.0           37.3011        0.5146
-17   17    17   True  46.9728   False      NaN         NaN    1.0                  False             True         False       0.6833            1.0             21.0           29.5855        0.3167
-18   18    18   True  45.3351   False      NaN         NaN    1.0                  False             True         False       0.6081            1.0             26.0           37.7610        0.3919
-19   19    19   True  49.2198    True      NaN         NaN    1.0                  False             True         False       0.6053            1.0             27.0           37.0090        0.3947</code></pre>
+0     0     0   True  31.9029    True      NaN         NaN    1.0                  False             True         False       0.0000            1.0             40.0           48.6462        1.0651
+1     1     1   True  20.1963   False      NaN         NaN    1.0                  False            False          True       0.1108            1.0             41.0           50.1904        0.8892
+2     2     2   True  27.7188   False      NaN         NaN    1.0                  False             True         False       0.3615            1.0             37.0           47.1850        0.6385
+3     3     3   True  19.8975   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             46.0           55.7581        1.2836
+4     4     4   True  24.3466   False      NaN         NaN    1.0                  False            False          True       0.1712            1.0             50.0           60.2779        1.8288
+5     5     5   True  11.7957    True      NaN         NaN    1.0                  False             True         False       0.3252            1.0             33.0           42.8767        0.6748
+6     6     6   True  32.1198   False      NaN         NaN    1.0                  False            False          True       0.0497            1.0             41.0           52.2641        0.9503
+7     7     7   True  40.9630   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             42.0           51.3936        1.0716
+8     8     8   True   5.7246    True      NaN         NaN    1.0                  False             True         False       0.0000            1.0             38.0           48.9118        1.0786
+9     9     9   True  29.5681    True      NaN         NaN    1.0                  False             True         False       0.1256            1.0             39.0           48.5133        0.8744
+10   10    10   True  12.1764    True      NaN         NaN    1.0                  False             True         False       0.0987            1.0             37.0           47.9870        0.9013
+11   11    11   True  45.5516    True      NaN         NaN    1.0                  False             True         False       0.4826            1.0             32.0           41.8089        0.5174
+12   12    12   True  40.1340   False      NaN         NaN    1.0                  False             True         False       0.0917            1.0             38.0           49.8741        0.9083
+13   13    13   True  42.1071    True      NaN         NaN    1.0                  False             True         False       0.3681            1.0             36.0           47.7326        0.6319
+14   14    14   True   0.2257   False      NaN         NaN    1.0                  False            False          True       0.0000            1.0             46.0           56.1066        1.5114
+15   15    15   True  38.9969    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             48.0           60.7664        1.5676
+16   16    16   True   0.2895    True      NaN         NaN    1.0                  False             True         False       0.2516            1.0             36.0           45.7710        0.7484
+17   17    17   True  46.9728   False      NaN         NaN    1.0                  False             True         False       0.3347            1.0             38.0           48.8247        0.6653
+18   18    18   True  45.3351   False      NaN         NaN    1.0                  False             True         False       0.2605            1.0             37.0           46.5924        0.7395
+19   19    19   True  49.2198    True      NaN         NaN    1.0                  False            False          True       0.0000            1.0             45.0           55.5627        1.0141</code></pre>
 </div>
 </div>
 <p>We can see even in this very simple example with only one disease and 20 agents, a lot of data is generated!</p>
@@ -812,7 +812,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="what-happens-when-you-add-a-module" class="level2">
 <h2 class="anchored" data-anchor-id="what-happens-when-you-add-a-module">What happens when you add a module?</h2>
 <p>When you add a module to a <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>, the module’s parameters, states, and results will be added to the centralized collections of parameters, states, and results that are maintained within the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>. To illustrate this, let’s create a <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> with an SIR disease module and a random contact network:</p>
-<div id="674d81bb" class="cell" data-execution_count="3">
+<div id="5b55e269" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
@@ -1266,7 +1266,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.1 (2026-07-09).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
