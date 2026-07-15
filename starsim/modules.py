@@ -726,7 +726,7 @@ class Module(Base):
         if self.finalized:
             errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
             raise RuntimeError(errormsg)
-        if self.dists is not None: # Will be None if no distributions are defined
+        if self.dists is not None and ss.options.crn: # Will be None if no distributions are defined; jumping is a no-op under crn=False (see Dist.jump), so skip the per-dist loop entirely
             self.dists.jump_dt() # Advance random number generators forward for calls on this step
         return
 

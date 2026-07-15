@@ -168,6 +168,10 @@ def perf_cases():
     - bare_run_no_people: the People-results opt-out (largest removable per-tick cost)
     - het_init: the heterogeneous-dt numeric-sort plan fallback
     - births_run: demographics (birth draw + grow)
+    - crn_false_run: the crn=False path (guards the distribution jumping gate; all other
+      cases run crn=True and so would not catch a reinstated per-step/per-draw RNG jump)
+
+    Each case is (factory, which, crn).
     """
     bare = lambda **kw: ss.Sim(start=0, stop=365*10, dt=ss.days(1), verbose=0, **kw)
     het  = lambda: ss.Sim(diseases=ss.SIS(dt=ss.days(1)), networks=ss.RandomNet(dt=ss.weeks(1)),
@@ -175,27 +179,32 @@ def perf_cases():
                           start='2000-01-01', stop='2002-01-01', n_agents=200, verbose=0)
     births = lambda: ss.Sim(n_agents=5000, dur=20, dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(30)),
                             rand_seed=1, verbose=0)
+    crnf = lambda: ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
+                          demographics=ss.Births(birth_rate=ss.peryear(20)),
+                          n_agents=2000, dur=20, dt=0.2, rand_seed=1, verbose=0)
     return {
-        'bare_init':          (bare, 'init'),
-        'bare_run':           (bare, 'run'),
-        'bare_run_no_people': (lambda: bare(people_results=False), 'run'),
-        'het_init':           (het, 'init'),
-        'births_run':         (births, 'run'),
+        'bare_init':          (bare, 'init', True),
+        'bare_run':           (bare, 'run', True),
+        'bare_run_no_people': (lambda: bare(people_results=False), 'run', True),
+        'het_init':           (het, 'init', True),
+        'births_run':         (births, 'run', True),
+        'crn_false_run':      (crnf, 'run', False),
     }
 
 
-def measure_case(fn, which, repeats, warmup=1):
+def measure_case(fn, which, repeats, warmup=1, crn=True):
     """ Return the minimum wall-clock time (seconds) to init or run a fresh sim, after warmup """
-    for _ in range(warmup): # Warm up caches/JIT so the first (cold) sample doesn't dominate
-        s = fn(); s.init()
-        if which == 'run': s.run()
-    times = []
-    for _ in range(repeats):
-        if which == 'init':
-            t0 = sc.tic(); s = fn(); s.init(); times.append(sc.toc(t0, output=True))
-        else:
+    with ss.options.context(crn=crn):
+        for _ in range(warmup): # Warm up caches/JIT so the first (cold) sample doesn't dominate
             s = fn(); s.init()
-            t0 = sc.tic(); s.run(); times.append(sc.toc(t0, output=True))
+            if which == 'run': s.run()
+        times = []
+        for _ in range(repeats):
+            if which == 'init':
+                t0 = sc.tic(); s = fn(); s.init(); times.append(sc.toc(t0, output=True))
+            else:
+                s = fn(); s.init()
+                t0 = sc.tic(); s.run(); times.append(sc.toc(t0, output=True))
     return min(times)
 
 
@@ -219,11 +228,11 @@ def test_performance_guard(do_save=False, verbose=True):
     if not do_save and os.environ.get('PYTEST_XDIST_WORKER') is not None:
         pytest.skip('Performance guard is timing-sensitive; run serially (pytest test_baselines.py::test_performance_guard).')
 
-    repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4)
+    repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
 
     # Measure, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')
-    measured = {name: measure_case(fn, which, repeats[name]) for name,(fn,which) in perf_cases().items()}
+    measured = {name: measure_case(fn, which, repeats[name], crn=crn) for name,(fn,which,crn) in perf_cases().items()}
     r2 = sc.benchmark(which='numpy')
     ratio = (r1 + r2) / 2 / REF_MOPS
     normalized = {k: round(ratio*v, 4) for k,v in measured.items()}

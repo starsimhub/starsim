@@ -542,6 +542,15 @@ class Dist:
     def jump(self, to=None, delta=1, force=False):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
 
+        # Under crn=False, jumping is pure waste: the RNG stream advances naturally on each
+        # draw, giving fresh, valid, same-seed-reproducible numbers without a reseed. Skip it
+        # (keeping the dist callable). This is the single gate that neutralizes every jump path
+        # under crn=False -- auto-jumps in rvs(), Module.start_step, and the manual jumps in
+        # networks.py / multi_random. force=True (explicit reset / manual jump) still jumps.
+        if not ss.options.crn and not force:
+            self.ready = True
+            return self.state
+
         # Validation
         jumps = to if (to is not None) else self.ind + delta
         if self.ind > jumps and not force:
@@ -955,8 +964,11 @@ class Dist:
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
             raise ValueError(errormsg)
 
-        # Store the state
-        self.make_history() # Store the pre-call state
+        # Store the pre-call state. Only needed to support CRN reset() or an explicit
+        # rvs(reset=True) resample; under crn=False (and no reset) the per-draw PCG64
+        # state-dict copy is pure overhead, so skip it.
+        if ss.options.crn or reset:
+            self.make_history()
 
         # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
         self.process_pars()
