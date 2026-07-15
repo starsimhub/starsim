@@ -1066,10 +1066,9 @@ class uids(np.ndarray):
         """ Return unique UIDs; equivalent to np.unique() """
         if return_index:
             arr, index = np.unique(self, return_index=True)
-            return arr.view(self.__class__), index
+            return self._ensure_int(arr), index # index is a position array, not a uids
         else:
-            arr = np.unique(self).view(self.__class__)
-            return arr
+            return self._ensure_int(np.unique(self))
 
     def __array_wrap__(self, out_arr, context=None, return_scalar=False):
         # Guard 1: non-integer dtype → return a plain ndarray.
