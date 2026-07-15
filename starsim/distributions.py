@@ -29,11 +29,39 @@ def str2int(string, modulo=1_000_000_000):
 _GOLDEN = np.uint64(0x9e3779b97f4a7c15)
 _MIX1   = np.uint64(0xbf58476d1ce4e5b9)
 _MIX2   = np.uint64(0x94d049bb133111eb)
-_INV53  = np.float64(1.0 / 9007199254740992.0) # 2^-53, to map a 53-bit int to [0, 1)
+_INV53  = np.float64(1.0 / 9007199254740992.0) # 2^-53, to map a 53-bit int to [0, 1) (float64 mantissa)
+_INV24  = np.float64(1.0 / 16777216.0)         # 2^-24, to map a 24-bit int to [0, 1) (float32 mantissa)
 _U30, _U27, _U31, _U11 = np.uint64(30), np.uint64(27), np.uint64(31), np.uint64(11)
+_U40 = np.uint64(40) # 64 - 24: keep the top 24 bits for a float32-representable uniform
 
-@nb.njit(nb.float64[:](nb.int64, nb.int64, nb.uint64[:]), cache=True)
-def hash_uniforms(seed, ind, slots):
+@nb.njit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
+          nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
+def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
+    """
+    Fill `out` with one uniform in [0, 1) per slot via a counter-based (splitmix64) hash keyed
+    by (seed, ind); not for the user. See hash_uniforms() for the algorithm and rationale.
+
+    `out` carries the target float dtype (Numba specializes on it), and (shift, scale) select the
+    mantissa width: (40, 2^-24) for float32, (11, 2^-53) for float64. Matching the mantissa to the
+    float width keeps every value representable and strictly < 1.
+    """
+    # Derive a per-draw key by mixing the distribution seed with the draw index
+    x = (np.uint64(seed) ^ (np.uint64(ind) * _GOLDEN)) + _GOLDEN
+    x = (x ^ (x >> _U30)) * _MIX1
+    x = (x ^ (x >> _U27)) * _MIX2
+    key = x ^ (x >> _U31)
+
+    # Hash each slot to a uniform of the requested width
+    for i in range(slots.shape[0]):
+        z = (slots[i] + key) * _GOLDEN
+        z = (z ^ (z >> _U30)) * _MIX1
+        z = (z ^ (z >> _U27)) * _MIX2
+        z = z ^ (z >> _U31)
+        out[i] = (z >> shift) * scale
+    return
+
+
+def hash_uniforms(seed, ind, slots, dtype=None):
     """
     Generate one uniform random number in [0, 1) per slot via a counter-based (splitmix64)
     hash keyed by (seed, ind); not for the user.
@@ -44,22 +72,21 @@ def hash_uniforms(seed, ind, slots):
     scenarios don't ripple into unrelated agents. Unlike the stream-based approach (draw
     `slots.max()+1` numbers and gather), this generates exactly `len(slots)` numbers, avoiding
     the `slot_scale` blowup.
-    """
-    # Derive a per-draw key by mixing the distribution seed with the draw index
-    x = (np.uint64(seed) ^ (np.uint64(ind) * _GOLDEN)) + _GOLDEN
-    x = (x ^ (x >> _U30)) * _MIX1
-    x = (x ^ (x >> _U27)) * _MIX2
-    key = x ^ (x >> _U31)
 
-    # Hash each slot to a uniform
-    n = slots.shape[0]
-    out = np.empty(n, dtype=np.float64)
-    for i in range(n):
-        z = (slots[i] + key) * _GOLDEN
-        z = (z ^ (z >> _U30)) * _MIX1
-        z = (z ^ (z >> _U27)) * _MIX2
-        z = z ^ (z >> _U31)
-        out[i] = np.float64(z >> _U11) * _INV53
+    The result is returned at `dtype` (default `ss.dtypes.float`) so the CRN path matches the
+    dtype of the native draw path (`Dist.rand`). The mantissa width is matched to the float
+    width (24-bit for float32, 53-bit for float64) so every value stays strictly < 1 -- a plain
+    float64->float32 cast would round the largest values up to exactly 1.0 and break the [0, 1)
+    contract (e.g. `expon.ppf(1.0)` is inf). The float64 stream is unchanged from earlier versions.
+    """
+    if dtype is None:
+        dtype = ss.dtypes.float
+    dtype = np.dtype(dtype)
+    out = np.empty(slots.shape[0], dtype=dtype)
+    if dtype.itemsize <= 4: # float32: keep the top 24 bits
+        _hash_uniforms_fill(seed, ind, slots, out, _U40, _INV24)
+    else: # float64: keep the top 53 bits (unchanged from earlier versions)
+        _hash_uniforms_fill(seed, ind, slots, out, _U11, _INV53)
     return out
 
 
@@ -1279,8 +1306,10 @@ class poisson(Dist):
                 kmax = int(lam + 10.0*np.sqrt(lam) + 30) # P(X > kmax) is negligible, so the CDF saturates to 1.0
                 self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
                 self._ppf_lam = lam
-            return np.searchsorted(self._ppf_cdf, rands, side='left').astype(float) # side='left' matches sps.poisson.ppf
-        return self.dist.ppf(rands) # Fallback for array-valued lambda
+            rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
+        else:
+            rvs = self.dist.ppf(rands) # Fallback for array-valued lambda
+        return rvs.astype(ss.dtypes.int) # Poisson yields integer counts, matching the native rvs path (SciPy's ppf returns float)
 
 
 class beta_dist(Dist):
@@ -1678,7 +1707,7 @@ class multi_random(sc.prettyobj):
         rvs = multi.rvs(source_uids, target_uids)
     """
     def __init__(self, names, *args, crn=None, **kwargs):
-        names = sc.mergelists(names, args)
+        names = sc.mergelists(names, *args)
         self.dists = [ss.random(name=name, **kwargs) for name in names]
         self.crn = crn # If None, follow ss.options.crn at draw time
         return
@@ -1743,7 +1772,17 @@ class multi_random(sc.prettyobj):
             return rvs
 
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
-        int_type = ss.dtypes.rand_uint
+
+        # The XOR-combine reinterprets the float bytes as unsigned ints, so the int width must
+        # match the float width - we need to base it on the width of ss.dtypes.float, not ss.dtypes.rand_uint
+        itemsize = np.dtype(ss.dtypes.float).itemsize
+        if itemsize == 4:
+            int_type = np.uint32
+        elif itemsize == 8:
+            int_type = np.uint64
+        else:
+            errormsg = f'Unexpected float itemsize {itemsize}; expected 4 (float32) or 8 (float64)'
+            raise ValueError(errormsg)
         int_max = np.iinfo(int_type).max
         if n_dists == 2: # Common case (e.g. pairwise transmission): skip the costly nb.typed.List build
             rvs = self.combine2_rvs(rvs_list[0], rvs_list[1], int_type, int_max)

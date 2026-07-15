@@ -379,7 +379,7 @@ class Arr(BaseArr):
         if both_raw:
             result_raw = c
         else:
-            result_raw = np.empty(raw_size, dtype=np.bool_)
+            result_raw = np.empty(self_raw.size, dtype=np.bool_)
             result_raw[inds] = c
 
         if inplace:
