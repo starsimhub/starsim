@@ -7,6 +7,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Fixed `ss.poisson()` sometimes returning `float64` and sometimes returning an integer. It now always returns `ss.dtypes.int`
 - Fixed `ss.multi_random.rvs()` returning an incorrect number of samples due to type mismatches
 - *Regression*: Because the default CRN mechanism precision has changed to consistently match `ss.dtypes.float`, the exact random values produced for agent-indexed draws are different from 3.5.1
+- `ss.uids()` performs additional validation to more consistently ensure it only contains integers.
+- *Regression*: Previously `ss.uids([1.5])` would convert the input to an integer and thus return `ss.uids([1])`. However, because this usage would often reflect an error, this operation will now raise a `TypeError` to prevent inadvertent conversion of floats silently succeeding. To maintain previous functionality, convert the input to integers before calling `ss.uids()`. 
 
 
 ## Version 3.5.1 (2026-07-09)
