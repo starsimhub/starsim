@@ -3,6 +3,7 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 ## Version 3.5.2 (2026-XX-XX)
+- `Timeline.now()` returns durations rather than bare floats, for simulations that use duration-based units.
 - Fixed a bug where `ss.random()` always returned `float64` regardless of the configured type `ss.dtypes.float`
 - Fixed `ss.poisson()` sometimes returning `float64` and sometimes returning an integer. It now always returns `ss.dtypes.int`
 - Fixed `ss.multi_random.rvs()` returning an incorrect number of samples due to type mismatches
