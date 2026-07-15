@@ -3,6 +3,11 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
 
 ## Version 3.5.2 (2026-XX-XX)
+- Fixed a bug where `ss.random()` always returned `float64` regardless of the configured type `ss.dtypes.float`
+- Fixed `ss.poisson()` sometimes returning `float64` and sometimes returning an integer. It now always returns `ss.dtypes.int`
+- Fixed `ss.multi_random.rvs()` returning an incorrect number of samples due to type mismatches
+- *Regression*: Because the default CRN mechanism precision has changed to consistently match `ss.dtypes.float`, the exact random values produced for agent-indexed draws are different from 3.5.1
+
 
 ## Version 3.5.1 (2026-07-09)
 - Added `ss.Arr.isin()`, for comparing an array against multiple values. For example, code like `recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)` could now be `recent = self.ti_infected.isin([self.ti, self.ti-1])`.
