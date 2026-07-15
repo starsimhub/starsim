@@ -530,6 +530,46 @@ def test_hist_plotting():
     return
 
 
+@sc.timer()
+def test_dtype_consistency():
+    """
+    The two draw paths must return the same dtype, and float dists must honor ss.dtypes.float.
+
+    A distribution can be sampled two ways: by count (`dist.rvs(n)`, the native path) or by UID
+    (`dist.rvs(uids)`, the common-random-number hash path). These must agree. Regression (3.5.1):
+    the CRN hash engine (`hash_uniforms`) returned float64 regardless of the declared float dtype,
+    so `ss.random`/`ss.uniform` returned float32 by count but float64 by UID. That mismatch also
+    made `ss.multi_random.rvs()` return double-length arrays (the XOR-combine views the float bytes
+    as uint32, and an 8-byte float viewed as a 4-byte uint doubles the length). See CHANGELOG 3.5.2.
+    """
+    sc.heading('Testing dtype consistency across draw paths')
+    sim = make_sim()
+    uids = ss.uids(np.arange(20))
+    ft = ss.dtypes.float
+
+    def path_dtypes(dist):
+        dist.init(sim=sim)
+        native = np.asarray(dist.rvs(20)).dtype    # by count -> native path
+        crn    = np.asarray(dist.rvs(uids)).dtype   # by UID   -> CRN/hash path
+        return native, crn
+
+    # Float dists (pass-through / linear PPF) must honor ss.dtypes.float on BOTH paths
+    for dist in [ss.random(name='r'), ss.uniform(low=0, high=5, name='u')]:
+        native, crn = path_dtypes(dist)
+        assert native == crn == ft, f'{dist.distname}: by-count={native}, by-UID={crn}, expected {ft}'
+
+    # ss.poisson yields integer counts, so both paths must return ss.dtypes.int. Regression: the CRN
+    # ppf cast counts to float64 (`searchsorted(...).astype(float)`) while the native path was int64.
+    native, crn = path_dtypes(ss.poisson(lam=3, name='p'))
+    assert native == crn == ss.dtypes.int, f'poisson: by-count={native}, by-UID={crn}, expected {ss.dtypes.int}'
+
+    # Other dists aren't independently vulnerable to this issue, but the two paths must still agree
+    for dist in [ss.normal(name='n'), ss.expon(name='e'), ss.lognorm_ex(name='l'),
+                 ss.constant(v=1.5, name='c'), ss.bernoulli(p=0.3, name='b')]:
+        native, crn = path_dtypes(dist)
+        assert native == crn, f'{dist.distname}: by-count path {native} != by-UID path {crn}'
+    return
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -553,5 +593,6 @@ if __name__ == '__main__':
     o12 = test_timepar_dists()
     o13 = test_timepar_callable()
     o14 = test_hist_plotting()
+    o15 = test_dtype_consistency()
 
     T.toc()
