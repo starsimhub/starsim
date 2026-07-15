@@ -295,10 +295,10 @@ class Samples:
         Pass in outputs (list of tuples (df:pd.DataFrame, summary_row:dict)) to wrap them in a `Samples` instance.
 
         Args:
-            folder (path): the folder to save the zip file in
             outputs: A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry 'seed' for the seed
             identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the
                          same value for all samples. This is useful when generating multiple sets of results e.g., for scenarios (optional)
+            folder (path): the folder to save the zip file in
             fname (str/BytesIO): filename for the zip file; auto-generated from identifiers if not supplied.
                                  If an `io.BytesIO` instance is passed, the zip file is created in-memory
             verbose (bool): whether to print the save path (default True)
