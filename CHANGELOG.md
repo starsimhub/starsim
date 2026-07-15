@@ -2,6 +2,36 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.6.0 (2026-07-15)
+This release delivers substantial framework-overhead performance improvements, focused on simulation initialization and per-timestep execution. The gains are largest for lightweight/ODE-style simulations (e.g. a bare 10-year daily sim now initializes roughly 35x faster and runs ~2x faster with `people_results=False`); module-heavy simulations see large initialization speedups from cheaper module timeline copies. It also corrects the `cum_deaths` result. Almost all changes are bit-identical; the exceptions are flagged as *Regression* below.
+
+### Initialization performance
+- **Module timeline copies are now shallow rather than deep.** When a module shares the sim's timeline (the common case), its time vectors were previously deep-copied via `sc.dcp`, duplicating ~1800 immutable `ss.date`/`ss.dur` objects per vector. They are now copied as independent array containers that share those (immutable) elements — bit-identical, and dramatically faster for module-heavy sims (`starsim/timeline.py`).
+- **Canonical time-vector construction is cheaper and lazy.** `ss.Timeline` now eagerly builds only the canonical `tvec`/`tivec`/`yearvec`; the human-friendly `datevec`, `timevec`, and `relvec` are derived lazily on first access (as cached properties). This avoids constructing calendar date sequences that many sims never read, and removes a redundant `ss.date.arange` pass that was previously built and then discarded on the duration-based path. All time vectors remain accessible with identical values (`starsim/timeline.py`).
+- **The integration-loop plan is built without sorting date/dur objects.** When every module shares the sim's timeline, plan entries are now generated directly in execution order with no sort; otherwise a numeric `np.lexsort` on the canonical time vectors is used. Previously the plan was sorted using a `(date/dur, int)` object key, which is very slow because each comparison ran interpreted `ss.dur` dunder methods. The rebuilt plan is bit-identical. Closes issue [#1404](https://github.com/starsimhub/starsim/issues/1404) (`starsim/loop.py`).
+- `LoopEntry` now uses `@dataclass(slots=True)`, reducing the memory footprint of the 10⁴–10⁵ entries in a typical plan (`starsim/loop.py`).
+
+### Per-timestep performance
+- **Loop instrumentation is now opt-in.** `sim.run()` (and `loop.run()`) no longer record a `perf_counter` for every plan entry, nor build the plan DataFrame at the end of the run, since most runs do not use them. Pass `sim.run(profile=True)` to record per-entry CPU timing (exposed by `loop.to_df()`/`loop.plot_cpu()` as the `cpu_time` column); otherwise `cpu_time` is `NaN`. The plan metadata via `loop.to_df()` is always available on demand (`starsim/loop.py`, `starsim/sim.py`).
+- **Added the `people_results` parameter (default `True`).** Setting `ss.Sim(..., people_results=False)` skips the automatic per-timestep People-level results (`n_alive`, `n_female`, `new_deaths`, `cum_deaths`, etc.) — the single largest removable per-timestep cost in lightweight sims (~40% of a bare run). Disease/module dynamics are unaffected. Note that some modules (e.g. demographics) rely on `results.n_alive`, so this is intended for models that do not need the People-level results (`starsim/parameters.py`, `starsim/people.py`, `starsim/loop.py`).
+- **No-op lifecycle phases are skipped.** A module's `update_results` is now omitted from the integration plan when it is the inherited base method *and* the module has no auto-generated boolean-state results (so the call would do nothing). Overrides — including those that call `super()` — are always kept. Result-identical (`starsim/loop.py`).
+
+### cum_deaths correctness and performance
+- *Regression*: **`People.cum_deaths` is now a true running cumulative sum.** It previously computed `np.sum(new_deaths[:ti])` on every timestep, which was O(n²) over the run *and* lagged by one timestep (it excluded deaths on the current step, so the final value omitted any deaths on the final step). It is now computed as an O(1)-per-step running sum satisfying `cum_deaths == np.cumsum(new_deaths)`, matching the `cum_infections` convention. This changes `cum_deaths` values whenever deaths occur (the default test baseline's `cum_deaths` increased from 2315 to 2346); no other results are affected (`starsim/people.py`).
+
+### Demographics
+- **Faster births under `ss.options.crn = False`.** `ss.Births` previously drew a per-agent Bernoulli for every living agent each timestep. When common random numbers are disabled, it now draws the *number* of births directly (Poisson) and samples that many parents, which is statistically equivalent but O(1) draws instead of O(n_alive). The default CRN path (`ss.options.crn = True`) is unchanged and bit-identical (`starsim/demographics.py`).
+
+### Testing
+- Added a CPU-normalized performance regression guard (`tests/test_baselines.py::test_performance_guard`, with baselines in `tests/perf_guard.yaml`) that fails if any of a small matrix of normalized timings — bare `init`/`run`, People-results off, a heterogeneous-`dt` sim, and a births sim — regresses by more than 1.5x. It guards distinct cost terms separately and uses min-of-repeats with CPU normalization to cancel machine speed. Because per-test wall-clock is unreliable under parallel contention, it is skipped under pytest-xdist and should be run serially (e.g. `pytest tests/test_baselines.py::test_performance_guard`) or refreshed via `tests/update_benchmarks.py`.
+- Added `test_loop.py::test_plan_identity` (plus heterogeneous-fallback, insertion, and no-op-filtering variants) asserting the rebuilt integration plan matches the legacy object-sorted plan exactly; `test_timeline.py::test_timeline_container_independence`; `test_people.py::test_people_results_optout` and `test_cum_deaths_invariant`; and `test_demographics.py::test_count_based_births`.
+
+### Regression information
+- `cum_deaths` is now `cumsum(new_deaths)` (previously lagged by one timestep); baselines involving deaths will change.
+- Births under `ss.options.crn = False` use a count-based draw and so produce different (statistically equivalent) stochastic realizations than the previous per-agent scan; the default `crn=True` path is unchanged.
+- *GitHub info*: PR [1408](https://github.com/starsimhub/starsim/pull/1408)
+
+
 ## Version 3.5.2 (2026-07-14)
 - Starsim v3.5.0 added several optimizations affecting how random numbers are drawn. However, these changes introduced several `dtype`-related bugs that have been fixed in this release:
   - Fixed a bug where `ss.random()` always returned `float64` regardless of the configured type `ss.dtypes.float`.

@@ -266,7 +266,12 @@ class People:
 
         This method also creates the standard people-related results like new_deaths,
         new_emigrants, and cum_deaths.
+
+        If `sim.pars.people_results` is False, People-level result collection is disabled
+        (no results are created here and `People.update_results` is skipped in the loop).
         """
+        if not self.sim.pars.get('people_results', True): # Opt-out: skip People-level results entirely
+            return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
         results = []
 
@@ -502,7 +507,11 @@ class People:
             res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
-        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+        # Running cumulative sum: O(1) per step instead of the previous O(n) np.sum(new_deaths[:ti]),
+        # which made the whole calculation O(n²). This also fixes a one-timestep lag in the previous
+        # version (which summed new_deaths[:ti], excluding the current step): cum_deaths now satisfies
+        # cum_deaths == np.cumsum(new_deaths), matching the cum_infections convention.
+        res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
     def finish_step(self):

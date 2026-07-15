@@ -7,3 +7,4 @@ import test_baselines
 
 test_baselines.save_baseline()
 test_baselines.test_benchmark(do_save=True, repeats=5)
+test_baselines.test_performance_guard(do_save=True)

@@ -60,7 +60,11 @@ class Births(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
         self.n_births_this_step = 0 # For results tracking
-        self.dist = ss.bernoulli(p=0) # Used to generate random numbers; set to use the birth rate above
+        self.dist = ss.bernoulli(p=0) # Per-agent birth draw (CRN path); set to the birth rate each step
+        # Count-based birth draw, used only on the non-CRN fast path (ss.options.crn=False):
+        # n_dist draws the number of births directly, parent_dist picks that many parents.
+        self.n_dist = ss.poisson(lam=1.0)
+        self.parent_dist = ss.randint(low=0, high=2)
         return
 
     def init_pre(self, sim):
@@ -117,10 +121,40 @@ class Births(Demographics):
             scaled_birth_prob = ss.prob.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
 
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        self.dist.set(p=scaled_birth_prob) # Update the distribution with the probabilities for this timestep
-        birth_uids = self.dist.filter()
-        # n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
+
+        if ss.options.crn:
+            # CRN-safe path: scan every agent with a per-agent Bernoulli draw (reproducible
+            # across scenarios, bit-identical to previous versions)
+            self.dist.set(p=scaled_birth_prob) # Update the distribution with the probabilities for this timestep
+            birth_uids = self.dist.filter()
+        else:
+            # Fast non-CRN path: draw the number of births directly rather than scanning every
+            # agent -- O(1) draws instead of O(n_alive) (see issue #404). Statistically equivalent
+            # to the per-agent Bernoulli scan for the small per-step probabilities typical of birth
+            # rates, but not CRN-safe across scenarios (which is inherent to ss.options.crn=False).
+            birth_uids = self._get_births_count(float(scaled_birth_prob))
         return birth_uids
+
+    def _get_births_count(self, prob):
+        """
+        Non-CRN count-based birth draw
+
+        Draws the number of new births from a Poisson distribution (mean = n_alive*prob,
+        matching the expected count of the per-agent Bernoulli scan) and then samples that
+        many parents uniformly from the living population. Used only when `ss.options.crn` is
+        False; see `get_births()`.
+        """
+        alive = self.sim.people.alive.uids
+        n_alive = len(alive)
+        if n_alive == 0:
+            return ss.uids()
+        self.n_dist.set(lam=n_alive*prob)
+        n_new = min(int(self.n_dist.rvs(1)[0]), n_alive) # Cannot have more births than living agents
+        if n_new == 0:
+            return ss.uids()
+        self.parent_dist.set(high=n_alive)
+        idx = self.parent_dist.rvs(n_new) # Uniform indices into the living population
+        return ss.uids(alive[idx])
 
     def step(self):
         new_uids = self.add_births()

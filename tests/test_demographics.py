@@ -396,6 +396,41 @@ def test_nnd():
     return sim
 
 
+@sc.timer()
+def test_count_based_births():
+    """
+    The non-CRN count-based birth draw (ss.options.crn=False) matches the per-agent
+    Bernoulli scan distributionally, and both paths are reproducible for a fixed seed.
+    """
+    sc.heading('Testing count-based (non-CRN) births...')
+
+    def cum_births(crn, seed):
+        ss.options.crn = crn
+        sim = ss.Sim(n_agents=3000, dur=15, dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(30)),
+                     rand_seed=seed, verbose=0).run()
+        return float(sim.results.births.cumulative[-1])
+
+    orig_crn = ss.options.crn
+    try:
+        nseeds = 12
+        per_agent = np.array([cum_births(True, s) for s in range(nseeds)])
+        count_based = np.array([cum_births(False, s) for s in range(nseeds)])
+
+        # Distributional match: mean cumulative births agree within stochastic tolerance
+        rel_diff = abs(per_agent.mean() - count_based.mean()) / per_agent.mean()
+        assert rel_diff < 0.05, f'Count-based births differ from per-agent by {rel_diff*100:.1f}% (mean {count_based.mean():.0f} vs {per_agent.mean():.0f})'
+        assert count_based.std() > 0, 'Count-based births should be stochastic'
+
+        # Both paths are reproducible: identical seed -> identical result
+        assert cum_births(True, 0) == cum_births(True, 0), 'CRN births not reproducible'
+        assert cum_births(False, 0) == cum_births(False, 0), 'Count-based births not reproducible'
+    finally:
+        ss.options.crn = orig_crn
+
+    print(f'  Per-agent mean: {per_agent.mean():.0f}, count-based mean: {count_based.mean():.0f} ({rel_diff*100:.2f}% difference)')
+    return per_agent, count_based
+
+
 if __name__ == '__main__':
     T = sc.timer()
 
@@ -408,5 +443,6 @@ if __name__ == '__main__':
     s7 = test_loss_classification()
     s8 = test_background_loss()
     s9 = test_nnd()
+    s10 = test_count_based_births()
 
     T.toc()
