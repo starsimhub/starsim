@@ -647,7 +647,7 @@ class Module(Base):
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
         for state in self.auto_state_list:
-            results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+            results += ss.Result(f'n_{state.name}', dtype=float, scale=True, label=state.label) # float to hold scale-weighted (fractional) counts under multiscale
         self.define_results(*results)
         return
 
@@ -751,7 +751,10 @@ class Module(Base):
         modules, where relevant.
         """
         for state in self.auto_state_list:
-            self.results[f'n_{state.name}'][self.ti] = state.sum()
+            self.results[f'n_{state.name}'][self.ti] = state.count() # scale-weighted; == raw count when scales are 1
+        for res in self.results.values(): # Auto-fill declared flow results, scale-weighted
+            if isinstance(res, ss.Result) and res.flow is not None:
+                self.results[res.name][self.ti] = self.sim.people.count(res.flow(self))
         return
 
     @required()
@@ -770,7 +773,7 @@ class Module(Base):
         # Scale results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
+                self.results[reskey] = ss.scale_result(self.results[reskey], self.sim.pars.pop_scale) # int-preserving when exact
         return
 
     def to_json(self):

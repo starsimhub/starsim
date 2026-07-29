@@ -463,7 +463,7 @@ class SexualNetwork(DynamicNetwork):
     def active(self, people):
         """ Return boolean array of agents who are alive, participating, and past sexual debut. """
         valid_age = people.age > self.debut
-        active = self.participant & valid_age & people.alive
+        active = self.participant & valid_age & people.alive & ~people.fine # exclude fine-scale (sub-)agents from transmission
         return active
 
     def available(self, people, sex):
@@ -625,7 +625,7 @@ class RandomExactNet(DynamicNetwork):
         """ Generate edges """
         p = self.pars
         people = self.sim.people
-        born = people.alive & (people.age > 0)
+        born = people.alive & (people.age > 0) & ~people.fine # exclude fine-scale (sub-)agents from transmission
         uids = born.uids
         if isinstance(p.n_contacts, ss.Dist):
             n_conn = p.n_contacts.rvs(uids)
@@ -775,7 +775,7 @@ class RandomSafeNet(DynamicNetwork):
     def add_pairs(self):
         """ Generate edges """
         people = self.sim.people
-        born = people.alive & (people.age > 0)
+        born = people.alive & (people.age > 0) & ~people.fine # exclude fine-scale (sub-)agents from transmission
 
         # Get the random numbers
         self.rep_rand(born.uids)

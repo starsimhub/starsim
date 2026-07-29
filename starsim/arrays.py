@@ -544,8 +544,13 @@ class Arr(BaseArr):
             return uids(np.arange(len(self.raw)))
 
     def count(self):
-        """ Count the number of nonzero (truthy) values among active agents. """
-        return np.count_nonzero(self.values)
+        """
+        Scale-weighted count of nonzero (truthy) values among active agents.
+
+        Equals the raw nonzero count when every agent's `scale` is 1 (the default), and counts
+        fine-scale agents by the population they represent under multiscale (see `People.split`).
+        """
+        return float(self.people.scale_flows(self.uids))
 
     @property
     def values(self):

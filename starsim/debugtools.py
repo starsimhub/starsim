@@ -475,8 +475,14 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
         auids = np.arange(n_agents),
         slot = np.arange(n_agents),
         age = rng.uniform(min_age, max_age, size=n_agents),
+        scale = np.ones(n_agents), # Per-agent result weight (uniform in the mock); needed by scale-weighted counting
+        epi_weight = np.ones(n_agents), # Per-agent demographic/transmission weight (uniform in the mock)
+        fine = np.zeros(n_agents, dtype=bool), # No fine sub-agents in the mock
         add_module = lambda x: None, # Placeholder function
     )
+    people.scale_flows = lambda inds: people.scale[inds].sum() # Mirror People.scale_flows for scale-weighted counting
+    people.epi_flows = lambda inds: people.epi_weight[inds].sum() # Mirror People.epi_flows for body-weighted counting
+    people.count = lambda x: x.count() if isinstance(x, ss.BoolArr) else people.scale_flows(x) # Mirror People.count
     return people
 
 

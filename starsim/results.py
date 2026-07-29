@@ -9,6 +9,21 @@ import matplotlib.pyplot as plt
 
 
 
+def scale_result(arr, factor):
+    """
+    Multiply a result by the population scale factor, preserving integer dtype when
+    the result is integer-valued and the factor is integral (i.e. the scaling is exact).
+
+    Body-weighted vital-dynamics flows (births, pregnancies, etc.) are integer counts;
+    with an integral `pop_scale` (the default 1.0 included) they should stay integer
+    rather than being promoted to float by the multiply. A fractional `pop_scale`
+    necessarily yields a float result.
+    """
+    if np.issubdtype(arr.dtype, np.integer) and float(factor).is_integer():
+        return arr * int(factor)
+    return arr * factor
+
+
 class Result(ss.BaseArr):
     """
     Array-like container for holding sim results.
@@ -25,19 +40,25 @@ class Result(ss.BaseArr):
         low (array): values for the lower bound
         high (array): values for the upper bound
         summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+        flow (callable): if set, a flow result auto-filled scale-weighted each step from
+            `flow(module)`, which returns the agents (a `BoolArr` condition or `uids`) who
+            experienced the event this step. Use a top-level function or method, not a lambda,
+            if the sim will be saved or run in parallel (a lambda cannot be pickled). See the
+            [Multiscale agents guide](https://docs.starsim.org/user_guide/advanced_multiscale.html).
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
     """
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, flow=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
         self.module = module
         self.scale = scale # TODO: should default to True for ints, False for floats
         self.auto_plot = auto_plot
+        self.flow = flow # Optional callable (module)->BoolArr/uids; if set, the framework auto-fills this result scale-weighted each step
         self.timevec = timevec
         self.low = low
         self.high = high

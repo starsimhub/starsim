@@ -68,7 +68,9 @@ class People:
             ss.BoolState('female', default=ss.bernoulli(name='female', p=0.5)),
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('ti_removed'),  # Time index for removal (e.g. emigration)
-            ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
+            ss.FloatArr('scale', default=1.0), # Result weight: people represented in outputs (count/scale_flows/results)
+            ss.IntArr('epi_weight', default=1), # Demographic & transmission weight: whole people (1) for vital dynamics + transmission; 0 for non-participating fine sub-agents. Integer participation flag, not fractional.
+            ss.BoolArr('fine', default=False), # True for non-participating fine-scale sub-agents created by People.split() (BoolArr, not BoolState, so no auto n_fine result)
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
@@ -267,7 +269,7 @@ class People:
         This method also creates the standard people-related results like new_deaths,
         new_emigrants, and cum_deaths.
         """
-        kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
+        kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=float, scale=True) # float to hold scale-weighted (fractional) counts under multiscale
         results = []
 
         # Create results for all BoolStates
@@ -335,7 +337,17 @@ class People:
     def n_uids(self):
         """ Number of UIDs used in People """
         return self.uid.len_used
-    
+
+    @property
+    def _split_slot_offset(self):
+        """
+        Base of the reserved slot band for fine-scale agents created by `split()`.
+
+        Sits above `Pregnancy`'s reserved newborn range (`slot_scale=5` -> 5*n) so
+        fine-agent slots cannot collide with newborn slots.
+        """
+        return int(max(1000, 10 * self.n_agents_init))
+
     @property
     def dead(self):
         """ Dead boolean. Also includes removed agents """
@@ -388,6 +400,144 @@ class People:
         self.auids = self.auids.concatenate(new_uids)
         return new_uids
 
+    def split(self, uids, ratio):
+        """
+        Split coarse agents into `ratio` finer-scale agents, conserving the total
+        represented population (`sum(scale)`), to resolve rare events at higher resolution.
+
+        Each input agent is retained (keeping its slot, hence its CRN trajectory) and
+        `ratio - 1` sibling copies are created. All `ratio` resolved agents have their
+        `scale` divided by `ratio`. Sibling slots come from a dense, self-recycling pool
+        (`_fine_slots`): the lowest free slots >= `_split_slot_offset` not occupied by a
+        live fine agent. This is collision-free within a step and reproducible within a run,
+        but (unlike the prior parent-keyed reserved-block scheme) is NOT CRN-stable across
+        scenarios. The dense pool keeps `slot.max()` ~ O(n) regardless of ratio or sim
+        length, so fine-agent Dist draws cost the same as ordinary draws.
+
+        Args:
+            uids (uids): coarse agents to split (must not already be fine-scale)
+            ratio (int): number of fine-scale agents each coarse agent becomes (>= 2)
+
+        Returns:
+            new_uids (uids): the newly created sibling UIDs
+        """
+        uids = ss.uids(uids)
+        ratio = int(ratio)
+        if ratio < 2 or len(uids) == 0:
+            return ss.uids()
+        # Re-splitting fine siblings is unsupported: they are sub-agents with no body weight.
+        # Parents may be re-split (the dense pool reuses dead descendants' slots automatically).
+        if self.fine[uids].any():
+            raise ValueError('split() received fine agents; re-splitting a fine sibling is unsupported')
+
+        n_sib = ratio - 1
+
+        new_slots, parent_map = self._fine_slots(uids, np.full(len(uids), n_sib))
+
+        new_uids = self.grow(len(new_slots), new_slots)
+        for state in self.states.values():
+            state[new_uids] = state[parent_map]
+        self.parent[new_uids] = parent_map
+
+        # Result axis: divide scale across all `ratio` resolved sub-draws (parent + siblings).
+        # parent_map from _fine_slots is grouped per parent (repeat, not tile).
+        new_scale = self.scale[uids] / ratio
+        self.scale[uids] = new_scale
+        self.scale[new_uids] = np.repeat(new_scale, n_sib)
+        # Epi axis: the parent stays a whole body (keeps its epi_weight); siblings are
+        # non-participating sub-agents (epi_weight 0, tagged fine -> excluded from transmission
+        # and vital dynamics). This keeps total transmission/reproduction consistent: the cohort
+        # contributes one body (the parent), while its outcome is resolved across `ratio` sub-draws.
+        self.epi_weight[new_uids] = 0
+        self.fine[new_uids] = True
+        return new_uids
+
+    def _fine_slots(self, parent_uids, counts):
+        """Dense, recycling slots for fine descendants (split/spawn_fine).
+
+        Allocates counts.sum() slots as the lowest free slots >= _split_slot_offset
+        not occupied by a LIVE fine agent; dead fine agents' slots are reused
+        automatically. Returns (slots, parent_map) aligned element-wise, with
+        parent_map = repeat(parent_uids, counts) driving the state-copy. Slots are
+        dense (slots.max() ~ offset + peak concurrent fine, O(n)) and NOT parent-keyed,
+        so fine-agent Dist draws cost the same as ordinary draws. Reproducible within
+        a run; not CRN-stable across scenarios (fine agents do not need that)."""
+        counts = np.asarray(counts, dtype=int)
+        keep = counts > 0
+        parent_uids = ss.uids(parent_uids)[keep]
+        counts = counts[keep]
+        n = int(counts.sum())
+        if n == 0:
+            return np.array([], dtype=int), ss.uids()
+        offset = self._split_slot_offset
+        # Slot *values* of every live fine agent (index slot by the uids of fine & alive;
+        # indexing an IndexArr with a BoolArr returns uids, not the stored values).
+        live = np.asarray(self.slot[(self.fine & self.alive).uids]).astype(int)
+        live = live[live >= offset]
+        # Window must hold >= n free slots AND cover every live slot (live slots can sit
+        # above offset+len(live)+n when low slots recycled while higher ones survive).
+        hi = max(offset + len(live) + n, int(live.max()) if len(live) else offset)
+        free_mask = np.ones(hi - offset + 1, dtype=bool)
+        free_mask[live - offset] = False
+        free = (offset + np.nonzero(free_mask)[0][:n]).astype(int)
+        parent_map = ss.uids(np.repeat(parent_uids, counts))
+        return free, parent_map
+
+    def spawn_fine(self, parent_uids, n_events, ratio):
+        """
+        Materialize fine sub-agents for rare-event successes, keeping each parent a
+        whole body. For rare-outcome resolution (resolve a rare branch at finer
+        scale) as opposed to split()'s population partition.
+
+        For each parent with `n_events[i] = k > 0`, create `k` fine agents at
+        `scale = parent.scale/ratio` (epi_weight 0, fine=True), with dense recycling
+        slots from `_fine_slots` (lowest free slots >= offset, reusing dead fine
+        agents' slots), copying all states. The parent stays a whole body (epi_weight unchanged,
+        not fine) and sheds the delegated mass: `scale *= (1 - k/ratio)`, conserving
+        sum(scale). The disease model owns the event draw and supplies the counts.
+
+        Args:
+            parent_uids (uids): at-risk whole bodies (must not be fine)
+            n_events (int array): successes per parent, 0..ratio (aligned to parent_uids)
+            ratio (int): resolution; each fine agent carries 1/ratio of the parent scale
+
+        Returns:
+            new_uids (uids): the newly created fine agents
+        """
+        parent_uids = ss.uids(parent_uids)
+        ratio = int(ratio)
+        n_events = np.asarray(n_events, dtype=int)
+        if ratio < 2 or len(parent_uids) == 0:
+            return ss.uids()
+        if len(n_events) != len(parent_uids):
+            raise ValueError('n_events must align with parent_uids')
+        if (n_events < 0).any() or (n_events > ratio).any():
+            raise ValueError('n_events entries must be in [0, ratio]')
+        if self.fine[parent_uids].any():
+            raise ValueError('spawn_fine received fine agents; only whole bodies can be resolved')
+
+        keep = n_events > 0
+        if not keep.any():
+            return ss.uids()
+
+        par = parent_uids[keep]
+        k = n_events[keep]
+        par_scale = self.scale[par].copy()
+
+        new_slots, parent_map = self._fine_slots(par, k)
+
+        new_uids = self.grow(len(new_slots), new_slots)
+        for state in self.states.values():
+            state[new_uids] = state[parent_map]
+        self.parent[new_uids] = parent_map
+
+        self.scale[new_uids] = np.repeat(par_scale / ratio, k)
+        self.epi_weight[new_uids] = 0
+        self.fine[new_uids] = True
+        # Shed the delegated outcome mass from the parents (conserves sum(scale)).
+        self.scale[par] = par_scale * (1 - k / ratio)
+        return new_uids
+
     def filter(self, criteria=None, uids=None, split=False):
         """
         Store indices to allow for easy filtering of the People object.
@@ -410,6 +560,36 @@ class People:
         followed by scale factor multiplication
         """
         return self.scale[inds].sum()
+
+    def epi_flows(self, inds):
+        """
+        Body-weighted version of a flow over `inds` -- the demographic/transmission analogue of
+        `scale_flows`. Sums `epi_weight` (whole people for vital dynamics) rather than `scale`
+        (people in results); equals `len(inds)` when all `epi_weight` are 1. Fine sub-agents
+        (`epi_weight == 0`) contribute nothing.
+        """
+        return self.epi_weight[inds].sum()
+
+    def count(self, x):
+        """
+        Scale-weighted count of agents -- the default way to count agents into a result.
+
+        Counts agents by the population they represent (`scale`), so it is correct under
+        multiscale and equals the raw count when every agent's `scale` is 1. Accepts either a
+        boolean condition or a set of UIDs:
+
+        - `ss.BoolArr`/`ss.BoolState` (e.g. `disease.infected` or `infected & (age > 50)`): counts
+          the truthy agents.
+        - `ss.uids` / boolean mask: counts those agents.
+
+        Examples:
+            sim.people.count(disease.infected)                 # how many are infected (scaled)
+            sim.people.count((disease.infected & at_risk))     # ad-hoc condition (scaled)
+            sim.people.count(new_infection_uids)               # a flow this step (scaled)
+        """
+        if isinstance(x, ss.BoolArr):
+            return x.count()
+        return self.scale_flows(x)
 
     def update_post(self):
         """ Final updates at the very end of the timestep """
@@ -499,9 +679,9 @@ class People:
         ti = self.sim.ti
         res = self.sim.results
         for state in self.auto_state_list: # Count each auto-generated BoolState result, e.g. n_alive, n_female
-            res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
-        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
-        res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
+            res[f'n_{state.name}'][ti] = getattr(self, state.name).count() # scale-weighted; == raw count when scales are 1
+        res.new_deaths[ti] = self.scale_flows((self.ti_dead == ti).uids)       # scale-weighted; == raw count when scales are 1
+        res.new_emigrants[ti] = self.scale_flows((self.ti_removed == ti).uids) # scale-weighted
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 

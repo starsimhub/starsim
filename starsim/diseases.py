@@ -107,6 +107,14 @@ class Disease(ss.Module):
         return
 
 
+def _new_infections_flow(module):
+    """ Agents newly infected this step (ti_infected rounds to the current ti); used as a flow.
+
+    Top-level (not a lambda) so a `Result(flow=...)` remains picklable.
+    """
+    return module.ti_infected.round() == module.ti
+
+
 class Infection(Disease):
     """
     Base class for infectious diseases used in Starsim
@@ -174,8 +182,8 @@ class Infection(Disease):
         super().init_results()
         self.define_results(
             ss.Result('prevalence',     dtype=float, scale=False, label='Prevalence'),
-            ss.Result('new_infections', dtype=int,   scale=True,  label='New infections'),
-            ss.Result('cum_infections', dtype=int,   scale=True,  label='Cumulative infections'),
+            ss.Result('new_infections', dtype=float, scale=True,  label='New infections', flow=_new_infections_flow), # declarative flow: auto-filled scale-weighted
+            ss.Result('cum_infections', dtype=float, scale=True,  label='Cumulative infections'),
         )
         return
 
@@ -425,19 +433,14 @@ class Infection(Disease):
         return
 
     def update_results(self):
-        """ Update new_infections and prevalence for the current timestep. """
-        super().update_results()
+        """ new_infections is auto-filled scale-weighted via its declared flow; here we remove
+        seed infections on the first step and compute prevalence. """
+        super().update_results()  # fills n_<state> and the new_infections flow (scale-weighted)
         res = self.results
         ti = self.ti
-        n_infections = np.count_nonzero(np.round(self.ti_infected) == ti)  # Round since ti_infected is FloatArr
-
-        # Update new infections to remove initial cases on first timestep
-        if ti == 0:
-            n_initial_cases = self.pars.pop('_n_initial_cases', 0)
-            n_infections -= n_initial_cases
-
-        res.new_infections[ti] = n_infections
-        res.prevalence[ti] = res.n_infected[ti] / len(self.sim.people)
+        if ti == 0:  # Remove initial seed cases from the first-step flow
+            res.new_infections[ti] -= self.pars.pop('_n_initial_cases', 0)
+        res.prevalence[ti] = res.n_infected[ti] / self.sim.people.scale.sum()  # scale-weighted; denominator == len(people) when scales are 1
         return
 
     def finalize_results(self):
@@ -617,18 +620,18 @@ class NCD(Disease):
         """
         super().init_results()
         self.define_results(
-            ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
+            ss.Result('n_not_at_risk', dtype=float, label='Not at risk'), # float for scale-weighted (fractional) counts
             ss.Result('prevalence',    dtype=float, label='Prevalence'),
-            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
+            ss.Result('new_deaths',    dtype=float, label='Deaths'),
         )
         return
 
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(self.sim.people)
-        self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
+        self.results.n_not_at_risk[ti] = self.not_at_risk.count()  # scale-weighted; == raw count when scales are 1
+        self.results.prevalence[ti]    = self.affected.count() / self.sim.people.scale.sum()  # scale-weighted; denom == len(people) when scales are 1
+        self.results.new_deaths[ti]    = self.sim.people.scale_flows((self.ti_dead == ti).uids)  # scale-weighted
         return
 
 

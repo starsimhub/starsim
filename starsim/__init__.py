@@ -98,7 +98,7 @@ from .networks import (
 )
 
 t('results')
-from .results import Result, Results
+from .results import Result, Results, scale_result
 
 t('demographics')
 from .demographics import (

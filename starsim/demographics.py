@@ -88,7 +88,7 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
+            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'), # body-weighted (epi_flows): integer count of whole-body births
             ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
             ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
@@ -119,12 +119,13 @@ class Births(Demographics):
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         self.dist.set(p=scaled_birth_prob) # Update the distribution with the probabilities for this timestep
         birth_uids = self.dist.filter()
+        birth_uids = birth_uids[~self.sim.people.fine[birth_uids]]  # fine sub-agents are not independent bodies; they don't reproduce
         # n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
         return birth_uids
 
     def step(self):
         new_uids = self.add_births()
-        self.n_births_this_step = len(new_uids)
+        self.n_births_this_step = self.sim.people.epi_flows(new_uids)  # body-weighted; == len(new_uids) when epi_weights are 1
         return new_uids
 
     def add_births(self):
@@ -134,6 +135,9 @@ class Births(Demographics):
         new_uids = people.grow(len(birth_uids))
         people.age[new_uids] = 0
         people.parent[new_uids] = birth_uids
+        # Newborn is a fresh whole agent representing its parent's body weight (scale == epi_weight)
+        people.scale[new_uids] = people.epi_weight[birth_uids]
+        people.epi_weight[new_uids] = people.epi_weight[birth_uids]
         return new_uids
 
     def update_results(self):
@@ -144,7 +148,7 @@ class Births(Demographics):
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
         births_per_year = self.n_births_this_step/self.sim.t.dt_year
-        denom = self.sim.people.alive.sum()
+        denom = self.sim.people.epi_flows(self.sim.people.alive.uids)  # body-weighted alive population (matches the body-weighted birth count)
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
 
@@ -272,8 +276,8 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
+            ss.Result('new',        dtype=float, scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # float for scale-weighted (fractional) counts; use sim deaths instead
+            ss.Result('cumulative', dtype=float, scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
             ss.Result('cmr',        dtype=float, scale=False, summarize_by='mean', label='Crude mortality rate'),
         )
         return
@@ -283,8 +287,24 @@ class Deaths(Demographics):
         p_death = self.make_p_death()  # Get the probability of death for each agent
         self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
         death_uids = self._p_death.filter()
+        # Fine sub-agents DO face background death: it is a competing risk on the
+        # rare outcome they resolve. Excluding them lets every fine agent survive
+        # its full (often long) disease dwell and reach the outcome, whereas the
+        # whole bodies they sub-resolve would lose a fraction to background death
+        # first — biasing the resolved outcome high (verified: ~+18% cancer /
+        # ~+11% CIN in hpvsim, eliminated by including them here). Their removal
+        # drops their scale from the population (correct).
         self.sim.people.request_death(death_uids)
-        self.n_deaths = len(death_uids)
+        # People-space death count: a death removes the agent's `scale` from the
+        # result population (a fine agent = 1/ratio of a person, a shrunk split
+        # parent = its <1 scale), so the reported flow is scale-weighted to match
+        # what leaves `n_alive` (== len(death_uids) when every scale is 1). NOTE
+        # the deliberate asymmetry with births/pregnancies, which stay
+        # epi_weight-counted: a death removes a (fractional) person, whereas a
+        # birth is a whole body reproducing (one body -> one baby, regardless of
+        # its result-scale; fine agents never reproduce). See
+        # docs/superpowers/specs/2026-06-25-fine-agent-competing-risk-death-design.md.
+        self.n_deaths = self.sim.people.scale_flows(death_uids)
         return self.n_deaths
 
     def update_results(self):
@@ -634,21 +654,22 @@ class Pregnancy(Demographics):
         """
         super().init_results()
 
-        scaling_kw = dict(dtype=int, scale=True)
+        body_kw = dict(dtype=int, scale=True)       # body-weighted (epi_flows): integer counts of whole-body vital-dynamics events
+        scaling_kw = dict(dtype=float, scale=True)  # scale-weighted (count()): float to hold fractional counts under multiscale
         nonscaling_kw = dict(dtype=float, scale=False)
         self.derived_results = ['n_fecund', 'n_fertile', 'n_susceptible']
 
         # Define results
         results = sc.autolist()
         results += [
-            ss.Result('pregnancies',     **scaling_kw, label='New pregnancies', summarize_by='sum'),
-            ss.Result('births',          **scaling_kw, label='New births', summarize_by='sum'),
-            ss.Result('n_preterm',       **scaling_kw, label='Preterm births', auto_plot=False),
-            ss.Result('n_very_preterm',  **scaling_kw, label='Very preterm births', auto_plot=False),
-            ss.Result('miscarriages',    **scaling_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
-            ss.Result('stillbirths',     **scaling_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
-            ss.Result('neonatal_deaths', **scaling_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
-            ss.Result('maternal_deaths', **scaling_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('pregnancies',     **body_kw, label='New pregnancies', summarize_by='sum'),
+            ss.Result('births',          **body_kw, label='New births', summarize_by='sum'),
+            ss.Result('n_preterm',       **body_kw, label='Preterm births', auto_plot=False),
+            ss.Result('n_very_preterm',  **body_kw, label='Very preterm births', auto_plot=False),
+            ss.Result('miscarriages',    **body_kw, label='Miscarriages', summarize_by='sum', auto_plot=False),
+            ss.Result('stillbirths',     **body_kw, label='Stillbirths', summarize_by='sum', auto_plot=False),
+            ss.Result('neonatal_deaths', **body_kw, label='Neonatal deaths', summarize_by='sum', auto_plot=False),
+            ss.Result('maternal_deaths', **body_kw, label='Maternal deaths', summarize_by='sum', auto_plot=False),
             ss.Result('preterm_rate',    **nonscaling_kw, label='Preterm birth rate', auto_plot=False),
             ss.Result('mmr',             **nonscaling_kw, summarize_by='mean', label='Maternal mortality rate', auto_plot=False),
             ss.Result('cbr',             **nonscaling_kw, summarize_by='mean', label='Crude birth rate'),
@@ -737,8 +758,9 @@ class Pregnancy(Demographics):
         very_preterm = ga_wk < self.pars.very_preterm_threshold.weeks
         self.preterm[newborn_uids]      = preterm
         self.very_preterm[newborn_uids] = very_preterm
-        self._counts.n_preterm      += preterm.sum()
-        self._counts.n_very_preterm += very_preterm.sum()
+        epi_flows = self.sim.people.epi_flows
+        self._counts.n_preterm      += epi_flows(newborn_uids[preterm])       # body-weighted; == preterm.sum() when epi_weights are 1
+        self._counts.n_very_preterm += epi_flows(newborn_uids[very_preterm])  # body-weighted
 
         self.pregnant[mother_uids] = False
         self.ti_delivery[mother_uids] = self.ti  # Record timestep of delivery as timestep, not fractional time
@@ -836,7 +858,7 @@ class Pregnancy(Demographics):
         """
         maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
-        self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
+        self.results['maternal_deaths'][self.ti] = self.sim.people.epi_flows(maternal_deaths)  # body-weighted
         return
 
     def select_conceivers(self, uids=None):
@@ -844,6 +866,7 @@ class Pregnancy(Demographics):
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         if uids is None: uids = self.sim.people.female.uids
+        uids = uids[~self.sim.people.fine[uids]]  # fine sub-agents are not independent bodies; they don't conceive
         p_conceive = self.make_p_conceive(uids)
         self._p_conceive.set(p_conceive)
         conceive_uids = self._p_conceive.filter(uids)
@@ -901,6 +924,9 @@ class Pregnancy(Demographics):
         people.slot[new_uids] = new_slots  # Before sampling female_dist
         people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
         people.parent[new_uids] = conceive_uids
+        # Newborn is a fresh whole agent representing its mother's body weight (scale == epi_weight)
+        people.scale[new_uids] = people.epi_weight[conceive_uids]
+        people.epi_weight[new_uids] = people.epi_weight[conceive_uids]
         return
 
     def make_embryos(self, conceive_uids, embryo_counts=None):
@@ -970,13 +996,13 @@ class Pregnancy(Demographics):
         if len(mothers):
             newborns = self.find_unborn_children(mothers)
             self.process_delivery(mothers, newborns)    # Resets maternal states & transfers data to child
-            self._counts.births += len(newborns)       # += to handle burn-in
+            self._counts.births += self.sim.people.epi_flows(newborns)  # body-weighted; == len(newborns) when epi_weights are 1
             self.process_newborns(newborns)             # Process newborns
 
         # Figure out who conceives, set prognoses, and make embryos
         self.set_rel_sus()                              # Update rel_sus
         conceivers = self.select_conceivers()            # Get the UIDs of women who are going to conceive this timestep
-        self._counts.pregnancies += len(conceivers)  # += to handle burn-in
+        self._counts.pregnancies += self.sim.people.epi_flows(conceivers)  # body-weighted; == len(conceivers) when epi_weights are 1
 
         # Make pregnancies and embryos
         if len(conceivers):
@@ -1047,8 +1073,9 @@ class Pregnancy(Demographics):
             self.n_stillbirths[mother_uids[~is_mc]] += 1
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                self.results['miscarriages'][ti] += is_mc.sum()
-                self.results['stillbirths'][ti]  += (~is_mc).sum()
+                epi_flows = self.sim.people.epi_flows
+                self.results['miscarriages'][ti] += epi_flows(prenatal_death_uids[is_mc])   # body-weighted
+                self.results['stillbirths'][ti]  += epi_flows(prenatal_death_uids[~is_mc])  # body-weighted
 
             singletons = mother_uids[~self.carrying_multiple[mother_uids]]
             self.step_die(singletons)
@@ -1080,7 +1107,7 @@ class Pregnancy(Demographics):
             self.neonatal_death[nnd_uids] = True
             ti = self.ti
             if 0 <= ti < self.t.npts:  # Skip during burn-in (ti < 0) or after final step
-                self.results['neonatal_deaths'][ti] += len(nnd_uids)
+                self.results['neonatal_deaths'][ti] += self.sim.people.epi_flows(nnd_uids)  # body-weighted
         return
 
     def update_results(self):
@@ -1098,7 +1125,7 @@ class Pregnancy(Demographics):
 
         for dr in self.derived_results:
             state = getattr(self, dr.replace('n_', ''))
-            res[dr][ti] = state.sum()
+            res[dr][ti] = state.count()  # scale-weighted; == state.sum() when scales are 1
 
         # Update ASFR, TFR, and MMR
         self.compute_asfr()
@@ -1114,8 +1141,10 @@ class Pregnancy(Demographics):
         """
         new_mother_uids = (self.ti_delivery == self.ti).uids
         new_mother_ages = self.sim.people.age[new_mother_uids]
-        births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins)
-        women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins)
+        epi = self.sim.people.epi_weight
+        # Body-weighted histograms (fertility is a vital-dynamics rate): each agent contributes its body weight
+        births_by_age, _ = np.histogram(new_mother_ages, bins=self.asfr_bins, weights=epi[new_mother_uids])
+        women_by_age, _ = np.histogram(self.sim.people.age[self.sim.people.female], bins=self.asfr_bins, weights=epi[self.sim.people.female])
         self.asfr[:, self.ti] = sc.safedivide(births_by_age, women_by_age) * 1000
         return
 

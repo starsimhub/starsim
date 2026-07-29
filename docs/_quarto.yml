@@ -122,6 +122,7 @@ website:
             - user_guide/advanced_indexing.qmd
             - user_guide/advanced_distributions.qmd
             - user_guide/advanced_random.qmd
+            - user_guide/advanced_multiscale.qmd
             - user_guide/advanced_profiling.qmd
             - user_guide/advanced_nonstandard.qmd
         - href: examples.qmd
