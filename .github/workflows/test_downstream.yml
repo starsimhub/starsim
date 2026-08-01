@@ -40,7 +40,7 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
@@ -86,7 +86,7 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
