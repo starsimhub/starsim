@@ -29,12 +29,13 @@ class infection_log(Analyzer):
     different than other analyzers, but is required since the information required
     to create an infection log isn't kept outside of the disease's `infect()` step.
 
-    **Example**:
-
+    Examples:
+        ```python
         import starsim as ss
         sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
         sim.run()
         sim.analyzers[0].plot()
+        ```
     """
     def __init__(self):
         super().__init__()
@@ -124,13 +125,14 @@ class dynamics_by_age(Analyzer):
         state (str): the name of the state to analyze
         age_bins (list): the list of age bins to analyze by
 
-    **Example**:
-
+    Examples:
+        ```python
         by_age = ss.dynamics_by_age('sis.infected')
 
         sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
         sim.run()
         sim.analyzers[0].plot() # Note: if Sim(copy_inputs=False), we can also use by_age.plot()
+        ```
     """
     def __init__(self, state, age_bins=(0, 20, 40, 100)):
         super().__init__()

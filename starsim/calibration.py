@@ -762,7 +762,8 @@ class CalibComponent(sc.prettyobj):
     def _validate_conform(self, conform):
         ''' Validate the conform argument '''
         if not isinstance(conform, str) and not callable(conform):
-            raise Exception(f"The conform argument must be a string or a callable function, not {type(conform)}.")
+            errormsg = f"The conform argument must be a string or a callable function, not {type(conform)}."
+            raise TypeError(errormsg)
         elif isinstance(conform, str):
             conform_ = self.avail_conforms.get(conform.lower(), 'NOT FOUND')
             if conform_ == 'NOT FOUND':

@@ -270,6 +270,47 @@ def test_repeat_slot():
     return draws
 
 
+def test_poisson_ppf():
+    """ The fast Poisson inverse CDF must match SciPy exactly (guards the searchsorted optimization) """
+    sc.heading('Test fast Poisson inverse CDF')
+    import scipy.stats as sps
+    u = np.linspace(1e-4, 1-1e-4, 5000) # Deterministic grid of uniforms spanning (0, 1)
+    for lam in [0.5, 3.7, 10, 50, 200]:
+        d = ss.poisson(lam=lam, strict=False).init(slots=np.arange(10))
+        d.process_pars() # Populate _pars so ppf() can read lam
+        fast = d.ppf(u)
+        ref = sps.poisson.ppf(u, mu=lam)
+        assert np.array_equal(fast, ref), f'Fast Poisson ppf does not match SciPy for lam={lam}'
+        sc.printgreen(f'✓ Poisson ppf matches SciPy for lam={lam}')
+    return fast
+
+
+def test_choice_slots():
+    """ ss.choice over UIDs must stay correct and CRN-safe regardless of slot magnitude (no slots.max()+1 blowup) """
+    sc.heading('Test ss.choice slot handling')
+    a = np.array([10, 20, 30])
+    p = np.array([0.2, 0.3, 0.5])
+
+    # Repeated + very large slots (as for agents born mid-sim with slot_scale=100):
+    # equal slots must yield equal values (CRN), and large slots must not allocate slots.max()+1.
+    slots = np.array([1_000_000, 5, 1_000_000, 5, 999_999])
+    uids = ss.uids(np.arange(len(slots)))
+    d = ss.choice(a=a, p=p, strict=False).init(slots=slots)
+    vals = d.rvs(uids)
+    assert set(np.unique(vals)).issubset(set(a)), 'choice returned values outside a'
+    assert vals[0] == vals[2] and vals[1] == vals[3], 'Equal slots must give equal values (CRN)'
+
+    # Frequencies match p, with slots spread across a large range
+    n = 20000
+    big_slots = np.arange(n) + 1_000_000
+    d2 = ss.choice(a=a, p=p, strict=False).init(slots=big_slots)
+    freq = d2.rvs(ss.uids(np.arange(n)))
+    for val, pexp in zip(a, p):
+        assert np.isclose((freq == val).mean(), pexp, atol=0.02), f'choice frequency off for {val}'
+    sc.printgreen('✓ ss.choice correct and CRN-safe with large slots')
+    return vals
+
+
 def make_mock_modules():
     """ Create mock modules for the tests to use """
     mod = sc.objdict()
@@ -489,6 +530,46 @@ def test_hist_plotting():
     return
 
 
+@sc.timer()
+def test_dtype_consistency():
+    """
+    The two draw paths must return the same dtype, and float dists must honor ss.dtypes.float.
+
+    A distribution can be sampled two ways: by count (`dist.rvs(n)`, the native path) or by UID
+    (`dist.rvs(uids)`, the common-random-number hash path). These must agree. Regression (3.5.1):
+    the CRN hash engine (`hash_uniforms`) returned float64 regardless of the declared float dtype,
+    so `ss.random`/`ss.uniform` returned float32 by count but float64 by UID. That mismatch also
+    made `ss.multi_random.rvs()` return double-length arrays (the XOR-combine views the float bytes
+    as uint32, and an 8-byte float viewed as a 4-byte uint doubles the length). See CHANGELOG 3.5.2.
+    """
+    sc.heading('Testing dtype consistency across draw paths')
+    sim = make_sim()
+    uids = ss.uids(np.arange(20))
+    ft = ss.dtypes.float
+
+    def path_dtypes(dist):
+        dist.init(sim=sim)
+        native = np.asarray(dist.rvs(20)).dtype    # by count -> native path
+        crn    = np.asarray(dist.rvs(uids)).dtype   # by UID   -> CRN/hash path
+        return native, crn
+
+    # Float dists (pass-through / linear PPF) must honor ss.dtypes.float on BOTH paths
+    for dist in [ss.random(name='r'), ss.uniform(low=0, high=5, name='u')]:
+        native, crn = path_dtypes(dist)
+        assert native == crn == ft, f'{dist.distname}: by-count={native}, by-UID={crn}, expected {ft}'
+
+    # ss.poisson yields integer counts, so both paths must return ss.dtypes.int. Regression: the CRN
+    # ppf cast counts to float64 (`searchsorted(...).astype(float)`) while the native path was int64.
+    native, crn = path_dtypes(ss.poisson(lam=3, name='p'))
+    assert native == crn == ss.dtypes.int, f'poisson: by-count={native}, by-UID={crn}, expected {ss.dtypes.int}'
+
+    # Other dists aren't independently vulnerable to this issue, but the two paths must still agree
+    for dist in [ss.normal(name='n'), ss.expon(name='e'), ss.lognorm_ex(name='l'),
+                 ss.constant(v=1.5, name='c'), ss.bernoulli(p=0.3, name='b')]:
+        native, crn = path_dtypes(dist)
+        assert native == crn, f'{dist.distname}: by-count path {native} != by-UID path {crn}'
+    return
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -507,8 +588,11 @@ if __name__ == '__main__':
     o7 = test_callable()
     o8 = test_array()
     o9 = test_repeat_slot()
-    o10 = test_timepar_dists()
-    o10 = test_timepar_callable()
-    o11 = test_hist_plotting()
+    o10 = test_poisson_ppf()
+    o11 = test_choice_slots()
+    o12 = test_timepar_dists()
+    o13 = test_timepar_callable()
+    o14 = test_hist_plotting()
+    o15 = test_dtype_consistency()
 
     T.toc()

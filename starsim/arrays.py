@@ -1,7 +1,6 @@
 """
 Define array-handling classes, including agent states
 """
-# import sys
 import itertools
 import numbers
 import numpy as np
@@ -28,6 +27,22 @@ def np_indexer(arr, inds):
 def nb_indexer(arr, inds):
     """ Roughly 30% faster than NumPy for large numbers of indices (>10k) """
     return arr[inds]
+
+@nb.njit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
+def nb_true(auids, vals, want):
+    """ Return the UIDs where `bool(vals[k])` equals `want` (True for true(), False for false()).
+
+    ~4-5x faster than `auids[vals.astype(bool)]` for large arrays: a single branchless pass
+    with no intermediate mask allocation. `vals[k] != 0` matches `.astype(bool)` for every dtype,
+    including NaN floats (NaN != 0 is True, i.e. NaN is truthy), so results are identical.
+    """
+    n = auids.shape[0]
+    out = np.empty(n, dtype=auids.dtype)
+    m = 0
+    for k in range(n):
+        out[m] = auids[k] # Written every iteration (branchless); only kept if m advances
+        m += (vals[k] != 0) == want
+    return out[:m]
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -193,8 +208,8 @@ class Arr(BaseArr):
         people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
         mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a standalone Arr for quick testing
         age = ss.Arr('age', default=0, mock=5) # 5 = length if not supplying a real People object
         age[:] = [20, 30, 40, 50, 60]
@@ -203,6 +218,7 @@ class Arr(BaseArr):
         # Use within a simulation
         sim = ss.Sim(n_agents=100).init()
         sim.people.age.mean()  # Mean age of active agents
+        ```
     """
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
         # Set attributes
@@ -363,7 +379,7 @@ class Arr(BaseArr):
         if both_raw:
             result_raw = c
         else:
-            result_raw = np.empty(raw_size, dtype=np.bool_)
+            result_raw = np.empty(self_raw.size, dtype=np.bool_)
             result_raw[inds] = c
 
         if inplace:
@@ -383,6 +399,43 @@ class Arr(BaseArr):
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
+
+    def isin(self, values):
+        """
+        Return a `BoolArr` that is True wherever the array's value is in `values`.
+
+        An `Arr`-aware analogue of `numpy.isin` that also picks the faster algorithm:
+        `values` may be a scalar or any array-like of test values. For a small number
+        of test values the equality comparisons are OR-ed together (which avoids the
+        sort/hash overhead of `np.isin` and is faster for the common
+        handful-of-categories case); for larger sets it falls back to `np.isin`. The
+        result is a `BoolArr`, so `.uids`, `[uids]`, and boolean combination all work.
+
+        Args:
+            values: a scalar, or an array-like (list/tuple/array) of values to test against.
+
+        Returns:
+            BoolArr: True wherever the array's value equals one of `values`.
+
+        **Example**:
+
+            active = disease.state.isin([State.MILD, State.SEVERE]).uids
+        """
+        values = np.atleast_1d(sc.toarray(values)) # Normalize scalars/lists/arrays to 1D (matches np.isin for other inputs)
+        if values.dtype == object: # A set, dict, or generator is wrapped as a single object, which np.isin would silently treat as no-match; be louder
+            errormsg = f'isin() expects a scalar or array-like object (list/tuple/array), not {values}'
+            raise TypeError(errormsg)
+        raw = self.raw # Always size N, so the result has correct full-size raw
+        n = len(values)
+        if n == 0:
+            result = np.zeros(raw.shape, dtype=np.bool_)
+        elif n <= 10: # OR-of-equality beats np.isin for small sets (measured crossover ~11)
+            result = (raw == values[0])
+            for v in values[1:]:
+                result |= (raw == v)
+        else:
+            result = np.isin(raw, values)
+        return self.asnew(result, cls=BoolArr, copy=False)
 
     def _math(self, op, other=None, inplace=False, reverse=False):
         """
@@ -671,11 +724,19 @@ class Arr(BaseArr):
 
     def true(self):
         """ Efficiently convert truthy values to UIDs """
-        return self.auids[self.values.astype(bool)]
+        vals = self.values
+        auids = self.auids
+        if vals.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
+            return uids(nb_true(auids.view(np.ndarray), vals, True))
+        return auids[vals.astype(bool)]
 
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
-        return self.auids[~self.values.astype(bool)]
+        vals = self.values
+        auids = self.auids
+        if vals.size >= numba_indexing:
+            return uids(nb_true(auids.view(np.ndarray), vals, False))
+        return auids[~vals.astype(bool)]
 
     def to_json(self):
         """ Export to JSON """
@@ -717,13 +778,14 @@ class BoolArr(Arr):
     """
     Subclass of `ss.Arr` with defaults for booleans.
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a standalone BoolArr
         infected = ss.BoolArr('infected', mock=5)
         infected[[0, 2, 4]] = True
         infected.count()  # Returns 3
         infected.uids     # Returns ss.uids([0, 2, 4])
+        ```
     """
     def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
@@ -873,38 +935,39 @@ class uids(np.ndarray):
 
     The following operators are supported:
 
-    - ``+`` / ``+=``: if the RHS is a ``uids``, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. ``uids([1,2]) + 1`` → ``uids([2,3])``). Concatenation preserves duplicates.
-    - ``-`` / ``-=``: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
-    - ``|`` / ``|=``: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use ``+`` instead to keep them).
-    - ``&`` / ``&=``: intersection
-    - ``^`` / ``^=``: symmetric difference
+    - `+` / `+=`: if the RHS is a `uids`, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. `uids([1,2]) + 1` → `uids([2,3])`). Concatenation preserves duplicates.
+    - `-` / `-=`: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
+    - `|` / `|=`: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use `+` instead to keep them).
+    - `&` / `&=`: intersection
+    - `^` / `^=`: symmetric difference
 
     Note: because `uids` is a subclass of `np.ndarray`, set-like in-place operators
-    (``+=`` with a ``uids`` RHS, ``-=``, ``|=``, ``&=``, ``^=``) must return a new array and rebind
-    the variable. However, ``+=`` with a scalar or array RHS modifies the array in-place
-    and preserves ``id(self)``.
+    (`+=` with a `uids` RHS, `-=`, `|=`, `&=`, `^=`) must return a new array and rebind
+    the variable. However, `+=` with a scalar or array RHS modifies the array in-place
+    and preserves `id(self)`.
 
-    **Examples**::
-
+    Examples:
+        ```python
         a = ss.uids([1, 2, 3])
         b = ss.uids([3, 4, 5])
         a + b   # Concatenate: uids([1, 2, 3, 3, 4, 5])
         a | b   # Union:       uids([1, 2, 3, 4, 5])
         a & b   # Intersect:   uids([3])
         a - b   # Difference:  uids([1, 2])
+        ```
     """
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            return arr.astype(ss_int).view(cls)
+            return cls._ensure_int(arr)
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
             return arr.uids
         elif isinstance(arr, set):
-            return np.fromiter(arr, dtype=ss_int).view(cls)
+            return cls._ensure_int(np.array(list(arr)))
         elif arr is None: # Shortcut to return empty
             return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
-        return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
+        return cls._ensure_int(np.asarray(arr)) # Handle everything else
 
     def concatenate(*args):  # pylint: disable=no-self-argument  # intentionally no `self` so it works as both instance and class method
         """
@@ -932,45 +995,68 @@ class uids(np.ndarray):
 
         # If non-empty arrays remain, concatenate, always using int type
         if valid:
-            out = np.concatenate(valid).astype(ss_int).view(uids)
+            out = uids._ensure_int(np.concatenate(valid))
         else:
             out = uids()
         return out
 
     def concat(self, other):
-        """ Deprecated — use ``uids.concatenate()`` instead """
+        """ Deprecated — use `uids.concatenate()` instead """
         ss.warn('uids.concat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return self.concatenate(other)
 
     @classmethod
     def cat(cls, *args):
-        """ Deprecated — use ``uids.concatenate()`` instead """
+        """ Deprecated — use `uids.concatenate()` instead """
         ss.warn('uids.cat() is deprecated; use uids.concatenate() instead', category=DeprecationWarning)
         return uids.concatenate(*args)
+
+    @classmethod
+    def _ensure_int(cls, arr):
+        """
+        Return an integer-typed uids view, validating that the values are valid UIDs.
+
+        UIDs are integer identifiers used for array indexing, so they must be integer-valued.
+        This is called both by the constructor and by operations that can change the dtype:
+        numpy may promote the return type (e.g. `np.intersect1d(uids, [])` returns a `float`),
+        and the constructor may receive float input directly (e.g. `ss.uids([1.5])`).
+
+        Integer input of the correct type is returned as a view with no copy. Other input is
+        accepted only if every value is finite and integer-valued (e.g. an empty list, or `2.0`);
+        genuinely fractional or non-finite values (`1.5`, `nan`, `inf`) are rejected, since they
+        can never index an array.
+        """
+        if arr.dtype == ss_int:
+            return arr.view(cls) # Fast path: already the correct type, no copy needed
+        if arr.dtype.kind not in ('i', 'u'):
+            # Non-integer dtype: isfinite rejects nan/inf, floor rejects fractions
+            if not (np.isfinite(arr).all() and (arr == np.floor(arr)).all()):
+                raise TypeError(f'UIDs must be integers, but got non-integer values: {arr}')
+        return arr.astype(ss_int).view(cls) # Normalize integer width, or cast validated floats
 
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.setdiff1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.setdiff1d(self, other, **kw))
 
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.intersect1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.intersect1d(self, other, **kw))
 
     def union(self, other, **kw):
         """ Return all UIDs present in both arrays """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.union1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.union1d(self, other, **kw))
 
     def xor(self, other, **kw):
         """ Return UIDs present in only one of the arrays """
         if isinstance(other, BoolArr):
             other = other.uids
-        return np.setxor1d(self, other, **kw).view(self.__class__)
+        return self._ensure_int(np.setxor1d(self, other, **kw))
 
     def to_numpy(self):
         """ Return a view as a standard NumPy array """
@@ -980,10 +1066,9 @@ class uids(np.ndarray):
         """ Return unique UIDs; equivalent to np.unique() """
         if return_index:
             arr, index = np.unique(self, return_index=True)
-            return arr.view(self.__class__), index
+            return self._ensure_int(arr), index # index is a position array, not a uids
         else:
-            arr = np.unique(self).view(self.__class__)
-            return arr
+            return self._ensure_int(np.unique(self))
 
     def __array_wrap__(self, out_arr, context=None, return_scalar=False):
         # Guard 1: non-integer dtype → return a plain ndarray.

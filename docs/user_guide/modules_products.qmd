@@ -1,0 +1,138 @@
+---
+title: Products
+jupyter: python3
+---
+
+In Starsim, a **product** represents the actual medical tool that an intervention delivers: a diagnostic test, a treatment, or a vaccine. The split between *interventions* and *products* mirrors how real programs work: an intervention decides *who* gets something and *when* (eligibility, coverage, timing), while the product defines *what* happens to an agent when it's administered.
+
+This separation means you can reuse the same product across different delivery strategies. For example, a single vaccine product can be deployed via a routine immunization program in one scenario and a one-off campaign in another, without redefining the vaccine itself.
+
+For how products are *delivered*, see the [Interventions](modules_interventions.qmd) page; this page focuses on the products themselves.
+
+## Product types
+
+All products inherit from `ss.Product` (itself an `ss.Module`) and implement an `administer()` method. Starsim provides three base product types:
+
+| Class | Represents | Delivered by |
+|-------|------------|--------------|
+| `ss.Dx` | Diagnostics (tests) | `routine_screening`, `campaign_screening`, `routine_triage`, `campaign_triage` |
+| `ss.Tx` | Treatments | `treat_num` |
+| `ss.Vx` | Vaccines | `routine_vx`, `campaign_vx` |
+
+## Vaccines
+
+The simplest product to use is `ss.simple_vx`, a built-in vaccine that reduces an agent's relative susceptibility (`rel_sus`). It can be "leaky" (everyone who is vaccinated gets partial protection, the default) or "all-or-nothing" (`leaky=False`, where a fraction of recipients are fully protected and the rest are not protected at all):
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+# Create a vaccine product with 80% efficacy
+vaccine = ss.simple_vx(efficacy=0.8)
+
+# Deliver it through a routine vaccination program
+vaccination = ss.routine_vx(product=vaccine, start_year=2010, prob=0.5)
+
+# Run with and without the vaccine
+pars = dict(n_agents=5000, start=2000, stop=2020, diseases='sis', networks='random', verbose=0)
+s1 = ss.Sim(pars, label='No vaccine')
+s2 = ss.Sim(pars, label='With vaccine', interventions=vaccination)
+ss.parallel(s1, s2).plot('sis_n_infected')
+```
+
+## Diagnostics
+
+A diagnostic product (`ss.Dx`) is defined by a dataframe giving the probability of each test result, conditional on an agent's true disease state. The results are returned in priority order (the `hierarchy`), with the first listed result taking precedence when an agent could match more than one:
+
+```{python}
+import sciris as sc
+import starsim as ss
+
+# Probability of each result given the agent's true state
+dx_data = sc.dataframe(
+    columns = ['disease', 'state',       'result',   'probability'],
+    data = [
+        ['sis',   'susceptible', 'positive', 0.01],  # False positive rate
+        ['sis',   'susceptible', 'negative', 0.99],
+        ['sis',   'infected',    'positive', 0.95],  # Sensitivity
+        ['sis',   'infected',    'negative', 0.05],
+    ]
+)
+
+# Create the diagnostic product and deliver it via screening
+test = ss.Dx(df=dx_data)
+screening = ss.routine_screening(product=test, prob=0.5, start_year=2010)
+
+sim = ss.Sim(n_agents=5000, start=2000, stop=2020, diseases='sis', networks='random',
+             interventions=screening, verbose=0)
+sim.run()
+
+# The screening intervention records who tested positive/negative each step
+print('Tested positive on final step:', len(sim.interventions.routine_screening.outcomes['positive']))
+```
+
+Screening is often paired with treatment: agents who test positive become eligible for a treatment intervention (this is the "triage" pattern; see the [Interventions](modules_interventions.qmd) page).
+
+## Treatments
+
+A treatment product (`ss.Tx`) moves agents from one disease state to another with a given efficacy. It's defined by a dataframe with `disease`, `state`, `post_state`, and `efficacy` columns. Here we clear infection in an SIS model, returning treated agents to susceptible:
+
+```{python}
+import sciris as sc
+import starsim as ss
+
+# Treatment clears infection with 80% efficacy
+tx_data = sc.dataframe(
+    columns = ['disease', 'state',    'post_state',  'efficacy'],
+    data = [['sis',   'infected', 'susceptible', 0.8]],
+)
+treatment = ss.treat_num(
+    product = ss.Tx(df=tx_data),
+    eligibility = lambda sim: sim.diseases.sis.infected.uids,
+    max_capacity = 50,  # Treat at most 50 agents per timestep
+)
+
+pars = dict(n_agents=5000, diseases='sis', networks='random', verbose=0)
+s1 = ss.Sim(pars, label='No treatment')
+s2 = ss.Sim(pars, label='With treatment', interventions=treatment)
+ss.parallel(s1, s2).plot('sis_n_infected')
+```
+
+The `max_capacity` argument caps how many agents can be treated per timestep, which is useful for modelling resource-constrained programs.
+
+## Writing a custom product
+
+If the built-in products don't do what you need, you can write your own by subclassing `ss.Vx`, `ss.Dx`, `ss.Tx`, or `ss.Product` directly and implementing `administer()`. Vaccine products receive `(people, uids)`; diagnostics and treatments receive `(uids)` and return their outcomes.
+
+The example below is a vaccine whose efficacy is higher for younger agents:
+
+```{python}
+import starsim as ss
+import numpy as np
+
+class AgeTargetedVx(ss.Vx):
+    """ A vaccine that is more effective in younger agents """
+    def __init__(self, efficacy=0.9, **kwargs):
+        super().__init__()
+        self.define_pars(efficacy=efficacy)
+        self.update_pars(**kwargs)
+        return
+
+    def administer(self, people, uids):
+        # Efficacy declines linearly with age, to a floor of 0
+        age_factor = np.clip(1 - people.age[uids]/80, 0, 1)
+        protection = 1 - self.pars.efficacy*age_factor
+        for disease in self.sim.diseases.values():
+            disease.rel_sus[uids] *= protection
+        return
+
+vaccination = ss.routine_vx(product=AgeTargetedVx(efficacy=0.9), start_year=2010, prob=0.5)
+sim = ss.Sim(n_agents=5000, start=2000, stop=2020, diseases='sis', networks='random',
+             interventions=vaccination, verbose=0)
+sim.run()
+sim.plot('sis')
+```
+
+:::{.callout-tip}
+Because products are modules, they can define their own parameters (with `define_pars()`), states, and results, just like any other Starsim module. See [Adding new modules](modules_adding.qmd) for the general pattern.
+:::

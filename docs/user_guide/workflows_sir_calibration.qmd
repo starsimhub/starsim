@@ -5,7 +5,7 @@ jupyter: python3
 
 
 
-The Starsim framework includes a built-in susceptible-infected-recovered (SIR) within-host progression module that can be used as a building block to developing more realistic agent-based models. Here, we use that SIR within-host module in combination with mixing pool transmission to create a simple SIR disease model. 
+The Starsim framework includes a built-in susceptible-infected-recovered (SIR) within-host progression module that can be used as a building block to developing more realistic agent-based models. Here, we use that SIR within-host module in combination with mixing pool transmission to create a simple SIR disease model.
 
 Here, we use that SIR disease model to test two calibration workflows. The goal is to assess if they able to re-identify a known "true" set of parameters and explore the resulting latent trajectories. The two workflows demonstrated are:
 1. [Likelihood maximization using the optuna package as integrated with Starsim](#optimization)
@@ -27,7 +27,6 @@ import pandas as pd
 import sciris as sc
 import warnings
 import optuna
-import matplotlib.dates as mdates
 import seaborn as sns
 from IPython.display import display
 import matplotlib.pyplot as plt
@@ -261,7 +260,7 @@ display(starsim_data)
 df = results.reset_index().melt(id_vars=['Time', 'rand_seed'], value_vars=['S', 'I', 'R'], var_name='State', value_name='Count')
 ax = sns.lineplot(data=df, hue='State', x='Time', y='Count', units='rand_seed', estimator=None, alpha=0.5, lw=0.5, legend=False)
 sns.lineplot(data=df, hue='State', x='Time', y='Count', errorbar=('pi', 50), ax=ax, legend=True)
-ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+sc.dateformatter(ax=ax)
 for ot in observation_times:
     ax.axvline(ot, ls='--', color='black')
 ax.scatter(starsim_data.index, starsim_data['x'], marker='o', color='black', label='Observed data', zorder=10);
@@ -304,11 +303,11 @@ calib = ss.Calibration(
     build_fn     = modify_sim,             # The function to modify the base simulation with the calibration parameters
     reseed       = True,                   # Reseed the simulation for each calibration trial
     components   = [prevalence_component], # The calibration components
-    total_trials = 100,                    # Total number of trials to run
+    total_trials = 50,                     # Kept modest so the docs build quickly; use more for a real calibration
     verbose      = False,                  # Shh...
 
     # Select and configure the sampler (optional)
-    sampler = optuna.samplers.TPESampler(n_startup_trials=50)
+    sampler = optuna.samplers.TPESampler(n_startup_trials=25)
 )
 
 calib.calibrate() # Let's go!
@@ -358,7 +357,7 @@ results = pd.concat(results_list) # Combine the results into a single DataFrame
 df = results.reset_index().melt(id_vars=['Time', 'rand_seed'], value_vars=['S', 'I', 'R'], var_name='State', value_name='Count')
 ax = sns.lineplot(data=df, hue='State', x='Time', y='Count', units='rand_seed', estimator=None, alpha=0.5, lw=0.5, legend=False)
 sns.lineplot(data=df, hue='State', x='Time', y='Count', errorbar=('pi', 50), ax=ax, legend=True)
-ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+sc.dateformatter(ax=ax)
 for ot in observation_times:
     ax.axvline(ot, ls='--', color='black')
 ax.scatter(starsim_data.index, starsim_data['x'], marker='o', color='black', label='Observed data');
@@ -534,7 +533,7 @@ ax.scatter(starsim_data.index, starsim_data['x'], marker='o', color='black', lab
 ax.set_ylabel('Count')
 ax.set_title('Weighted posterior trajectories')
 ax.legend(title='State')
-ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+sc.dateformatter(ax=ax)
 plt.tight_layout()
 ```
 
@@ -553,7 +552,7 @@ fig, ax = plt.subplots(figsize=(9,5))
 sns.lineplot(data=df, hue='State', x='Time', y='Count', units='rand_seed', estimator=None, alpha=0.5, lw=0.2, legend=False, ax=ax)
 sns.lineplot(data=df, hue='State', x='Time', y='Count', errorbar=('pi', 50), alpha=0.5, ax=ax, legend=True, zorder=5)
 sns.lineplot(data=df, hue='State', x='Time', y='Count', errorbar=('pi', 90), alpha=0.25, ax=ax, legend=False, zorder=6)
-ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+sc.dateformatter(ax=ax)
 for ot in observation_times:
     ax.axvline(ot, ls='--', color='black')
 ax.scatter(starsim_data.index, starsim_data['x'], marker='o', color='black', label='Observed data', zorder=10);

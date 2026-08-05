@@ -92,9 +92,8 @@ from .modules import (
 t('networks') # Slow import due to networkx
 from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
-    MaternalNet, PrenatalNet, PostnatalNet, BreastfeedingNet,
-    HouseholdNet,
+    StaticNet, RandomExactNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
+    PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool,
 )
 
@@ -103,7 +102,7 @@ from .results import Result, Results
 
 t('demographics')
 from .demographics import (
-    Demographics, Births, Deaths, PregnancyPars, Pregnancy, FetalHealth,
+    Demographics, Births, Deaths, PregnancyPars, Pregnancy,
 )
 
 t('products')
@@ -145,6 +144,10 @@ from .calibration import (
 
 t('samples')
 from .samples import Dataset, Samples
+
+# The library of example/reference modules; not exported at the top level, access via e.g. ss.library.mnch.FetalHealth
+t('library')
+from . import library
 
 # Load fonts
 def _load_fonts(debug=debug):

@@ -1,0 +1,58 @@
+---
+title: Examples
+jupyter: python3
+---
+
+Starsim ships with a collection of **example models** — illustrative implementations of diseases, networks, and analyses that aren't part of the core library but show how Starsim can be used and extended. They come in two forms:
+
+- **Library examples**, importable via `import starsim.library as ssl` (e.g. `ssl.diseases.HIV`). These are maintained alongside Starsim and can be dropped straight into a simulation.
+- **Standalone examples**, kept as scripts in the [`docs/examples`](https://github.com/starsimhub/starsim/tree/main/docs/examples) folder of the repository. These are meant to be read and adapted rather than imported.
+
+```{python}
+#| tags: [hide-cell]
+%pip install -q starsim # Install Starsim if required
+```
+
+Here's a quick example running one of the library disease models:
+
+```{python}
+import starsim as ss
+import starsim.library as ssl
+ss.options(jupyter=True)
+
+# Run the measles model on a random network
+sim = ss.Sim(diseases=ssl.diseases.Measles(), networks='random', n_agents=5000, verbose=0)
+sim.run()
+sim.plot('measles')
+```
+
+## Library disease models (`ssl.diseases`)
+
+Worked examples of disease models, several of which add states and dynamics beyond the core `SIR`/`SIS` templates:
+
+- **`ssl.diseases.HIV`** — HIV natural history, including CD4 dynamics; pairs with the `ssl.diseases.ART` intervention and the `ssl.diseases.CD4_analyzer`
+- **`ssl.diseases.Cholera`** — an environmentally transmitted disease
+- **`ssl.diseases.Ebola`** — a model with multiple transmission routes
+- **`ssl.diseases.Measles`** — a childhood disease with an SEIR-like structure
+
+These are used throughout the documentation, for example in the [Diseases](tutorials/t4_diseases.qmd) and [Networks](tutorials/t5_networks.qmd) tutorials and the [Connectors](user_guide/modules_connectors.qmd) user guide.
+
+## Library networks (`ssl.networks`)
+
+Example contact networks demonstrating different connection rules:
+
+- **`ssl.networks.DiskNet`** — connects agents by spatial proximity on a disk
+- **`ssl.networks.HouseholdNet`** — household-structured contacts
+- **`ssl.networks.ErdosRenyiNet`**, **`ssl.networks.NullNet`** — theoretical reference networks
+
+## Library maternal and child health (`ssl.mnch`)
+
+Examples relevant to maternal and child health, including `ssl.mnch.FetalHealth`, `ssl.mnch.NeonatalSepsis`, and `ssl.mnch.CongenitalDisease`.
+
+## Standalone examples (`docs/examples`)
+
+These live as scripts in the repository rather than in the importable library:
+
+- **Embedding network** ([`embedding.py`](https://github.com/starsimhub/starsim/blob/main/docs/examples/embedding.py)) — pairs agents based on a continuous similarity embedding.
+- **Cross-language translations** ([`translations/`](https://github.com/starsimhub/starsim/tree/main/docs/examples/translations)) — the *same* simple SIS model implemented in pure Python, Numba, JAX, Julia, and Rust, alongside the idiomatic Starsim version. Useful for understanding performance trade-offs and how Starsim relates to lower-level implementations.
+- **LASER interoperability** ([`laser/`](https://github.com/starsimhub/starsim/tree/main/docs/examples/laser)) — shows how Starsim models relate to [LASER](https://github.com/InstituteforDiseaseModeling/laser), including minimal and full Starsim equivalents of a LASER example and profiling scripts.

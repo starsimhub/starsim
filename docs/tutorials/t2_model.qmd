@@ -42,10 +42,10 @@ sim.run()
 sim.plot()
 ```
 
-Now let's look at the `pars` dictionary in more detail. The one we've created here has 3 things in it: the number of agents (`n_agents`), detail on how the agents interact with each other (`networks`) and detail on what disease we're modeling (`diseases`). When we create and run the model, what happens 'under the hood' is that the simulation creates 5,000 people, and allows them to the interact with one another over the network and transmit the infection. 
+Now let's look at the `pars` dictionary in more detail. The one we've created here has 3 things in it: the number of agents (`n_agents`), detail on how the agents interact with each other (`networks`) and detail on what disease we're modeling (`diseases`). When we create and run the model, what happens 'under the hood' is that the simulation creates 5,000 people, and allows them to the interact with one another over the network and transmit the infection.
 
 ## Simple SIR model built with components
-The example above is a nice simple way to get started, but you might want to have more control over the networks, diseases, and people that you're creating. Here's another version of the exact same model, but written slightly differently:  
+The example above is a nice simple way to get started, but you might want to have more control over the networks, diseases, and people that you're creating. Here's another version of the exact same model, but written slightly differently:
 
 ```{python}
 people = ss.People(n_agents=5_000)
@@ -74,10 +74,10 @@ network = ss.RandomNet(n_contacts=dict(type='poisson', lam=4))
 If we use this network, our agents will have varying numbers of contacts.
 
 ## Accessing results 
-Once you've run a model, you will want to see what the results look like! We've seen a few basic plotting commands above, but if you want to inspect the results for yourself, you can take a look in `sim.results`. This is a dictionary with keys corresponding to core components of interest. For example, the sim we created in the code block above will have the following keys: `['n_alive', 'new_deaths', 'births', 'deaths', 'sir']`. Then `sim.results.sir` is also a dictionary and contains all the results relating to this disease over time. For example, `new_infections` is a kind of array showing annual new infections. 
+Once you've run a model, you will want to see what the results look like! We've seen a few basic plotting commands above, but if you want to inspect the results for yourself, you can take a look in `sim.results`. This is a dictionary with keys corresponding to core components of interest. For example, the sim we created in the code block above will have the following keys: `['n_alive', 'new_deaths', 'births', 'deaths', 'sir']`. Then `sim.results.sir` is also a dictionary and contains all the results relating to this disease over time. For example, `new_infections` is a kind of array showing annual new infections.
 
 ## Matters of time 
-The default for Starsim models is the start simulations in 1995 and simulate with an annual timestep for 35 years. All of this can be easily changed within the main `pars` dictionary or by passing alternative values straight to the sim, e.g. 
+The default for Starsim models is the start simulations in 1995 and simulate with an annual timestep for 35 years. All of this can be easily changed within the main `pars` dictionary or by passing alternative values straight to the sim, e.g.
 
 ```{python}
 #| jupyter: {outputs_hidden: false}

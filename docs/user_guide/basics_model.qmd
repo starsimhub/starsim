@@ -3,7 +3,7 @@ title: Model structure
 jupyter: python3
 ---
 
-Starsim models are designed to capture disease dynamics within a population of agents, which typically represent people (but may represent animals or other things). In keeping with this, the basic ingredients of a Starsim model are the `People` class, which store all the relevant attributes about people, a collection of `Modules` that determine what happens to people on each time step, and the `Sim` class, which pulls all the components together, runs the simulation, and stores the `Results`. 
+Starsim models are designed to capture disease dynamics within a population of agents, which typically represent people (but may represent animals or other things). In keeping with this, the basic ingredients of a Starsim model are the `People` class, which store all the relevant attributes about people, a collection of `Modules` that determine what happens to people on each time step, and the `Sim` class, which pulls all the components together, runs the simulation, and stores the `Results`.
 
 ## Overview of People
 More details on the `People` class are in the separate user guide page, but we give a basic introduction here since people are so central to the model structure. When people are created, by default they come with basic states that are stored for each person. These basic states include age, sex, and whether the person is alive. All of these states are stored as arrays, so the basic structure of the `People` class can be easily exported to a dataframe, e.g.:
@@ -43,7 +43,7 @@ Starsim contains the following kinds of modules, listed below in the order that 
 * Interventions
 * Analyzers
 
-Modules typically store _parameters_ (e.g. the transmission probability), _states_ of people (e.g. whether they are susceptible, infected, or recovered), and _results_ (e.g. the number of people infected at each point in time). 
+Modules typically store _parameters_ (e.g. the transmission probability), _states_ of people (e.g. whether they are susceptible, infected, or recovered), and _results_ (e.g. the number of people infected at each point in time).
 
 ## Overview of a Sim
 The `Sim` object is responsible for storing assembling, initializing, and running the model. The `Sim` class contains some top-level parameters (including the number of agents in the simulation, the start and stop times, and the random seed) and results (e.g. the population size over time), but almost all other parameters and results are specific to modules and stored within them. There are more details on the `Sim` on the linked page.
@@ -64,5 +64,5 @@ The call to `sim.init()` means that the `SIR` module gets added to `sim.diseases
 * the results specific to each module are added to the centralized Results dictionary of the `Sim`, so you can access them via `sim.diseases.sir.results.n_infected` or `sim.results.sir.n_infected`.
 
 ## Overview of Results
-Once you've run a `Sim`, all the results are stored under `sim.results`. This is structured similarly to a nested dictionary, with results specific to each module stored in their own dictionaries, like the `sim.results.sir.n_infected` example above. 
+Once you've run a `Sim`, all the results are stored under `sim.results`. This is structured similarly to a nested dictionary, with results specific to each module stored in their own dictionaries, like the `sim.results.sir.n_infected` example above.
 

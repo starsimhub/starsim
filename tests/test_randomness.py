@@ -8,7 +8,7 @@ import sciris as sc
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
 n = 5 # Default number of samples
 
@@ -205,7 +205,7 @@ def test_worlds(do_plot=False):
             dur_inf = 20,
             p_death = 0, # Here since analyzer can't handle variable numbers of people
         ),
-        networks = sse.EmbeddingNet(duration=5)  # Must be shorter than dur_inf for SIR transmission to occur
+        networks = ss.RandomNet()  # Edges reform each step (< dur_inf), allowing SIR transmission
     )
     s1 = ss.Sim(pars=pars, interventions=CountInf())
     s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])
@@ -247,7 +247,7 @@ def test_independence(do_plot=False, thresh=0.1):
         diseases = [
             dict(type='sir', init_prev=0.1),
             dict(type='sis', init_prev=0.1),
-            sse.HIV(init_prev=0.1),
+            ssl.diseases.HIV(init_prev=0.1),
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
@@ -323,6 +323,63 @@ def test_combine_rands(do_plot=False):
     return c
 
 
+@sc.timer()
+def test_crn_option():
+    """ The opt-in non-CRN fast path (ss.options.crn=False) for transmission """
+    def run(crn, seed=1):
+        with ss.options.context(crn=crn):
+            sim = ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
+                         n_agents=2000, dur=30, rand_seed=seed, verbose=0)
+            sim.run()
+        return sim.results['sis']['n_infected'].values
+
+    assert ss.options.crn is True, 'CRN should be the default'
+
+    # CRN is reproducible, and is the default (not changed by toggling the option back)
+    assert np.array_equal(run(True), run(True)), 'CRN path should be reproducible'
+
+    # Non-CRN is reproducible given the same seed, but differs from CRN (it is a different RNG path)
+    fast = run(False)
+    assert np.array_equal(fast, run(False)), 'Non-CRN path should be reproducible for a fixed seed'
+    assert not np.array_equal(fast, run(True)), 'Non-CRN path should differ from the CRN path'
+
+    # Statistically equivalent: similar epidemic size at the end
+    crn_eq = run(True)[-5:].mean()
+    fast_eq = fast[-5:].mean()
+    assert np.isclose(crn_eq, fast_eq, rtol=0.1), f'Epidemic sizes should be similar: {crn_eq} vs {fast_eq}'
+
+    # Per-instance override works independently of the global option
+    assert ss.multi_random('a', 'b', crn=False).crn is False
+    return fast
+
+
+@sc.timer()
+def test_multi_random_length():
+    """
+    Confirm multi_random output length
+
+    Tests a regression occurring in 3.5.1 due to dtypes with numba functions
+    """
+    sim = ss.Sim(n_agents=100).init()
+
+    def make_multi(n_dists):
+        mr = ss.multi_random('placeholder')
+        mr.dists = [ss.random(name=f'mr_d{i}') for i in range(n_dists)]
+        mr.init(sim=sim)
+        return mr
+
+    for n_dists in [2, 3]: # 2 dists uses combine2_rvs; 3 dists uses combine_rvs
+        mr = make_multi(n_dists)
+        for size in [1, 5]: # A singleton and a multi-element case are enough to catch 2*n doubling
+            uid_lists = [ss.uids(np.arange(i*size, (i+1)*size)) for i in range(n_dists)]
+            rvs = mr.rvs(*uid_lists)
+            assert len(rvs) == size, f'Expected len {size} but got {len(rvs)} (n_dists={n_dists}); rvs() is returning double-length arrays'
+            assert np.issubdtype(np.asarray(rvs).dtype, np.floating), f'Expected a float dtype, got {np.asarray(rvs).dtype}'
+            assert rvs.min() >= 0 and rvs.max() <= 1, f'Values should be uniforms in [0, 1], got [{rvs.min()}, {rvs.max()}]'
+
+    return
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -335,6 +392,8 @@ if __name__ == '__main__':
     o5 = test_worlds(do_plot=do_plot)
     o6 = test_independence(do_plot=do_plot)
     o7 = test_combine_rands(do_plot=do_plot)
+    o8 = test_crn_option()
+    o9 = test_multi_random_length()
 
     T.toc()
 

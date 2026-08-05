@@ -29,6 +29,8 @@ website:
         aria-label: GitHub
       - icon: envelope-at-fill
         href: mailto:info@starsim.org
+      - icon: slack
+        href: https://starsimhub.slack.com
       - icon: globe
         href: https://starsim.org/
 
@@ -56,6 +58,8 @@ website:
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
+      - href: examples.qmd
+        text: Examples
       - href: conduct.qmd
         text: Code of conduct
       - href: contributing.qmd
@@ -94,14 +98,17 @@ website:
             - user_guide/basics_sim.qmd
             - user_guide/basics_people.qmd
             - user_guide/basics_parameters.qmd
+            - user_guide/basics_results.qmd
           - section: "Modules"
             contents:
             - user_guide/modules_diseases.qmd
             - user_guide/modules_networks.qmd
             - user_guide/modules_demographics.qmd
             - user_guide/modules_interventions.qmd
+            - user_guide/modules_products.qmd
             - user_guide/modules_analyzers.qmd
             - user_guide/modules_connectors.qmd
+            - user_guide/modules_adding.qmd
           - section: "Workflows"
             contents:
             - user_guide/workflows_run.qmd
@@ -117,6 +124,8 @@ website:
             - user_guide/advanced_random.qmd
             - user_guide/advanced_profiling.qmd
             - user_guide/advanced_nonstandard.qmd
+        - href: examples.qmd
+          text: "**Examples**"
         - href: conduct.qmd
           text: "**Code of conduct**"
         - href: contributing.qmd
@@ -134,6 +143,7 @@ website:
             - api/loop.qmd
             - api/people.qmd
             - api/parameters.qmd
+            - api/results.qmd
         - section: "**Modules**"
           contents:
             - api/modules.qmd
@@ -148,17 +158,49 @@ website:
           contents:
             - api/run.qmd
             - api/calibration.qmd
+            - api/samples.qmd
         - section: "**Utilities**"
           contents:
             - api/arrays.qmd
             - api/time.qmd
             - api/timeline.qmd
             - api/distributions.qmd
-            - api/results.qmd
-            - api/samples.qmd
             - api/settings.qmd
             - api/debugtools.qmd
             - api/utils.qmd
+
+quartodoc:
+  package: starsim
+  title: API reference
+  style: pkgdown
+  dir: api
+  parser: google
+  render_interlinks: true
+  sections:
+    - contents: # No title/desc here: the page already shows an "API reference" heading from the top-level title above (issue #1330)
+        - analyzers
+        - arrays
+        - calibration
+        - connectors
+        - debugtools
+        - demographics
+        - diseases
+        - distributions
+        - interventions
+        - loop
+        - modules
+        - networks
+        - parameters
+        - people
+        - products
+        - results
+        - run
+        - samples
+        - settings
+        - sim
+        - time
+        - timeline
+        - utils
 
 format:
   html:
@@ -167,7 +209,8 @@ format:
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
     toc: true
-    toc-depth: 3
+    toc-expand: true
+    toc-depth: 5
     highlight-style: github
 
 filters:
@@ -195,41 +238,7 @@ interlinks:
     matplotlib: [plt]
     sciris: [sc]
     starsim: [null, ss]
-
-quartodoc:
-  package: starsim
-  title: API reference
-  style: pkgdown
-  dir: api
-  parser: google
-  render_interlinks: true
-  sections:
-    - title: API reference
-      desc: Full details on all Starsim classes and functions.
-      contents:
-        - analyzers
-        - arrays
-        - calibration
-        - connectors
-        - debugtools
-        - demographics
-        - diseases
-        - distributions
-        - interventions
-        - loop
-        - modules
-        - networks
-        - parameters
-        - people
-        - products
-        - results
-        - run
-        - samples
-        - settings
-        - sim
-        - time
-        - timeline
-        - utils
+    starsim.library: [ssl]
 
 execute:
   freeze: auto # Only re-execute notebooks that have changed

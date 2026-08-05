@@ -1,0 +1,4 @@
+# Normalize line endings: store all text files with LF in the repo and check them
+# out with LF, regardless of the contributor's platform. Git auto-detects text vs.
+# binary files, so binary files (images, .sim, etc.) are left untouched.
+* text=auto eol=lf

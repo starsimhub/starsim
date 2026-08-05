@@ -9,6 +9,19 @@ Welcome! We are thrilled you are interested in contributing to Starsim. This doc
 
 If you have any other questions, please reach out to us: <info@starsim.org>. Thank you!
 
+## Changelog entries
+Every PR should add an entry to `CHANGELOG.md`. Changes that alter model output, or that are needed to run an old parameter set with the current version, must be flagged with **Migration** or **Regression**.
+
+For any backwards-incompatible change, write the entry so that a human (or an LLM) could perform the migration from the changelog alone. Include the concrete before/after call. For example, instead of:
+
+> `ss.foo()` and `ss.bar()` are deprecated; use `ss.cat()` instead.
+
+write:
+
+> `ss.foo()` and `ss.bar()` have been replaced by `ss.cat()`. Instead of `ss.foo(x=1)` and `ss.bar(y=2)`, use e.g. `ss.cat(z=[1, 2])`.
+
+The extra specificity (which arguments map to which, with example values) is what makes the entry actionable.
+
 ## Release procedure
 This assumes you're about to release version `3.1.1`.
 1. Merge all PRs into the release candidate branch (`rc3.1.1`)

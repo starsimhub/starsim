@@ -5,7 +5,7 @@ Larger test of sim performance.
 
 import sciris as sc
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
 # Define the parameters
 repeats = 10
@@ -23,9 +23,9 @@ def make_run_sim():
 
     # Make the components
     sir = ss.SIS()
-    hiv = sse.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0,0]}
-    networks = [ss.RandomNet(), ss.MFNet(), ss.MaternalNet()]
+    hiv = ssl.diseases.HIV()
+    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'prenatal': [0.2, 0], 'random': [0,0]}
+    networks = [ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()]
 
     # Make the sim
     sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=[sir, hiv])

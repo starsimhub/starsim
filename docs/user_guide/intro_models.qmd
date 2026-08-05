@@ -4,9 +4,9 @@ jupyter: python3
 ---
 
 
-The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time. 
+The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.
 
-Specific models that have been created using the Starsim framework are kept in their own separate repositories. As of May 2025, Starsim's models include the following models:
+Specific models that have been created using the Starsim framework are kept in their own separate repositories. Starsim's models include the following:
 
 | Model | Status | Description |
 |-------|--------|------------|

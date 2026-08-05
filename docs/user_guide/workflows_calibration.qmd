@@ -188,7 +188,7 @@ calib = ss.Calibration(
     build_kw = dict(n_reps=3), # Run 3 replicates for each parameter set
     reseed = True, # If true, a different random seed will be provided to each configuration
     components = [prevalence],
-    total_trials = 100, # Use more for a real calibration
+    total_trials = 50, # Kept modest so the docs build quickly; use more for a real calibration
     n_workers = None, # None indicates to use all available CPUs
     die = True,
     debug = debug, # Run in serial if True

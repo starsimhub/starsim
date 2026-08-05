@@ -1,0 +1,95 @@
+2.0.0:
+  date: '2024-10-01'
+  cpu_performance: 0.992
+  scaled_time: 2.723
+  actual_time: 2.745
+2.1.0:
+  date: '2024-11-07'
+  cpu_performance: 0.938
+  scaled_time: 2.585
+  actual_time: 2.757
+2.1.1:
+  date: '2024-11-07'
+  cpu_performance: 0.9
+  scaled_time: 2.692
+  actual_time: 2.989
+2.2.0:
+  date: '2024-11-18'
+  cpu_performance: 0.943
+  scaled_time: 2.783
+  actual_time: 2.952
+2.3.2:
+  date: '2025-07-16'
+  cpu_performance: 0.9
+  scaled_time: 2.733
+  actual_time: 3.037
+3.0.0:
+  date: '2025-08-03'
+  cpu_performance: 0.912
+  scaled_time: 2.735
+  actual_time: 2.999
+3.0.3:
+  date: '2025-10-08'
+  cpu_performance: 0.883
+  scaled_time: 2.758
+  actual_time: 3.124
+3.0.4:
+  date: '2025-10-22'
+  cpu_performance: 0.899
+  scaled_time: 2.572
+  actual_time: 2.862
+3.0.5:
+  date: '2025-12-03'
+  cpu_performance: 0.912
+  scaled_time: 2.588
+  actual_time: 2.837
+3.0.6:
+  date: '2026-01-28'
+  cpu_performance: 0.93
+  scaled_time: 2.623
+  actual_time: 2.819
+3.1.0:
+  date: '2026-02-13'
+  cpu_performance: 0.938
+  scaled_time: 2.623
+  actual_time: 2.797
+3.1.1:
+  date: '2026-02-18'
+  cpu_performance: 0.908
+  scaled_time: 2.548
+  actual_time: 2.805
+3.2.0:
+  date: '2026-03-03'
+  cpu_performance: 0.933
+  scaled_time: 2.626
+  actual_time: 2.815
+3.2.1:
+  date: '2026-03-06'
+  cpu_performance: 0.921
+  scaled_time: 2.591
+  actual_time: 2.812
+3.2.2:
+  date: '2026-03-11'
+  cpu_performance: 0.92
+  scaled_time: 2.733
+  actual_time: 2.969
+3.3.0:
+  date: '2026-03-27'
+  cpu_performance: 0.918
+  scaled_time: 2.706
+  actual_time: 2.948
+3.3.1:
+  date: '2026-04-01'
+  cpu_performance: 0.939
+  scaled_time: 2.708
+  actual_time: 2.885
+3.4.0:
+  date: '2026-06-21'
+  cpu_performance: 0.896
+  scaled_time: 2.628
+  actual_time: 2.931
+3.5.0:
+  date: '2026-07-05'
+  cpu_performance: 0.935
+  scaled_time: 1.662
+  actual_time: 1.777

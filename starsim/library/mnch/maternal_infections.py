@@ -1,41 +1,41 @@
 """
 Example maternal infection with congenital outcomes.
 
-Demonstrates the generic congenital outcome framework in the base ``Infection``
-class. ``CongenitalDisease`` is a simple SIR that assigns birth outcomes
+Demonstrates the generic congenital outcome framework in the base `Infection`
+class. `CongenitalDisease` is a simple SIR that assigns birth outcomes
 (stillborn, congenital infection, normal) to unborn agents infected via
-``PrenatalNet``.
+`PrenatalNet`.
 
 How the congenital framework works:
-    1. Mother-to-child transmission happens via ``PrenatalNet`` — the base
-       ``Infection.infect()`` calls ``set_congenital()`` when the target is
+    1. Mother-to-child transmission happens via `PrenatalNet` — the base
+       `Infection.infect()` calls `set_congenital()` when the target is
        an unborn agent (age < 0).
-    2. ``set_congenital()`` samples an outcome from ``birth_outcomes`` and
-       schedules it at delivery time by setting ``ti_<outcome>``.
-    3. ``step_congenital()`` (called each timestep from ``step_state()``)
+    2. `set_congenital()` samples an outcome from `birth_outcomes` and
+       schedules it at delivery time by setting `ti_<outcome>`.
+    3. `step_congenital()` (called each timestep from `step_state()`)
        checks whether any scheduled outcomes are due. Death outcomes
-       ('stillborn', 'nnd', 'miscarriage') call ``request_death()``;
-       non-lethal outcomes set a BoolArr state (e.g. ``congenital = True``).
+       ('stillborn', 'nnd', 'miscarriage') call `request_death()`;
+       non-lethal outcomes set a BoolArr state (e.g. `congenital = True`).
 
 To use the framework in your own disease:
-    1. Define ``birth_outcome_keys`` and ``birth_outcomes`` in pars
-    2. Define matching ``ti_<key>`` FloatArr states for each outcome
+    1. Define `birth_outcome_keys` and `birth_outcomes` in pars
+    2. Define matching `ti_<key>` FloatArr states for each outcome
     3. Define BoolArr states for non-lethal outcomes (same name as the key)
-    4. Optionally define ``cs_outcome`` FloatArr to store outcome indices
-    5. Call ``self.step_congenital()`` from ``step_state()``
+    4. Optionally define `cs_outcome` FloatArr to store outcome indices
+    5. Call `self.step_congenital()` from `step_state()`
 
 For diseases with state- or gestational-age-dependent outcome probabilities
 (e.g. syphilis, where outcomes differ by infection stage), override
-``_assign_congenital_outcomes()`` and provide multiple keyed distributions
-in ``birth_outcomes``.
+`_assign_congenital_outcomes()` and provide multiple keyed distributions
+in `birth_outcomes`.
 
 Usage::
 
     import starsim as ss
-    import starsim_examples as sse
+    import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=sse.CongenitalDisease(beta=0.2, init_prev=0.2),
+        diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
         demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
@@ -58,13 +58,13 @@ class CongenitalDisease(ss.SIR):
     Simple disease with congenital outcomes via the generic framework.
 
     Infected mothers transmit to their unborn via PrenatalNet. At transmission,
-    the base ``set_congenital()`` samples an outcome (stillborn, congenital,
-    normal) and schedules it for delivery time. ``step_congenital()``
-    in ``step_state()`` executes those scheduled events.
+    the base `set_congenital()` samples an outcome (stillborn, congenital,
+    normal) and schedules it for delivery time. `step_congenital()`
+    in `step_state()` executes those scheduled events.
 
     Pars:
-        birth_outcome_keys (list): outcome names — each needs a ``ti_<key>`` state
-        birth_outcomes (objdict):  ``ss.choice`` distributions keyed by category;
+        birth_outcome_keys (list): outcome names — each needs a `ti_<key>` state
+        birth_outcomes (objdict):  `ss.choice` distributions keyed by category;
             use 'default' for a single distribution applied to all infections
 
     States:

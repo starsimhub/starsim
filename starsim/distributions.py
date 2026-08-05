@@ -25,6 +25,71 @@ def str2int(string, modulo=1_000_000_000):
     return seed
 
 
+# Constants for the splitmix64 hash used by hash_uniforms() (see below)
+_GOLDEN = np.uint64(0x9e3779b97f4a7c15)
+_MIX1   = np.uint64(0xbf58476d1ce4e5b9)
+_MIX2   = np.uint64(0x94d049bb133111eb)
+_INV53  = np.float64(1.0 / 9007199254740992.0) # 2^-53, to map a 53-bit int to [0, 1) (float64 mantissa)
+_INV24  = np.float64(1.0 / 16777216.0)         # 2^-24, to map a 24-bit int to [0, 1) (float32 mantissa)
+_U30, _U27, _U31, _U11 = np.uint64(30), np.uint64(27), np.uint64(31), np.uint64(11)
+_U40 = np.uint64(40) # 64 - 24: keep the top 24 bits for a float32-representable uniform
+
+@nb.njit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
+          nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
+def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
+    """
+    Fill `out` with one uniform in [0, 1) per slot via a counter-based (splitmix64) hash keyed
+    by (seed, ind); not for the user. See hash_uniforms() for the algorithm and rationale.
+
+    `out` carries the target float dtype (Numba specializes on it), and (shift, scale) select the
+    mantissa width: (40, 2^-24) for float32, (11, 2^-53) for float64. Matching the mantissa to the
+    float width keeps every value representable and strictly < 1.
+    """
+    # Derive a per-draw key by mixing the distribution seed with the draw index
+    x = (np.uint64(seed) ^ (np.uint64(ind) * _GOLDEN)) + _GOLDEN
+    x = (x ^ (x >> _U30)) * _MIX1
+    x = (x ^ (x >> _U27)) * _MIX2
+    key = x ^ (x >> _U31)
+
+    # Hash each slot to a uniform of the requested width
+    for i in range(slots.shape[0]):
+        z = (slots[i] + key) * _GOLDEN
+        z = (z ^ (z >> _U30)) * _MIX1
+        z = (z ^ (z >> _U27)) * _MIX2
+        z = z ^ (z >> _U31)
+        out[i] = (z >> shift) * scale
+    return
+
+
+def hash_uniforms(seed, ind, slots, dtype=None):
+    """
+    Generate one uniform random number in [0, 1) per slot via a counter-based (splitmix64)
+    hash keyed by (seed, ind); not for the user.
+
+    This is the engine behind Starsim's common random numbers (CRN). Because each output
+    depends only on its slot (plus the per-draw key), the same slot always yields the same
+    value regardless of how many other agents are drawn -- so structural differences between
+    scenarios don't ripple into unrelated agents. Unlike the stream-based approach (draw
+    `slots.max()+1` numbers and gather), this generates exactly `len(slots)` numbers, avoiding
+    the `slot_scale` blowup.
+
+    The result is returned at `dtype` (default `ss.dtypes.float`) so the CRN path matches the
+    dtype of the native draw path (`Dist.rand`). The mantissa width is matched to the float
+    width (24-bit for float32, 53-bit for float64) so every value stays strictly < 1 -- a plain
+    float64->float32 cast would round the largest values up to exactly 1.0 and break the [0, 1)
+    contract (e.g. `expon.ppf(1.0)` is inf). The float64 stream is unchanged from earlier versions.
+    """
+    if dtype is None:
+        dtype = ss.dtypes.float
+    dtype = np.dtype(dtype)
+    out = np.empty(slots.shape[0], dtype=dtype)
+    if dtype.itemsize <= 4: # float32: keep the top 24 bits
+        _hash_uniforms_fill(seed, ind, slots, out, _U40, _INV24)
+    else: # float64: keep the top 53 bits (unchanged from earlier versions)
+        _hash_uniforms_fill(seed, ind, slots, out, _U11, _INV53)
+    return out
+
+
 def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
@@ -130,11 +195,6 @@ class Dists(sc.prettyobj):
     def jump(self, to=None, delta=1, force=False):
         """ Advance all RNGs, e.g. to call "to", by jumping """
         out = sc.autolist()
-
-        # Do not jump if centralized
-        if ss.options.single_rng:
-            return out
-
         for dist in self.dists.values():
             out += dist.jump(to=to, delta=delta, force=force)
         return out
@@ -147,11 +207,6 @@ class Dists(sc.prettyobj):
             ti (int): if specified, jump to this timestep (default: current sim timestep)
         """
         out = sc.autolist()
-
-        # Do not jump if centralized
-        if ss.options.single_rng:
-            return out
-
         for dist in self.dists.values():
             out += dist.jump_dt(ti=ti, force=force)
         return out
@@ -285,8 +340,8 @@ class Dist:
         debug (bool): print out additional detail
         kwargs (dict): parameters of the distribution
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Create a Bernoulli distribution
         p_death = ss.bernoulli(p=0.1).init(force=True)
         p_death.rvs(50) # Create 50 draws
@@ -301,6 +356,7 @@ class Dist:
         # Create a distribution manually
         dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
         dist.rvs(10) # Return 10 normally distributed random numbers
+        ```
     """
     valid_pars = None
     scaling = None # See "scale_types" above
@@ -415,6 +471,12 @@ class Dist:
                     kwargs[parkeys[i]] = arg
 
         if kwargs:
+            if dist is None: # Only validate when not also changing the distribution type (which changes the valid parameters)
+                invalid = [k for k in kwargs if k not in self.pars]
+                if invalid:
+                    valid = list(self.pars.keys())
+                    errormsg = f'Cannot set parameter(s) {invalid} for {self}: not a valid parameter name for this distribution. Valid parameters are: {valid}'
+                    raise ValueError(errormsg)
             self.pars.update(kwargs)
             if self.initialized:
                 # If initialized, re-process the pars to update self._pars
@@ -457,8 +519,8 @@ class Dist:
 
         Use 0 for original state, -1 for most recent state.
 
-        **Example**:
-
+        Examples:
+            ```python
             dist = ss.random(seed=5).init()
             r1 = dist(5)
             r2 = dist(5)
@@ -469,6 +531,7 @@ class Dist:
             assert all(r1 != r2)
             assert all(r2 == r3)
             assert all(r4 == r1)
+            ```
         """
         if not isinstance(state, dict):
             state = self.history[state]
@@ -478,10 +541,6 @@ class Dist:
 
     def jump(self, to=None, delta=1, force=False):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
-
-        # Do not jump if centralized # TODO: remove
-        if ss.options.single_rng:
-            return self.state
 
         # Validation
         jumps = to if (to is not None) else self.ind + delta
@@ -535,10 +594,7 @@ class Dist:
         self.process_seed(trace, seed)
 
         # Create the actual RNG
-        if ss.options.single_rng:
-            self.rng = np.random.mtrand._rand # If single_rng, return the centralized numpy random number instance
-        else:
-            self.rng = np.random.default_rng(seed=self.seed)
+        self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
 
         # Handle the sim, module, and slots
@@ -576,10 +632,11 @@ class Dist:
             trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
             **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
 
-        **Example**:
-
+        Examples:
+            ```python
             dist = ss.normal(3, 2, unit='years').mock(dt=ss.days(1))
             dist.rvs(10)
+            ```
         """
         mock_sim = ss.mock_sim(**kwargs)
         mock_mod = ss.mock_module(**kwargs)
@@ -646,14 +703,21 @@ class Dist:
         else:
             uids = ss.uids(n)
             if len(uids):
-                if self.slots is None:
-                    errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
-                    raise ValueError(errormsg)
-                slots = self.slots[uids]
-                if len(slots): # Handle case where uids is boolean
-                    size = slots.max() + 1
+                if not ss.options.crn:
+                    # Fast non-CRN path: draw exactly one number per UID directly, with no
+                    # slot gather. This avoids the slot_scale "blowup" (drawing slots.max()+1
+                    # numbers and discarding most of them). Statistically valid but not CRN-safe.
+                    slots = None
+                    size = len(uids)
                 else:
-                    size = 0
+                    if self.slots is None:
+                        errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
+                        raise ValueError(errormsg)
+                    slots = self.slots[uids]
+                    if len(slots): # Handle case where uids is boolean
+                        size = slots.max() + 1
+                    else:
+                        size = 0
             else:
                 slots = np.array([])
                 size = 0
@@ -839,19 +903,13 @@ class Dist:
 
     def rand(self, size):
         """ Simple way to get simple random numbers """
-        if ss.options.single_rng:
-            return np.random.mtrand._rand.random(size).astype(ss.dtypes.float)
         return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
 
     def make_rvs(self):
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
-            if ss.options.single_rng:
-                dtype = self._pars.pop('dtype', None)
             rvs = rvs_func(size=self._size, **self._pars)
-            if ss.options.single_rng and dtype:
-                rvs = rvs.astype(dtype)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
@@ -876,16 +934,22 @@ class Dist:
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
-        if not self.ready and self.strict and not ss.options.single_rng:
+        if not self.ready and self.strict:
             raise DistNotReadyError(self)
 
         # Figure out size, UIDs, and slots
-        if ss.options.single_rng and not (np.isscalar(n) or isinstance(n, tuple)):
-            n = len(n) # If centralized, treat n as a size
         size, slots = self.process_size(n)
 
-        # Check if size is 0, then we can return
+        # Check if size is 0, then we can return -- but still count the call and jump/reset
+        # so that CRN behavior does not depend on whether any random numbers were drawn
         if size == 0:
+            self.called += 1
+            if reset:
+                self.reset(-1)
+            elif self.auto:
+                self.jump()
+            elif self.strict:
+                self.ready = False
             return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
         elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
@@ -898,13 +962,21 @@ class Dist:
         self.process_pars()
 
         # Actually get the random numbers
-        if self._use_ppf:
-            rands = self.rand(size)[slots] # Get random values
+        if slots is not None and self._use_ppf is not False:
+            # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
+            # Generates exactly len(uids) numbers (no slot_scale blowup) while preserving CRN.
+            # (choice/histogram set _use_ppf=False and keep the native path below.)
+            rands = hash_uniforms(self.seed, self.ind, self._slots.astype(np.uint64))
+            rvs = self.ppf(rands) # Convert to actual values via the PPF
+        elif self._use_ppf:
+            rands = self.rand(size)
+            if slots is not None: # In non-CRN mode, size == len(uids) and no gather is needed
+                rands = rands[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
-                rvs = rvs[self._slots]
+                rvs = ss.arrays.nb_indexer(rvs, self._slots) if self._slots.size >= ss.arrays.numba_indexing else rvs[self._slots] # Numba indexer is ~1.3x faster for large gathers
 
         # Handle unit if provided
         if self.unit is not None:
@@ -992,11 +1064,15 @@ class Dist:
         self._size = None
         return
 
-    def shrink(self):
-        """ Shrink the size of the module for saving to disk """
-        to_shrink = ['slots', '_slots', 'module', 'sim', '_n', '_uids', '_callable_args', '_callable_keys']
+    def shrink(self, max_arr_size=100):
+        """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
+        to_shrink = ['slots', '_slots', 'module', 'sim', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
         ss.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
+        shrunk = ss.shrink()
+        for key, val in self.pars.items():
+            if isinstance(val, np.ndarray) and val.size > max_arr_size:
+                self.pars[key] = shrunk
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
@@ -1093,9 +1169,10 @@ class lognorm_im(Dist):
         mean (float): the mean of the underlying normal distribution (not this distribution) (default 0.0)
         sigma (float): the standard deviation of the underlying normal distribution (not this distribution) (default 1.0)
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
+        ```
     """
     scaling = scale_types.postdraw
 
@@ -1134,9 +1211,10 @@ class lognorm_ex(Dist):
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
         std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
 
-    **Example**:
-
+    Examples:
+        ```python
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
+        ```
     """
     scaling = scale_types.both
 
@@ -1201,6 +1279,8 @@ class poisson(Dist):
     scaling = scale_types.predraw
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        self._ppf_lam = None # Cached lambda for the fast ppf (see ppf())
+        self._ppf_cdf = None # Cached CDF for the fast ppf
         return
 
     def sync_pars(self):
@@ -1208,6 +1288,28 @@ class poisson(Dist):
         spars = dict(mu=self._pars.lam)
         self.update_dist_pars(spars)
         return spars
+
+    def ppf(self, rands):
+        """
+        Fast inverse-CDF sampling for the common-random-number (ppf) path.
+
+        SciPy's generic discrete ``ppf`` is very slow (it root-finds per element),
+        and for CRN draws it is called every time an ``ss.poisson`` is sampled by
+        UID. For a scalar ``lam`` we instead precompute the CDF once and map each
+        uniform via ``np.searchsorted``, which is 30-60x faster and produces
+        bitwise-identical results. Array-valued ``lam`` falls back to SciPy.
+        """
+        lam = self._pars.lam
+        if np.isscalar(lam) or (isinstance(lam, np.ndarray) and lam.ndim == 0):
+            lam = float(lam)
+            if self._ppf_lam != lam: # Rebuild the CDF only when lambda changes
+                kmax = int(lam + 10.0*np.sqrt(lam) + 30) # P(X > kmax) is negligible, so the CDF saturates to 1.0
+                self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
+                self._ppf_lam = lam
+            rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
+        else:
+            rvs = self.dist.ppf(rands) # Fallback for array-valued lambda
+        return rvs.astype(ss.dtypes.int) # Poisson yields integer counts, matching the native rvs path (SciPy's ppf returns float)
 
 
 class beta_dist(Dist):
@@ -1287,14 +1389,12 @@ class randint(Dist):
     Args:
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
-        allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
     scaling = scale_types.predraw
     valid_pars = ['low', 'high', 'dtype']
 
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
-        self.allow_time = allow_time
         if len(args):
             if len(args) == 1:
                 high = args[0]
@@ -1308,10 +1408,8 @@ class randint(Dist):
         if high is None:
             high = np.iinfo(ss.dtypes.rand_int).max
 
-        if ss.options.single_rng: # randint because we're accessing via numpy.random
-            super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
-        else: # integers instead of randint because interfacing a numpy.random.Generator
-            super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
+        # integers (rather than randint) because we interface a numpy.random.Generator
+        super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
         return
 
     def convert_timepars(self):
@@ -1323,8 +1421,8 @@ class randint(Dist):
 
     def ppf(self, rands):
         p = self._pars
-        rvs = rands * (p.high + 1 - p.low) + p.low
-        rvs = rvs.astype(self.dtype)
+        rvs = rands * (p.high - p.low) + p.low  # Map [0,1) to [low, high), matching np.random.integers (exclusive high)
+        rvs = np.minimum(rvs, p.high - 1).astype(p.dtype)  # Clamp guards against rands rounding up to high
         return rvs
 
 class rand_raw(Dist):
@@ -1336,10 +1434,7 @@ class rand_raw(Dist):
     scaling = scale_types.false
 
     def make_rvs(self):
-        if ss.options.single_rng:
-            return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
-        else:
-            return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
+        return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
 
 
 class weibull(Dist):
@@ -1460,14 +1555,14 @@ class choice(Dist):
         a (int or array): the number of choices, or the choices themselves (default 2)
         p (array): if supplied, the probability of each choice (default, 1/a for a choices)
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Simulate 10 die rolls
         ss.choice(6, strict=False)(10) + 1
 
         # Choose between specified options each with a specified probability (must sum to 1)
         ss.choice(a=[30, 70], p=[0.3, 0.7], strict=False)(10)
-
+        ```
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
     """
@@ -1476,18 +1571,48 @@ class choice(Dist):
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
-        self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
+        if not replace:
+            # Sampling without replacement is a joint draw over all elements, so it
+            # cannot be expressed as an independent per-slot inverse-CDF. Keep the
+            # native (make_rvs) path in that case, but draw exactly len(uids) values
+            # rather than slots.max()+1 (see process_size below).
+            self._use_ppf = False
+        # For the (default) replace=True case, leave _use_ppf as None so that the
+        # ppf path is used for UID draws. This maps each slot's uniform through the
+        # inverse CDF (below), which is CRN-safe and, crucially, avoids the
+        # make_rvs "slot blowup" (drawing slots.max()+1 values and discarding most)
+        # -- the same issue hash-based CRN already fixed for bernoulli/poisson/etc.
         return
 
+    def process_size(self, n=1):
+        """ For replace=False, draw one value per UID (no slot blowup); not for the user """
+        size, slots = super().process_size(n)
+        if not self.pars.replace and slots is not None:
+            # Without replacement can't be slot-indexed CRN (it's a joint draw), and
+            # requesting slots.max()+1 distinct items both blows up and errors once
+            # slots.max() >= len(a). Draw exactly one value per UID instead. Like
+            # ss.options.crn=False, this is statistically valid but not CRN-safe
+            # across scenarios -- which is inherent to sampling without replacement.
+            self._slots = None
+            size = self._size = len(self._uids)
+            slots = None
+        return size, slots
+
     def ppf(self, rands):
-        """ Shouldn't actually be needed since dynamic pars not supported """
+        """ Map uniform values to choices via the inverse CDF (one draw per slot). """
         pars = self._pars
-        if np.isscalar(pars.a):
-            pars.a = np.arange(pars.a)
-        pcum = np.cumsum(pars.p)
-        inds = np.searchsorted(pcum, rands)
-        rvs = pars.a[inds]
-        return rvs
+        a = pars.a
+        if np.isscalar(a):
+            a = np.arange(a)
+        else:
+            a = np.asarray(a) # Ensure array indexing works below (e.g. a=[30, 70] passed as a list)
+        if pars.p is None: # Uniform over the choices
+            n = len(a)
+            inds = np.minimum((rands*n).astype(int), n - 1) # minimum guards against rands == 1.0
+        else:
+            pcum = np.cumsum(pars.p)
+            inds = np.minimum(np.searchsorted(pcum, rands, side='right'), len(a) - 1)
+        return a[inds]
 
 
 class histogram(Dist):
@@ -1512,8 +1637,8 @@ class histogram(Dist):
     The values can be supplied in either normalized (sum to 1) or un-normalized
     format.
 
-    **Examples**:
-
+    Examples:
+        ```python
         # Sample from an age distribution
         age_bins = [0,    10,  20,  40,  65, 100]
         age_vals = [0.1, 0.1, 0.3, 0.3, 0.2]
@@ -1524,6 +1649,7 @@ class histogram(Dist):
         data = np.random.randn(10_000)*2+5
         h2 = ss.histogram(data=data, strict=False)
         h2.plot_hist(bins=100)
+        ```
     """
     valid_pars = ['values', 'bins', 'density', 'data']
     scaling = scale_types.false
@@ -1553,7 +1679,11 @@ class histogram(Dist):
             values = values / vsum
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
-        self._use_ppf = False # Set to false since array arguments correspond to bins, not UIDs
+        # Leave _use_ppf as None (the default) so UID draws go through the hash-based
+        # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
+        # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,
+        # avoiding the slot_scale "blowup" (drawing slots.max()+1 and discarding most).
+        # The values/bins arrays are baked into self.dist, not treated as per-UID pars.
         return
 
 
@@ -1569,15 +1699,17 @@ class multi_random(sc.prettyobj):
     Args:
         names (str/list): name(s) for each internal random distribution
         *args: additional names (shorthand)
+        crn (bool): whether to use common random numbers; if None (default), follow `ss.options.crn`
         **kwargs: passed to each `ss.random()` instance
 
     Usage:
         multi = ss.multi_random('source', 'target')
         rvs = multi.rvs(source_uids, target_uids)
     """
-    def __init__(self, names, *args, **kwargs):
-        names = sc.mergelists(names, args)
+    def __init__(self, names, *args, crn=None, **kwargs):
+        names = sc.mergelists(names, *args)
         self.dists = [ss.random(name=name, **kwargs) for name in names]
+        self.crn = crn # If None, follow ss.options.crn at draw time
         return
 
     def __len__(self):
@@ -1612,6 +1744,15 @@ class multi_random(sc.prettyobj):
         rvs = rand_ints / int_max
         return rvs
 
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True)
+    def combine2_rvs(a, b, int_type, int_max):
+        """ Fast path for the common two-distribution case (avoids nb.typed.List, ~550us/call) """
+        ra = a.view(int_type)
+        rb = b.view(int_type)
+        rand_ints = np.bitwise_xor(ra*rb, ra-rb)
+        return rand_ints / int_max
+
     def rvs(self, *args):
         """ Get random variates from each of the underlying distributions and combine them efficiently """
         # Validation
@@ -1621,11 +1762,33 @@ class multi_random(sc.prettyobj):
             errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
             raise ValueError(errormsg)
 
+        # Fast non-CRN path: a single plain uniform draw per element, skipping the
+        # slot gathers and XOR combine. Statistically valid but not CRN-safe.
+        crn = ss.options.crn if self.crn is None else self.crn
+        if not crn:
+            dist = self.dists[0]
+            rvs = dist.rng.random(len(args[0]))
+            dist.jump() # Advance the RNG manually, since we bypassed dist.rvs() above
+            return rvs
+
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
-        rvs_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
-        int_type = ss.dtypes.rand_uint
+
+        # The XOR-combine reinterprets the float bytes as unsigned ints, so the int width must
+        # match the float width - we need to base it on the width of ss.dtypes.float, not ss.dtypes.rand_uint
+        itemsize = np.dtype(ss.dtypes.float).itemsize
+        if itemsize == 4:
+            int_type = np.uint32
+        elif itemsize == 8:
+            int_type = np.uint64
+        else:
+            errormsg = f'Unexpected float itemsize {itemsize}; expected 4 (float32) or 8 (float64)'
+            raise ValueError(errormsg)
         int_max = np.iinfo(int_type).max
-        rvs = self.combine_rvs(rvs_list, int_type, int_max)
+        if n_dists == 2: # Common case (e.g. pairwise transmission): skip the costly nb.typed.List build
+            rvs = self.combine2_rvs(rvs_list[0], rvs_list[1], int_type, int_max)
+        else:
+            nb_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
+            rvs = self.combine_rvs(nb_list, int_type, int_max)
         return rvs
 
 

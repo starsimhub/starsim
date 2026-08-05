@@ -21,11 +21,11 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 ```python
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
 # Congenital disease example
 sim = ss.Sim(
-    diseases=sse.CongenitalDisease(beta=0.2),
+    diseases=ssl.mnch.CongenitalDisease(beta=0.2),
     demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],
 )
@@ -33,9 +33,9 @@ sim = ss.Sim(
 # Fetal health example
 sim = ss.Sim(
     diseases=ss.SIR(beta=0.1),
-    connectors=sse.fetal_infection(),
-    interventions=sse.treat_pregnant(disease='sir'),
-    custom=ss.FetalHealth(),
+    connectors=ssl.mnch.fetal_infection(),
+    interventions=ssl.mnch.treat_pregnant(disease='sir'),
+    custom=ssl.mnch.FetalHealth(),
     demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],
 )

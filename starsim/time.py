@@ -236,13 +236,14 @@ class date(pd.Timestamp):
         allow_zero (bool): if True, allow a year 0 by creating a datedur instead; if False, raise an exception; if None, give a warning
         kwargs (dict): passed to pd.Timestamp()
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.date(2020) # Returns <2020-01-01>
         ss.date(year=2020) # Returns <2020-01-01>
         ss.date(year=2024.75) # Returns <2024-10-01>
         ss.date('2024-04-04') # Returns <2024-04-04>
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
+        ```
     """
     def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
@@ -336,10 +337,11 @@ class date(pd.Timestamp):
             day_round (bool): whether to round to the nearest day
             allow_zero (bool): whether to allow year 0 (if so, return ss.datedur instead)
 
-        **Examples**:
-
+        Examples:
+            ```python
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
+            ```
         """
         if year < 1:
             warnmsg = f'Dates with years < 1 are not valid ({year = }); returning ss.datedur instead'
@@ -363,10 +365,11 @@ class date(pd.Timestamp):
     def to_year(self):
         """ Convert a date to a floating-point year
 
-        **Examples**:
-
+        Examples:
+            ```python
             ss.date('2020-01-01').to_year() # Returns 2020.0
             ss.date('2024-10-01').to_year() # Returns 2024.7486
+            ```
         """
         year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
         year_end = pd.Timestamp(year=self.year+1,month=1,day=1).timestamp()
@@ -1641,10 +1644,11 @@ class Rate(TimePar):
             dur (`ss.dur`): the duration over which to convert the probability to
             scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
 
-        **Example**:
-
+        Examples:
+            ```python
             p_month = ss.probpermonth(0.05)
             p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+            ```
         """
         if dur is None:
             dur = self.default_dur # May also be None
@@ -1827,10 +1831,11 @@ class prob(Rate):
             dur (`ss.dur`): the duration over which to convert the probability to
             scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
 
-        **Example**:
-
+        Examples:
+            ```python
             p_month = ss.probpermonth(0.05)
             p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+            ```
         """
         if dur is None:
             if scale == 1.0:
@@ -2022,6 +2027,18 @@ def assume_cal_year(val):
 # Durations
 class years(dur):
     base = 'years'
+    def __init__(self, value=1, base=None):
+        # Convert date or date-string input(s) to decimal years, since dates only map cleanly onto years
+        to_convert = (str, pd.Timestamp)
+        if isinstance(value, to_convert): # A single date or date string
+            value = sc.datetoyear(value)
+        elif np.iterable(value):
+            for i,val in enumerate(value):
+                if isinstance(val, to_convert):
+                    value[i] = sc.datetoyear(val)
+        super().__init__(value=value, base=base)
+        return
+
     def __str__(self):
         """ As this is the "default" Starsim unit, show its value simply for calendar years, e.g. 2020.5 """
         if ss.time.assume_cal_year(self.value):

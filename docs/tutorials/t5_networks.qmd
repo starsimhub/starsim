@@ -31,14 +31,14 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 ss.options(jupyter=True)
-import starsim_examples as sse
+import starsim.library as ssl
 import matplotlib.pyplot as plt
 
 # Make random network
 random = ss.RandomNet()
 ```
 
-The network we just made stores two very important things: the list of contacts (found in `random.edges`) and the parameters (`random.pars`).  
+The network we just made stores two very important things: the list of contacts (found in `random.edges`) and the parameters (`random.pars`).
 
 If we just make a network on its own like this, it's not very interesting. Like all components of Starsim, it needs to be initialized within a `sim` before the database of contacts gets populated:
 
@@ -76,47 +76,47 @@ net.plot()
 
 
 ## Sexual networks
-Starsim contains a few basic sexual networks, including an `mf` network for modeling heterosexual partnerships and an `msm` network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here's an example modeling syphilis:
+Starsim contains a few basic sexual networks, including an `mf` network for modeling heterosexual partnerships and an `msm` network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here's an example modeling HIV:
 
 ```{python}
 # Create the disease
-syph = sse.Syphilis(
-    beta = {'mf': [0.25, 0.15]},    # See notes below 
+hiv = ssl.diseases.HIV(
+    beta = {'mf': [0.05, 0.025]},    # See notes below
 )
 
 # Create a heterosexual network
 mf = ss.MFNet(
-    duration=1/24,  # Using very short relationships so that we get more transmission 
+    duration=1/24,  # Using very short relationships so that we get more transmission
     acts=80,        # Distribution of the number of coital acts/year
 )
 
 pars = dict(start=2000, dur=20, dt=1/12)
-sim = ss.Sim(pars=pars, diseases=syph, networks=mf)
+sim = ss.Sim(pars=pars, diseases=hiv, networks=mf)
 ```
 
-The main difference here is that we've added the line `syph.pars['beta'] = {'mf': [0.25, 0.15]}`. Because STIs are generally more transmissible from males to females than vice versa, we can specify `beta` as a list, and we can also allow it to vary between networks. For instance, if we also had an MSM network here, we could set 
+The main difference here is that we've added the line `hiv.pars['beta'] = {'mf': [0.05, 0.025]}`. Because STIs are generally more transmissible from males to females than vice versa, we can specify `beta` as a list, and we can also allow it to vary between networks. For instance, if we also had an MSM network here, we could set
 ```
-syph.pars.update(beta = {'mf': [0.25, 0.15], 'msm': [0.4, 0.4]})
+hiv.pars.update(beta = {'mf': [0.05, 0.025], 'msm': [0.08, 0.08]})
 ```
 The sexual network itself is structurally similar to the `random` network that we looked at previously, and can be customized by changing the `pars` dictionary that's used to construct it.
  
 ## Maternal networks
-Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the maternal network. Here's an example showing how you would do this for syphilis:
+Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the prenatal network. Here's an example showing how you would do this for HIV:
 
 ```{python}
-syph = sse.Syphilis(
-    beta = {'mf': [0.25, 0.15], 'maternal': [0.99, 0]}
+hiv = ssl.diseases.HIV(
+    beta = {'mf': [0.05, 0.025], 'prenatal': [0.5, 0]}
 )
 
 # Make demographic modules
 pregnancy = ss.Pregnancy(fertility_rate=20)
 death = ss.Deaths(death_rate=15)
 
-# Make maternal network
-maternal = ss.MaternalNet()
+# Make prenatal network
+prenatal = ss.PrenatalNet()
 
 # Make sim
-sim = ss.Sim(pars=pars, diseases=syph, networks=[mf, maternal], demographics=[pregnancy, death], dur=10)
+sim = ss.Sim(pars=pars, diseases=hiv, networks=[mf, prenatal], demographics=[pregnancy, death], dur=10)
 sim.run().plot(show_module=False)
 ```
 

@@ -76,8 +76,8 @@ uv add starsim[dev]  # With dev dependencies
 - `time.py`: Time coordination between modules
 - `utils.py`: Helper functions
 
-### Example Disease Models (`starsim_examples/diseases/`)
-Pre-implemented example disease models including HIV, syphilis, gonorrhea, cholera, Ebola, and measles. Core disease base classes (Disease, Infection, NCD, SIR, SIS) live in `starsim/diseases.py`.
+### Example Disease Models (`starsim/library/diseases/`)
+Pre-implemented example disease models including HIV, cholera, Ebola, and measles, available via `import starsim.library as ssl` (e.g. `ssl.diseases.Cholera`). Core disease base classes (Disease, Infection, NCD, SIR, SIS) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
 - `test_*.py`: Main test files
@@ -122,7 +122,7 @@ The framework uses a modular architecture where all components inherit from base
 - Use built-in Starsim plotting commands if possible, only falling back to Matplotlib if necessary
 - Use Sciris where possible to shorten commands
 - When creating a multiline dictionary, put a space around the equals for arguments (as if it were a class)
-- The framework requires Python 3.10+
+- The framework requires Python 3.11+
 - Uses Numba for performance-critical code sections
 - All modules inherit from base classes in `modules.py`
 - Parameter handling is centralized through `parameters.py` and `SimPars` class

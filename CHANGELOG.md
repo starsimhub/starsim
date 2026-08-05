@@ -1,6 +1,21 @@
 # What's new
 
-All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the terms "Migration" or "Regression".
+All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
+
+## Version 3.5.2 (2026-07-14)
+- Starsim v3.5.0 added several optimizations affecting how random numbers are drawn. However, these changes introduced several `dtype`-related bugs that have been fixed in this release:
+  - Fixed a bug where `ss.random()` always returned `float64` regardless of the configured type `ss.dtypes.float`.
+  - Fixed `ss.poisson()` sometimes returning `float64` and sometimes returning an integer. It now always returns `ss.dtypes.int`.
+  - Fixed `ss.multi_random.rvs()` returning an incorrect number of samples due to type mismatches.
+  - *Regression*: Because the default CRN mechanism precision has changed to consistently match `ss.dtypes.float`, the exact random values produced for agent-indexed draws are different from v3.5.1.
+- `ss.uids()` now performs additional validation to more consistently ensure it only contains integers.
+  - *Migration*: Previously `ss.uids([1.5])` would convert the input to an integer and thus return `ss.uids([1])`. However, because this usage would often reflect an error, this operation will now raise a `TypeError` to prevent inadvertent conversion of floats silently succeeding. To maintain previous functionality, convert the input to integers before calling `ss.uids()`. 
+
+- `Timeline.now()` returns durations rather than bare floats, for simulations that use duration-based units.
+- Made the `folder` argument of `ss.Samples` optional, and moved it from first to third.
+  - *Migration:* Positionally-created Samples should use kwargs instead, e.g. `ss.Samples(resultsdir, outputs)` should be changed to `ss.Samples(outputs, folder=resultsdir)`.
+
+- *GitHub info*: PR [1393](https://github.com/starsimhub/starsim/pull/1393)
 
 ## Version 3.3.1 (2026-XX-XX)
 
@@ -20,10 +35,95 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - Removed `Calibration.study` in favour of `Calibration.load_study()` that loads the study on-demand
 
 
-## Version 3.4.0 (2026-05-XX)
-- `library`: TBC
-- `ss.shrink()` (previously `ss.utils.shrink()`) is now called automatically after `sim.run()`; this clears circular `Sim` references that otherwise block garbage collection. However, it does not clear `sim.people`, so it is still worth explicitly calling `sim.shrink()` if a ninimal-memory sim is needed, as this will take the typical sim size from ~MB to ~KB.
-- Fixed various minor issues: corrected typos, added docstrings, improved error messages, etc.
+## Version 3.5.1 (2026-07-09)
+- Added `ss.Arr.isin()`, for comparing an array against multiple values. For example, code like `recent = (self.ti_infected == self.ti) | (self.ti_infected == self.ti-1)` could now be `recent = self.ti_infected.isin([self.ti, self.ti-1])`.
+- `ss.poisson` now uses precomputed CDFs for a 60x performance gain in some cases.
+- `ss.choice` (with the default `replace=True`) now uses the inverse-CDF/hash path for a ~10x performance gain in some cases.
+  - *Regression*: because the `ss.choice` random-number path changed, the exact values produced for `ss.choice` UID draws differ from previous versions (results remain statistically equivalent). Models using `ss.choice` (including `ss.Pregnancy`) will produce different stochastic realizations, and stored regression baselines should be regenerated.
+
+- Fixed a bug in `ss.library.HouseholdNet` move-out timing that only manifested when the `ss.Pregnancy` module ran on a coarser `dt` than the sim (e.g. `ss.Pregnancy(dt=ss.months(3))`). Eligibility was determined by comparing `pregnancy.ti_delivery` (an index in the pregnancy module's *own* timeline) against the sim timestep; with mismatched dt, pregnant non-heads became re-eligible far too often, greatly over-fragmenting households and suppressing household transmission (e.g. ~40% fewer infections in a TB model with quarterly pregnancy). Move-out is now evaluated exactly once per pregnancy (keyed to `ti_pregnant`), which is dt-agnostic and bit-identical when the pregnancy dt equals the sim dt.
+  - *Regression*: This fix will change the results obtained from using this module.
+
+- *GitHub info*: PR [1388](https://github.com/starsimhub/starsim/pull/1388)
+
+
+## Version 3.5.0 (2026-07-05)
+This release provides several major performance improvements, focused on random number generation, networks, and pregnancy. On a representative large simulation (50,000 agents, 100 years, SIS on a random network with births and deaths), the random number changes alone make the default configuration roughly 1.4x faster, or about 2x faster with common random numbers disabled (`ss.options.crn = False`); the network, transmission, and pregnancy changes described below provide further ~1.3x speedups on top of this, for a total of ~1.8-2.6x speedups.
+
+### Common random numbers
+- Common random numbers (CRN) work by giving each agent a "slot" and drawing one random number per slot, so that the same agent makes the same decision regardless of what other agents do. Previously this was implemented by drawing `slots.max()+1` numbers and keeping only those at the requested slots. Because newborn agents are assigned slots spread over a wide range (up to `slot_scale` times the population size), this could mean generating up to 5x more random numbers than were actually needed. The default CRN path now generates only the number of values needed, via a counter-based hash (`ss.distributions.hash_uniforms()`, a Numba-compiled [splitmix64](https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64) algorithm keyed by the distribution seed and draw index) that maps each slot directly to a uniform value. This preserves CRN reproducibility while removing the redundant draws.
+- Added a new `crn` option (`ss.options.crn`, default `True`). Setting `ss.options.crn = False` skips the slot machinery entirely. This is not CRN-safe across scenarios, but is statistically valid and considerably faster; it is useful when reproducibility across counterfactual scenarios is not required.
+- Sped up `ss.multi_random` (used for pairwise transmission probabilities) by including a dedicated fast path for the common two-distribution case that avoids constructing a typed list on each call.
+- *Migration*: the `single_rng` option has been removed. Its purpose was to demonstrate the "single centralized RNG" behavior of other agent-based modeling frameworks; use `ss.options.crn = False` instead, which is both faster and demonstrates the same stochastic-branching problem. (Note, however, that it does *not* use a single RNG; this option is no longer available.)
+- *Regression*: because the default CRN mechanism changed, the exact random values produced for agent-indexed draws are different from previous versions. Results remain statistically equivalent and CRN reproducibility is preserved, but stored regression baselines will need to be regenerated.
+
+### RandomNet and HouseholdNet
+- *Regression*: `ss.RandomNet` is now a faster (~1.8x), approximate network in which the target end of each edge is drawn independently. The per-agent degree is therefore only approximately Poisson rather than exact. The previous exact behavior is available as the new `ss.RandomExactNet`; switch to it if you rely on the exact degree distribution.
+- Edge generation for `ss.RandomExact` networks (what were previously called `ss.Random`) now uses an in-place Fisher-Yates shuffle (`ss.networks.fisher_yates_shuffle()`) instead of `np.random.permutation`, about 1.3x faster.
+- Networks whose edges last a single timestep (`dur=0`, e.g. `ss.RandomNet`) now regenerate edges via a zero-copy fast path that avoids concatenating onto the previous edge list each step.
+- `ss.library.HouseholdNet` initialization is now fully vectorized across household assignment, edge construction, and female-head-of-household selection, for a performance improvement of 10-20x for large populations.
+- `ss.library.HouseholdNet.add_births()` was also vectorized, for a performance improvement of ~1.3x in high-turnover simulations.
+
+### Pregnancy
+- The `ss.Pregnancy` conception logic was optimized, for a ~20% performance improvement.
+- *Regression*: the default `slot_scale` for `ss.Pregnancy` was increased from 5 to 10. Newborns are assigned a random slot in the range `[n_agents, slot_scale·n_agents]`; a larger range reduces the chance that two newborns share a slot (and therefore make identical random draws). Previously a larger `slot_scale` also meant proportionally more random draws, but with the new hash-based CRN the number of draws no longer depends on the slot range, so the default was raised to reduce these collision artifacts at no performance cost. This changes results for models with pregnancy.
+
+### Other performance optimizations
+
+- The disease transmission step now uses a Numba-compiled kernel (`_nb_transmit`) that identifies transmitting edges in a single branchless pass and returns its result as a zero-copy view, about 1.4x faster at typical transmission densities. Effective transmissibility and susceptibility are computed directly on the raw state arrays, avoiding intermediate `Arr` wrapper allocations.
+- Extracting the UIDs of a boolean state (`Arr.true()`, `Arr.uids`, and boolean filtering) now uses a branchless Numba compaction kernel above a threshold number of elements.
+- The `numba_indexing` threshold (the array size above which Numba is used instead of NumPy for indexing) was lowered from 5000 to 2000, since Numba wins for both gather and compaction above ~2000 elements.
+
+### Other changes
+
+- `starsim.library` now exports its contents at the top level, so classes can be accessed either via their submodule (e.g. `ss.library.networks.HouseholdNet`, `ss.library.diseases.Cholera`) or directly (e.g. `ss.library.HouseholdNet`, `ss.library.Cholera`), like core Starsim.
+- Added `tests/benchmark_large.py` and associated benchmark data for tracking performance on larger simulations.
+
+### Regression information
+- The default random number values for agent-indexed draws have changed (see "Common random numbers" above); results are statistically equivalent but not bit-for-bit identical, and baselines should be regenerated.
+- `ss.RandomNet` is now approximate; use `ss.RandomExactNet` for the previous exact-degree behavior.
+- The `single_rng` option has been removed; use `ss.options.crn = False` instead.
+- The default `slot_scale` for `ss.Pregnancy` was increased from 5 to 100, which changes results for models with pregnancy.
+- *GitHub info*: PR [1378](https://github.com/starsimhub/starsim/pull/1378)
+
+
+## Version 3.4.0 (2026-06-21)
+This release introduces the **Starsim library** (`starsim.library`), which absorbs the former standalone `starsim_examples` package. This release also adds memory, reproducibility, and usability improvements along with numerous bugfixes.
+
+### The Starsim library
+- Example and reference modules that previously lived in the separate `starsim_examples` package are now bundled with Starsim in `starsim.library`, imported as `import starsim.library as ssl`. (or just used as `ss.library`). Like core Starsim, the library exports everything at the top level:
+  - Diseases: `ss.library.Cholera`, `ss.library.Ebola`, `ss.library.HIV`, `ss.library.Measles`
+  - Maternal, neonatal, and child health: `ss.library.FetalHealth`, `ss.library.MaternalInfections`, `ss.library.NeonatalSepsis`
+  - Networks: `ss.library.HouseholdNet`, `ss.library.SpatialNet`, and the theoretical/abstract networks
+- *Migration*: `ss.FetalHealth` and `ss.HouseholdNet` are no longer available at the top level. Instead of `ss.FetalHealth()` and `ss.HouseholdNet()`, use `ss.library.FetalHealth()` and `ss.library.HouseholdNet()` (or `ssl.FetalHealth()` and `ssl.HouseholdNet()` with `import starsim.library as ssl`).
+- *Migration*: `ss.MaternalNet` has been removed. It was a thin alias for the prenatal network; replace `ss.MaternalNet(...)` with `ss.PrenatalNet(...)`.
+- *Migration*: the `gonorrhea` and `syphilis` example diseases have been removed from the package (they are not part of the new library). Full, maintained STI models are available in [STIsim](https://github.com/starsimhub/stisim). Replace `ss.Gonorrhea()` with `import stisim as sti; sti.Gonorrhea()` and the same for syphilis.
+- Standalone example scripts ([LASER](https://laser.idmod.org/) comparisons, language translations, network embedding) have moved out of the package into `docs/examples`.
+
+### Memory and reproducibility
+- `ss.shrink()` (previously `ss.utils.shrink()`) is now available at the top level. Calling `sim.run(shrink=True)` (the new default) performs a lightweight shrink that clears the circular `Sim` references that otherwise block garbage collection. A full `sim.shrink()` additionally clears `sim.people`, taking a typical sim from ~MB to ~KB.
+- Shrinking was refactored to be more robust, including for distributions and mixing pools, with clearer error messages when a module fails to shrink below its expected size.
+- Distribution run caches are now cleared automatically after each `sim.run()`.
+- *Regression*: distributions now count the call and jump/reset their random state even when sampling zero agents, so common-random-number (CRN) behavior no longer depends on whether any random numbers were actually drawn. This is more correct, but may produce numerically different results in models where a distribution is sometimes sampled with an empty set of agents.
+
+### Bugfixes and improvements
+- Whereas before only interventions and analyzers could be provided as pure functions, now any module can; the function becomes the `step()` method, with the sim being the argument to the function. See [Modules.from_func](https://docs.starsim.org/api/modules.html#starsim.modules.Module.from_func) for details.
+- Fixed the `n_female` result not being calculated.
+- `dist.set()` now raises a clear error when given a parameter name that is not valid for that distribution, rather than silently ignoring it.
+- Improved the error message shown when a module overrides misses a required `super()` call.
+- Fixed `ss.MultiSim` not respecting `n_runs` in some cases.
+- Fixed `sim.loop.plot()`, and added and tested `sim.loop.plot_step_order()` for visualizing multi-timestep execution order.
+- Fixed `MultiSim.plot('single_key')` raising `AttributeError: 'Axes' object has no attribute 'flatten'` on a reduced multisim (i.e. after `reduce()`, `mean()`, or `median()`) when plotting a single result key.
+- `ss.years()` now accepts dates and date strings (and iterables of them), converting them to decimal years (e.g. `ss.years('2020-07-01')`).
+- Made `ss.parse_age_range()` more robust when parsing `'X to Y'`-style ranges.
+- Fixed the string representation of an uninitialized `ss.People` object.
+- Pinned `numpy>2`.
+- Applied an engineering uplift across the codebase: added and corrected docstrings, normalized line endings, improved error messages, and fixed assorted minor issues.
+
+### Documentation
+- Added a "getting started" guide and reorganized the API reference.
+- Clarified the documentation on inclusive vs. exclusive time.
+- Added new user-guide and tutorial pages, and updated guidance on common modeling gotchas (transmission `beta` as a probability, getting agent UIDs from states, custom-module conventions, etc.).
 - *GitHub info*: PR [1344](https://github.com/starsimhub/starsim/pull/1344)
 
 
@@ -78,7 +178,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - New results: `miscarriages`, `stillbirths`, `nnds`, `n_preterm`, `n_very_preterm`, `preterm_rate`.
 - New states on newborns: `preterm`, `very_preterm`, `neonatal_death`.
 - Removed unused `_p_miscarriage` and `_p_stillbirth` placeholder distributions.
-- **Migration**: `n_pregnancies_this_step` and `n_births_this_step` counters removed; use results directly.
+- *Migration*: `n_pregnancies_this_step` and `n_births_this_step` counters removed; use results directly (e.g. `new_pregnancies`).
 
 ### Generic congenital outcome framework
 - Added `set_congenital()` to the base `Infection` class. Diseases opt in by defining `birth_outcome_keys` and `birth_outcomes` in pars.
@@ -143,7 +243,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 ## Version 3.1.0 (2026-02-12)
-- *Regression information*: See `docs/migration/v3.0_v3.1.md` for a detailed, LLM-friendly migration guide.
+- *Migration information*: See `docs/migration/v3.0_v3.1.md` for a detailed, LLM-friendly migration guide.
 - Added new functionality to the `Pregnancy` module:
     - Renamed `make_p_fertility()` -> `make_p_conceive()`
     - Added variable durations of pregnancies and tracking of pre-term birth outcomes
@@ -606,20 +706,20 @@ This has significantly changed how modules are initialized; what was
 previously:
 
     def __init__(self, pars=None, **kwargs):
-
+    
         pars = ss.omergeleft(pars,
             dur_inf = 6,
             init_prev = 0.01,
             p_death = 0.01,
             beta = 0.5,
         )
-
+    
         par_dists = ss.omergeleft(par_dists,
             dur_inf = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death = ss.bernoulli,
         )
-
+    
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
 is now:

@@ -1,6 +1,7 @@
 """
 Test the Samples class
 """
+import io
 import sciris as sc
 import starsim as ss
 
@@ -30,7 +31,7 @@ def test_samples_no_identifier():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
-    s = ss.Samples.new(resultsdir, outputs)
+    s = ss.Samples.new(outputs, folder=resultsdir)
     return s
 
 @sc.timer()
@@ -38,7 +39,7 @@ def test_samples():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
-    s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
+    s = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir)
     return s
 
 @sc.timer()
@@ -47,7 +48,7 @@ def test_dataset():
     resultsdir.mkdir(exist_ok=True)
     for p_death in [0.25, 0.5]:
         outputs = get_outputs(p_death)
-        ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
+        ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir)
     results = ss.Dataset(resultsdir)
     return results
 
@@ -56,7 +57,7 @@ def test_verbose():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
-    s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"], verbose=False)
+    s = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir, verbose=False)
     return s
 
 @sc.timer()
@@ -64,8 +65,32 @@ def test_seed_result():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
-    s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"], verbose=False)
+    s = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir, verbose=False)
     return s[0]
+
+@sc.timer()
+def test_samples_bytesio():
+    """ Passing an io.BytesIO as fname should build the zip in-memory rather than on disk """
+    outputs = get_outputs(0.2)
+    buffer = io.BytesIO()
+    s = ss.Samples.new(outputs, identifiers=["p_death"], fname=buffer)
+
+    # The zip should have been written into the supplied buffer, not to disk
+    assert s._fname is buffer
+    assert len(buffer.getvalue()) > 0
+
+    # Data should round-trip identically to a disk-based Samples built from the same outputs
+    resultsdir = tempdir/'samples_results'
+    resultsdir.mkdir(exist_ok=True)
+    disk = ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir, verbose=False)
+    assert list(s.seeds) == list(disk.seeds)
+    assert s.id == disk.id
+    assert s[0].equals(disk[0])
+
+    # The buffer can also be re-opened directly as a Samples object
+    s2 = ss.Samples(buffer)
+    assert list(s2.seeds) == list(s.seeds)
+    return s
 
 
 if __name__ == '__main__':
@@ -74,3 +99,4 @@ if __name__ == '__main__':
     samples = test_verbose()
     seed_result = test_seed_result()
     results = test_dataset()
+    samples_mem = test_samples_bytesio()

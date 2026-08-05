@@ -4,7 +4,7 @@ jupyter: python3
 ---
 
 
-Connectors enable interactions between different modules in Starsim, particularly between disease models. They allow you to model complex epidemiological scenarios where one disease affects the transmission or progression of another disease. For example, you might want to model how having syphilis increases susceptibility to HIV, or how HIV affects the treatment outcomes of other sexually transmitted infections.
+Connectors enable interactions between different modules in Starsim, particularly between disease models. They allow you to model complex epidemiological scenarios where one disease affects the transmission or progression of another disease. For example, you might want to model how having SIS increases susceptibility to HIV, or how HIV affects the treatment outcomes of other sexually transmitted infections.
 
 ## Basic concepts
 
@@ -20,7 +20,7 @@ Here's a simple example showing how HIV and "SIS" diseases can interact, and als
 ```{python}
 import starsim as ss
 ss.options(jupyter=True)
-import starsim_examples as sse
+import starsim.library as ssl
 import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,7 +87,7 @@ class check_connector(ss.Analyzer):
         return fig
     
 # Create disease models
-hiv = sse.HIV(beta=dict(mf=0.1, random=0), init_prev=0.001)
+hiv = ssl.diseases.HIV(beta=dict(mf=0.1, random=0), init_prev=0.001)
 sis = ss.SIS(beta=dict(mf=0.0, random=0.05))
 mf = ss.MFNet(duration=ss.lognorm_ex(mean=ss.years(5), std=ss.years(5)))
 
@@ -116,67 +116,67 @@ In this example, the connector modifies HIV susceptibility based on SIS infectio
 
 ## Advanced usage with parameters
 
-For more complex interactions, you can define parameters in your connector class to control the strength and nature of the interactions. Here's an example showing bi-directional interactions between HIV and syphilis:
+For more complex interactions, you can define parameters in your connector class to control the strength and nature of the interactions. Here's an example showing bi-directional interactions between HIV and SIS:
 
 ```{python}
-class HIV_Syphilis(ss.Connector):
+class HIV_SIS(ss.Connector):
     """
-    Advanced connector showing bi-directional interactions between HIV and syphilis.
-    Models how HIV affects syphilis susceptibility/transmission and vice versa,
+    Advanced connector showing bi-directional interactions between HIV and SIS.
+    Models how HIV affects SIS susceptibility/transmission and vice versa,
     with different effects based on CD4 count (AIDS progression).
     """
     def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            label='HIV-Syphilis',
-            rel_sus_syph_hiv=2,      # People with HIV are 2x more likely to acquire syphilis
-            rel_sus_syph_aids=5,     # People with AIDS are 5x more likely to acquire syphilis
-            rel_trans_syph_hiv=1.5,  # People with HIV are 1.5x more likely to transmit syphilis
-            rel_trans_syph_aids=3,   # People with AIDS are 3x more likely to transmit syphilis
-            rel_sus_hiv_syph=2.7,    # People with syphilis are 2.7x more likely to acquire HIV
-            rel_trans_hiv_syph=2.7,  # People with syphilis are 2.7x more likely to transmit HIV
+            label='HIV-SIS',
+            rel_sus_sis_hiv=2,      # People with HIV are 2x more likely to acquire SIS
+            rel_sus_sis_aids=5,     # People with AIDS are 5x more likely to acquire SIS
+            rel_trans_sis_hiv=1.5,  # People with HIV are 1.5x more likely to transmit SIS
+            rel_trans_sis_aids=3,   # People with AIDS are 3x more likely to transmit SIS
+            rel_sus_hiv_sis=2.7,    # People with SIS are 2.7x more likely to acquire HIV
+            rel_trans_hiv_sis=2.7,  # People with SIS are 2.7x more likely to transmit HIV
         )
         self.update_pars(**kwargs)
         return
 
     def step(self):
-        """Apply HIV-syphilis interactions based on CD4 count and infection status"""
+        """Apply HIV-SIS interactions based on CD4 count and infection status"""
         diseases = self.sim.diseases
-        syph = diseases.syphilis
+        sis = diseases.sis
         hiv = diseases.hiv
         cd4 = self.sim.people.hiv.cd4
 
         # Reset relative susceptibility and transmission to baseline
-        syph.rel_sus[:] = 1.0
-        syph.rel_trans[:] = 1.0
+        sis.rel_sus[:] = 1.0
+        sis.rel_trans[:] = 1.0
         hiv.rel_sus[:] = 1.0
         hiv.rel_trans[:] = 1.0
 
-        # People with HIV are more likely to acquire syphilis
-        syph.rel_sus[cd4 < 500] = self.pars.rel_sus_syph_hiv
-        syph.rel_sus[cd4 < 200] = self.pars.rel_sus_syph_aids  # AIDS stage
+        # People with HIV are more likely to acquire SIS
+        sis.rel_sus[cd4 < 500] = self.pars.rel_sus_sis_hiv
+        sis.rel_sus[cd4 < 200] = self.pars.rel_sus_sis_aids  # AIDS stage
 
-        # People with HIV are more likely to transmit syphilis
-        syph.rel_trans[cd4 < 500] = self.pars.rel_trans_syph_hiv
-        syph.rel_trans[cd4 < 200] = self.pars.rel_trans_syph_aids
+        # People with HIV are more likely to transmit SIS
+        sis.rel_trans[cd4 < 500] = self.pars.rel_trans_sis_hiv
+        sis.rel_trans[cd4 < 200] = self.pars.rel_trans_sis_aids
 
-        # People with syphilis are more likely to acquire HIV
-        hiv.rel_sus[syph.active] = self.pars.rel_sus_hiv_syph
+        # People with SIS are more likely to acquire HIV
+        hiv.rel_sus[sis.infected] = self.pars.rel_sus_hiv_sis
 
-        # People with syphilis are more likely to transmit HIV
-        hiv.rel_trans[syph.active] = self.pars.rel_trans_hiv_syph
+        # People with SIS are more likely to transmit HIV
+        hiv.rel_trans[sis.infected] = self.pars.rel_trans_hiv_sis
         return
 
 # Create disease models
-hiv = sse.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
-syph = sse.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+hiv = ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
+sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
 
 # Create network
 mf = ss.MFNet()
 
 # Configure simulation parameters
 kw = dict(
-    diseases=[hiv, syph], 
+    diseases=[hiv, sis], 
     networks=mf,
     n_agents=2000,
     verbose=0
@@ -184,7 +184,7 @@ kw = dict(
 
 # Create simulations
 s1 = ss.Sim(label='Without connector', **kw)
-s2 = ss.Sim(label='With connector', connectors=HIV_Syphilis(), **kw)
+s2 = ss.Sim(label='With connector', connectors=HIV_SIS(), **kw)
 
 # Run simulations
 msim = ss.parallel(s1, s2)
@@ -193,8 +193,8 @@ msim = ss.parallel(s1, s2)
 print("\nFinal infection counts:")
 print(f"HIV infections - Without connector: {s1.results.hiv.n_infected[-1]}")
 print(f"HIV infections - With connector: {s2.results.hiv.n_infected[-1]}")
-print(f"Syphilis infections - Without connector: {s1.results.syphilis.n_infected[-1]}")
-print(f"Syphilis infections - With connector: {s2.results.syphilis.n_infected[-1]}")
+print(f"SIS infections - Without connector: {s1.results.sis.n_infected[-1]}")
+print(f"SIS infections - With connector: {s2.results.sis.n_infected[-1]}")
 
 # Plot comparative results
 fig = plt.figure(figsize=(12, 4))
@@ -208,11 +208,11 @@ plt.xlabel('Year')
 plt.ylabel('Number infected')
 plt.legend()
 
-# Syphilis infections
+# SIS infections
 plt.subplot(122)
-plt.plot(s1.timevec, s1.results.syphilis.n_infected, label='Without connector', alpha=0.8)
-plt.plot(s2.timevec, s2.results.syphilis.n_infected, label='With connector', alpha=0.8)
-plt.title('Syphilis infections over time')
+plt.plot(s1.timevec, s1.results.sis.n_infected, label='Without connector', alpha=0.8)
+plt.plot(s2.timevec, s2.results.sis.n_infected, label='With connector', alpha=0.8)
+plt.title('SIS infections over time')
 plt.xlabel('Year')
 plt.ylabel('Number infected')
 plt.legend()
@@ -228,13 +228,13 @@ This more complex example demonstrates several important concepts:
 
 ## Combining connectors with interventions
 
-Connectors can work alongside interventions to model complex treatment scenarios. Here's an example that combines the HIV-syphilis connector with a treatment intervention:
+Connectors can work alongside interventions to model complex treatment scenarios. Here's an example that combines the HIV-SIS connector with a treatment intervention:
 
 ```{python}
-class Penicillin(ss.Intervention):
+class TreatSIS(ss.Intervention):
     """
-    Penicillin treatment intervention for syphilis.
-    Also resets HIV transmission/susceptibility parameters when syphilis is cured.
+    TreatSIS treatment intervention for SIS.
+    Also resets HIV transmission/susceptibility parameters when SIS is cured.
     """
     
     def __init__(self, year=2020, prob=0.8):
@@ -246,10 +246,10 @@ class Penicillin(ss.Intervention):
     def step(self):
         sim = self.sim
         if sim.now >= self.year:
-            syphilis = sim.diseases.syphilis
+            sis = sim.diseases.sis
 
             # Define who is eligible for treatment (currently infected)
-            eligible_ids = syphilis.infected.uids
+            eligible_ids = sis.infected.uids
             n_eligible = len(eligible_ids)
 
             if n_eligible > 0:
@@ -257,11 +257,11 @@ class Penicillin(ss.Intervention):
                 is_treated = np.random.rand(n_eligible) < self.prob
                 treat_ids = eligible_ids[is_treated]
 
-                # Cure syphilis
-                syphilis.infected[treat_ids] = False
-                syphilis.susceptible[treat_ids] = True
+                # Cure SIS
+                sis.infected[treat_ids] = False
+                sis.susceptible[treat_ids] = True
 
-                # Reset HIV parameters (removes syphilis co-infection effects)
+                # Reset HIV parameters (removes SIS co-infection effects)
                 sim.diseases.hiv.rel_sus[treat_ids] = 1.0
                 sim.diseases.hiv.rel_trans[treat_ids] = 1.0
         return
@@ -271,8 +271,8 @@ sims = {}
 
 # Base configuration
 base_kw = dict(
-    diseases=[sse.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2),
-              sse.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)], 
+    diseases=[ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2),
+              ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)], 
     networks=ss.MFNet(),
     n_agents=2000,
     verbose=0
@@ -283,12 +283,12 @@ sims['baseline'] = ss.Sim(label='Baseline (no connector, no treatment)', **base_
 
 # 2. Connector only
 sims['connector'] = ss.Sim(label='With connector only', 
-                          connectors=HIV_Syphilis(), **base_kw)
+                          connectors=HIV_SIS(), **base_kw)
 
 # 3. Connector + treatment
 sims['both'] = ss.Sim(label='Connector + treatment', 
-                     connectors=HIV_Syphilis(), 
-                     interventions=Penicillin(year=2020, prob=0.8), **base_kw)
+                     connectors=HIV_SIS(), 
+                     interventions=TreatSIS(year=2020, prob=0.8), **base_kw)
 
 # Run all simulations
 msim = ss.parallel(*sims.values())
@@ -305,10 +305,10 @@ ax[0,0].set_xlabel('Year')
 ax[0,0].set_ylabel('Number infected')
 ax[0,0].legend()
 
-# Syphilis infections
-ax[0,1].set_title('Syphilis infections over time')
+# SIS infections
+ax[0,1].set_title('SIS infections over time')
 for sim in sims.values():
-    ax[0,1].plot(sim.timevec, sim.results.syphilis.n_infected, label=sim.label, alpha=0.8)
+    ax[0,1].plot(sim.timevec, sim.results.sis.n_infected, label=sim.label, alpha=0.8)
 ax[0,1].axvline(2020, color='red', linestyle='--', alpha=0.5, label='Treatment start')
 ax[0,1].set_xlabel('Year')
 ax[0,1].set_ylabel('Number infected')
@@ -322,10 +322,10 @@ ax[1,0].set_xlabel('Year')
 ax[1,0].set_ylabel('Cumulative infections')
 ax[1,0].legend()
 
-# Cumulative syphilis infections
-ax[1,1].set_title('Cumulative syphilis infections')
+# Cumulative SIS infections
+ax[1,1].set_title('Cumulative SIS infections')
 for sim in sims.values():
-    ax[1,1].plot(sim.timevec, sim.results.syphilis.cum_infections, label=sim.label, alpha=0.8)
+    ax[1,1].plot(sim.timevec, sim.results.sis.cum_infections, label=sim.label, alpha=0.8)
 ax[1,1].set_xlabel('Year')
 ax[1,1].set_ylabel('Cumulative infections')
 ax[1,1].legend()
@@ -337,13 +337,13 @@ plt.show()
 sc.heading("Final results summary:")
 for sim in sims.values():
     hiv_final = sim.results.hiv.n_infected[-1]
-    syph_final = sim.results.syphilis.n_infected[-1]
+    sis_final = sim.results.sis.n_infected[-1]
     hiv_cum = sim.results.hiv.cum_infections[-1]
-    syph_cum = sim.results.syphilis.cum_infections[-1]
+    sis_cum = sim.results.sis.cum_infections[-1]
     print(f"{sim.label}:")
     print(f"  HIV: {hiv_final:3.0f} current, {hiv_cum:4.0f} cumulative")
-    print(f"  Syphilis: {syph_final:3.0f} current, {syph_cum:4.0f} cumulative")
+    print(f"  SIS: {sis_final:3.0f} current, {sis_cum:4.0f} cumulative")
 ```
 
-This example demonstrates how interventions and connectors work together. The treatment intervention not only cures syphilis but also resets the HIV transmission parameters, effectively removing the co-infection effects when syphilis is treated.
+This example demonstrates how interventions and connectors work together. The treatment intervention not only cures SIS but also resets the HIV transmission parameters, effectively removing the co-infection effects when SIS is treated.
 

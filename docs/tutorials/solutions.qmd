@@ -4,7 +4,7 @@ jupyter: python3
 ---
 
 
-These are the solutions to the problems from each of the tutorials. (Note: Some solutions are still pending, but [email us](mailto:info@starsim.org) if you're impatient!)
+These are the solutions to the exercises from each of the tutorials. Many of these exercises are open-ended, so these are just *example* solutions — there are often many equally valid approaches. If you get stuck or want to discuss alternatives, [email us](mailto:info@starsim.org)!
 
 
 <div class="alert alert-info">
@@ -126,9 +126,37 @@ answer = sim.results.sir.cum_infections[-1]
 print(f'Cumulative infections over one year: {answer}')
 ```
 
-## Question 2
+### Question 2
 
-Solution pending.
+**Q: Whether an epidemic 'takes off' depends to a large extent on the basic reproduction number, which in this kind of model depends on `beta`, `n_contacts`, and `dur_inf`. Experiment with different values for each and compare the trajectory of `sim.results.sir.n_infected`.**
+
+A: All three parameters increase transmission, so increasing any of them makes the epidemic grow faster and larger. The cleanest way to see this is to write a small helper that builds a sim for a given set of parameters, then compare them:
+
+```{python}
+import starsim as ss
+import sciris as sc
+
+def make_sim(beta=0.05, n_contacts=10, dur_inf=10):
+    pars = sc.objdict(
+        n_agents = 5_000,
+        networks = sc.objdict(type='random', n_contacts=n_contacts),
+        diseases = sc.objdict(type='sir', init_prev=0.01, beta=beta, dur_inf=dur_inf),
+        verbose = 0,
+    )
+    return ss.Sim(pars, label=f'beta={beta}, n_contacts={n_contacts}, dur_inf={dur_inf}')
+
+# Vary each parameter in turn, relative to the baseline
+sims = [
+    make_sim(),               # Baseline
+    make_sim(beta=0.10),      # Higher transmissibility
+    make_sim(n_contacts=20),  # More contacts
+    make_sim(dur_inf=20),     # Longer infectious period
+]
+msim = ss.parallel(sims)
+msim.plot('sir_n_infected')
+```
+
+Each of the three modified scenarios produces a larger, faster epidemic than the baseline, illustrating that they all push the reproduction number in the same direction.
 
 ## T3 Solutions
 
@@ -159,15 +187,197 @@ print(f'Population size in year {pars.stop}: {answer} million')
 
 ## T4 Solutions
 
+These solutions build on the `SEIR` class from the tutorial, so we define it again here:
+
+```{python}
+import numpy as np
+import starsim as ss
+
+class SEIR(ss.SIR):
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__()
+        self.define_pars(dur_exp=ss.lognorm_ex(0.5))
+        self.update_pars(pars, **kwargs)
+        self.define_states(
+            ss.BoolState('exposed', label='Exposed'),
+            ss.FloatArr('ti_exposed', label='Time of exposure'),
+        )
+        return
+
+    @property
+    def infectious(self):
+        return self.infected | self.exposed
+
+    def step_state(self):
+        super().step_state()
+        infected = self.exposed & (self.ti_infected <= self.ti)
+        self.exposed[infected] = False
+        self.infected[infected] = True
+        return
+
+    def step_die(self, uids):
+        super().step_die(uids)
+        self.exposed[uids] = False
+        return
+
+    def set_prognoses(self, uids, sources=None):
+        super().set_prognoses(uids, sources)
+        ti = self.ti
+        self.susceptible[uids] = False
+        self.exposed[uids] = True
+        self.ti_exposed[uids] = ti
+        p = self.pars
+        dur_exp = p.dur_exp.rvs(uids)
+        self.ti_infected[uids] = ti + dur_exp
+        dur_inf = p.dur_inf.rvs(uids)
+        will_die = p.p_death.rvs(uids)
+        self.ti_recovered[uids[~will_die]] = ti + dur_inf[~will_die]
+        self.ti_dead[uids[will_die]] = ti + dur_inf[will_die]
+        return
+```
+
 ### Question 1
 
-Solution pending.
+**Q: Try different values of `dur_exp` in the SEIR model — how does it affect the epidemic curve?**
+
+A: A longer exposed (latent) period delays the onset of infectiousness, so the epidemic peak comes later and is somewhat lower and broader:
+
+```{python}
+sims = []
+for dur_exp in [0.5, 2, 5]:
+    seir = SEIR(dur_exp=ss.lognorm_ex(dur_exp))
+    sims.append(ss.Sim(diseases=seir, networks='random', verbose=0, label=f'dur_exp={dur_exp}'))
+msim = ss.parallel(sims)
+msim.plot('seir_n_infected')
+```
+
+### Question 2
+
+**Q: Adapt the SEIR example to be SEIRS (where recovered people can become susceptible again).**
+
+A: We add a duration of immunity (`dur_imm`) and, in `step_state()`, move recovered agents back to susceptible once their immunity has waned. We schedule the waning time in `set_prognoses()` for everyone who is going to recover:
+
+```{python}
+class SEIRS(SEIR):
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__()
+        self.define_pars(dur_imm=ss.lognorm_ex(10))  # Duration of immunity after recovery
+        self.update_pars(pars, **kwargs)
+        self.define_states(ss.FloatArr('ti_susceptible'))
+        return
+
+    def step_state(self):
+        super().step_state()
+        # Recovered agents whose immunity has waned return to susceptible
+        waning = self.recovered & (self.ti_susceptible <= self.ti)
+        self.recovered[waning] = False
+        self.susceptible[waning] = True
+        return
+
+    def set_prognoses(self, uids, sources=None):
+        super().set_prognoses(uids, sources)
+        # Schedule waning of immunity for those who will recover
+        recovering = uids[~np.isnan(self.ti_recovered[uids])]
+        dur_imm = self.pars.dur_imm.rvs(recovering)
+        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + dur_imm
+        return
+
+seirs = SEIRS()
+sim = ss.Sim(diseases=seirs, networks='random', dur=100, verbose=0)
+sim.run()
+sim.plot('seirs')
+```
+
+Unlike the SEIR model, the SEIRS model can sustain endemic transmission, because the pool of susceptibles is continually replenished as immunity wanes.
+
+### Question 3
+
+**Q: Can you create a model with two strains of the same disease that provide partial cross-immunity?**
+
+A: One clean way to do this is to model the two strains as two separate diseases, and use a [connector](../user_guide/modules_connectors.qmd) to couple them: recovery from one strain reduces susceptibility to the other. Here we reset and re-apply the cross-protection each timestep so it always reflects the current recovered population:
+
+```{python}
+# Two independent SIR "strains" (strain 2 is seeded slightly later)
+strain1 = ss.SIR(name='strain1', beta=0.1, init_prev=0.01)
+strain2 = ss.SIR(name='strain2', beta=0.1, init_prev=0.0)
+
+class CrossImmunity(ss.Connector):
+    """ Recovery from one strain reduces susceptibility to the other """
+    def __init__(self, protection=0.5, **kwargs):
+        super().__init__()
+        self.define_pars(protection=protection)
+        self.update_pars(**kwargs)
+        return
+
+    def step(self):
+        s1 = self.sim.diseases.strain1
+        s2 = self.sim.diseases.strain2
+        factor = 1 - self.pars.protection
+        s1.rel_sus[:] = 1.0  # Reset each step...
+        s2.rel_sus[:] = 1.0
+        s1.rel_sus[s2.recovered.uids] = factor  # ...then apply cross-protection
+        s2.rel_sus[s1.recovered.uids] = factor
+        return
+
+sim = ss.Sim(
+    diseases = [strain1, strain2],
+    networks = 'random',
+    connectors = CrossImmunity(protection=0.5),
+    verbose = 0,
+)
+sim.run()
+sim.plot('strain1')
+```
+
+Higher values of `protection` make it harder for the second strain to spread through people who have already recovered from the first.
 
 ## T5 Solutions
 
 ### Question 1
 
-Solution pending.
+**Q: Adapt the HIV example to include both MF and MSM transmission.**
+
+A: We add an `ss.MSMNet` alongside the `ss.MFNet`, and specify a `beta` for each network in the disease's `beta` dictionary:
+
+```{python}
+import starsim as ss
+import starsim.library as ssl
+
+# HIV transmitting on both networks
+hiv = ssl.diseases.HIV(beta={'mf': [0.05, 0.025], 'msm': [0.08, 0.08]})
+
+# Heterosexual and MSM networks
+mf  = ss.MFNet(duration=1/24, acts=80)
+msm = ss.MSMNet(duration=1/24, acts=80)
+
+pars = dict(start=2000, dur=20, dt=1/12, verbose=0)
+sim = ss.Sim(pars=pars, diseases=hiv, networks=[mf, msm])
+sim.run()
+sim.plot('hiv')
+```
+
+### Question 2
+
+**Q: Modify the `age_mf` network to have different age bins and mixing probabilities.**
+
+A: This exercise is open-ended and depends on the assortativity you want to model. The general approach is to override `add_pairs()` in a subclass of `ss.MFNet` (as sketched in the tutorial), and within it, choose partners using your own age-bin logic — for example, by binning agents by age and drawing partners preferentially from nearby bins. The [Networks user guide](../user_guide/modules_networks.qmd) shows worked examples of age-structured mixing, which is the most robust starting point.
+
+### Question 3
+
+**Q: Compare random vs age-structured networks — how do they affect epidemic dynamics?**
+
+A: We can run the same SIR disease on a structureless `RandomNet` and on the age-structured `MFNet`, and compare the infection trajectories:
+
+```{python}
+s_rand = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.RandomNet(n_contacts=10),
+                n_agents=5000, verbose=0, label='Random')
+s_age  = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.MFNet(),
+                n_agents=5000, verbose=0, label='Age-structured (MF)')
+msim = ss.parallel(s_rand, s_age)
+msim.plot('sir_n_infected')
+```
+
+The age-structured network restricts who can contact whom (and the `MFNet` only connects agents in partnerships), so it typically produces slower, smaller epidemics than a random network where every agent can mix freely.
 
 ## T6 Solutions
 

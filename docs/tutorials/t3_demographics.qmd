@@ -9,7 +9,7 @@ jupyter: python3
 ```
 
 
-There are a few basic ways to add vital dynamics to your model, e.g. 
+There are a few basic ways to add vital dynamics to your model, e.g.
 
 ```{python}
 import starsim as ss
@@ -56,7 +56,7 @@ sim = ss.Sim(pars={'total_pop': 200e6, 'n_agents': 50e3}, demographics=demograph
 ```
 
 ## Using realistic vital demographics
-For more realistic demographics, we can also pass in a file that has birth or death rates over time and by age/sex. There are examples of these files in the `test_data` folder. Here's how we would read them in and construct realistic vital dynamics for Nigeria: 
+For more realistic demographics, we can also pass in a file that has birth or death rates over time and by age/sex. There are examples of these files in the `test_data` folder. Here's how we would read them in and construct realistic vital dynamics for Nigeria:
 
 ```{python}
 import starsim as ss

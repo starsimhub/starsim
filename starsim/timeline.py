@@ -38,13 +38,23 @@ class Timeline:
     The `Timeline` object also has the following attributes/methods:
 
     - `ti` (int): the current timestep
-    - `npts` (int): the total number of timesteps
-    - `now()` (`ss.date`/float/str): the current time, based on the timevec by default or a different vector if specified
+    - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
+    - `now()` (`ss.date`/float/str): the current time, based on tvec by default or a different vector if specified
 
-    **Examples**:
+    Note: the time vectors include *both* the start and stop endpoints, so `npts`
+    (the number of time points) is one more than the number of steps taken. For
+    example, `start=0, stop=1, dt=1` runs a single step but produces two time points
+    (`[0, 1]`), since the state is recorded at both the start and the end. Specifying
+    the length via `dur` is exactly equivalent to specifying `stop` (internally,
+    `stop = start + dur`), so e.g. `start=2000, dur=1` and `start=2000, stop=2001`
+    produce identical timelines. See the time user guide for the rationale behind
+    the inclusive endpoint.
 
+    Examples:
+        ```python
         t1 = ss.Timeline(start=2000, stop=2020, dt=1.0)
         t2 = ss.Timeline(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
+        ```
     """
 
     # Allowable time arguments
@@ -99,6 +109,7 @@ class Timeline:
 
     @property
     def npts(self):
+        """ The number of time points (inclusive of both endpoints, so one more than the number of steps) """
         try:
             return self.tvec.shape[0]
         except:
@@ -161,23 +172,24 @@ class Timeline:
         Get the current simulation time
 
         Args:
-            key (str): which type of time to get: "time" (default), "year", "date", "tvec", or "str"
+            key (str): which type of time to get: "tvec" (default), "time", "year", "date", or "str"
 
-        **Examples**:
-
+        Examples:
+            ```python
             t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt='week')
             t.ti = 25
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
             t.now('str') # Returns '2021-06-25'
+            ```
         """
         # Preprocessing
         to_str = False
         if key in [None, 'none', 'str']: # All of these are the default
             if key == 'str':
                 to_str = True
-            key = 'time'
+            key = 'tvec' # Return a typed value (ss.date or ss.dur)
         if not isinstance(key, str):
             errormsg = f'Key must be a string, not {key}'
             raise TypeError(errormsg)

@@ -8,19 +8,21 @@
 
 Starsim builds on our previous suite of disease-specific models, which included [Covasim](https://covasim.org), [HPVsim](https://hpvsim.org), and [FPsim](https://fpsim.org). It can model different levels of detail, including agent-based, metapopulation, and compartmental modeling. It is designed to be simple and fast enough to enable rapid or exploratory analyses (from project start to calibrated model and scenario analyses in days to weeks), while also being flexible enough to support complex, long-term research projects (such as intrahost immunity, data-driven spatial network transmission, and health economics optimization).
 
-Examples of health areas that have already been [modeled using Starsim](https://docs.starsim.org/user_guide/intro_models.html) include [sexually transmitted infections](https://stisim.org) (HIV, HPV, and syphilis, including co-transmission), respiratory infections ([tuberculosis](https://starsim.org/tbsim) and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as [family planning](https://fpsim.org) and malnutrition). 
+Examples of health areas that have already been [modeled using Starsim](https://docs.starsim.org/user_guide/intro_models.html) include [sexually transmitted infections](https://stisim.org) (HIV, HPV, and syphilis, including co-transmission), respiratory infections ([tuberculosis](https://starsim.org/tbsim) and RSV), other infectious diseases (Ebola and cholera), and underlying determinants of health (such as [family planning](https://fpsim.org) and malnutrition).
 
-For more information, see the [documentation](https://docs.starsim.org). For Starsim for R, see [r.starsim.org](https://r.starsim.org). For Starsim's AI tools, see [ai.starsim.org](https://ai.starsim.org).
+For more information, see the [documentation](https://docs.starsim.org) or the [code](https://github.com/starsimhub/starsim). For Starsim for R, see [r.starsim.org](https://r.starsim.org). For Starsim's AI tools, see [ai.starsim.org](https://ai.starsim.org).
 
 
 ## Requirements
 
-Python 3.10-3.14 or R.
+Python 3.11-3.14 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as [uv](https://github.com/astral-sh/uv) or [Miniconda](https://docs.anaconda.com/miniconda/).
 
 
 ## Installation
+
+If you're new to Python, check out our [getting started guide](https://starsim.org/getting-started/).
 
 ### Python
 
@@ -152,7 +154,7 @@ The submodules of the Starsim folder are as follows:
 - `utils.py`: Helper functions.
 - `version.py`: Version, date, and license information.
 
-Starsim also includes a `starsim_examples` folder, which contains definitions of different examples of diseases, including STIs, Ebola, and cholera. **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. [STIsim](https://stisim.org).
+Starsim also includes a `starsim.library` subpackage (imported as `import starsim.library as ssl`), which contains example and reference modules: diseases (e.g. `ssl.diseases.Cholera`, `ssl.diseases.Ebola`, `ssl.diseases.HIV`), networks (e.g. `ssl.networks.HouseholdNet`), and maternal/newborn/child health modules (e.g. `ssl.mnch.FetalHealth`). **Note**: these are illustrative examples only for demonstrating Starsim usage and functionality; for actual scientific research, please see other Starsim models, e.g. [STIsim](https://stisim.org).
 
 ## Contributing
 

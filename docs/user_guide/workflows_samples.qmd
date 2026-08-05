@@ -17,11 +17,9 @@ Essentially, if we think of the processed results of a model run as being
 - A collection of scalar outputs (e.g., cumulative infections, total deaths)
 - A dataframe of time-varying outputs (e.g., new diagnoses per day, number of people on treatment each day)
 
-then the classes `Dataset` and `Samples` manage collections of these results. In particular, the `Samples` class manages different random samples of the same parameters, and the `Dataset` class manages a collection of `Samples`. 
+then the classes `Dataset` and `Samples` manage collections of these results. In particular, the `Samples` class manages different random samples of the same parameters, and the `Dataset` class manages a collection of `Samples`.
 
-<div class="alert alert-block alert-info">    
-These classes are particularly designed to facilitate working with tens of thousands of simulation runs, where other approaches such as those based on the MultiSim class may not be feasible.
-</div>
+<div class="alert alert-block alert-info"> These classes are particularly designed to facilitate working with tens of thousands of simulation runs, where other approaches such as those based on the MultiSim class may not be feasible. </div>
 
 ```{python}
 import starsim as ss
@@ -55,9 +53,7 @@ A `Sim` instance is (in general) too large and complex to efficiently store on d
 These outputs can each be produced from a `Sim` - the former has a tabular structure, and the latter has a dictionary structure (which can later be assembled into a table where the rows correspond to each simulation). The `export_df` method is a quick way to obtain a dataframe with the appropriate structure retaining all results from the `Sim`.
 
 
-<div class="alert alert-block alert-info">    
-In real-world use, it is often helpful to write your own function to extract a dataframe of simulation outputs, because typically some of the outputs need to be extracted from custom Analyzers.
-</div>
+<div class="alert alert-block alert-info"> In real-world use, it is often helpful to write your own function to extract a dataframe of simulation outputs, because typically some of the outputs need to be extracted from custom Analyzers. </div>
 
 ```{python}
 sim.to_df()
@@ -76,9 +72,7 @@ summary['cum_deaths'] = sum(sim.results.new_deaths)
 summary
 ```
 
-<div class="alert alert-warning alert-info">    
-Notice how in the example above, the summary contains both simulation inputs (seed, probability of death) as well as simulation outputs (total infections, total deaths). The simulation summary should contain sufficient information about the simulation inputs to identify the simulation. The seed should generally be present. The other inputs normally correspond to variables that scenarios are being run over. In this example, we will run scenarios comparing simulations with different probabilities of death. Therefore, we need to include the death probability in the simulation summary. 
-</div>
+<div class="alert alert-warning alert-info"> Notice how in the example above, the summary contains both simulation inputs (seed, probability of death) as well as simulation outputs (total infections, total deaths). The simulation summary should contain sufficient information about the simulation inputs to identify the simulation. The seed should generally be present. The other inputs normally correspond to variables that scenarios are being run over. In this example, we will run scenarios comparing simulations with different probabilities of death. Therefore, we need to include the death probability in the simulation summary. </div>
 
 ### Running the model
 
@@ -86,7 +80,7 @@ For usage at scale, the steps of creating a simulation, running it and producing
 
 ```{python}
 def get_sim(seed, p_death):
-    ppl = ss.People(5000)
+    ppl = ss.People(2000)
     net = ss.RandomNet(n_contacts=ss.poisson(5))
     sir = ss.SIR(p_death=p_death)
     sim = ss.Sim(people=ppl, networks=net, diseases=sir, rand_seed=seed)
@@ -107,9 +101,7 @@ def run_sim(seed, p_death):
     return df, summary
 ```
 
-<div class="alert alert-success">    
-The functions above could be combined into a single function. However, in real world usage it is often convenient to be able to construct a simulation independently of running it (e.g., for diagnostic purposes or to allow running the sim in a range of different ways). The suggested structure above, with a <code>get_sim()</code> function and a <code>run_sim()</code> function are recommended as standard practice.
-</div>
+<div class="alert alert-success"> The functions above could be combined into a single function. However, in real world usage it is often convenient to be able to construct a simulation independently of running it (e.g., for diagnostic purposes or to allow running the sim in a range of different ways). The suggested structure above, with a <code>get_sim()</code> function and a <code>run_sim()</code> function are recommended as standard practice. </div>
 
 Now running a simulation for a given beta/seed value and returning the processed outputs can be done in a single step:
 
@@ -119,7 +111,7 @@ df, summary = run_sim(0, 0.2);
 summary
 ```
 
-We can produce all of the samples associated with a scenario by iterating over the input seed values. This is being done in a basic loop here, but could be done in more sophistical ways to leverage parallel computing (e.g., with `sc.parallelize` for single host parallelization, or with `celery` for distributed computation). 
+We can produce all of the samples associated with a scenario by iterating over the input seed values. This is being done in a basic loop here, but could be done in more sophistical ways to leverage parallel computing (e.g., with `sc.parallelize` for single host parallelization, or with `celery` for distributed computation).
 
 ```{python}
 # Run a collection of sims
@@ -135,17 +127,15 @@ We have now produced simulation outputs (dataframes and summary statistics) for 
 ```{python}
 resultsdir = Path('results')
 resultsdir.mkdir(exist_ok=True, parents=True)
-ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
+ss.Samples.new(outputs, identifiers=["p_death"], folder=resultsdir)
 list(resultsdir.iterdir())
 ```
 
 Notice that a list of `identifiers` should be passed to the `Samples` constructor. This is a list of keys in the simulation summary dictionaries that identifies the scenario. These would be model inputs rather than model outputs, and they should be the same for all of the outputs passed into the `Samples` object. If no file name is explicitly provided, the file will automatically be assigned a name based on the identifiers.
 
-<div class="alert alert-success">    
-The <code>Samples</code> file internally contains metadata recording the identifiers. When <code>Samples</code> are accessed using the <code>Dataset</code> class, they can be accessed via the internal metadata. Therefore for a typical workflow, the file name largely doesn't matter, and it usually doesn't need to be manually specified.
-</div>
+<div class="alert alert-success"> The <code>Samples</code> file internally contains metadata recording the identifiers. When <code>Samples</code> are accessed using the <code>Dataset</code> class, they can be accessed via the internal metadata. Therefore for a typical workflow, the file name largely doesn't matter, and it usually doesn't need to be manually specified. </div>
 
-The saved file can be loaded and accessed via the `Samples` class. **Importantly, individual files can be extracted from a `.zip` file without decompressing the entire archive**. This means that loading the summary dataframe and using it to selectively load the full outputs for individual runs can be done efficiently. For example, loading retrieving a single result from a `Samples` file would take a similar amount of time regardless of whether the file contained 10 samples or 100000 samples. 
+The saved file can be loaded and accessed via the `Samples` class. **Importantly, individual files can be extracted from a `.zip` file without decompressing the entire archive**. This means that loading the summary dataframe and using it to selectively load the full outputs for individual runs can be done efficiently. For example, loading retrieving a single result from a `Samples` file would take a similar amount of time regardless of whether the file contained 10 samples or 100000 samples.
 
 ```{python}
 # Load the samples
@@ -165,7 +155,7 @@ Each simulation is uniquely identified by its seed, and the time series datafram
 res[0]
 ```
 
-The dataframes in the `Samples` object are cached, so that the dataframes don't all need to be loaded in order to start working with the file. The first time a dataframe is accessed, it will be loaded from disk. Subsequent requests for the dataframe will return a cached version instead. The cached dataframe is copied each time it is retrieved, to prevent accidentally modifying the original data. 
+The dataframes in the `Samples` object are cached, so that the dataframes don't all need to be loaded in order to start working with the file. The first time a dataframe is accessed, it will be loaded from disk. Subsequent requests for the dataframe will return a cached version instead. The cached dataframe is copied each time it is retrieved, to prevent accidentally modifying the original data.
 
 ## Common analysis operations
 
@@ -233,9 +223,7 @@ res2 = res.copy()
 res2.summary = res.summary.loc[res['cum_infections']>4900]
 ```
 
-<div class="alert alert-warning">    
-Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only deep copies the summary dataframe. It does not duplicate the time series dataframes or the cache. For <code>Samples</code> objects, it is therefore generally preferable to use <code>.copy()</code>.
-</div>
+<div class="alert alert-warning"> Unlike <code>sc.dcp()</code>, copying using the <code>.copy()</code> method only deep copies the summary dataframe. It does not duplicate the time series dataframes or the cache. For <code>Samples</code> objects, it is therefore generally preferable to use <code>.copy()</code>. </div>
 
 Now notice that there are fewer samples, and the seeds have been filtered:
 
@@ -317,7 +305,7 @@ with sc.Timer():
         continue
 ```
 
-The `preload` option populates the entire cache in advance. This makes creating the `Samples` object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards. 
+The `preload` option populates the entire cache in advance. This makes creating the `Samples` object slower, but operating on the dataframes afterwards will be consistently fast. This type of usage can be useful when wanting to load large files in the background and then interactively work with them afterwards.
 
 ```{python}
 with sc.Timer():
@@ -384,12 +372,12 @@ for file_path in resultsdir.glob('*'):
 
 ```{python}
 # Run the sweep over initial and p_death
-n = 10
+n = 5
 seeds = np.arange(n)
 for init_prev in initials:
     for p_death in p_deaths:
         outputs = [run_sim(seed, init_prev=init_prev, p_death=p_death) for seed in seeds]
-        ss.Samples.new(resultsdir, outputs, ["p_death", "initial"])
+        ss.Samples.new(outputs, identifiers=["p_death", "initial"], folder=resultsdir)
 ```
 
 The results folder now contains a collection of saved `Samples` objects. Notice how the automatically selected file names now contain both the `p_death` value and the `initial` value, because they were both specified as identifiers. We can load one of these objects in to see how these identifiers are stored and accessed inside the `Samples` class:

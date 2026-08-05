@@ -21,11 +21,12 @@ class ndict(sc.objdict):
         strict (bool): If True, only items with the specified attribute will be accepted.
         overwrite (bool): whether to allow adding a key when one has already been added
 
-    **Examples**:
-
-        networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
-        networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
+    Examples:
+        ```python
+        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
+        ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
         super().__init__()
@@ -69,7 +70,13 @@ class ndict(sc.objdict):
         elif valid is None:
             pass  # Nothing to do
         else:
-            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+            if isinstance(arg, ss.Module) and not hasattr(arg, self._nameattr):
+                # A Module missing its name attribute almost always means super().__init__() was not called
+                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "{self._nameattr}" attribute. '
+                            f'This usually means super().__init__() was not called in the module\'s __init__() method; '
+                            f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
+            else:
+                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
         return self
 
@@ -105,7 +112,8 @@ class ndict(sc.objdict):
             default (obj): what to return if not found (default None)
             match_case (bool): if False (default), ignore case with string matching
 
-        **Example**:
+        Examples:
+            ```python
             sim = ss.Sim(diseases=ss.SIR(name='MySIR'), networks='random')
             sim.run()
 
@@ -113,6 +121,7 @@ class ndict(sc.objdict):
             sim.diseases.get('MySIR')
             sim.diseases.get('mysir')
             sim.diseases.get(ss.SIR)
+            ```
         """
         # Handle strings
         if isinstance(key, str):
@@ -248,8 +257,8 @@ def parse_age_range(age_string) -> tuple:
     Parse an age range string into lower and upper bounds.
 
     Extracts the numeric bounds from a variety of age range formats. Note that
-    bracket/interval notation (e.g. ``[15,25)`` vs ``(15,25]``) is accepted but
-    the brackets are stripped — all formats return a plain ``(lower, upper)``
+    bracket/interval notation (e.g. `[15,25)` vs `(15,25]`) is accepted but
+    the brackets are stripped — all formats return a plain `(lower, upper)`
     tuple. To get a boolean mask that respects bracket semantics (inclusive vs
     exclusive bounds), use :func:`apply_age_range` instead.
 
@@ -263,18 +272,18 @@ def parse_age_range(age_string) -> tuple:
         (15.0, 25.0)
 
     Supported formats:
-        - ``'5-9'`` or ``'5 to 9'``
-        - ``'<5'`` — returns ``(0.0, 5.0)``
-        - ``'95+'`` — returns ``(95.0, np.inf)``
-        - ``'>95'`` — returns ``(95.0, np.inf)``
-        - ``'[15,25)'``, ``'(15,25]'``, ``'[15,25]'``, ``'(15,25)'`` — bracket
-          notation; brackets are stripped, returns ``(15.0, 25.0)`` in all cases
+        - `'5-9'` or `'5 to 9'`
+        - `'<5'` — returns `(0.0, 5.0)`
+        - `'95+'` — returns `(95.0, np.inf)`
+        - `'>95'` — returns `(95.0, np.inf)`
+        - `'[15,25)'`, `'(15,25]'`, `'[15,25]'`, `'(15,25)'` — bracket
+          notation; brackets are stripped, returns `(15.0, 25.0)` in all cases
 
     Args:
         age_string: a string specifying an age range
 
     Returns:
-        A tuple ``(lower, upper)`` as floats.
+        A tuple `(lower, upper)` as floats.
     """
     s = str(age_string).strip()
 
@@ -299,8 +308,9 @@ def parse_age_range(age_string) -> tuple:
             age_lower = float(s[1:])
             age_upper = np.inf
         elif 'to' in s:
-            age_lower = float(s.split('to')[0])
-            age_upper = float(s.split('to')[1])
+            parts = s.split('to')
+            age_lower = float(parts[0])
+            age_upper = float(parts[1])
         else:
             raise ValueError(f'Cannot parse age range: {age_string!r}')
 
@@ -314,17 +324,17 @@ def parse_age_range(age_string) -> tuple:
 
 def apply_age_range(age_string, arr):
     """
-    Return a boolean mask for values in ``arr`` that fall within the age range.
+    Return a boolean mask for values in `arr` that fall within the age range.
 
-    For bracket/interval notation, respects inclusive ``[`` ``]`` vs exclusive
-    ``(`` ``)`` bounds. For other formats, uses standard conventions:
+    For bracket/interval notation, respects inclusive `[` `]` vs exclusive
+    `(` `)` bounds. For other formats, uses standard conventions:
 
-        - ``'5-9'``, ``'5 to 9'`` → ``[5, 9)`` (inclusive lower, exclusive upper)
-        - ``'<5'`` → ``[0, 5)``
-        - ``'>95'`` → ``(95, inf)``
-        - ``'95+'`` → ``[95, inf)``
-        - ``'[15,25)'`` → ``>= 15`` and ``< 25``
-        - ``'(15,25]'`` → ``> 15`` and ``<= 25``
+        - `'5-9'`, `'5 to 9'` → `[5, 9)` (inclusive lower, exclusive upper)
+        - `'<5'` → `[0, 5)`
+        - `'>95'` → `(95, inf)`
+        - `'95+'` → `[95, inf)`
+        - `'[15,25)'` → `>= 15` and `< 25`
+        - `'(15,25]'` → `> 15` and `<= 25`
 
     Example usage::
 
@@ -338,7 +348,7 @@ def apply_age_range(age_string, arr):
         arr: a numeric array to filter
 
     Returns:
-        A boolean array of the same shape as ``arr``.
+        A boolean array of the same shape as `arr`.
     """
     s = str(age_string).strip()
 
@@ -600,13 +610,14 @@ def shrink(obj=None, attrs=None, verbose=False):
         verbose (bool): if True, print warnings about missing attributes
 
     Examples:
-
+        ```python
         # "Shrink" (remove) the People object
         sim = ss.Sim()
         ss.shrink(sim, 'people')
 
         # Equivalent behavior, used manually
         sim.people = ss.shrink()
+        ```
     """
     none_count = sum([x is None for x in [obj, attrs]])
     if none_count == 2:
@@ -668,10 +679,11 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - style: 'font', 'fontsize', 'interactive'
         - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
 
-    **Examples**:
-
+    Examples:
+        ```python
         kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
+        ```
     """
     suffix='_kw'
     _None = '<None>'

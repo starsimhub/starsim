@@ -4,7 +4,7 @@ Test Starsim features not covered by other test files
 import numpy as np
 import sciris as sc
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 import matplotlib.pyplot as plt
 
 sc.options.interactive = False # Assume not running interactively
@@ -20,15 +20,15 @@ def test_microsim(do_plot=False):
     sc.heading('Test small HIV simulation')
 
     # Make HIV module
-    hiv = sse.HIV()
+    hiv = ssl.diseases.HIV()
     # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
     # Need to be careful to get the ordering right. The set-up here assumes that in the simple
-    # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
+    # sexual  network, p1 is male and p2 is female. In the prenatal network, p1=mothers, p2=babies.
+    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'prenatal': [0.2, 0]}
 
     sim = ss.Sim(
         people=ss.People(small),
-        networks=[ss.MFNet(), ss.MaternalNet()],
+        networks=[ss.MFNet(), ss.PrenatalNet()],
         demographics=ss.Pregnancy(),
         diseases=hiv,
         copy_inputs = False, # So we can reuse hiv
@@ -106,7 +106,7 @@ def test_results():
 @sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
-    s1 = ss.Sim(pars=dict(diseases='sir', networks=sse.EmbeddingNet()), n_agents=small)
+    s1 = ss.Sim(pars=dict(diseases='sir', networks=ss.RandomNet()), n_agents=small)
     s1.init()
 
     s2 = sc.dcp(s1)
@@ -155,8 +155,8 @@ def test_custom_imports():
 
     my_modules = [MyDisease, MyNetwork]
 
-    # Make both starsim_examples and custom modules searchable
-    ss.register_modules(sse, my_modules)
+    # Make both library and custom modules searchable
+    ss.register_modules(ssl.diseases, my_modules)
     sim = ss.Sim(n_agents=1000, diseases=['hiv', 'mydisease'], networks='mynetwork')
     sim.run()
 

@@ -58,10 +58,11 @@ class Options(sc.objdict):
         - verbose:        default verbosity for simulations to use
         - warnings:       how to handle warnings (e.g. print, raise as errors, ignore)
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.options(verbose=True) # Set more verbosity
         ss.options(warnings='error') # Be more strict about warnings
+        ```
     """
 
     def __init__(self):
@@ -127,10 +128,10 @@ class Options(sc.objdict):
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, int)
 
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
-        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 5000, int) # See https://github.com/starsimhub/starsim/issues/1005 for details
+        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
-        optdesc.single_rng = 'If True, revert to single centralized random number generator like what other agent-based models typically use (not advised; for testing/comparison only).'
-        options.single_rng = sc.parse_env('STARSIM_SINGLE_RNG', False, bool)
+        optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
+        options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
         return optdesc, options
 
@@ -206,9 +207,10 @@ class Options(sc.objdict):
             detailed (bool): whether to print out full help
             output (bool): whether to return a list of the options
 
-        **Example**:
-
+        Examples:
+            ```python
             ss.options.help(detailed=True)
+            ```
         """
         # If not detailed, just print the docstring for sc.options
         if not detailed and not len(args):
@@ -269,8 +271,10 @@ class Options(sc.objdict):
             use (bool): whether to use the chosen style
             kwargs (dict):   if supplied, set multiple key-value pairs
 
-        **Example**:
+        Examples:
+            ```python
             ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)
+            ```
         """
 
         # Reset to defaults
@@ -309,8 +313,8 @@ class Options(sc.objdict):
         """
         Alias to set(), for use in a "with" block.
 
-        **Examples**:
-
+        Examples:
+            ```python
             # Silence all output
             with ss.options.context(verbose=0):
                 ss.Sim().run()
@@ -322,6 +326,7 @@ class Options(sc.objdict):
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):
                 ss.Sim().run().plot()
+            ```
         """
 
         # Store current settings
@@ -410,7 +415,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
     """
     Helper function to load custom fonts for plotting -- (usually) not for the user.
 
-    Note: if fonts don't load, try running ``ss.settings.load_fonts(rebuild=True)``,
+    Note: if fonts don't load, try running `ss.settings.load_fonts(rebuild=True)`,
     and/or rebooting the system.
 
     Args:
@@ -455,8 +460,8 @@ def style(style=None, **kwargs):
         style (str): the style to use; if None, use current; otherwise, 'starsim', 'simple', 'fancy', plus all of the Matplotlib styles are options
         **kwargs (dict): passed to `sc.options.with_style()`
 
-    **Examples**::
-
+    Examples:
+        ```python
         # Create a plot using default Starsim styling
         with ss.style():
             plt.plot()
@@ -468,6 +473,7 @@ def style(style=None, **kwargs):
         # Customize the current style
         with ss.style(font='Rosario'):
             plt.plot()
+        ```
     """
     if style is None:
         style = options._style

@@ -297,11 +297,12 @@ class routine_screening(BaseScreening, RoutineDelivery):
     Routine screening - an instance of base screening combined with routine delivery.
     See base classes for a description of input arguments.
 
-    **Examples**:
-
+    Examples:
+        ```python
         screen1 = ss.routine_screening(product=my_prod, prob=0.02) # Screen 2% of the eligible population every year
         screen2 = ss.routine_screening(product=my_prod, prob=0.02, start_year=2020) # Screen 2% every year starting in 2020
         screen3 = ss.routine_screening(product=my_prod, prob=np.linspace(0.005,0.025,5), years=np.arange(2020,2025)) # Scale up screening over 5 years starting in 2020
+        ```
     """
     pass
 
@@ -311,10 +312,11 @@ class campaign_screening(BaseScreening, CampaignDelivery):
     Campaign screening - an instance of base screening combined with campaign delivery.
     See base classes for a description of input arguments.
 
-    **Examples**:
-
+    Examples:
+        ```python
         screen1 = ss.campaign_screening(product=my_prod, prob=0.2, years=2030) # Screen 20% of the eligible population in 2020
         screen2 = ss.campaign_screening(product=my_prod, prob=0.02, years=[2025,2030]) # Screen 20% of the eligible population in 2025 and again in 2030
+        ```
     """
     pass
 
@@ -324,10 +326,12 @@ class routine_triage(BaseTriage, RoutineDelivery):
     Routine triage - an instance of base triage combined with routine delivery.
     See base classes for a description of input arguments.
 
-    **Example**:
+    Examples:
+        ```python
         # Example: Triage positive screens into confirmatory testing
         screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
         triage = ss.routine_triage(product=my_triage, eligibility=screen_pos, prob=0.9, start_year=2030)
+        ```
     """
     pass
 
@@ -337,10 +341,12 @@ class campaign_triage(BaseTriage, CampaignDelivery):
     Campaign triage - an instance of base triage combined with campaign delivery.
     See base classes for a description of input arguments.
 
-    **Examples**:
+    Examples:
+        ```python
         # Example: In 2030, triage all positive screens into confirmatory testing
         screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
         triage1 = ss.campaign_triage(product=my_triage, eligibility=screen_pos, prob=0.9, years=2030)
+        ```
     """
     pass
 
@@ -361,6 +367,7 @@ class BaseTreatment(Intervention):
     """
     def __init__(self, product=None, prob=None, eligibility=None, **kwargs):
         super().__init__(**kwargs)
+        if prob is None: prob = 1.0  # Treat all eligible candidates (capped by max_capacity, if set)
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)

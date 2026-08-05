@@ -1,8 +1,10 @@
 """
-CRN-safe embedding networks
+CRN-safe embedding networks -- illustrative example only due to poor performance.
 """
 import numpy as np
 import starsim as ss
+import scipy.optimize as spo
+import scipy.spatial as spsp
 
 __all__ = ['EmbeddingNet']
 
@@ -37,9 +39,6 @@ class EmbeddingNet(ss.MFNet):
         return loc
 
     def add_pairs(self):
-        import scipy.optimize as spo
-        import scipy.spatial as spsp
-
         people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')

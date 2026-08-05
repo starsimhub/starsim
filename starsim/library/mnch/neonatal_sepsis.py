@@ -6,10 +6,10 @@ shortly after, producing neonatal deaths that the Pregnancy module passively
 detects and classifies.
 
 This demonstrates:
-    - How a disease can cause neonatal deaths via ``request_death`` on newborns
+    - How a disease can cause neonatal deaths via `request_death` on newborns
     - How the Pregnancy module passively detects deaths of agents aged 0-28 days
       and classifies them as neonatal deaths (no special hookup needed)
-    - How to use ``set_prognoses`` to apply lethal outcomes only to neonates
+    - How to use `set_prognoses` to apply lethal outcomes only to neonates
 
 The key insight is that neonatal death detection is passive: any mechanism that
 kills an agent aged 0-28 days (disease, congenital outcomes, background
@@ -19,10 +19,10 @@ module. No registration or callback is needed.
 Usage::
 
     import starsim as ss
-    import starsim_examples as sse
+    import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=sse.NeonatalSepsis(),
+        diseases=ssl.mnch.NeonatalSepsis(),
         demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
@@ -42,8 +42,8 @@ class NeonatalSepsis(ss.SIR):
     """
     Minimal neonatal sepsis model.
 
-    Infects newborns at birth with probability ``init_prev``, then kills a
-    fraction (``p_death``) within a short window (``dur_inf``). Useful for
+    Infects newborns at birth with probability `init_prev`, then kills a
+    fraction (`p_death`) within a short window (`dur_inf`). Useful for
     testing passive neonatal death detection in the Pregnancy module.
 
     Pars:

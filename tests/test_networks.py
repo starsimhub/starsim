@@ -6,7 +6,7 @@ Test networks
 import sciris as sc
 import numpy as np
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 
@@ -33,7 +33,7 @@ def test_manual():
     # Create a maternal network
     sim = ss.Sim(n_agents=n_agents)
     sim.init()
-    nw2 = ss.MaternalNet()
+    nw2 = ss.PrenatalNet()
     nw2.init_pre(sim)
     nw2.add_pairs(mother_uids=[1, 2, 3], unborn_uids=[100, 101, 102])
 
@@ -65,6 +65,34 @@ def test_random():
 
     # Tidy
     o = sc.objdict(nw1=nw1, nw2=nw2, nw3=nw3)
+    return o
+
+
+@sc.timer()
+def test_randomfast():
+    sc.heading('Testing the (default, fast) RandomNet vs the exact RandomExactNet')
+    n_contacts = 10
+
+    s1 = ss.Sim(n_agents=medium, networks=ss.RandomExactNet(n_contacts=n_contacts), rand_seed=1).init()
+    s2 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
+    nw1 = s1.networks[0]
+    nw2 = s2.networks[0]
+
+    # Same number of edges as RandomExactNet, and the mean degree matches n_contacts
+    assert len(nw1) == len(nw2), 'RandomNet should produce the same number of edges as RandomExactNet'
+    deg = np.bincount(np.concatenate([np.asarray(nw2.p1), np.asarray(nw2.p2)]), minlength=medium)
+    assert np.isclose(deg.mean(), n_contacts, rtol=0.05), f'Mean degree should be ~{n_contacts}, not {deg.mean()}'
+
+    # The fast version has variable (Poisson-like) degree, unlike RandomExactNet's fixed degree
+    deg1 = np.bincount(np.concatenate([np.asarray(nw1.p1), np.asarray(nw1.p2)]), minlength=medium)
+    assert deg1.std() == 0, 'RandomExactNet should have fixed degree'
+    assert deg.std() > 1, 'RandomNet should have variable degree'
+
+    # Reproducible given the same seed
+    s3 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
+    assert np.array_equal(nw2.p2, s3.networks[0].p2), 'RandomNet should be reproducible for a fixed seed'
+
+    o = sc.objdict(nw1=nw1, nw2=nw2)
     return o
 
 
@@ -152,12 +180,12 @@ def test_erdosrenyi():
 
     # Manual creation
     p = 0.1
-    nw1 = sse.ErdosRenyiNet(p=p)
+    nw1 = ssl.networks.ErdosRenyiNet(p=p)
     ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
-    ss.register_modules(sse)
+    ss.register_modules(ssl.networks)
     s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
     nw2 = s2.networks[0]
 
@@ -181,7 +209,7 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    nw1 = sse.DiskNet()
+    nw1 = ssl.networks.DiskNet()
     s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
@@ -197,7 +225,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = sse.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
+    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.freq(0.05, unit=ss.year))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -237,7 +265,7 @@ def test_static():
 def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
-    network = sse.NullNet()
+    network = ssl.networks.NullNet()
     sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
@@ -265,8 +293,8 @@ def test_household():
     sc.heading('Testing HouseholdNet...')
     dhs_data = make_dhs_data(n=small)
 
-    # Test ss.HouseholdNet (static)
-    household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=False)
+    # Test ssl.networks.HouseholdNet (static)
+    household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False)
     sim = ss.Sim(n_agents=small, diseases='sis', networks=household)
     sim.run()
 
@@ -275,7 +303,7 @@ def test_household():
 
     # Test with sexes provided
     dhs_data_sex = make_dhs_data(include_sexes=True)
-    household2 = ss.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
+    household2 = ssl.networks.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
     sim2 = ss.Sim(n_agents=small, diseases='sis', networks=household2)
     sim2.run()
 
@@ -287,7 +315,7 @@ def test_dynamic_household():
     sc.heading('Testing dynamic HouseholdNet...')
     dhs_data = make_dhs_data(n=medium)
 
-    household = ss.HouseholdNet(dhs_data=dhs_data, dynamic=True)
+    household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
     preg = ss.Pregnancy()
     sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg, copy_inputs=False)
     sim.run()
@@ -304,6 +332,35 @@ def test_dynamic_household():
     assert np.all(np.isfinite(hids[delivered.uids])), 'Some delivered agents are missing household IDs'
 
     return sim
+
+
+@sc.timer()
+def test_household_coarse_pregnancy_dt():
+    """ Regression test: a Pregnancy module running on a coarser dt than the sim must not corrupt
+    HouseholdNet move-out timing.
+
+    Move-out is evaluated once per pregnancy, so the resulting number of households should be
+    ~invariant to the pregnancy module's dt. Previously, HouseholdNet compared
+    pregnancy.ti_delivery (an index in the pregnancy module's own timeline) against sim.ti; when
+    pregnancy ran on a coarser dt (e.g. ss.Pregnancy(dt=ss.months(3))), pregnant non-heads became
+    re-eligible far too often, greatly over-fragmenting households. """
+    sc.heading('Testing HouseholdNet with a coarse-dt Pregnancy module...')
+    dhs_data = make_dhs_data(n=medium)
+
+    def run(preg_dt):
+        household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True, prob_move_out=0.5)
+        preg = ss.Pregnancy(dt=preg_dt)
+        sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg,
+                     start='2000-01-01', stop='2020-12-31', dt=ss.months(1), rand_seed=1, copy_inputs=False)
+        sim.run()
+        return household.n_households
+
+    n_month   = run(ss.months(1))
+    n_quarter = run(ss.months(3))
+    rel = abs(n_quarter - n_month) / n_month
+    assert rel < 0.15, f'Coarse-dt pregnancy over-fragments households: monthly={n_month}, quarterly={n_quarter} (rel diff {rel:.1%})'
+
+    return n_month, n_quarter
 
 
 @sc.timer()
@@ -336,6 +393,7 @@ if __name__ == '__main__':
     # Run tests
     man  = test_manual()
     rand = test_random()
+    fast = test_randomfast()
     safe = test_randomsafe()
     stat = test_static()
     erdo = test_erdosrenyi()
@@ -343,6 +401,7 @@ if __name__ == '__main__':
     null = test_null()
     hh   = test_household()
     ehh  = test_dynamic_household()
+    ehh2 = test_household_coarse_pregnancy_dt()
     oth  = test_other()
 
     T.toc()

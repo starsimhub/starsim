@@ -307,7 +307,7 @@ class Loop:
         return sc.dataframe(rows, columns=cols)
 
     def _insert_into_plan(self, func, label=None, match_fn=None, before=False):
-        """ Insert into ``self.plan`` without recording the insertion for replay """
+        """ Insert into `self.plan` without recording the insertion for replay """
         if label:
             match_fn = lambda plan: plan.label == label
 
@@ -359,8 +359,8 @@ class Loop:
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match
 
-        **Examples**:
-
+        Examples:
+            ```python
             # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
                 print(f'Population size is {len(sim.people)}')
@@ -388,6 +388,7 @@ class Loop:
             sim.init()
             sim.loop.insert(update_betas, match_fn=match_fn, before=True)
             sim.run()
+            ```
         """
         self._check_initialized()
 
@@ -488,7 +489,7 @@ class Loop:
         if self.cpu_df is None:
             self.to_df()
         df = self.cpu_df
-        ylabels = df.index.values
+        ylabels = df.index.values.copy() # Copy to avoid mutating the cached cpu_df when labels are assembled below
         if bytime:
             y = np.arange(len(ylabels))
         else:
@@ -543,14 +544,15 @@ class Loop:
             fig_kw (dict): passed to `plt.figure()`
             legend_kw (dict): passed to `plt.legend()`
 
-        **Example**:
-
+        Examples:
+            ```python
             sis = ss.SIS(dt=0.1)
             net = ss.RandomNet(dt=0.5)
             births = ss.Births(dt=1)
             sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
             sim.init()
             sim.loop.plot_step_order()
+            ```
         """
         self._check_initialized()
         df = self.df

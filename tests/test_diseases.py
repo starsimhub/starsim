@@ -7,7 +7,7 @@ import sciris as sc
 import matplotlib.pyplot as plt
 import numpy as np
 import starsim as ss
-import starsim_examples as sse
+import starsim.library as ssl
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
@@ -158,7 +158,7 @@ def test_ncd():
 @sc.timer()
 def test_gavi():
     sc.heading('Testing GAVI diseases')
-    ss.register_modules(sse) # So we can use strings for these
+    ss.register_modules(ssl.diseases) # So we can use strings for these
 
     sims = sc.autolist()
     for disease in ['cholera', 'measles', 'ebola']:
@@ -240,7 +240,7 @@ def test_fetal_health(do_plot=do_plot):
     # -- 1. Baseline (no disease) --
     sim_baseline = ss.Sim(
         demographics=demog(),
-        custom=ss.FetalHealth(),
+        custom=ssl.mnch.FetalHealth(),
         networks=ss.PrenatalNet(),
         **sim_kw,
     )
@@ -265,8 +265,8 @@ def test_fetal_health(do_plot=do_plot):
     sim_disease = ss.Sim(
         demographics=demog(),
         diseases=ss.SIR(**sir_kw),
-        connectors=sse.fetal_infection(),
-        custom=ss.FetalHealth(),
+        connectors=ssl.mnch.fetal_infection(),
+        custom=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -285,9 +285,9 @@ def test_fetal_health(do_plot=do_plot):
     sim_treated = ss.Sim(
         demographics=demog(),
         diseases=ss.SIR(**sir_kw),
-        connectors=sse.fetal_infection(),
-        interventions=sse.treat_pregnant(disease='sir'),
-        custom=ss.FetalHealth(),
+        connectors=ssl.mnch.fetal_infection(),
+        interventions=ssl.mnch.treat_pregnant(disease='sir'),
+        custom=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -345,7 +345,7 @@ def test_congenital():
             ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
             ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
         ],
-        diseases=sse.CongenitalDisease(beta=0.2, init_prev=0.2),
+        diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
         dur=ss.years(5),
         dt=ss.years(1/12),
         rand_seed=1,
