@@ -50,7 +50,8 @@ class Births(Demographics):
         )
         self.update_pars(pars, **kwargs)
 
-        # Process metadata. Defaults here are the labels used by UN data
+        # Process metadata. The year column may equivalently be labeled "Time" (as in UN data);
+        # see ss.col_synonyms
         self.metadata = sc.mergedicts(
             sc.objdict(data_cols=dict(year='Year', value='CBR')),
             metadata,
@@ -65,16 +66,6 @@ class Births(Demographics):
         # n_dist draws the number of births directly, parent_dist picks that many parents.
         self.n_dist = ss.poisson(lam=1.0)
         self.parent_dist = ss.randint(low=0, high=2)
-        return
-
-    def init_pre(self, sim):
-        """ Initialize with sim information """
-        super().init_pre(sim)
-        if isinstance(self.pars.birth_rate, pd.DataFrame):
-            br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
-            br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
-            all_birth_rates = np.interp(self.timevec, br_year, br_val) # This assumes a year timestep -- probably ok?
-            self.pars.birth_rate = all_birth_rates
         return
 
     def standardize_birth_data(self):

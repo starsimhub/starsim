@@ -431,6 +431,55 @@ def test_count_based_births():
     return per_agent, count_based
 
 
+@sc.timer()
+def test_birth_data_cols():
+    """ Birth rate data can use either "Year" or "Time" (the UN label) for the year column """
+    sc.heading('Testing birth data column handling...')
+
+    years = [1990, 2000, 2010]
+    vals = [45.0, 42.0, 38.0]
+    expected = pd.Series(vals, index=pd.Index(years, name='year', dtype=float))
+
+    def check(births, msg):
+        """ The standardized birth rates match the input, regardless of column labels """
+        actual = births.pars.birth_rate.loc[years] # Drop the -inf age entries etc.
+        assert np.allclose(actual.values, expected.values), f'{msg}: expected {vals}, got {actual.values}'
+        return
+
+    # Both spellings of the year column work without a metadata override
+    year_df = pd.DataFrame({'Year':years, 'CBR':vals})
+    time_df = pd.DataFrame({'Time':years, 'CBR':vals})
+    check(ss.Births(birth_rate=year_df), 'Year column')
+    check(ss.Births(birth_rate=time_df), 'Time column')
+
+    # An explicit override takes precedence over the synonyms: here "Year" holds junk,
+    # so if the override were ignored, the values would not match
+    both_df = pd.DataFrame({'Year':[0, 0, 0], 'Time':years, 'CBR':vals})
+    check(ss.Births(birth_rate=both_df, metadata=dict(data_cols=dict(year='Time', value='CBR'))), 'Explicit override')
+
+    # A genuinely missing column raises an informative error
+    missing_df = pd.DataFrame({'Date':years, 'CBR':vals})
+    with pytest.raises(ValueError) as excinfo:
+        ss.Births(birth_rate=missing_df)
+    errormsg = str(excinfo.value)
+    for expect in ['Year', 'year', 'Date', 'CBR', 'data_cols']: # Names the column, lists those present, points at the override
+        assert expect in errormsg, f'Expected "{expect}" in error message:\n{errormsg}'
+
+    # The same applies to the value column
+    with pytest.raises(ValueError) as excinfo:
+        ss.Births(birth_rate=pd.DataFrame({'Year':years, 'Rate':vals}))
+    assert 'CBR' in str(excinfo.value)
+
+    # Deaths and pregnancy data likewise accept either spelling
+    death_data = dict(Sex=['Female', 'Male'], AgeGrpStart=[0, 0], mx=[0.05, 0.06])
+    time_deaths = ss.Deaths(death_rate=pd.DataFrame(dict(Time=[1990, 1990], **death_data))) # The default
+    year_deaths = ss.Deaths(death_rate=pd.DataFrame(dict(Year=[1990, 1990], **death_data))) # Via the synonym
+    assert time_deaths.death_rate_data.equals(year_deaths.death_rate_data)
+
+    print('✓ (birth/death data column handling)')
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
 
@@ -444,5 +493,6 @@ if __name__ == '__main__':
     s8 = test_background_loss()
     s9 = test_nnd()
     s10 = test_count_based_births()
+    s11 = test_birth_data_cols()
 
     T.toc()
