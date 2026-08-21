@@ -1,0 +1,266 @@
+---
+title: Library modules
+jupyter: python3
+---
+
+Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of concrete, opinionated modules built on top of those: specific diseases such as measles and cholera, specialized networks such as households, and worked examples of harder modeling patterns such as congenital infection.
+
+The library is shipped with Starsim but is deliberately held to a lower bar than the core package. Library modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and the APIs may change between versions. Treat them as starting points to copy and adapt, not as off-the-shelf models for a particular setting.
+
+::: {.callout-note}
+The library is where most modules that used to live in core Starsim ended up. If you are migrating older code, `ss.Measles` is now `ssl.Measles`, `ss.HIV` is now `ssl.HIV`, and so on.
+:::
+
+## Importing and using library modules
+
+Library classes are available both at the top level and via their submodule; the two are identical objects:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+import starsim.library as ssl
+
+print(ssl.Measles is ssl.diseases.Measles)
+```
+
+Otherwise they behave exactly like core modules, and can be mixed freely with them:
+
+```{python}
+outbreak = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=2000)
+sim = ss.Sim(diseases=ssl.Measles(beta=ss.perday(0.3)), networks=ss.RandomNet(), **outbreak)
+sim.run()
+sim.plot('measles')
+```
+
+::: {.callout-important}
+## Library diseases need a sub-year timestep
+
+The library's outbreak diseases specify their natural history in days (incubation periods of a week or two, illness lasting days). With the default yearly timestep these durations collapse to zero and the dynamics are meaningless — `ssl.Cholera` in particular produces no infections at all, because its environmental reservoir never has time to build up. Set `dt=ss.days(1)` (or `ss.weeks(1)`) for these models. See [Time handling](advanced_time.qmd) for more on timesteps.
+:::
+
+## Diseases
+
+The library includes four example diseases, spanning a range of complexity:
+
+| Class | Base | Description |
+| --- | --- | --- |
+| `ssl.Measles` | `ss.SIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `ssl.Ebola` | `ss.SIR` | Ebola with severe disease and continued transmission from unburied bodies |
+| `ssl.Cholera` | `ss.Infection` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
+| `ssl.HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
+
+`Measles` and `Ebola` show the most common pattern for a new disease: subclass `ss.SIR`, add extra states in `define_states()`, and extend `set_prognoses()` and `step_state()` to move agents between them. `Measles` adds a single exposed state; `Ebola` additionally makes severe and unburied agents more infectious, via `rel_trans`.
+
+`Cholera` goes further and subclasses `ss.Infection` directly, because it needs a transmission route that isn't a network: it overrides `infect()` to add environmental transmission on top of the usual person-to-person transmission. This is the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
+
+```{python}
+sim = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(), **outbreak)
+sim.run()
+sim.plot('cholera')
+```
+
+Note the extra `env_prev` and `env_conc` results, which track the environmental reservoir.
+
+### HIV and its companions
+
+`ssl.HIV` comes with two companion modules that illustrate how a disease, an intervention, and an analyzer fit together:
+
+- `ssl.ART` is an intervention that scales up treatment coverage over specified years, reducing transmissibility by `art_efficacy` and raising CD4 counts back towards `cd4_max`.
+- `ssl.CD4_analyzer` is an analyzer that records every agent's CD4 count at every timestep.
+
+Since HIV mortality is CD4-dependent, treatment reduces deaths as well as transmission:
+
+Unlike the outbreak diseases above, HIV plays out over years, so a yearly timestep and a multi-decade horizon are appropriate:
+
+```{python}
+endemic = dict(start=2000, stop=2030, n_agents=2000)
+hiv = lambda: ssl.HIV(beta=ss.peryear(0.05), init_prev=0.05)
+net = lambda: ss.RandomNet(n_contacts=ss.poisson(2))
+
+s1 = ss.Sim(diseases=hiv(), networks=net(), label='No ART', **endemic)
+s2 = ss.Sim(diseases=hiv(), networks=net(), label='With ART', **endemic,
+            interventions=ssl.ART(year=[2005, 2015], coverage=[0, 0.9]))
+
+msim = ss.parallel(s1, s2)
+msim.plot('hiv')
+
+for sim in msim.sims:
+    print(f'{sim.label}: {sim.results.hiv.new_deaths.sum():n} deaths, '
+          f'{sim.results.hiv.prevalence[-1]:0.1%} prevalence in 2030')
+```
+
+::: {.callout-note}
+`ART` only offers treatment to agents infected `art_delay` ago, so it has no effect once an epidemic has saturated and there are no newly infected agents left. If you see `n_art` stuck at zero, check that transmission is still ongoing when treatment starts.
+:::
+
+## Networks
+
+| Class | Base | Description |
+| --- | --- | --- |
+| `ssl.HouseholdNet` | `ss.Network` | Households built from DHS-style survey data, optionally evolving over time |
+| `ssl.DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
+| `ssl.ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
+| `ssl.NullNet` | `ss.Network` | Self-connections only, with zero transmission |
+
+`DiskNet` is a spatial network: each agent has an `x`, `y` position and a heading, moves at speed `v` each timestep, bounces off the walls of the unit square, and is connected to every agent within radius `r`. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:
+
+```{python}
+sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.DiskNet(r=0.05), **outbreak)
+sim.run()
+sim.plot('sis')
+```
+
+`ErdosRenyiNet` is the classic random graph, useful when you want to compare against analytic results. For general-purpose random mixing, prefer `ss.RandomNet`, which is much faster. `NullNet` gives every agent a single self-contact with zero transmission weight, which is handy as a placeholder while developing a model that doesn't yet have a real network.
+
+### Household networks
+
+`ssl.HouseholdNet` is the most substantial library network. It builds households from [DHS](https://dhsprogram.com) household survey data, overriding each agent's age and sex to match a randomly drawn real household. With `dynamic=True` (the default) households also evolve: one woman is designated head of each household, pregnant non-heads may move out to form new households, and births are added to their mother's household.
+
+Real DHS data requires registration, so `dhs_data='default'` generates synthetic data with the same structure for demos and testing:
+
+```{python}
+import numpy as np
+
+sim = ss.Sim(diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'),
+             demographics=ss.Pregnancy(), **endemic)
+sim.run()
+
+# Note: use the sim's copy of the network, since modules are copied on initialization
+net = sim.networks.householdnet
+hh_ids = net.household_ids[net.household_ids.notnan] # Unborn agents have no household
+sizes = np.bincount(hh_ids.astype(int))
+sizes = sizes[sizes > 0]
+print(f'Households: {len(sizes)}; mean size: {sizes.mean():0.1f}; max size: {sizes.max()}')
+print(f'Mean age: {sim.people.age.mean():0.1f} years')
+```
+
+To use real data, download a Household Recode (HR) dataset in Stata format and load it with `HouseholdNet.load_dhs()`:
+
+```python
+dhs_data = ssl.HouseholdNet.load_dhs('XXHR7xDT/XXHR7xFL.DTA')
+sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
+```
+
+::: {.callout-warning}
+`HouseholdNet` overwrites the age and sex of every agent when it initializes. Use it with caution alongside other modules that depend on or modify age and sex.
+:::
+
+## Maternal, newborn, and child health
+
+The `ssl.mnch` submodule contains examples of vertical transmission and birth outcomes — patterns that are considerably harder to discover than a standard disease module. All of them build on `ss.Pregnancy` and `ss.PrenatalNet`.
+
+| Class | Base | Description |
+| --- | --- | --- |
+| `ssl.mnch.CongenitalDisease` | `ss.SIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic congenital framework |
+| `ssl.mnch.NeonatalSepsis` | `ss.SIR` | Infects newborns at birth and kills some within days |
+| `ssl.mnch.FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA) |
+| `ssl.mnch.fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes |
+| `ssl.mnch.treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses fetal damage |
+
+### Congenital outcomes
+
+`CongenitalDisease` demonstrates the generic congenital framework built into `ss.Infection`. When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it for delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state:
+
+```{python}
+mnch_pars = dict(start=2000, stop=2005, n_agents=2000, dt=ss.weeks(1))
+sim = ss.Sim(
+    diseases      = ssl.mnch.CongenitalDisease(beta=ss.peryear(20), init_prev=0.2),
+    demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
+    networks      = [ss.PrenatalNet(), ss.RandomNet()],
+    **mnch_pars,
+)
+sim.run()
+preg = sim.results.pregnancy
+print('Births:', preg.births.sum())
+print('Fetal losses:', preg.miscarriages.sum() + preg.stillbirths.sum())
+print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
+```
+
+To use the framework in your own disease, define `birth_outcome_keys` and `birth_outcomes` in your pars, add a matching `ti_<key>` state for each outcome (plus a boolean state for each non-lethal one), and call `self.step_congenital()` from `step_state()`.
+
+### Neonatal deaths
+
+`NeonatalSepsis` illustrates that neonatal death detection is *passive*: any mechanism that kills an agent aged 0–28 days is automatically classified as a neonatal death by the `ss.Pregnancy` module, with no registration or callback needed. Results therefore appear on the pregnancy module, not the disease:
+
+```{python}
+sim = ss.Sim(
+    diseases     = ssl.mnch.NeonatalSepsis(),
+    demographics = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
+    networks     = [ss.PrenatalNet(), ss.RandomNet()],
+    **mnch_pars,
+)
+sim.run()
+print('New infections:', sim.results.neonatalsepsis.new_infections.sum())
+print('Births:', sim.results.pregnancy.births.sum())
+print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
+```
+
+### Fetal health
+
+`FetalHealth` is deliberately disease-agnostic: it tracks a baseline fetal weight percentile per pregnancy and exposes two levers that other modules pull — bringing delivery forward (preterm risk) and accumulating growth restriction (low birth weight). At delivery it computes `birth_weight` and classifies newborns as LBW, VLBW, or SGA.
+
+The `fetal_infection` connector pulls those levers when a pregnant woman is infected, and the `treat_pregnant` intervention partially reverses the damage when she is treated. Note that `FetalHealth` is passed via `custom`, since it is not a disease, network, demographic, or intervention:
+
+```{python}
+sim = ss.Sim(
+    diseases      = ss.SIR(beta=ss.peryear(20)),
+    demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
+    connectors    = ssl.mnch.fetal_infection(),
+    interventions = ssl.mnch.treat_pregnant(disease='sir', start_year=2005),
+    custom        = ssl.mnch.FetalHealth(),
+    networks      = [ss.PrenatalNet(), ss.RandomNet()],
+    **mnch_pars,
+)
+sim.run()
+sim.plot('fetal_health')
+```
+
+To adapt this to a different disease, subclass `fetal_infection` and override `_apply_damage()` with disease-specific logic — for example, applying a larger growth penalty for severe infections than mild ones.
+
+## Adapting a library module
+
+Because library modules are ordinary Starsim modules, the usual customization routes all apply. The lightest touch is to override parameters:
+
+```{python}
+measles = ssl.Measles(beta=ss.perday(0.4), dur_exp=ss.normal(loc=ss.days(10)), p_death=0.01)
+```
+
+For structural changes, subclass. Here we give measles waning immunity by making recovered agents susceptible again after a delay:
+
+```{python}
+class WaningMeasles(ssl.Measles):
+    def __init__(self, dur_immune=ss.years(1), **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(dur_immune=dur_immune)
+        self.update_pars(**kwargs)
+        self.define_states(ss.FloatArr('ti_susceptible', label='Time of losing immunity'))
+        return
+
+    def set_prognoses(self, uids, sources=None):
+        super().set_prognoses(uids, sources)
+        self.ti_susceptible[uids] = self.ti_recovered[uids] + self.pars.dur_immune / self.t.dt
+        return
+
+    def step_state(self):
+        super().step_state()
+        waned = (self.recovered & (self.ti_susceptible <= self.ti)).uids
+        self.recovered[waned] = False
+        self.susceptible[waned] = True
+        return
+
+sim = ss.Sim(diseases=WaningMeasles(dur_immune=ss.days(60), beta=ss.perday(0.3)),
+             networks=ss.RandomNet(), **outbreak)
+sim.run()
+sim.plot('waningmeasles')
+
+res = sim.results.waningmeasles
+print(f'Susceptible at end: {res.n_susceptible[-1]:n}; recovered at end: {res.n_recovered[-1]:n}')
+```
+
+The recovered population drains back into the susceptible pool, as intended. Note that this alone does not produce a second wave: the outbreak burns out before immunity wanes, so there are no infectious agents left to restart it. Recurring waves need a continuing source of infection — births (`ss.Births`), importation, or a slower-burning disease.
+
+If you find yourself copying a library module wholesale and editing it, that is also a perfectly good outcome — it's what these modules are for. See [Adding new modules](modules_adding.qmd) for a fuller treatment of writing modules from scratch.
+
+## Contributing to the library
+
+New library modules are welcome, particularly ones that demonstrate a modeling pattern that is otherwise hard to discover. See [`starsim/library/README.md`](https://github.com/starsimhub/starsim/blob/main/starsim/library/README.md) for the specific conventions, and [Contributing](../contributing.qmd) for the general process.
