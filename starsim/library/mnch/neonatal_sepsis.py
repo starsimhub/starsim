@@ -35,8 +35,6 @@ Usage::
 
 import starsim as ss
 
-__all__ = ['NeonatalSepsis']
-
 
 class NeonatalSepsis(ss.SIR):
     """

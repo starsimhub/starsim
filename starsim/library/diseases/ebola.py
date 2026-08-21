@@ -8,8 +8,6 @@ Original version by @domdelport and @RomeshA
 import numpy as np
 import starsim as ss
 
-__all__ = ['Ebola']
-
 
 class Ebola(ss.SIR):
     """

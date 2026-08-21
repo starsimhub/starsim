@@ -10,5 +10,3 @@ from .cholera import Cholera
 from .ebola   import Ebola
 from .hiv     import HIV, ART, CD4_analyzer
 from .measles import Measles
-
-__all__ = ['Cholera', 'Ebola', 'HIV', 'ART', 'CD4_analyzer', 'Measles']

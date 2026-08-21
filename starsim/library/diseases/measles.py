@@ -7,8 +7,6 @@ Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 
 import starsim as ss
 
-__all__ = ['Measles']
-
 
 class Measles(ss.SIR):
     """

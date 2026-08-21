@@ -41,8 +41,6 @@ eligibility criteria or reversal logic.
 import numpy as np
 import starsim as ss
 
-__all__ = ['FetalHealth', 'fetal_infection', 'treat_pregnant']
-
 
 class FetalHealth(ss.Module):
     """

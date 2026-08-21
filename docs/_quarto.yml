@@ -161,8 +161,8 @@ website:
         - section: "**Library**"
           contents:
             - api/library.diseases.qmd
-            - api/library.networks.qmd
             - api/library.mnch.qmd
+            - api/library.networks.qmd
         - section: "**Utilities**"
           contents:
             - api/arrays.qmd
@@ -211,29 +211,34 @@ quartodoc:
         Import as `import starsim.library as ssl`. These modules are illustrative rather
         than validated; see the [user guide](../user_guide/modules_library.qmd) for details.
       contents:
-        # One page per subpackage, with members listed explicitly: quartodoc's static
-        # analysis does not follow the re-exports in each subpackage's __init__.py
+        # One page per library subpackage; contents are picked up automatically from each
+        # subpackage's __init__.py, so adding a class to the library does not need any
+        # docs changes. include_imports is required since these are imported, not defined,
+        # in the __init__.py that is being documented.
         - kind: page
           path: library.diseases
-          package: starsim.library.diseases
-          summary:
-            name: library.diseases
-            desc: Example disease models, plus HIV-related interventions and analyzers.
-          contents: [Cholera, Ebola, HIV, ART, CD4_analyzer, Measles]
-        - kind: page
-          path: library.networks
-          package: starsim.library.networks
-          summary:
-            name: library.networks
-            desc: Household, spatial, and theoretical contact networks.
-          contents: [HouseholdNet, DiskNet, ErdosRenyiNet, NullNet]
+          package: starsim.library
+          contents:
+            - kind: auto
+              name: diseases
+              include_imports: true
+              children: embedded
         - kind: page
           path: library.mnch
-          package: starsim.library.mnch
-          summary:
-            name: library.mnch
-            desc: Maternal, newborn, and child health examples.
-          contents: [CongenitalDisease, NeonatalSepsis, FetalHealth, fetal_infection, treat_pregnant]
+          package: starsim.library
+          contents:
+            - kind: auto
+              name: mnch
+              include_imports: true
+              children: embedded
+        - kind: page
+          path: library.networks
+          package: starsim.library
+          contents:
+            - kind: auto
+              name: networks
+              include_imports: true
+              children: embedded
 
 format:
   html:

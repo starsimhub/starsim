@@ -9,5 +9,3 @@ theoretical work and debugging. Core network classes (`ss.RandomNet`,
 from .household   import HouseholdNet
 from .spatial     import DiskNet
 from .theoretical import ErdosRenyiNet, NullNet
-
-__all__ = ['HouseholdNet', 'DiskNet', 'ErdosRenyiNet', 'NullNet']

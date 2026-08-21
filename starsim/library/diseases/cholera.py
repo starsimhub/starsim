@@ -8,8 +8,6 @@ Original version by Dom Delport 2024
 import numpy as np
 import starsim as ss
 
-__all__ = ['Cholera']
-
 
 class Cholera(ss.Infection):
     """

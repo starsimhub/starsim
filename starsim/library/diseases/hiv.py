@@ -7,8 +7,6 @@ import sciris as sc
 import starsim as ss
 
 
-__all__ = ['HIV', 'ART', 'CD4_analyzer']
-
 class HIV(ss.Infection):
     """
     Simple HIV model with CD4 count dynamics and ART.

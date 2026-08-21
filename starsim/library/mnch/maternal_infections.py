@@ -54,8 +54,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['CongenitalDisease']
-
 
 class CongenitalDisease(ss.SIR):
     """
