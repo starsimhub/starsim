@@ -75,8 +75,6 @@ website:
           text: "**Home**"
         - href: whatsnew.qmd
           text: "**What's new**"
-        - href: api/index.qmd
-          text: "**API reference**"
         - section: "**Tutorials**"
           contents:
             - tutorials/t1_intro.qmd

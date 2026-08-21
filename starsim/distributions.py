@@ -240,6 +240,32 @@ class Dists(sc.prettyobj):
         return new
 
 
+def to_timepar(template, value):
+    """
+    Convert a plain number to a timepar matching the supplied template
+
+    For example, `to_timepar(ss.years(5), 6)` returns `ss.years(6)`. Copying the template
+    rather than constructing a new object preserves the base as well as the class, e.g.
+    `to_timepar(ss.per(0.1, 'weeks'), 0.2)` returns a rate per week, not per year.
+
+    Args:
+        template (TimePar): the timepar whose class and base should be matched
+        value (float/array): the value to convert
+
+    Returns:
+        A new `TimePar` of the same type as the template
+    """
+    if isinstance(template, ss.datedur): # datedur stores its value as a date offset rather than a number, so can't be reused
+        kwds = template.value.kwds # Instead, use the finest unit the datedur was specified with, e.g. days for ss.datedur(days=10)
+        for unit in ['days', 'weeks', 'months', 'years']:
+            if kwds.get(unit):
+                return getattr(ss, unit)(value)
+        return ss.years(value) # No recognized units, so fall back to the default
+    out = sc.dcp(template)
+    out.value = value
+    return out
+
+
 class scale_types(sc.prettyobj):
     """ Define how distributions scale
 
@@ -350,7 +376,7 @@ class Dist:
         # Create a normal distribution that's also a timepar
         dur_infection = ss.normal(loc=12, scale=2, unit='years')
         dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
-        dur_infection = ss.normal(loc=ss.years(12), scale=2)) # Same as above
+        dur_infection = ss.normal(loc=ss.years(12), scale=ss.years(2)) # Same as above
         dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
         dur_infection.init(force=True).plot_hist() # Show results
 
@@ -361,6 +387,8 @@ class Dist:
     """
     valid_pars = None
     scaling = None # See "scale_types" above
+    unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognorm_ex(); None means no check
+    unitless_pars = None # Parameters that cannot have time units, e.g. ('c',), the shape parameter, for ss.weibull(); None means no check
 
     def __init__(self, dist=None, distname=None, name=None, unit=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
@@ -478,12 +506,31 @@ class Dist:
                     valid = list(self.pars.keys())
                     errormsg = f'Cannot set parameter(s) {invalid} for {self}: not a valid parameter name for this distribution. Valid parameters are: {valid}'
                     raise ValueError(errormsg)
+            self.preserve_timepars(kwargs) # Ensure e.g. dist.set(mean=6) gives years(6), not 6, if mean was years(5)
             self.pars.update(kwargs)
             if self.initialized:
                 # If initialized, re-process the pars to update self._pars
                 # If not initialized, the module may not be available to do this conversion - but in any case,
                 # initialization will cause the pars to be processed again. So skip this step here
                 self.process_pars(call=False)
+        return
+
+    def preserve_timepars(self, kwargs):
+        """
+        Preserve time units when a timepar parameter is updated with a plain number
+
+        For example, if a distribution was created with `mean=ss.years(5)` and is then
+        updated with `mean=6`, the new value should be `ss.years(6)` rather than a bare 6
+        (which would be interpreted as 6 timesteps). Modifies `kwargs` in place.
+        """
+        for key,new in kwargs.items():
+            old = self.pars.get(key)
+            if isinstance(old, ss.TimePar) and not isinstance(new, ss.TimePar):
+                if sc.isnumber(new):
+                    kwargs[key] = to_timepar(old, new)
+                elif sc.checktype(new, 'arraylike'):
+                    kwargs[key] = to_timepar(old, sc.toarray(new))
+                # Otherwise (e.g. a function or None), use the new value directly
         return
 
     @property
@@ -798,6 +845,10 @@ class Dist:
                 msg += 'Use e.g. ss.weibull(3, ss.years(5), ss.years(2)) instead of ss.weibull(3, 5, 2, unit=ss.years).'
                 raise ValueError(msg)
 
+        # Ensure that unitless parameters really are unitless, and that parameters that share dimensions also share time units
+        self.check_unitless_pars()
+        self.harmonize_par_units()
+
         # Do predraw scaling
         for key, v in self._pars.items():
             is_timepar = False
@@ -834,6 +885,84 @@ class Dist:
                     self._pars[key] = self._pars[key].astype(float)
                 except Exception:
                     pass
+
+    def check_unitless_pars(self):
+        """
+        Check that parameters that must be dimensionless have not been given time units
+
+        Some distribution parameters are inherently unitless, such as the shape parameter
+        of `ss.weibull()` or `ss.gamma()`; these are listed in the distribution's
+        `unitless_pars` attribute. Supplying a timepar for these is always an error, since
+        scaling them by `dt` would change the shape of the distribution rather than its
+        location or spread. Distributions with `unitless_pars = None` are not checked.
+        """
+        if self.unitless_pars is None: # Nothing to check
+            return
+
+        invalid = sc.objdict()
+        for key in self.unitless_pars:
+            val = self._pars.get(key)
+            if isinstance(val, ss.TimePar):
+                invalid[key] = val
+            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
+                invalid[key] = val.flat[0]
+
+        if len(invalid):
+            errormsg = f'Cannot use timepars for parameter(s) {sc.strjoin(invalid.keys())} of {self}: {dict(invalid)}.\n'
+            errormsg += f'The following parameters of ss.{self.__class__.__name__}() are dimensionless and must be plain numbers: {sc.strjoin(self.unitless_pars)}. '
+            if self.unit_pars is not None:
+                errormsg += f'Did you mean to supply units for {sc.strjoin(self.unit_pars)} instead?'
+            raise TypeError(errormsg)
+        return
+
+    def harmonize_par_units(self):
+        """
+        Ensure that parameters that share dimensions also share time units
+
+        Some distributions have several parameters with the same dimensions (e.g. the
+        mean and standard deviation of `ss.lognorm_ex()`); these are listed in the
+        distribution's `unit_pars` attribute. Supplying units for only some of them is
+        the expected usage, since the units of the others follow from it: for example,
+        `ss.lognorm_ex(mean=ss.years(10))` means the same thing as
+        `ss.lognorm_ex(mean=ss.years(10), std=ss.years(1))`. Any plain numbers are
+        therefore converted to the same timepar as their siblings. (Without this, they
+        would be interpreted as numbers of timesteps, and would give different answers
+        for different values of `dt`.) Mixing durations and rates cannot be resolved
+        this way, so it raises an exception. Distributions with `unit_pars = None` are
+        not checked.
+        """
+        if self.unit_pars is None: # Nothing to check, e.g. the parameters have different dimensions
+            return
+
+        # Sort the parameters into timepars and plain numbers
+        timepars = sc.objdict()
+        plain = sc.objdict()
+        for key in self.unit_pars:
+            val = self._pars.get(key)
+            if isinstance(val, ss.TimePar):
+                timepars[key] = val
+            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
+                timepars[key] = val.flat[0]
+            elif sc.isnumber(val) or (isinstance(val, np.ndarray) and val.size):
+                plain[key] = val
+
+        if not len(timepars): # They're all plain numbers, so are consistent
+            return
+
+        # Check that the timepars are all of the same kind, since e.g. a duration and a rate can't be reconciled
+        kinds = set('dur' if isinstance(val, ss.dur) else 'rate' for val in timepars.values())
+        if len(kinds) > 1:
+            errormsg = f'Cannot mix durations and rates in {self}, since parameters {sc.strjoin(self.unit_pars)} must have the same units: {dict(timepars)}'
+            raise TypeError(errormsg)
+
+        if not len(plain): # They're all timepars of the same kind, so are consistent
+            return
+
+        # Convert the plain numbers to the same timepar as their siblings
+        template = timepars[0]
+        for key,val in plain.items():
+            self._pars[key] = to_timepar(template, val if sc.isnumber(val) else sc.toarray(val))
+        return
 
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
@@ -1131,6 +1260,7 @@ class uniform(Dist):
     """
     valid_pars = ['low', 'high']
     scaling = scale_types.both
+    unit_pars = ('low', 'high')
 
     def __init__(self, low=None, high=None, **kwargs):
         if high is None and low is not None: # One argument, swap
@@ -1165,6 +1295,7 @@ class normal(Dist):
 
     """
     scaling = scale_types.both
+    unit_pars = ('loc', 'scale')
     def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
@@ -1188,6 +1319,7 @@ class lognorm_im(Dist):
         ```
     """
     scaling = scale_types.postdraw
+    unitless_pars = ('mean', 'sigma')
 
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
@@ -1230,6 +1362,7 @@ class lognorm_ex(Dist):
         ```
     """
     scaling = scale_types.both
+    unit_pars = ('mean', 'std')
 
     def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
@@ -1334,6 +1467,7 @@ class beta_dist(Dist):
         b (float): shape parameter, must be > 0 (default 1.0)
     """
     scaling = scale_types.false
+    unitless_pars = ('a', 'b')
     def __init__(self, a=1.0, b=1.0, **kwargs):
         super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
         return
@@ -1351,6 +1485,7 @@ class beta_mean(Dist):
         force (bool): if True, scale the parameters to the valid range
     """
     scaling = scale_types.false
+    unitless_pars = ('mean', 'var')
     def __init__(self, mean=0.5, var=0.05, force=False, **kwargs):  # Does not accept dtype
         # Validation
         max_var = mean*(1-mean)
@@ -1390,6 +1525,7 @@ class nbinom(Dist):
 
     """
     scaling = scale_types.predraw
+    unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
         super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
         return
@@ -1404,6 +1540,7 @@ class randint(Dist):
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
     """
     scaling = scale_types.predraw
+    unit_pars = ('low', 'high')
     valid_pars = ['low', 'high', 'dtype']
 
     def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
@@ -1460,6 +1597,8 @@ class weibull(Dist):
         scale (float): the scale parameter, sometimes called λ (default 1.0)
     """
     scaling = scale_types.postdraw
+    unitless_pars = ('c',)
+    unit_pars = ('loc', 'scale')
     def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
         return
@@ -1480,6 +1619,8 @@ class gamma(Dist):
         scale (float): the scale parameter, sometimes called θ (default 1.0)
     """
     scaling = scale_types.postdraw
+    unitless_pars = ('a',)
+    unit_pars = ('loc', 'scale')
     def __init__(self, a=1.0, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='gamma', dist=sps.gamma, a=a, loc=loc, scale=scale, **kwargs)
         return
@@ -1581,6 +1722,7 @@ class choice(Dist):
     """
     valid_pars = ['a', 'p', 'replace', 'dtype']
     scaling = scale_types.false
+    unitless_pars = ('p',)
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
