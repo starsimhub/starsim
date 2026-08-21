@@ -1,5 +1,6 @@
 """
-Define measles model.
+Measles, as an SEIR model.
+
 Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/measles.py
 Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
@@ -10,7 +11,35 @@ __all__ = ['Measles']
 
 
 class Measles(ss.SIR):
+    """
+    Measles, as an SEIR model.
 
+    Extends `ss.SIR` with an exposed (latent, non-infectious) state. Exposed
+    agents become infectious after `dur_exp`, then either die (with probability
+    `p_death`) or recover after `dur_inf`. Natural history parameters are from
+    the US CDC.
+
+    Pars:
+        beta (prob):        per-contact transmission probability
+        init_prev (Dist):   initial prevalence
+        dur_exp (Dist):     duration from exposure to infectiousness
+        dur_inf (Dist):     duration of infectiousness
+        p_death (Dist):     probability of death among infected agents
+
+    States:
+        exposed (BoolState):    infected but not yet infectious
+        ti_exposed (FloatArr):  timestep of exposure
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(diseases=ssl.Measles(), networks='random')
+        sim.run()
+        sim.plot()
+        ```
+    """
     def __init__(self, pars=None, **kwargs):
         """ Initialize with parameters """
         super().__init__()

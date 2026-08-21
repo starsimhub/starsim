@@ -41,8 +41,8 @@ Usage::
     )
     sim.run()
 
-    # Check results
-    print('Stillbirths:', sim.results.pregnancy.stillbirths.sum())
+    # Check results; note that fetal loss is classified by the Pregnancy module
+    print('Fetal losses:', sim.results.pregnancy.stillbirths.sum() + sim.results.pregnancy.miscarriages.sum())
     print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 """
 

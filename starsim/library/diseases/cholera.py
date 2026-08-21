@@ -1,5 +1,6 @@
 """
-Define cholera model.
+Cholera, with direct and environmental (waterborne) transmission.
+
 Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
 Original version by Dom Delport 2024
 """
@@ -12,7 +13,52 @@ __all__ = ['Cholera']
 
 class Cholera(ss.Infection):
     """
-    Cholera
+    Cholera, with both direct and environmental (waterborne) transmission.
+
+    An SEIR-type model in which exposed agents become infected, a fraction of
+    whom become symptomatic; symptomatic agents may die, and everyone else
+    recovers. Asymptomatic agents are infectious but shed far less bacteria
+    (`asymp_trans`). In addition to person-to-person transmission via the
+    network, infectious agents shed into a single well-mixed environmental
+    reservoir, which decays exponentially and drives indirect transmission
+    with a dose-response governed by `half_sat_rate`.
+
+    Parameter values are drawn from the literature; see the source for citations.
+
+    Pars:
+        beta (prob):            per-contact transmission probability
+        init_prev (Dist):       initial prevalence
+        dur_exp2inf (Dist):     duration from exposure to infectiousness
+        dur_asymp2rec (Dist):   duration from infection to recovery, asymptomatic agents
+        dur_symp2rec (Dist):    duration from symptoms to recovery
+        dur_symp2dead (Dist):   duration from symptoms to death
+        p_death (Dist):         probability of death among symptomatic agents
+        p_symp (Dist):          probability an infection is symptomatic
+        asymp_trans (float):    relative transmissibility of asymptomatic agents
+        beta_env (prob):        scale factor for environmental transmission
+        half_sat_rate (float):  environmental dose infecting 50% of those exposed
+        shedding_rate (freq):   rate at which infectious agents shed to the environment
+        decay_rate (rate):      rate at which environmental bacteria die off
+        p_env_transmit (Dist):  environmental transmission probability (set each step)
+
+    States:
+        exposed (BoolState):        infected but not yet infectious
+        symptomatic (BoolState):    currently symptomatic
+        recovered (BoolState):      recovered and immune
+        ti_exposed (FloatArr):      timestep of exposure
+        ti_symptomatic (FloatArr):  timestep symptoms began
+        ti_recovered (FloatArr):    timestep of recovery
+        ti_dead (FloatArr):         timestep of death
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(diseases=ssl.Cholera(), networks='random')
+        sim.run()
+        sim.plot()
+        ```
     """
     def __init__(self, pars=None, **kwargs):
         """ Initialize with parameters """

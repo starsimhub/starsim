@@ -106,6 +106,7 @@ website:
             - user_guide/modules_products.qmd
             - user_guide/modules_analyzers.qmd
             - user_guide/modules_connectors.qmd
+            - user_guide/modules_library.qmd
             - user_guide/modules_adding.qmd
           - section: "Workflows"
             contents:
@@ -157,6 +158,11 @@ website:
             - api/run.qmd
             - api/calibration.qmd
             - api/samples.qmd
+        - section: "**Library**"
+          contents:
+            - api/library.diseases.qmd
+            - api/library.networks.qmd
+            - api/library.mnch.qmd
         - section: "**Utilities**"
           contents:
             - api/arrays.qmd
@@ -199,6 +205,35 @@ quartodoc:
         - time
         - timeline
         - utils
+    - title: Library
+      desc: |
+        Example and reference modules that build on core Starsim but are not part of it.
+        Import as `import starsim.library as ssl`. These modules are illustrative rather
+        than validated; see the [user guide](../user_guide/modules_library.qmd) for details.
+      contents:
+        # One page per subpackage, with members listed explicitly: quartodoc's static
+        # analysis does not follow the re-exports in each subpackage's __init__.py
+        - kind: page
+          path: library.diseases
+          package: starsim.library.diseases
+          summary:
+            name: library.diseases
+            desc: Example disease models, plus HIV-related interventions and analyzers.
+          contents: [Cholera, Ebola, HIV, ART, CD4_analyzer, Measles]
+        - kind: page
+          path: library.networks
+          package: starsim.library.networks
+          summary:
+            name: library.networks
+            desc: Household, spatial, and theoretical contact networks.
+          contents: [HouseholdNet, DiskNet, ErdosRenyiNet, NullNet]
+        - kind: page
+          path: library.mnch
+          package: starsim.library.mnch
+          summary:
+            name: library.mnch
+            desc: Maternal, newborn, and child health examples.
+          contents: [CongenitalDisease, NeonatalSepsis, FetalHealth, fetal_infection, treat_pregnant]
 
 format:
   html:

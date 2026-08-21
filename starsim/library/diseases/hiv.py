@@ -1,5 +1,5 @@
 """
-Define default HIV disease module and related interventions
+HIV, with CD4 dynamics, plus an ART intervention and a CD4 analyzer.
 """
 
 import numpy as np
@@ -10,7 +10,51 @@ import starsim as ss
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(ss.Infection):
+    """
+    Simple HIV model with CD4 count dynamics and ART.
 
+    Infected agents have a CD4 count that declines towards `cd4_min` while
+    untreated and recovers towards `cd4_max` while on ART, at a rate set by
+    `cd4_rate`. The per-timestep probability of death scales with how far the
+    CD4 count has fallen, so agents with low CD4 counts die soonest. Agents on
+    ART have their transmissibility reduced by `art_efficacy`. Vertical
+    transmission is supported: `set_congenital()` infects the newborn.
+
+    Use with `ART` to scale up treatment over time, and `CD4_analyzer` to record
+    CD4 counts. Since `beta` defaults to 0, it must be set for transmission to
+    occur.
+
+    Pars:
+        beta (float):           per-contact transmission probability (0 by default)
+        cd4_min (float):        CD4 count approached by untreated agents
+        cd4_max (float):        CD4 count approached by agents on ART
+        cd4_rate (float):       number of timesteps to close the CD4 gap
+        eff_condoms (float):    efficacy of condoms (not currently used internally)
+        art_efficacy (float):   proportional reduction in transmission on ART
+        init_prev (Dist):       initial prevalence
+        death_dist (Dist):      death probability, by default CD4-modulated `p_death`
+        p_death (rate):         baseline death rate per unit time (not per infection)
+
+    States:
+        on_art (BoolState):     currently on ART
+        ti_art (FloatArr):      timestep of ART initiation
+        ti_dead (FloatArr):     timestep of HIV-caused death
+        cd4 (FloatArr):         current CD4 count (default 500)
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(
+            diseases = ssl.HIV(beta=0.02, init_prev=0.05),
+            networks = 'random',
+            interventions = ssl.ART(year=[2000, 2020], coverage=[0, 0.8]),
+        )
+        sim.run()
+        sim.plot()
+        ```
+    """
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
@@ -86,7 +130,27 @@ class HIV(ss.Infection):
 # %% HIV-related interventions
 
 class ART(ss.Intervention):
+    """
+    Scale up antiretroviral therapy over time.
 
+    Each timestep, agents infected `art_delay` ago are offered ART, and are
+    treated with a probability interpolated from `coverage` at the corresponding
+    `year`. Requires the `HIV` module.
+
+    Args:
+        year (float/array):     year(s) at which coverage is specified
+        coverage (float/array): probability of ART initiation at each year
+
+    Pars:
+        art_delay (Dist):   delay from infection to ART eligibility
+
+    Examples:
+        ```python
+        import starsim.library as ssl
+
+        art = ssl.ART(year=[2000, 2010, 2020], coverage=[0, 0.4, 0.8])
+        ```
+    """
     def __init__(self, year, coverage, pars=None, **kwargs):
         self.requires = HIV
         self.year = sc.toarray(year)
@@ -97,7 +161,7 @@ class ART(ss.Intervention):
         )
         self.update_pars(pars, **kwargs)
 
-        prob_art = lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage)
+        prob_art = lambda self, sim, uids: np.interp(self.t.now('year'), self.year, self.coverage)
         self.prob_art_at_infection = ss.bernoulli(p=prob_art)
         return
 
@@ -112,24 +176,24 @@ class ART(ss.Intervention):
         return
 
     def step(self):
-        sim = self.sim
-        if sim.year < self.year[0]:
-            return
+        ti = self.ti
+        if self.t.now('year') < self.year[0]:
+            return 0
 
-        hiv = sim.people.hiv
+        hiv = self.sim.diseases.hiv
         infected = hiv.infected.uids
         ti_delay = np.round(self.pars.art_delay.rvs(infected)).astype(int)
-        recently_infected = infected[hiv.ti_infected[infected] == sim.ti-ti_delay]
+        recently_infected = infected[hiv.ti_infected[infected] == ti - ti_delay]
 
         n_added = 0
         if len(recently_infected) > 0:
             inds = self.prob_art_at_infection.filter(recently_infected)
             hiv.on_art[inds] = True
-            hiv.ti_art[inds] = sim.ti
+            hiv.ti_art[inds] = ti
             n_added = len(inds)
 
         # Add result
-        self.results['n_art'][sim.ti] = np.count_nonzero(hiv.on_art)
+        self.results['n_art'][ti] = np.count_nonzero(hiv.on_art)
 
         return n_added
 
@@ -137,18 +201,26 @@ class ART(ss.Intervention):
 #%% Analyzers
 
 class CD4_analyzer(ss.Analyzer):
+    """
+    Record the CD4 count of every agent at every timestep.
 
-    def __init__(self):
+    Results are stored in `self.cd4`, a (timesteps × agents) array. Requires the
+    `HIV` module. Note that this analyzer allocates a full dense array, so it is
+    best suited to small simulations.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.requires = HIV
         self.cd4 = None
         return
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.cd4 = np.zeros((self.npts, sim.people.n), dtype=int)
+        self.cd4 = np.zeros((self.t.npts, sim.people.n_uids), dtype=int)
         return
 
     def step(self):
-        sim = self.sim
-        self.cd4[sim.t] = sim.people.hiv.cd4
+        cd4 = self.sim.diseases.hiv.cd4.raw
+        n = min(self.cd4.shape[1], len(cd4)) # Truncate in case the population has grown
+        self.cd4[self.ti, :n] = cd4[:n]
         return

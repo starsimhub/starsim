@@ -29,7 +29,7 @@ Usage::
     sim.run()
 
     # NND results are on the Pregnancy module, not the disease
-    print('Neonatal deaths:', sim.results.pregnancy.nnds.sum())
+    print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
     print('Total births:', sim.results.pregnancy.births.sum())
 """
 
@@ -62,7 +62,33 @@ class NeonatalSepsis(ss.SIR):
             p_death   = ss.bernoulli(p=0.5),                       # 50% case fatality
         )
         self.update_pars(pars, **kwargs)
+        self.define_states(
+            ss.BoolArr('screened', label='Screened for sepsis at birth'),
+        )
         return
+
+    def init_post(self):
+        """ Exempt the initial population from being treated as newborns """
+        out = super().init_post()
+        self.screened[self.sim.people.auids] = True
+        return out
+
+    def step(self):
+        """
+        Infect newly born agents.
+
+        `init_prev` only seeds the initial population, so newborns have to be
+        infected explicitly. Each agent is screened once, the first timestep
+        after they are born.
+        """
+        out = super().step()
+        newborns = (~self.screened & (self.sim.people.age >= 0)).uids
+        if len(newborns):
+            self.screened[newborns] = True
+            new_cases = self.pars.init_prev.filter(newborns)
+            if len(new_cases):
+                self.set_prognoses(new_cases, sources=-1)  # -1 = no source agent
+        return out
 
     def set_prognoses(self, uids, sources=None):
         """

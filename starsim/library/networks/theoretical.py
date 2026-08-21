@@ -1,5 +1,5 @@
 """
-Additional theoretical network classes
+Theoretical networks, useful for comparison against analytic results and for debugging.
 """
 import numpy as np
 import starsim as ss
@@ -23,6 +23,19 @@ class ErdosRenyiNet(ss.DynamicNetwork):
     accumulate over time.
 
     Warning: this network is quite slow compared to `ss.RandomNet`.
+
+    Pars:
+        p (float):      probability that each possible edge is created per timestep
+        dur (dur/Dist): how long edges persist; 0 means new edges each timestep
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(diseases='sis', networks=ssl.ErdosRenyiNet(p=0.01))
+        sim.run()
+        ```
     """
     def __init__(self, key_dict=None, pars=None, **kwargs):
         """ Initialize """
@@ -78,6 +91,9 @@ class NullNet(ss.Network):
     >> import networkx as nx
     >> empty_net_static = ss.StaticNet(nx.empty_graph)
     >> empty_net_rand = ss.RandomNet(n_contacts=0)
+
+    Args:
+        n_people (int): number of agents in the network; defaults to the sim's `n_agents`
     """
 
     def __init__(self, n_people=None, **kwargs):

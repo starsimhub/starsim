@@ -1,7 +1,8 @@
 """
-Define Ebola model.
+Ebola, with severe disease and transmission from unburied bodies.
+
 Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/ebola.py
-Original version by@domdelport and @RomeshA
+Original version by @domdelport and @RomeshA
 """
 
 import numpy as np
@@ -11,7 +12,49 @@ __all__ = ['Ebola']
 
 
 class Ebola(ss.SIR):
+    """
+    Ebola, including severe disease and transmission from unburied bodies.
 
+    Extends `ss.SIR` with exposed, severe, and buried states. Exposed agents
+    become infectious, a fraction progress to severe disease, and a fraction of
+    those die; everyone else recovers. Severe agents are more infectious
+    (`sev_factor`), and dead agents remain infectious until buried
+    (`unburied_factor`), with safe burials happening immediately and unsafe
+    burials after a delay.
+
+    Pars:
+        init_prev (Dist):           initial prevalence
+        beta (prob):                per-contact transmission probability
+        sev_factor (float):         relative transmissibility of severe agents
+        unburied_factor (float):    relative transmissibility of unburied bodies
+        dur_exp2symp (Dist):        duration from exposure to symptoms
+        dur_symp2sev (Dist):        duration from symptoms to severe disease
+        dur_sev2dead (Dist):        duration from severe disease to death
+        dur_dead2buried (Dist):     duration from death to (unsafe) burial
+        dur_symp2rec (Dist):        duration from symptoms to recovery, non-severe agents
+        dur_sev2rec (Dist):         duration from severe disease to recovery
+        p_sev (Dist):               probability of progressing to severe disease
+        p_death (Dist):             probability of death among severe agents
+        p_safe_bury (Dist):         probability of a safe (immediate) burial
+
+    States:
+        exposed (BoolState):    infected but not yet infectious
+        severe (BoolState):     currently severely ill
+        buried (BoolState):     dead and buried (no longer infectious)
+        ti_exposed (FloatArr):  timestep of exposure
+        ti_severe (FloatArr):   timestep severe symptoms began
+        ti_buried (FloatArr):   timestep of burial
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(diseases=ssl.Ebola(), networks='random')
+        sim.run()
+        sim.plot()
+        ```
+    """
     def __init__(self, pars=None, **kwargs):
         """ Initialize with parameters """
         super().__init__()

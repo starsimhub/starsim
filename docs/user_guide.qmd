@@ -43,6 +43,7 @@ To run these user guides locally:
 - [Products](user_guide/modules_products.qmd)
 - [Analyzers](user_guide/modules_analyzers.qmd)
 - [Connectors](user_guide/modules_connectors.qmd)
+- [Library modules](user_guide/modules_library.qmd)
 - [Adding new modules](user_guide/modules_adding.qmd)
 
 ## Workflows
