@@ -331,6 +331,13 @@ class Infection(Disease):
         self.set_prognoses(uids[~congenital], src_p)
         return
 
+    # Birth outcomes that trigger request_death rather than setting a bool state.
+    # Prenatal outcomes are fetal losses and must fire while the agent is still unborn;
+    # postnatal outcomes happen to a live newborn. See set_congenital() for why this matters.
+    prenatal_death_keys = {'miscarriage', 'stillborn'}
+    postnatal_death_keys = {'neonatal_deaths'}
+    congenital_death_keys = prenatal_death_keys | postnatal_death_keys
+
     def set_congenital(self, target_uids, source_uids=None):
         """
         Default implementation for assigning congenital outcomes during in-utero
@@ -351,6 +358,12 @@ class Infection(Disease):
         Each outcome name needs a matching `ti_<name>` FloatArr state; non-lethal
         outcomes also need a BoolArr of the same name. Death outcomes ('miscarriage',
         'neonatal_deaths', 'stillborn') fire via `request_death`; others set a bool state.
+
+        Outcomes are scheduled for the mother's delivery timestep, except for fetal
+        losses ('miscarriage', 'stillborn'), which are scheduled one timestep earlier so
+        that they occur before the fetus is delivered and are classified as fetal losses
+        rather than neonatal deaths. A fetus infected within one timestep of delivery is
+        therefore born alive, and a lethal outcome for it counts as a neonatal death.
 
         For state- or GA-dependent probabilities, provide multiple keyed
         distributions in `birth_outcomes` and override
@@ -385,7 +398,16 @@ class Infection(Disease):
             if len(o_uids):
                 ti_key = f'ti_{key}'
                 if hasattr(self, ti_key):
-                    getattr(self, ti_key)[o_uids] = self.ti + dt_delivery[s_uids]
+                    ti_event = self.ti + dt_delivery[s_uids]
+                    if key in self.prenatal_death_keys:
+                        # Fetal losses must fire while the agent is still unborn. Pregnancy.step()
+                        # runs before diseases' step_state() in the integration loop, so an event
+                        # scheduled at ti_delivery would kill an already-delivered newborn: it would
+                        # be counted as a live birth and then as a neonatal death, rather than as a
+                        # fetal loss. Firing a timestep early also matches the biology, since a
+                        # stillborn fetus dies in utero before labor.
+                        ti_event = np.maximum(ti_event - 1, self.ti)
+                    getattr(self, ti_key)[o_uids] = ti_event
         return
 
     def _assign_congenital_outcomes(self, target_uids, source_uids):
@@ -409,7 +431,7 @@ class Infection(Disease):
         """
         if not hasattr(self.pars, 'birth_outcome_keys'):
             return
-        death_keys = {'miscarriage', 'neonatal_deaths', 'stillborn'}  # Birth outcomes that trigger request_death
+        death_keys = self.congenital_death_keys
         for key in self.pars.birth_outcome_keys:
             ti_key = f'ti_{key}'
             if not hasattr(self, ti_key):

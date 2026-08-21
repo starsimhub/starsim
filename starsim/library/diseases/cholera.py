@@ -25,7 +25,7 @@ class Cholera(ss.Infection):
 
     Parameter values are drawn from the literature; see the source for citations.
 
-    Pars:
+    Args:
         beta (prob):            per-contact transmission probability
         init_prev (Dist):       initial prevalence
         dur_exp2inf (Dist):     duration from exposure to infectiousness
@@ -41,7 +41,7 @@ class Cholera(ss.Infection):
         decay_rate (rate):      rate at which environmental bacteria die off
         p_env_transmit (Dist):  environmental transmission probability (set each step)
 
-    States:
+    Attributes:
         exposed (BoolState):        infected but not yet infectious
         symptomatic (BoolState):    currently symptomatic
         recovered (BoolState):      recovered and immune

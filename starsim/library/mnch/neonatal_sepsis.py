@@ -46,7 +46,7 @@ class NeonatalSepsis(ss.SIR):
     fraction (`p_death`) within a short window (`dur_inf`). Useful for
     testing passive neonatal death detection in the Pregnancy module.
 
-    Pars:
+    Args:
         beta (float):       transmission rate — set to 0 since infection is only at birth
         init_prev (Dist):   fraction of newborns infected at birth
         dur_inf (Dist):     time from infection to death (for those who die)

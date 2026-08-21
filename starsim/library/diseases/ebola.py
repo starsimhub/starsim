@@ -22,7 +22,7 @@ class Ebola(ss.SIR):
     (`unburied_factor`), with safe burials happening immediately and unsafe
     burials after a delay.
 
-    Pars:
+    Args:
         init_prev (Dist):           initial prevalence
         beta (prob):                per-contact transmission probability
         sev_factor (float):         relative transmissibility of severe agents
@@ -37,7 +37,7 @@ class Ebola(ss.SIR):
         p_death (Dist):             probability of death among severe agents
         p_safe_bury (Dist):         probability of a safe (immediate) burial
 
-    States:
+    Attributes:
         exposed (BoolState):    infected but not yet infectious
         severe (BoolState):     currently severely ill
         buried (BoolState):     dead and buried (no longer infectious)

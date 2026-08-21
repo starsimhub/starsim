@@ -24,7 +24,7 @@ class HIV(ss.Infection):
     CD4 counts. Since `beta` defaults to 0, it must be set for transmission to
     occur.
 
-    Pars:
+    Args:
         beta (float):           per-contact transmission probability (0 by default)
         cd4_min (float):        CD4 count approached by untreated agents
         cd4_max (float):        CD4 count approached by agents on ART
@@ -35,7 +35,7 @@ class HIV(ss.Infection):
         death_dist (Dist):      death probability, by default CD4-modulated `p_death`
         p_death (rate):         baseline death rate per unit time (not per infection)
 
-    States:
+    Attributes:
         on_art (BoolState):     currently on ART
         ti_art (FloatArr):      timestep of ART initiation
         ti_dead (FloatArr):     timestep of HIV-caused death
@@ -140,9 +140,7 @@ class ART(ss.Intervention):
     Args:
         year (float/array):     year(s) at which coverage is specified
         coverage (float/array): probability of ART initiation at each year
-
-    Pars:
-        art_delay (Dist):   delay from infection to ART eligibility
+        art_delay (Dist):       par: delay from infection to ART eligibility
 
     Examples:
         ```python

@@ -18,11 +18,11 @@ class DiskNet(ss.Network):
 
     Edges are formed between two agents if they are within r distance of each other.
 
-    Pars:
+    Args:
         r (float):  radius within which edges are formed
         v (freq):   speed at which agents move
 
-    States:
+    Attributes:
         x (FloatArr):       x position, in [0, 1]
         y (FloatArr):       y position, in [0, 1]
         theta (FloatArr):   direction of travel, in radians

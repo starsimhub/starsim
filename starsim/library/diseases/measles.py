@@ -19,14 +19,14 @@ class Measles(ss.SIR):
     `p_death`) or recover after `dur_inf`. Natural history parameters are from
     the US CDC.
 
-    Pars:
+    Args:
         beta (prob):        per-contact transmission probability
         init_prev (Dist):   initial prevalence
         dur_exp (Dist):     duration from exposure to infectiousness
         dur_inf (Dist):     duration of infectiousness
         p_death (Dist):     probability of death among infected agents
 
-    States:
+    Attributes:
         exposed (BoolState):    infected but not yet infectious
         ti_exposed (FloatArr):  timestep of exposure
 

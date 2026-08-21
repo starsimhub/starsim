@@ -364,6 +364,15 @@ def test_congenital():
     assert n_congenital > 0, 'Expected some congenital infections'
     assert births > 0, 'Expected some live births'
 
+    # Stillbirths must fire in utero, not after delivery. birth_outcomes is
+    # choice(a=3, p=[0.3, 0.4, 0.3]) over ['stillborn', 'congenital', 'normal'], so
+    # stillbirths and congenital infections should occur in roughly a 0.3:0.4 ratio.
+    # If stillbirths were scheduled at (rather than before) delivery, Pregnancy would
+    # already have delivered the fetus and they would be logged as neonatal deaths,
+    # driving this ratio towards zero -- see Infection.set_congenital.
+    ratio = sb/n_congenital
+    assert 0.3 < ratio < 1.8, f'Stillbirth:congenital ratio {ratio:0.2f} is far from the expected 0.75'
+
     sc.printgreen('✓ Congenital framework tests passed')
     return sim
 

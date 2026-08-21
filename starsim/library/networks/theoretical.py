@@ -24,7 +24,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
 
     Warning: this network is quite slow compared to `ss.RandomNet`.
 
-    Pars:
+    Args:
         p (float):      probability that each possible edge is created per timestep
         dur (dur/Dist): how long edges persist; 0 means new edges each timestep
 

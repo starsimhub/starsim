@@ -11,10 +11,14 @@ How the congenital framework works:
        `Infection.infect()` calls `set_congenital()` when the target is
        an unborn agent (age < 0).
     2. `set_congenital()` samples an outcome from `birth_outcomes` and
-       schedules it at delivery time by setting `ti_<outcome>`.
+       schedules it by setting `ti_<outcome>`. Most outcomes are scheduled
+       for the delivery timestep, but fetal losses ('stillborn' and
+       'miscarriage') are scheduled one timestep earlier so that they occur
+       before `Pregnancy` delivers the fetus — otherwise they would be
+       counted as a live birth followed by a neonatal death.
     3. `step_congenital()` (called each timestep from `step_state()`)
        checks whether any scheduled outcomes are due. Death outcomes
-       ('stillborn', 'nnd', 'miscarriage') call `request_death()`;
+       ('stillborn', 'miscarriage', 'neonatal_deaths') call `request_death()`;
        non-lethal outcomes set a BoolArr state (e.g. `congenital = True`).
 
 To use the framework in your own disease:
@@ -41,8 +45,8 @@ Usage::
     )
     sim.run()
 
-    # Check results; note that fetal loss is classified by the Pregnancy module
-    print('Fetal losses:', sim.results.pregnancy.stillbirths.sum() + sim.results.pregnancy.miscarriages.sum())
+    # Check results; note that stillbirths are recorded by the Pregnancy module
+    print('Stillbirths:', sim.results.pregnancy.stillbirths.sum())
     print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 """
 
@@ -62,12 +66,12 @@ class CongenitalDisease(ss.SIR):
     normal) and schedules it for delivery time. `step_congenital()`
     in `step_state()` executes those scheduled events.
 
-    Pars:
+    Args:
         birth_outcome_keys (list): outcome names — each needs a `ti_<key>` state
         birth_outcomes (objdict):  `ss.choice` distributions keyed by category;
             use 'default' for a single distribution applied to all infections
 
-    States:
+    Attributes:
         ti_stillborn (FloatArr):  timestep when stillbirth fires (triggers request_death)
         ti_congenital (FloatArr): timestep when congenital infection fires (sets BoolArr)
         ti_normal (FloatArr):     timestep when normal outcome fires (no effect)

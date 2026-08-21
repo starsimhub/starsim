@@ -159,7 +159,7 @@ The `ssl.mnch` submodule contains examples of vertical transmission and birth ou
 
 ### Congenital outcomes
 
-`CongenitalDisease` demonstrates the generic congenital framework built into `ss.Infection`. When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it for delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state:
+`CongenitalDisease` demonstrates the generic congenital framework built into `ss.Infection`. When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it around delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state. Fetal losses (`'stillborn'`, `'miscarriage'`) are scheduled one timestep before delivery so that they happen in utero — otherwise `ss.Pregnancy`, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:
 
 ```{python}
 mnch_pars = dict(start=2000, stop=2005, n_agents=2000, dt=ss.weeks(1))
@@ -172,11 +172,13 @@ sim = ss.Sim(
 sim.run()
 preg = sim.results.pregnancy
 print('Births:', preg.births.sum())
-print('Fetal losses:', preg.miscarriages.sum() + preg.stillbirths.sum())
+print('Stillbirths:', preg.stillbirths.sum())
 print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 ```
 
-To use the framework in your own disease, define `birth_outcome_keys` and `birth_outcomes` in your pars, add a matching `ti_<key>` state for each outcome (plus a boolean state for each non-lethal one), and call `self.step_congenital()` from `step_state()`.
+The stillbirth and congenital-infection counts should track the `birth_outcomes` probabilities (0.3 and 0.4 here).
+
+To use the framework in your own disease, define `birth_outcome_keys` and `birth_outcomes` in your pars, add a matching `ti_<key>` state for each outcome (plus a boolean state for each non-lethal one), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_deaths'` are treated as deaths; the first two fire before delivery and the third after it.
 
 ### Neonatal deaths
 
