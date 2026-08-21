@@ -26,6 +26,7 @@ def str2int(string, modulo=1_000_000_000):
 
 
 # Constants for the splitmix64 hash used by hash_uniforms() (see below)
+# Ugly? Yes. Blazingly fast? Also yes.
 _GOLDEN = np.uint64(0x9e3779b97f4a7c15)
 _MIX1   = np.uint64(0xbf58476d1ce4e5b9)
 _MIX2   = np.uint64(0x94d049bb133111eb)
