@@ -875,7 +875,11 @@ class Sim(ss.Base):
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
             elif key == 'results':
-                d.results = self.to_df().to_dict()
+                df = self.to_df()
+                if isinstance(df, dict):  # For sims with heterogeneous timelines, to_df() returns a dict of dataframes rather than a single dataframe
+                    d.results = {k:v.to_dict() for k,v in df.items()}
+                else:
+                    d.results = df.to_dict()
             else:  # pragma: no cover
                 warnmsg = f'Could not convert "{key}" to JSON; continuing...'
                 ss.warn(warnmsg)

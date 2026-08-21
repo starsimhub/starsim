@@ -671,21 +671,29 @@ class RandomNet(RandomExactNet):
     A faster, approximate version of `ss.RandomExactNet`
 
     Identical to `ss.RandomExactNet` except that the target end of each edge is drawn
-    uniformly at random, rather than via a shuffle of the source stubs. This is
-    roughly 1.8x faster at generating edges, but the per-agent degree is no longer
-    fixed: the source side of each edge is still exactly `n_contacts`, while the
-    target side is Poisson-distributed (mean `n_contacts`). Agents therefore have
-    somewhat more variable numbers of contacts than with `ss.RandomExactNet`.
+    by sampling the source stubs *with* replacement, rather than by shuffling them
+    (i.e. sampling without replacement). This is roughly 1.8x faster at generating
+    edges, but the per-agent degree is no longer fixed: the source side of each edge
+    is still exactly `n_contacts`, while the target side is Poisson-distributed with
+    mean `n_contacts`. Agents therefore have somewhat more variable numbers of
+    contacts than with `ss.RandomExactNet`.
+
+    Because targets are drawn from the stub list, an agent's chance of being picked
+    as a target is proportional to its own `n_contacts`, exactly as in
+    `ss.RandomExactNet`. This means the approximation preserves the mixing structure
+    of risk-stratified networks (e.g. a small high-risk core with many contacts
+    correctly forms most of its edges with itself); drawing targets uniformly over
+    agents instead would destroy that clustering and bias the realized degrees.
 
     Note: like `ss.RandomExactNet`, this is not random-number safe; see `ss.RandomSafeNet`
     for the CRN-safe (but slower) version.
     """
     def get_edges(self, inds, n_contacts):
-        """ Find edges by drawing the target of each edge uniformly at random (see `ss.RandomExactNet.get_edges`) """
+        """ Find edges by sampling the source stubs with replacement (see `ss.RandomExactNet.get_edges`) """
         source = np.repeat(inds, n_contacts)
         if len(source):
-            idx = self.dist.rng.integers(0, len(inds), len(source)) # A random target agent for each source stub
-            target = inds[idx]
+            idx = self.dist.rng.integers(0, len(source), len(source)) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
+            target = source[idx]
         else:
             target = source
         self.dist.jump() # Reset the RNG manually, as in RandomExactNet.get_edges
@@ -739,13 +747,14 @@ class RandomSafeNet(DynamicNetwork):
             order = np.argsort(r_arr)
             rr = rr[order,:]
         self.rr = rr
+        self.rr_uids = ss.uids(uids) # Store the UIDs so form_pairs() can map stub positions back to agents
         return rr
 
     def form_pairs(self, debug=False):
         """ From a 2N input array, return 2N-2 nearest-neighbor pairs """
         rr = self.rr
         out = []
-        agent = rr[:,0].astype(int)
+        agent = self.rr_uids[rr[:,0].astype(int)] # Map stub positions back to agent UIDs
         v     = rr[:,1]
         center = v[1:-1]
         p1_dist = abs(center - v[:-2])
@@ -753,7 +762,7 @@ class RandomSafeNet(DynamicNetwork):
         use_p1 = sc.findinds(p1_dist < p2_dist)
         use_p2 = sc.findinds(p1_dist > p2_dist) # Can refactor
         source = agent[1:-1]
-        target = np.zeros(len(source), dtype=int)
+        target = np.zeros(len(source), dtype=agent.dtype).view(ss.uids)
         target[use_p1] = agent[:-2][use_p1]
         target[use_p2] = agent[2:][use_p2]
 

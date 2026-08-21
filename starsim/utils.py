@@ -8,8 +8,8 @@ import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
 
-# %% Helper functions
 
+# %% Helper functions
 
 class ndict(sc.objdict):
     """
@@ -376,10 +376,10 @@ def standardize_netkey(key):
     return key.lower().removesuffix('net')
 
 
-#: Alternative column names accepted for standard data columns, used only if the configured
-#: column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
-#: rather than "Year"). Keep this list short and explicit; anything else can be handled by
-#: supplying `metadata=dict(data_cols=...)` explicitly.
+# Alternative column names accepted for standard data columns, used only if the configured
+# column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
+# rather than "Year"). Keep this list short and explicit; anything else can be handled by
+# supplying `metadata=dict(data_cols=...)` explicitly.
 col_synonyms = dict(
     year = ['Year', 'Time', 'year', 'time'],
 )
