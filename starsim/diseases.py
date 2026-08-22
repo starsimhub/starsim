@@ -372,7 +372,7 @@ class Infection(Disease):
         Call `step_congenital` from the disease's `step_state()` to
         execute the scheduled events each timestep.
         """
-        if not hasattr(self.pars, 'birth_outcomes') or self.pars.birth_outcomes is None:
+        if 'birth_outcomes' not in self.pars or self.pars.birth_outcomes is None:
             return
 
         # Prevent repeated MTC transmission each timestep of pregnancy
@@ -416,10 +416,8 @@ class Infection(Disease):
         Must return an integer array of outcome indices (one per target_uid),
         corresponding to `self.pars.birth_outcome_keys`.
         """
-        raise NotImplementedError(
-            'Subclass must implement _assign_congenital_outcomes or use a single '
-            '"default" distribution in birth_outcomes'
-        )
+        errormsg = 'Subclass must implement _assign_congenital_outcomes or use a single "default" distribution in birth_outcomes'
+        raise NotImplementedError(errormsg)
 
     def step_congenital(self):
         """
@@ -429,7 +427,7 @@ class Infection(Disease):
         pars. Call from the disease's `step_state()`; see `set_congenital`
         for setup details.
         """
-        if not hasattr(self.pars, 'birth_outcome_keys'):
+        if 'birth_outcome_keys' not in self.pars:
             return
         death_keys = self.congenital_death_keys
         for key in self.pars.birth_outcome_keys:
