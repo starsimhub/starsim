@@ -124,6 +124,9 @@ class Infection(Disease):
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
+            # Transmission comes from infectious people; by default everyone infected is infectious,
+            # but a disease with a latent state (e.g. SEIR) can define 'infectious' as a state of its own
+            infectious = 'infected',
         )
 
         self.define_pars(
@@ -139,14 +142,6 @@ class Infection(Disease):
         super().init_pre(sim)
         self.validate_beta()
         return
-
-    @property
-    def infectious(self):
-        """
-        Generally defined as an alias for infected, although these may differ in some diseases.
-        Transmission comes from infectious people; prevalence estimates may include infected people who don't transmit
-        """
-        return self.infected
 
     def init_post(self):
         """

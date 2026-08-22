@@ -166,6 +166,13 @@ def required(val=True):
     return decorator
 
 
+# Attributes that are usually expected to exist, along with the state they are usually
+# aliased to; used to give a more helpful error message; see Module.define_aliases()
+alias_hints = {
+    'infectious': 'infected',
+}
+
+
 class Base:
     """
     The parent class for Sim and Module objects
@@ -287,6 +294,7 @@ class Module(Base):
         self.finalized = False
         self._lock_attrs = True # Prevent key attributes from being overwritten directly
         self._auto_states = [] # Store automatic states (State objects) added via define_states()
+        self._state_aliases = {} # Store aliases to other states, added via define_aliases()
         return
 
     def __call__(self, *args, **kwargs):
@@ -296,6 +304,44 @@ class Module(Base):
     def __getitem__(self, key):
         """ Allow modules to act like dictionaries """
         return getattr(self, key)
+
+    def __getattr__(self, attr):
+        """ If an attribute isn't found, fall back to the state aliases; see define_aliases() """
+        aliases = self.__dict__.get('_state_aliases') # Use __dict__ rather than getattr to avoid infinite recursion
+        if aliases is not None and attr in aliases:
+            target = aliases[attr]
+            return target(self) if callable(target) else getattr(self, target)
+
+        # If the attribute does exist on the class (e.g. a property), then it raised an AttributeError
+        # internally; re-run it so the real error is reported rather than masked as a missing attribute
+        cls_attr = getattr(type(self), attr, None)
+        if cls_attr is not None and hasattr(cls_attr, '__get__'):
+            return cls_attr.__get__(self, type(self))
+
+        raise AttributeError(self._attr_errormsg(attr, aliases))
+
+    def _attr_errormsg(self, attr, aliases=None):
+        """ Construct a helpful error message for a missing attribute; see __getattr__() """
+        d = self.__dict__ # Use __dict__ throughout to avoid recursing back into __getattr__()
+        aliases = aliases or {}
+        states = sorted(key for key,val in d.items() if isinstance(val, ss.Arr))
+        others = sorted(key for key,val in d.items() if not key.startswith('_') and not isinstance(val, ss.Arr))
+        available = states + sorted(aliases.keys()) + others
+        errormsg = f'Attribute "{attr}" not found in {type(self).__name__} "{d.get("name", "(unnamed)")}"; available attributes are:\n'
+        errormsg += f'  States:  {sc.strjoin(states) if states else "(none defined yet)"}\n'
+        if aliases:
+            aliasstr = sc.strjoin(f'{k} -> {"(derived)" if callable(v) else v}' for k,v in aliases.items())
+            errormsg += f'  Aliases: {aliasstr}\n'
+        errormsg += f'  Other:   {sc.strjoin(others) if others else "(none)"}'
+        closest = sc.suggest(attr, available, threshold=4) if available else None # Only suggest close matches
+        if closest is not None and closest != attr and attr not in alias_hints:
+            errormsg += f'\n\nDid you mean "{closest}"?'
+        if attr in alias_hints:
+            target = alias_hints[attr]
+            errormsg += f'\n\nNo state is marked as "{attr}". Note: you can mark an existing state as "{attr}" '
+            errormsg += f'via e.g. self.define_aliases({attr}=\'{target}\'), or define it as a state in its own right '
+            errormsg += f'via self.define_states(ss.BoolState(\'{attr}\')).'
+        return errormsg
 
     def __setattr__(self, attr, value):
         """ Don't allow locked attributes to be overwritten """
@@ -519,18 +565,32 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
-    def define_states(self, *args, check=True, reset=False, lock=True):
+    def define_states(self, *args, check=True, reset=False, lock=True, **kwargs):
         """
         Define states of the module with the same attribute name as the state
 
         In addition to registering the state with the module by attribute, it adds
         it to `mod._auto_states`, which is used by `mod.state_list` and `mod.state_dict`.
 
+        Any additional keyword arguments are passed to `define_aliases()`, which is
+        usually the most convenient way to define an alias alongside the states it
+        refers to. Note that aliases are defined after the states, and are not removed
+        by `reset` (so e.g. `ss.SIR` inherits the `infectious` alias from `ss.Infection`).
+
         Args:
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state, and that it's not already present
             reset (bool): whether to reset the list of module states and use only the ones provided
             lock (bool): if True, prevent the state attributes from being overwritten after definition
+            kwargs (dict): passed to `define_aliases()`
+
+        **Example**:
+
+            self.define_states(
+                ss.BoolState('susceptible', default=True),
+                ss.BoolState('infected'),
+                infectious = 'infected', # Defines an alias rather than a state
+            )
         """
         # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
         if reset:
@@ -560,6 +620,7 @@ class Module(Base):
 
             # Add the state to the module
             attr = state.name
+            self._state_aliases.pop(attr, None) # A real state takes precedence over an alias of the same name
             if check and hasattr(self, attr):
                 present = [s.name for s in self.state_list]
                 new = [s.name for s in args]
@@ -580,6 +641,60 @@ class Module(Base):
         # Reset the lock state
         if not check:
             self._lock_attrs = orig_lock_attrs
+
+        # Define any aliases, which must come after the states they refer to
+        if kwargs:
+            self.define_aliases(**kwargs)
+        return
+
+    def define_aliases(self, **kwargs):
+        """
+        Define aliases to other states, e.g. `self.define_aliases(infectious='infected')`
+
+        An alias is only consulted if the attribute is not otherwise defined, so it acts as
+        a default that a subclass can override: defining a state of the same name via
+        `define_states()` removes the alias. This lets `ss.Infection` treat everyone infected
+        as infectious, while allowing e.g. an SEIR model to define `infectious` as a state
+        in its own right, without either having to override a property.
+
+        Each alias is either the name of another state, or a callable taking the module as
+        its only argument, which allows a state to be derived from several others. Note that
+        a callable is evaluated on every access, and so returns a plain array rather than a
+        state: it cannot be written to, and does not support in-place modification.
+
+        Unlike states, which cannot be redefined without `define_states(..., reset=True)`, an
+        alias may replace an existing state or alias of the same name. This allows a subclass
+        to derive a state that its parent defined directly, e.g. an SEIR model deriving
+        `infected` from `exposed` and `infectious`.
+
+        Note that unlike states, aliases do not appear in `mod.state_list`/`mod.state_dict`,
+        and do not generate automatic results (e.g. an alias named `infected` will not
+        produce `n_infected`).
+
+        Args:
+            kwargs (dict): mapping of alias name to either the name of a state, or a callable
+
+        **Examples**:
+
+            self.define_aliases(infectious='infected') # Everyone infected is infectious
+            self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Derived
+        """
+        for key, target in kwargs.items():
+            if isinstance(self.__dict__.get(key), ss.Arr): # Replacing a state, e.g. deriving 'infected' in an SEIR
+                self._remove_state(key)
+            elif key not in self._state_aliases and hasattr(self, key):
+                errormsg = f'Cannot alias "{key}" in {self._debug_name} since "{key}" is already defined, '
+                errormsg += 'and is not a state or another alias.'
+                raise AttributeError(errormsg)
+        self._state_aliases.update(kwargs)
+        return
+
+    def _remove_state(self, attr):
+        """ Remove a single state from the module; see define_aliases() and define_states(reset=True) """
+        delattr(self, attr)
+        if attr in self._locked_attrs:
+            self._locked_attrs.remove(attr)
+        self._auto_states = [state for state in self._auto_states if state.name != attr]
         return
 
     def define_results(self, *args, check=True):
@@ -648,6 +763,8 @@ class Module(Base):
         results = sc.autolist()
         for state in self.auto_state_list:
             results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+        for name in self.derived_state_list: # Derived states have no state object, but still get a result
+            results += ss.Result(f'n_{name}', dtype=int, scale=True, label=name)
         self.define_results(*results)
         return
 
@@ -710,6 +827,18 @@ class Module(Base):
         """
         return self._auto_states[:]
 
+    @property
+    def derived_state_list(self):
+        """
+        List of aliases defined by a callable (see `define_aliases()`)
+
+        Unlike a string alias, which points at a state that is already counted under its own
+        name, a callable alias is a derived quantity with no state of its own, and so generates
+        an automatic result (e.g. an alias named `infected` produces `n_infected`).
+        """
+        aliases = self.__dict__.get('_state_aliases') or {}
+        return [key for key,val in aliases.items() if callable(val)]
+
     def match_time_inds(self, inds=None):
         """ Find the nearest matching sim time indices for the current module """
         self_tvec = self.t.yearvec
@@ -752,6 +881,8 @@ class Module(Base):
         """
         for state in self.auto_state_list:
             self.results[f'n_{state.name}'][self.ti] = state.sum()
+        for name in self.derived_state_list:
+            self.results[f'n_{name}'][self.ti] = getattr(self, name).sum()
         return
 
     @required()
