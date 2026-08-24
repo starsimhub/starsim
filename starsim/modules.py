@@ -273,6 +273,8 @@ class Module(Base):
                 return
         ```
     """
+    _state_aliases = {} # Default, so that __getattr__() works before __init__() has run (e.g. when unpickling)
+
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
         self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
@@ -307,10 +309,14 @@ class Module(Base):
 
     def __getattr__(self, attr):
         """ If an attribute isn't found, fall back to the state aliases; see define_aliases() """
-        aliases = self.__dict__.get('_state_aliases') # Use __dict__ rather than getattr to avoid infinite recursion
-        if aliases is not None and attr in aliases:
+        aliases = self._state_aliases
+        if attr in aliases:
             target = aliases[attr]
-            return target(self) if callable(target) else getattr(self, target)
+            if not callable(target):
+                return getattr(self, target)
+            out = target(self) # A derived state, e.g. exposed = infected & ~infectious
+            out.raw.flags.writeable = False # It is recomputed on each access, so writes would be lost
+            return out
 
         # If the attribute does exist on the class (e.g. a property), then it raised an AttributeError
         # internally; re-run it so the real error is reported rather than masked as a missing attribute
@@ -320,14 +326,12 @@ class Module(Base):
 
         raise AttributeError(self._attr_errormsg(attr, aliases))
 
-    def _attr_errormsg(self, attr, aliases=None):
+    def _attr_errormsg(self, attr, aliases):
         """ Construct a helpful error message for a missing attribute; see __getattr__() """
-        d = self.__dict__ # Use __dict__ throughout to avoid recursing back into __getattr__()
-        aliases = aliases or {}
-        states = sorted(key for key,val in d.items() if isinstance(val, ss.Arr))
-        others = sorted(key for key,val in d.items() if not key.startswith('_') and not isinstance(val, ss.Arr))
+        states = sorted(state.name for state in self.state_list)
+        others = sorted(key for key in self.__dict__ if not key.startswith('_') and key not in states)
         available = states + sorted(aliases.keys()) + others
-        errormsg = f'Attribute "{attr}" not found in {type(self).__name__} "{d.get("name", "(unnamed)")}"; available attributes are:\n'
+        errormsg = f'Attribute "{attr}" not found in {type(self).__name__}; available attributes are:\n'
         errormsg += f'  States:  {sc.strjoin(states) if states else "(none defined yet)"}\n'
         if aliases:
             aliasstr = sc.strjoin(f'{k} -> {"(derived)" if callable(v) else v}' for k,v in aliases.items())
@@ -658,9 +662,11 @@ class Module(Base):
         in its own right, without either having to override a property.
 
         Each alias is either the name of another state, or a callable taking the module as
-        its only argument, which allows a state to be derived from several others. Note that
-        a callable is evaluated on every access, and so returns a plain array rather than a
-        state: it cannot be written to, and does not support in-place modification.
+        its only argument, which allows a state to be derived from several others. A callable
+        returns an ordinary `ss.Arr`, so UID indexing, `.uids`, and boolean operations all
+        behave exactly as they do for a real state. The only difference is that it is computed
+        fresh on each access rather than stored, so it is returned read-only: writing to it
+        would otherwise be silently lost.
 
         Unlike states, which cannot be redefined without `define_states(..., reset=True)`, an
         alias may replace an existing state or alias of the same name. This allows a subclass

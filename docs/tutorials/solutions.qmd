@@ -199,40 +199,30 @@ class SEIR(ss.SIR):
         self.define_pars(dur_exp=ss.lognorm_ex(0.5))
         self.update_pars(pars, **kwargs)
         self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.BoolState('infectious', label='Infectious'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
+            exposed = lambda self: self.infected & ~self.infectious,
         )
-        return
-
-    @property
-    def infectious(self):
-        return self.infected | self.exposed
-
-    def step_state(self):
-        super().step_state()
-        infected = self.exposed & (self.ti_infected <= self.ti)
-        self.exposed[infected] = False
-        self.infected[infected] = True
-        return
-
-    def step_die(self, uids):
-        super().step_die(uids)
-        self.exposed[uids] = False
         return
 
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources)
-        ti = self.ti
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = ti
-        p = self.pars
-        dur_exp = p.dur_exp.rvs(uids)
-        self.ti_infected[uids] = ti + dur_exp
-        dur_inf = p.dur_inf.rvs(uids)
-        will_die = p.p_death.rvs(uids)
-        self.ti_recovered[uids[~will_die]] = ti + dur_inf[~will_die]
-        self.ti_dead[uids[will_die]] = ti + dur_inf[will_die]
+        dur_exp = self.pars.dur_exp.rvs(uids)
+        self.ti_infectious[uids] = self.ti + dur_exp
+        self.ti_recovered[uids] += dur_exp
+        self.ti_dead[uids] += dur_exp
+        return
+
+    def step_state(self):
+        becoming = (self.exposed & (self.ti_infectious <= self.ti)).uids
+        self.infectious[becoming] = True
+        super().step_state()
+        self.infectious[~self.infected] = False
+        return
+
+    def step_die(self, uids):
+        super().step_die(uids)
+        self.infectious[uids] = False
         return
 ```
 

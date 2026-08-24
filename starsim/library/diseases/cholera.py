@@ -39,11 +39,17 @@ class Cholera(ss.Infection):
         decay_rate (rate):      rate at which environmental bacteria die off
         p_env_transmit (Dist):  environmental transmission probability (set each step)
 
+    Note that `infected` covers both the exposed and infectious compartments, so
+    `n_infected` is E+I, while only `infectious` agents transmit and shed; `exposed` is
+    derived as `infected & ~infectious`. `ti_infected` is the time of infection;
+    `ti_infectious` is the time of becoming infectious.
+
     Attributes:
-        exposed (BoolState):        infected but not yet infectious
+        infectious (BoolState):     infectious (shedding)
+        exposed (derived):          infected but not yet infectious
         symptomatic (BoolState):    currently symptomatic
         recovered (BoolState):      recovered and immune
-        ti_exposed (FloatArr):      timestep of exposure
+        ti_infectious (FloatArr):   timestep of becoming infectious
         ti_symptomatic (FloatArr):  timestep symptoms began
         ti_recovered (FloatArr):    timestep of recovery
         ti_dead (FloatArr):         timestep of death
@@ -87,21 +93,22 @@ class Cholera(ss.Infection):
         # Boolean states
         self.define_states(
             # Susceptible & infected are added automatically, here we add the rest
-            ss.BoolState('exposed', label='Exposed'),
+            ss.BoolState('infectious', label='Infectious'),
             ss.BoolState('symptomatic', label='Symptomatic'),
             ss.BoolState('recovered', label='Recovered'),
 
             # Timepoint states
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
             ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),
+
+            # Derived states: infected covers both E and I, and only infectious agents shed
+            exposed = lambda self: self.infected & ~self.infectious,
+            asymptomatic = lambda self: self.infectious & ~self.symptomatic,
+            ti_exposed = 'ti_infected', # Exposure and infection are the same event
         )
         return
-
-    @property
-    def asymptomatic(self):
-        return self.infected & ~self.symptomatic
 
     def init_results(self):
         """ Initialize results """
@@ -119,20 +126,19 @@ class Cholera(ss.Infection):
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
-        # Progress exposed -> infected
+        # Progress exposed -> infectious
         ti = self.ti
-        infected = (self.exposed & (self.ti_infected <= ti)).uids
-        self.infected[infected] = True
-        self.exposed[infected] = False
+        infectious = (self.exposed & (self.ti_infectious <= ti)).uids
+        self.infectious[infectious] = True
 
-        # Progress infected -> symptomatic
-        symptomatic = (self.infected & (self.ti_symptomatic <= ti)).uids
+        # Progress infectious -> symptomatic
+        symptomatic = (self.infectious & (self.ti_symptomatic <= ti)).uids
         self.symptomatic[symptomatic] = True
 
         # Progress symptomatic -> recovered
         recovered = (self.infectious & (self.ti_recovered <= ti)).uids
-        self.exposed[recovered] = False
         self.infected[recovered] = False
+        self.infectious[recovered] = False
         self.symptomatic[recovered] = False
         self.recovered[recovered] = True
 
@@ -171,17 +177,17 @@ class Cholera(ss.Infection):
         ti = self.ti
 
         self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = ti
+        self.infected[uids] = True
+        self.ti_infected[uids] = ti # Agents are infected (exposed) as soon as they are transmitted to
 
         p = self.pars
 
-        # Determine when exposed become infected
-        self.ti_infected[uids] = ti + p.dur_exp2inf.rvs(uids)
+        # Determine when exposed become infectious
+        self.ti_infectious[uids] = ti + p.dur_exp2inf.rvs(uids)
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
-        self.ti_symptomatic[symp_uids] = self.ti_infected[symp_uids]
+        self.ti_symptomatic[symp_uids] = self.ti_infectious[symp_uids]
 
         # Determine who dies and when
         dead_uids = p.p_death.filter(symp_uids)
@@ -190,8 +196,8 @@ class Cholera(ss.Infection):
         asymp_uids = np.setdiff1d(uids, symp_uids)
 
         # Determine when agents recover
-        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
-        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
+        self.ti_recovered[symp_rev_uids] = self.ti_infected[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
+        self.ti_recovered[asymp_uids] = self.ti_infected[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
 
         return
 
@@ -216,7 +222,7 @@ class Cholera(ss.Infection):
 
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
-        for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
+        for state in ['susceptible', 'infected', 'infectious', 'symptomatic', 'recovered']:
             self.state_dict[state][uids] = False
         return
 

@@ -98,7 +98,17 @@ Now for the fun part - creating your own disease from scratch! Let's modify the 
 
 This is a common pattern in epidemiology - think of it as the incubation period before someone becomes contagious.
 
-If you want to make your own disease, you could either inherit from one of the templates in diseases.py, or you could copy the examples and extend them to capture features of the disease that you want to model. For example, suppose you wanted to change the SIR model to an SEIR model (i.e., add an 'exposed' state where people were transmissible but did not yet have symptoms. You might hope that this would be a relatively simple change to make. Here's how it would look:
+If you want to make your own disease, you could either inherit from one of the templates in diseases.py, or you could copy the examples and extend them to capture features of the disease that you want to model. For example, suppose you wanted to change the SIR model to an SEIR model, i.e. add an 'exposed' state where people are infected but not yet infectious. You might hope that this would be a relatively simple change to make. Here's how it would look:
+
+Before writing the code, it's worth being precise about what the compartments mean, since this is the part that's easy to get wrong. In Starsim, `infected` means "has the infection" and `infectious` means "can transmit it". For SIR these are the same thing, so `ss.Infection` defines `infectious` as an alias of `infected`. For SEIR they come apart: an exposed agent is infected but not yet infectious.
+
+The neat way to handle this is to notice that SIR's infected compartment is *already* what we want `infected` to mean — an agent is infected from the moment of transmission until they recover, whether or not they're infectious yet. So we keep `infected` exactly as SIR manages it, add `infectious` as a new state that starts later, and *derive* the exposed compartment from the gap between them:
+
+```python
+exposed = lambda self: self.infected & ~self.infectious
+```
+
+This means we inherit almost all of SIR's behaviour rather than rewriting it: SEIR becomes "SIR, but infectiousness is delayed". It also keeps `new_infections` correct, since that counts agents entering `infected`, which is still the moment of transmission.
 
 ```{python}
 import starsim as ss
@@ -112,49 +122,36 @@ class SEIR(ss.SIR):
         )
         self.update_pars(pars, **kwargs)
 
-        # Additional states beyond the SIR ones 
+        # Additional states beyond the SIR ones
         self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.FloatArr('ti_exposed', label='TIme of exposure'),
+            ss.BoolState('infectious', label='Infectious'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
+            exposed = lambda self: self.infected & ~self.infectious, # Infected, but not yet infectious
         )
-        return
-
-    @property
-    def infectious(self):
-        return self.infected | self.exposed
-
-    def step_state(self):
-        """ Make all the updates from the SIR model """
-        # Perform SIR updates
-        super().step_state()
-
-        # Additional updates: progress exposed -> infected
-        infected = self.exposed & (self.ti_infected <= self.ti)
-        self.exposed[infected] = False
-        self.infected[infected] = True
-        return
-
-    def step_die(self, uids):
-        super().step_die(uids)
-        self.exposed[uids] = False
         return
 
     def set_prognoses(self, uids, sources=None):
         """ Carry out state changes associated with infection """
-        super().set_prognoses(uids, sources)
-        ti = self.ti
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = ti
+        super().set_prognoses(uids, sources) # Infects the agents and schedules recovery/death
 
-        # Calculate and schedule future outcomes
-        p = self.pars # Shorten for convenience
-        dur_exp = p.dur_exp.rvs(uids)
-        self.ti_infected[uids] = ti + dur_exp
-        dur_inf = p.dur_inf.rvs(uids)
-        will_die = p.p_death.rvs(uids)        
-        self.ti_recovered[uids[~will_die]] = ti + dur_inf[~will_die]
-        self.ti_dead[uids[will_die]] = ti + dur_inf[will_die]
+        # Delay the onset of infectiousness, and push recovery and death back to match
+        dur_exp = self.pars.dur_exp.rvs(uids)
+        self.ti_infectious[uids] = self.ti + dur_exp
+        self.ti_recovered[uids] += dur_exp
+        self.ti_dead[uids] += dur_exp
+        return
+
+    def step_state(self):
+        """ Make all the updates from the SIR model, plus the exposed -> infectious transition """
+        becoming = (self.exposed & (self.ti_infectious <= self.ti)).uids
+        self.infectious[becoming] = True
+        super().step_state() # Infected -> recovered, and deaths
+        self.infectious[~self.infected] = False # Recovering or dying also ends infectiousness
+        return
+
+    def step_die(self, uids):
+        super().step_die(uids)
+        self.infectious[uids] = False
         return
     
     def plot(self):
@@ -170,10 +167,13 @@ class SEIR(ss.SIR):
 
 The new class includes the following main changes:
 
-1. In `__init__` we added the extra pars and states needed for our model
-2. We defined `infectious` to include both infected and exposed people - this means that we can just reuse the existing logic for how the SIR model handles transmission
-3. We updated `update_pre` and `update_death` to include changes to the `exposed` state
-4. We rewrote `set_prognoses` to include the new exposed state.
+1. In `__init__` we added the extra pars and states needed for our model, and derived `exposed` from `infected & ~infectious`
+2. `set_prognoses` calls `super()` to do the actual infecting, then simply delays the onset of infectiousness
+3. `step_state` and `step_die` likewise call `super()` and add only the exposed → infectious transition
+
+Notice that every method is `super()` plus two or three lines: because SIR's infected compartment already means "infected from transmission until recovery", we get to inherit it rather than replace it.
+
+One detail is worth calling out, because it's easy to trip over: recovery and death are pushed back by `dur_exp` rather than being left where SIR put them. Otherwise the latent period would eat into the infectious period instead of delaying it, and a long enough `dur_exp` would let agents recover before they ever became infectious. Note that `+= dur_exp` works on both `ti_recovered` and `ti_dead` without having to split the agents up, because whichever one doesn't apply to a given agent is `NaN`, and `NaN` plus anything is still `NaN`.
 
 Here's how it would look in practice:
 

@@ -57,6 +57,24 @@ self.define_states(
 
 Each state becomes an attribute (`self.vaccinated`) and is automatically connected to the `People` object. A handy shortcut: every `ss.BoolState` automatically generates a corresponding `n_<name>` count result (e.g. `n_vaccinated`), so you often don't need to define that result yourself.
 
+#### Aliases and derived states
+
+Any keyword arguments to `define_states()` are passed to `define_aliases()`, which defines a name that resolves to something else. An alias is either the name of another state, or a callable that computes a value from other states:
+
+```python
+self.define_states(
+    ss.BoolState('infectious', label='Infectious'),
+    exposed = lambda self: self.infected & ~self.infectious, # Derived from other states
+    ti_exposed = 'ti_infected', # Shorthand for another state
+)
+```
+
+Aliases exist so that a base class can provide a sensible default that a subclass can replace. `ss.Infection` declares `infectious = 'infected'`, because for an SIR model everyone infected is infectious; an SEIR subclass overrides that simply by declaring `infectious` as a state of its own, with no property to override and no `super()` call. See [Infected vs. infectious](modules_diseases.qmd#infected-vs-infectious) for the full example.
+
+Unlike states, which cannot be redefined without `define_states(..., reset=True)`, an alias may replace an existing state or alias of the same name — so a subclass can derive a state that its parent stored directly.
+
+A callable alias is a **derived state**. It generates an `n_<name>` result like a real state, but it has no storage: it's recomputed on each access and returned read-only, so writing to it raises an error rather than silently discarding the write. It also doesn't appear in `state_list` or `state_dict`.
+
 ### Results: `define_results()`
 
 To record custom outputs, override `init_results()` and call `self.define_results()` with `ss.Result` objects. Results are time series the length of the simulation:

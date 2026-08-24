@@ -35,13 +35,19 @@ class Ebola(ss.SIR):
         p_death (Dist):             probability of death among severe agents
         p_safe_bury (Dist):         probability of a safe (immediate) burial
 
+    Note that `infected` covers both the exposed and infectious compartments, so
+    `n_infected` is E+I, while only `infectious` agents transmit; `exposed` is derived
+    as `infected & ~infectious`. `ti_infected` is the time of infection; `ti_infectious`
+    is the time of becoming infectious (symptomatic).
+
     Attributes:
-        exposed (BoolState):    infected but not yet infectious
-        severe (BoolState):     currently severely ill
-        buried (BoolState):     dead and buried (no longer infectious)
-        ti_exposed (FloatArr):  timestep of exposure
-        ti_severe (FloatArr):   timestep severe symptoms began
-        ti_buried (FloatArr):   timestep of burial
+        infectious (BoolState):     infectious (symptomatic)
+        exposed (derived):          infected but not yet infectious
+        severe (BoolState):         currently severely ill
+        buried (BoolState):         dead and buried (no longer infectious)
+        ti_infectious (FloatArr):   timestep of becoming infectious
+        ti_severe (FloatArr):       timestep severe symptoms began
+        ti_buried (FloatArr):       timestep of burial
 
     Examples:
         ```python
@@ -78,33 +84,37 @@ class Ebola(ss.SIR):
 
         # Boolean states
         self.define_states(
-            # SIR states are added automatically, here we add exposed, severe, and buried
-            ss.BoolState('exposed', label='Exposed'),
+            # SIR states are added automatically, here we add infectious, severe, and buried
+            ss.BoolState('infectious', label='Infectious'),
             ss.BoolState('severe', label='Severe'),
             ss.BoolState('buried', label='Buried'),
 
             # Timepoint states
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
             ss.FloatArr('ti_severe', label='Time of severe symptoms'),
             ss.FloatArr('ti_buried', label='Time of burial'),
+
+            # Derived states: infected covers both E and I
+            exposed = lambda self: self.infected & ~self.infectious,
+            ti_exposed = 'ti_infected', # Exposure and infection are the same event
         )
         return
 
     def step_state(self):
 
-        # Progress exposed -> infected
+        # Progress exposed -> infectious
         ti = self.ti
-        infected = (self.exposed & (self.ti_infected <= ti)).uids
-        self.exposed[infected] = False
-        self.infected[infected] = True
+        infectious = (self.exposed & (self.ti_infectious <= ti)).uids
+        self.infectious[infectious] = True
 
         # Progress infectious -> severe
-        severe = (self.infected & (self.ti_severe <= ti)).uids
+        severe = (self.infectious & (self.ti_severe <= ti)).uids
         self.severe[severe] = True
 
-        # Progress infected -> recovered
-        recovered = (self.infected & (self.ti_recovered <= ti)).uids
+        # Progress infectious -> recovered
+        recovered = (self.infectious & (self.ti_recovered <= ti)).uids
         self.infected[recovered] = False
+        self.infectious[recovered] = False
         self.recovered[recovered] = True
 
         # Progress severe -> recovered
@@ -131,17 +141,17 @@ class Ebola(ss.SIR):
 
         ti = self.ti
         self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = ti
+        self.infected[uids] = True
+        self.ti_infected[uids] = ti # Agents are infected (exposed) as soon as they are transmitted to
 
         p = self.pars
 
-        # Determine when exposed become infected
-        self.ti_infected[uids] = ti + p.dur_exp2symp.rvs(uids)
+        # Determine when exposed become infectious (symptomatic)
+        self.ti_infectious[uids] = ti + p.dur_exp2symp.rvs(uids)
 
-        # Determine who progresses to sever and when
+        # Determine who progresses to severe and when
         sev_uids = p.p_sev.filter(uids)
-        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.rvs(sev_uids)
+        self.ti_severe[sev_uids] = self.ti_infectious[sev_uids] + p.dur_symp2sev.rvs(sev_uids)
 
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(sev_uids)
@@ -149,7 +159,7 @@ class Ebola(ss.SIR):
         rec_sev_uids = np.setdiff1d(sev_uids, dead_uids)
         self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids)
         rec_symp_uids = np.setdiff1d(uids, sev_uids)
-        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids)
+        self.ti_recovered[rec_symp_uids] = self.ti_infectious[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids)
 
         # Determine time of burial - either immediate (safe burials) or after a delay (unsafe)
         safe_buried = p.p_safe_bury.filter(dead_uids)
@@ -166,6 +176,6 @@ class Ebola(ss.SIR):
 
     def step_die(self, uids):
         # Reset infected/recovered flags for dead agents
-        for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
+        for state in ['susceptible', 'infected', 'infectious', 'severe', 'recovered']:
             self.state_dict[state][uids] = False
         return

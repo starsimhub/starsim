@@ -49,8 +49,8 @@ Every `ss.Infection` shares a common set of per-agent states and parameters that
 | Name | Type | Meaning |
 |------|------|---------|
 | `susceptible` | `BoolState` | Whether an agent can be infected (default `True`) |
-| `infected` | `BoolState` | Whether an agent is currently infected |
-| `infectious` | property | Whether an agent can currently transmit (often `== infected`) |
+| `infected` | `BoolState` | Whether an agent currently has the infection |
+| `infectious` | alias | Whether an agent can currently transmit (by default, an alias of `infected`) |
 | `rel_sus` | `FloatArr` | Per-agent **relative susceptibility** (default `1.0`) |
 | `rel_trans` | `FloatArr` | Per-agent **relative transmissibility** (default `1.0`) |
 | `ti_infected` | `FloatArr` | Timestep at which each agent was infected |
@@ -104,6 +104,76 @@ print(f'Unprotected (20+):    {ever_infected[older].sum()} of {len(older)} ever 
 `beta` is a per-contact transmission **probability** — a bare float (or a dict/list of floats), not a rate. Do **not** wrap it in `ss.peryear()` or `ss.perday()`: doing so reinterprets the number as a hazard and rescales it by the timestep, corrupting the transmission scale. Use `beta=0.1`, not `beta=ss.perday(0.1)`. (Most other per-agent event parameters, such as `p_death`, *are* probabilities or distributions; the time-aware rate types are for quantities like birth and death *rates*. See [Time](advanced_time.qmd).)
 :::
 
+## Infected vs. infectious
+
+For an SIR model, "infected" and "infectious" are the same thing, so `ss.Infection` treats them that way. But for anything with a latent period — SEIR, measles, Ebola, cholera — they come apart, and getting the distinction right matters for both transmission and results.
+
+Starsim uses these definitions consistently:
+
+- **`infected`**: the agent carries the infection. For an SEIR model this spans both E and I, which is already how `ss.SIR` treats it.
+- **`infectious`**: the agent can transmit. Only these agents contribute `rel_trans`.
+- **`ti_infected`**: the timestep the agent *became infected* — i.e. the transmission event, not the later onset of infectiousness.
+
+`new_infections` is derived from `ti_infected`, so these definitions are what make it count infection events. If you instead set `ti_infected` to the time an agent becomes infectious, `new_infections` silently becomes "new onsets of infectiousness", and the seed infections created by `init_prev` are miscounted.
+
+### Defining `infectious` separately
+
+By default `infectious` is an **alias** of `infected`, declared in `ss.Infection`:
+
+```python
+self.define_states(
+    ss.BoolState('susceptible', default=True, label='Susceptible'),
+    ss.BoolState('infected', label='Infected'),
+    ...
+    infectious = 'infected', # Everyone infected is infectious, unless a subclass says otherwise
+)
+```
+
+An alias is only consulted when the attribute isn't otherwise defined, so a subclass overrides it just by declaring a state of the same name:
+
+```python
+self.define_states(
+    ss.BoolState('exposed', label='Exposed'),
+    ss.BoolState('infectious', label='Infectious'), # Replaces the inherited alias
+)
+```
+
+### Derived states
+
+An alias can also be a callable, which lets one state be *derived* from others. This is how the SEIR models in the library define `exposed`:
+
+```python
+self.define_states(
+    ss.BoolState('infectious', label='Infectious'),
+    exposed = lambda self: self.infected & ~self.infectious,
+)
+```
+
+The key observation is that `ss.SIR` already maintains `infected` with exactly the meaning we want: an agent is infected from the moment of transmission until they recover. An SEIR model therefore doesn't need to redefine `infected` at all — it adds `infectious` as a state that starts later, and reads off the exposed compartment as the gap between the two. `n_infected` reports E+I, `n_exposed` and `n_infectious` are reported separately, and the model inherits SIR's `set_prognoses()` and most of its `step_state()` rather than replacing them.
+
+Deriving `exposed` also means it can't fall out of sync with the other two — a class of bug that's otherwise easy to introduce, since it only shows up as slightly wrong prevalence.
+
+A few things to know about derived states:
+
+- They generate a result like any other state: the example above still produces `n_exposed`.
+- They are recomputed on each access and returned **read-only**, so `self.exposed[uids] = True` fails rather than silently discarding the write. Set the underlying states instead.
+- They don't appear in `state_list` or `state_dict`, since they have no storage of their own.
+
+You can also alias one name to another as a shorthand or for backwards compatibility, e.g. `ti_exposed = 'ti_infected'` where exposure and infection are the same event.
+
+### Scheduling from the right event
+
+The other easy mistake is leaving recovery and death where the parent class put them. Building on `ss.SIR`, `super().set_prognoses()` schedules them relative to the time of infection, so an SEIR model has to push them back by the latent period:
+
+```python
+dur_exp = self.pars.dur_exp.rvs(uids)
+self.ti_infectious[uids] = self.ti + dur_exp
+self.ti_recovered[uids] += dur_exp # Otherwise the latent period eats into the infectious period
+self.ti_dead[uids] += dur_exp
+```
+
+Without this, a long enough `dur_exp` lets agents recover before they ever become infectious. Note that `+=` can be applied to both arrays without splitting the agents into those who recover and those who die, because whichever doesn't apply to a given agent is `NaN`, and `NaN` plus anything is still `NaN`.
+
 ## Implementation patterns
 
 ### Pattern 1: Extending existing diseases
@@ -137,25 +207,40 @@ class MySEIR(ss.SIR):
         # Add new parameters
         self.define_pars(dur_exp=ss.lognorm_ex(0.5))
         self.update_pars(**kwargs)
-        
-        # Add new states
+
+        # Add new states; 'infected' already spans E and I, so we only add I
         self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.BoolState('infectious', label='Infectious'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
+            exposed = lambda self: self.infected & ~self.infectious,
         )
 
-    @property
-    def infectious(self):
-        # Define who can transmit (both infected and exposed)
-        return self.infected | self.exposed
+    def set_prognoses(self, uids, sources=None):
+        super().set_prognoses(uids, sources) # Infects the agents and schedules recovery/death
+
+        # Delay the onset of infectiousness, and push recovery and death back to match
+        dur_exp = self.pars.dur_exp.rvs(uids)
+        self.ti_infectious[uids] = self.ti + dur_exp
+        self.ti_recovered[uids] += dur_exp
+        self.ti_dead[uids] += dur_exp
 
     def step_state(self):
-        # Call parent state updates first
+        # Progress exposed -> infectious
+        becoming = (self.exposed & (self.ti_infectious <= self.ti)).uids
+        self.infectious[becoming] = True
+
+        # Progress infectious -> recovered, and trigger deaths
         super().step_state()
-        
-        # Add custom state transitions
-        transitioning = self.exposed & (self.ti_infected <= self.ti)
-        self.exposed[transitioning] = False
-        self.infected[transitioning] = True
+        self.infectious[~self.infected] = False # Recovering or dying also ends infectiousness
+
+    def step_die(self, uids):
+        super().step_die(uids)
+        self.infectious[uids] = False
+
+sim = ss.Sim(diseases=MySEIR(init_prev=0.05), networks='random', dur=20, verbose=0)
+sim.run()
+sim.diseases.myseir.plot()
 ```
+
+See [Infected vs. infectious](#infected-vs-infectious) above for why `exposed` is derived rather than stored.
 
