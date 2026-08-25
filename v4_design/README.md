@@ -1,18 +1,28 @@
-# Design of the Epi Modeling Lingua Franca
+# Design proposal: a lingua franca for epi modeling
+
+_**Version:** 0.1 | **Date:** 2026.08.25 | **Status:** Under development, not yet human-reviewed_
 
 ## Introduction
 
-This project contains ideas for implementing a _lingua franca_ for epi modeling (and also known as Starsim v4). Principles of the lingua franca are:
+This project contains ideas for implementing a _lingua franca_ for epi modeling. Principles of the lingua franca include:
 
-- AI-native, serving as a rigorous-yet-simple deterministic representation of modeling concepts (expressed as text or other modeling frameworks) into code;
-- Support for different modeling paradigms, including at least:
+- It should capture the best aspects of existing epi models (in terms of flexibility, simplicity, and elegance), and improve upon them when possible.
+- Be AI-native, serving as a rigorous-yet-simple and deterministic representation of modeling concepts (as expressed as prose or using other modeling frameworks) into code.
+- Provide a unified representation across different modeling paradigms, including at least:
     - Compartmental/ODE models
-    - Metapopulation models
     - Stochastic compartmental/SDE models
+    - Metapopulation models
     - Agent-based models
-- Interconversion between modeling frameworks (e.g. EpiModel and epydemix) and paradigms (e.g. compartmental to agent-based)
+- Allow interconversion between modeling frameworks (e.g. EpiModel to epydemix) and paradigms (e.g. compartmental to agent-based).
 
-## Structure
+## Motivation
+
+Why do we need a lingua franca? Why can't LLMs just write disease models directly? Two main reasons:
+
+- AI is most efficient and accurate as a thin wrapper for code that already provides most desired functionality; imagine an LLM trying to correctly do a dataframe merge without access to R or `pandas`.
+- A lingua franca serves as a rigorous source of truth for comparing other models to, and provides a robust endpoint (MCP) to develop AI skills, guardrails, and evals against. If a compartmental model written in R with EpiModel gives a different result than an agent-based model written in Python in Vivarium, currently it's extremely difficult to understand why. A lingua franca allows the differences between models to be clarified and explored.
+
+## Project structure
 
 - `approaches` contains a review of the current approaches used in the epi modeling landscape, based on https://starsim.org/disease_modeling_landscape.
 - `best-practices` distills the modeling landscape into best practices for each type of modeling.
