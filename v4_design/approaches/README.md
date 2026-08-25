@@ -4,7 +4,7 @@ A review of the current approaches used in the epi modeling landscape, based on 
 
 ## Purpose
 
-This folder catalogs what already exists: the frameworks, libraries, and conventions that epi modelers use today, and how each one represents the core modeling concepts (states, transitions, populations, networks, interventions, time). It is descriptive rather than prescriptive — the goal is an honest survey of the landscape, which the `best-practices` folder then distills into recommendations.
+This folder catalogs what already exists: the frameworks, libraries, and conventions that epi modelers use today, and how each one represents the core modeling concepts (states, transitions, populations, networks, interventions, time).
 
 ## Contents
 
@@ -14,9 +14,9 @@ One document per framework or family of frameworks, covering:
 - How a model is specified (API, DSL, config file, GUI)
 - The core abstractions and their names
 - Notable strengths, limitations, and idioms
-- A minimal representative model, ideally the same reference model across frameworks for comparison
+- A minimal representative model (SIR if possible), and a more complex fully worked example
 
 ## Relationship to other folders
 
 - Feeds into `best-practices`, which synthesizes these reviews into best practices per paradigm.
-- Concrete code from these frameworks lives in `examples`; this folder holds the analysis, not the corpus.
+- Concrete code from these frameworks lives in `examples`.

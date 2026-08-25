@@ -10,12 +10,12 @@ Where `approaches` describes what frameworks do, this folder takes a position on
 
 Organized by modeling paradigm and by cross-cutting concern:
 
-- **By paradigm**: compartmental/ODE, metapopulation, stochastic compartmental/SDE, agent-based
+- **By paradigm**: compartmental/ODE, stochastic compartmental/SDE, metapopulation, agent-based
 - **Cross-cutting**: time and units, parameters and distributions, stochasticity and reproducibility, population structure and networks, interventions, results and outputs, calibration
 
-Each best practice should state the recommendation, the evidence from the landscape review, the trade-offs, and what it implies for the lingua franca's design.
+Each best practice states the recommendation, the evidence from the landscape review, the trade-offs, and what it implies for the lingua franca's design.
 
 ## Relationship to other folders
 
 - Draws on the reviews in `approaches`.
-- Constrains the specifications in `design` — a design decision should trace back to a best practice here.
+- Informs the specifications in `design` , which are based on best practices here.

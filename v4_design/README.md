@@ -19,3 +19,8 @@ This project contains ideas for implementing a _lingua franca_ for epi modeling 
 - `design` contains design specifications for the language, based on the best practices described.
 - `examples` contains examples of models written in other frameworks to be expressed by the lingua franca.
 - `vignettes` contains translations of the model examples into the lingua franca.
+- `webapp` is a tool for viewing `examples` models side by side with their `vignettes` translations, with diff-style markup.
+
+## AI disclaimer
+
+AI tools (mostly Claude) were used to summarize information, compare and assess frameworks, extract code examples, and create vignettes. Assessments and design decisions are owned by the humans.

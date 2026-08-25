@@ -4,15 +4,15 @@ Models written in other frameworks, to be expressed by the lingua franca.
 
 ## Purpose
 
-This folder is the test corpus. It collects real models — as originally written, in their original frameworks — that the lingua franca must be able to represent. If a model here cannot be expressed cleanly, that is a finding about the design.
+This folder is the test corpus. It collects real models — as originally written, in their original frameworks — that the lingua franca must be able to represent. If a model here cannot be expressed cleanly, that is an issue for the lingua franca.
 
 ## Contents
 
 Models are kept as close to their source form as possible, with each example accompanied by:
 
-- The original source code, unmodified where licensing permits
-- Provenance: framework and version, origin (paper, repository, tutorial), and license
 - A short description of what the model does and which features it exercises
+- The original source code, with sufficient information to ensure reproducibility (`uv.lock` or equivalent)
+- Provenance: framework and version, origin (paper, repository, tutorial), and license
 - Expected outputs or reference results, where available, so translations can be checked
 
 ## Selection criteria
