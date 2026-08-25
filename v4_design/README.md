@@ -15,7 +15,7 @@ This project contains ideas for implementing a _lingua franca_ for epi modeling 
 ## Structure
 
 - `approaches` contains a review of the current approaches used in the epi modeling landscape, based on https://starsim.org/disease_modeling_landscape.
-- `best-practice` distills the modeling landscape into best practices for each type of modeling.
+- `best-practices` distills the modeling landscape into best practices for each type of modeling.
 - `design` contains design specifications for the language, based on the best practices described.
 - `examples` contains examples of models written in other frameworks to be expressed by the lingua franca.
 - `vignettes` contains translations of the model examples into the lingua franca.
