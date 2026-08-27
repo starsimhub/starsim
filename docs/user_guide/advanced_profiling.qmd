@@ -63,7 +63,7 @@ sim = ss.Sim(
     verbose = 0,
 )
 sim.run()
-sim.loop.df.disp()
+sim.loop.to_df().disp()
 # %%
 ```
 
