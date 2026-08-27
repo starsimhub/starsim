@@ -3,9 +3,9 @@
 ## Recommendation
 
 1. **Nothing extra should need declaring.** If parameters carry bounds and priors, and outcomes carry data and a likelihood, calibration is `sim.calibrate()`.
-2. **Keep Starsim's Optuna-based `ss.Calibration` as the default**, because it works on any model including agent-based ones.
-3. **Offer the method ladder, and pick for the user by default.** Which method is right follows from the model, not from the user's preferences.
-4. **Fitting configuration is separate from the model.** camdl's split is right: fitting is not part of a model's structural identity.
+2. **Keep Starsim's Optuna-based `ss.Calibration` as the default**, because it works on any model including agent-based ones. *[CK: No, I think the method should be selected based on the model -- sure use Optuna if it's agent based, but switch to another method if it's not.]*
+3. **Offer the method ladder, and pick for the user by default.** Which method is right follows from the model, not from the user's preferences. *[CK: yes, thought this seems to be the opposite of your point above.]*
+4. **Fitting configuration is separate from the model.** camdl's split is right: fitting is not part of a model's structural identity. *[CK: yes, though in practice they often live in the same script, which avoids drift.]*
 5. **Adopt staged fitting with convergence gates** for the cases that need it.
 6. **Report whether it converged**, not just the best-fit parameters.
 7. **Common random numbers make calibration cheaper**; say so and use them.
@@ -44,7 +44,7 @@ The mapping is deterministic enough to automate. A user should not have to know 
 
 ### What Starsim has
 
-`ss.Calibration` wraps Optuna, with `CalibComponent` objects defining likelihood terms against data. Optuna is the right default for agent-based models: it makes no assumptions, it parallelizes, and it handles the case — expensive, stochastic, no gradient — that defeats everything else in the table. `CalibComponent` is also, in effect, an observation model declared at calibration time rather than in the model, which is the piece that moves.
+`ss.Calibration` wraps Optuna, with `CalibComponent` objects defining likelihood terms against data. Optuna is the right default for agent-based models: it makes no assumptions, it parallelizes, and it handles the case — expensive, stochastic, no gradient — that defeats everything else in the table. `CalibComponent` is also, in effect, an observation model declared at calibration time rather than in the model, which is the piece that moves. *[CK: I don't particularly care for CalibComponent; it's so complicated and verbose. Let's try to do better with the lingua franca.]*
 
 ## The proposal
 
@@ -52,7 +52,7 @@ The mapping is deterministic enough to automate. A user should not have to know 
 
 ```python
 sir = ss.Disease(
-    beta      = ss.Par(0.05, bounds=[0.01, 0.5]),
+    beta      = ss.Par(0.05, bounds=[0.01, 0.5]), # [CK: let's use ss.par() for this]
     dur_inf   = ss.Par(ss.days(10), bounds=[3, 30]),
     infection = ss.transmission('S -> I', beta=beta),
     recovery  = ss.progression('I -> R', dur=dur_inf),
@@ -62,7 +62,7 @@ sim = ss.Sim(sir, start='2020-01-01', stop='2020-12-31')
 sim.observe(cases = ss.Outcome(sir.infection, p=0.5, delay=ss.days(5),
                                data='data/weekly_cases.csv', every=ss.weeks(1),
                                likelihood=ss.neg_binomial(k=ss.Par(bounds=[0.1, 100]))))
-
+# [CK: it's not clear to me that sim.observe should be needed as separate from sim.results]
 fit = sim.calibrate()
 ```
 
@@ -110,12 +110,12 @@ camdl separates `.camdl` from `fit.toml` deliberately, "to keep structural ident
 
 The resolution follows from [run identity](stochasticity-and-reproducibility.md): the *likelihood* is part of the model (it is a statement about how data relate to the process, and it belongs with the outcome that produces the quantity), while the *fitting procedure* — method, trials, chains, gates — is configuration and hashes separately. Changing the number of Optuna trials does not change the model.
 
-### Report the fit, honestly
+### Report the fit
 
 ```python
 fit.summary()      # estimates, intervals, convergence diagnostics
 fit.plot()         # trajectories against data, per outcome stream
-fit.apply(sim)     # a sim with the calibrated values
+fit.apply(sim)     # a sim with the calibrated values [CK: it's not clear to me what is being "applied" -- why not fit.sim or similar]
 ```
 
 camdl's discipline is the target: "Convergence is a checked claim, not an assumption." Report R̂ and ESS for MCMC; report gradient norm and iterations for optimization; report acceptance and ESS for particle filters; report whether the best trial was near a bound, because that usually means the bound was wrong rather than the parameter.
@@ -133,20 +133,20 @@ Free, because the bounds and the results are already declared.
 ## Trade-offs
 
 - **Automatic method selection can be wrong.** Mitigation: it is printed, and it is one keyword to override. The alternative — the user chooses from five methods on their first day — is worse.
-- **Declaring the likelihood in the model file commits to a form.** Negative binomial with an overdispersion parameter covers most surveillance count data; anything else takes a custom likelihood function, which should be allowed and priced.
+- **Declaring the likelihood in the model file commits to a form.** Negative binomial with an overdispersion parameter covers most surveillance count data; anything else takes a custom likelihood function, which should be allowed and priced. *[CK: Hmm. Seems like something simple like RMS should be the default for simplicity, even if not as rigorous. But I could be convinced.]*
 - **Optuna is not an inference method.** It gives a point estimate and a search history, not a posterior, and the summary must not present its trial spread as an interval. This is a real hazard in current practice.
-- **Analytic gradients are a large implementation project.** camdl gets them from source-to-source symbolic differentiation; summer2 gets them from JAX. Wrapping JAX for the compartmental backend is the cheap route and worth taking, since it also makes the ODE backend fast.
+- **Analytic gradients are a large implementation project.** camdl gets them from source-to-source symbolic differentiation; summer2 gets them from JAX. Wrapping JAX for the compartmental backend is the cheap route and worth taking, since it also makes the ODE backend fast. *[CK: Agree]*
 
 ## Rejected
 
 - **A separate calibration DSL.** Everything needed is already declared; a second vocabulary would be a second place for it to drift.
-- **`CalibComponent`-style likelihood declaration at calibration time** (Starsim today). It duplicates the observation model. Declare it once, with the outcome.
-- **ABC as the default** (Epydemix). Right for cheap stochastic models with awkward likelihoods, wasteful when a likelihood exists.
+- **`CalibComponent`-style likelihood declaration at calibration time** (Starsim today). It duplicates the observation model. Declare it once, with the outcome. *[CK: fine, as long as the user isn't forced into thinking about likelihoods when they just want to build a model.]*
+- **ABC as the default** (Epydemix). Right for cheap stochastic models with awkward likelihoods, wasteful when a likelihood exists. *[CK: it's not clear to me that that's not the regime we'll be in a lot of the time. I'd revisit this, though you may be right]*
 - **Requiring the user to choose an inference method.** They should be able to; they should not have to.
 - **Bundling the inference engine.** [odin](../approaches/odin.md)'s odin/dust/monty split is the architectural precedent — "an engine can be replaced, and the inference layer is reusable by models that were never written in the DSL". Wrap Optuna, JAX, and a particle filter; own none of them.
 
 ## Open questions
 
-- **Multi-objective and multi-stream weighting.** Fitting cases *and* deaths *and* seroprevalence requires either a joint likelihood (correct, and requires their correlation) or weights (practical, and arbitrary). camdl's multiple observation streams assume independence. This needs a stated default.
-- **Calibrating structure, not just parameters.** "Does this model need an exposed compartment?" is a model-comparison question, and once models are data it is mechanizable (prequential scoring, which camdl has). Out of scope for v1, worth not foreclosing.
+- **Multi-objective and multi-stream weighting.** Fitting cases *and* deaths *and* seroprevalence requires either a joint likelihood (correct, and requires their correlation) or weights (practical, and arbitrary). camdl's multiple observation streams assume independence. This needs a stated default. *[CK: I think weights is fine, but could be convinced.]*
+- **Calibrating structure, not just parameters.** "Does this model need an exposed compartment?" is a model-comparison question, and once models are data it is mechanizable (prequential scoring, which camdl has). Out of scope for v1, worth not foreclosing. *[CK: agree, it would be a superpower to be able to rigorously compare two models: `comparison = ss.calib_compare([sim_sir, sim_seir], against=data)`. If we could include this in v1 -- incredible.]
 - **The `β`/`c` identifiability question** raised in [population-and-mixing.md](population-and-mixing.md): the factoring is right for portability and means the two are not separately identifiable from incidence. Fitting the product needs a clean spelling.

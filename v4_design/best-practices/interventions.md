@@ -2,8 +2,8 @@
 
 ## Recommendation
 
-1. **Adopt EMOD's four-part decomposition: where × when and how many × to whom × what.** It is the most complete treatment in the review and each part is independently substitutable.
-2. **Eligibility is a declarative predicate over agent and model state**, built from Python operators — not an opaque callable.
+1. **Adopt EMOD's four-part decomposition: where × when and how many × to whom × what.** It is the most complete treatment in the review and each part is independently substitutable. *[CK: I don't know if it's this separable in practice. "What" yes. But everything else could collapse. For example: distribute treatment drugs to the top 100 clinics with the most positive cases while stocks last. Where, when, how many, and to whom are all a function of who tests positive.]*
+2. **Eligibility is a declarative predicate over agent and model state**, built from Python operators — not an opaque callable. *[CK: or an opaque callable as an escape hatch.]*
 3. **Keep Starsim's product/delivery split**, and separate efficacy from waning as EMOD does.
 4. **Most interventions are a `ss.transfer` between strata or an `ss.Effect` on a named quantity.** Do not build a class lattice for what is already two primitives.
 5. **The simple case stays a one-liner.** Covasim's `days`/`changes` form was simpler than what replaced it, and that simplicity should come back.
@@ -69,7 +69,7 @@ Python's operators build the expression tree. It reads like the sentence and it 
 **EMOD** (the 12-line JSON above) → **lingua franca:**
 
 ```python
-eligible = (ss.age > 65) & ~sir.vaccinated
+eligible = (ss.age > 65) & ~sir.vaccinated # [CK: this looks pretty, but what is "ss.age"? What if I have a custom attribute? I don't like how Polars solved this, but they did solve it, sort of.]
 ```
 
 **EpiHiper's "school edges on Fridays"** (roughly 200 lines of JSON across variables, sets, triggers, and interventions) →
@@ -81,10 +81,10 @@ ss.Effect(ss.weekday == 'Fri', school.contacts, multiply=0.0)
 The predicate vocabulary is small and closed:
 
 ```python
-ss.age, ss.sex, ss.uid                    # built-in agent attributes
-sir.I, sir.vaccinated                     # any state, as a predicate
+ss.age, ss.sex, ss.uid                    # built-in agent attributes # [CK: Or could "just" be self.sim.people.age]
+sir.I, sir.vaccinated                     # any state, as a predicate # [CK: will need to think about how ~sir.vaccinated won't immediately evaluate]
 ss.has(vaccine)                           # EMOD's HasIntervention
-ss.time, ss.weekday, ss.year              # model-level observables
+ss.time, ss.weekday, ss.year              # model-level observables # [CK: "weekday" does not seem like it falls in a small vocabulary]
 sim.results.n_infected > 1000             # EpiHiper's triggers: predicates over results
 &  |  ~  >  <  ==                         # composition
 ```
@@ -105,7 +105,7 @@ Before adding an intervention class, check whether it is one of the two primitiv
 **Vaccination is a transfer between strata** ([stratification.md](stratification.md)):
 
 ```python
-ss.transfer(vaccinated='no -> yes', coverage=0.7, years=[2021, 2022], eligible=ss.age > 65)
+ss.transfer(vaccinated='no -> yes', coverage=0.7, years=[2021, 2022], eligible=ss.age > 65) # [CK: 'no -> yes' is a really ugly way to set a boolean]
 ```
 
 The disease model never mentions vaccination. `rel_sus` for the vaccinated stratum is declared once on the dimension, following [EpiHiper](../approaches/epihiper.md)'s state properties.
@@ -113,7 +113,7 @@ The disease model never mentions vaccination. `rel_sus` for the vaccinated strat
 **A contact reduction is an effect** ([composition-and-effects.md](composition-and-effects.md)):
 
 ```python
-ss.Effect(ss.date('2020-03-15') <= ss.time <= ss.date('2020-06-01'), school.contacts, multiply=0.2)
+ss.Effect(ss.date('2020-03-15') <= ss.time <= ss.date('2020-06-01'), school.contacts, multiply=0.2) # [CK: I prefer start= and stop=, although we'll also need to support much more complex "when"]
 ```
 
 which is exactly [Epydemix](../approaches/epydemix.md)'s `add_intervention(layer_name="school", start_date=..., reduction_factor=0.2)` and [MEmilio](../approaches/memilio.md)'s `contact_matrix.add_damping(0.6, SimulationTime(12.5))`, in one line, with the layer and the dates visible.
@@ -134,7 +134,7 @@ EMOD adds the missing piece — efficacy and its decay are separate objects (`Va
 
 ```python
 bcg = ss.Vaccine(
-    blocks     = 'acquisition',                  # or 'transmission', 'severity', 'mortality'
+    blocks     = 'acquisition',  # or 'transmission', 'severity', 'mortality' # [CK: or a combination ... how would that work? Maybe efficacy could be a dict]
     efficacy   = 0.85,
     waning     = ss.exp_decay(halflife=ss.years(5)),
     cost       = 12.50,
@@ -148,7 +148,7 @@ The delivery half keeps Starsim's two shapes — `RoutineDelivery` (start, end, 
 Diagnostics and cascades follow HPVsim's screen → triage → treat pattern, which Starsim's `BaseTest`/`BaseTreatment` classes already generalize:
 
 ```python
-ss.screen(ss.Test(sens=0.9, spec=0.98), coverage=0.4, interval=ss.years(3),
+ss.screen(ss.Test(sens=0.9, spec=0.98), coverage=0.4, interval=ss.years(3), # [CK: can spell out sensitivity and specificity]
           eligible=(ss.age > 30) & (ss.sex == 'f'),
           on_positive=ss.treat(ss.Treatment(efficacy=0.95)))
 ```
@@ -162,7 +162,7 @@ From the [Covasim note](../approaches/notes.md#covasim--hpvsim--stisim--fpsim):
 So it comes back, as sugar over `ss.Effect`:
 
 ```python
-ss.change(sir.beta, days=[30, 60], to=[0.5, 1.0])
+ss.change(sir.beta, days=[30, 60], to=[0.5, 1.0]) # [CK: "days" is obviously COVID-specific]
 ```
 
 Three frameworks converged on this shape. It should be one line, and it should be the first thing in the documentation.
@@ -202,7 +202,7 @@ sims = ss.parallel(
 sims.plot()
 ```
 
-camdl's discipline is worth copying exactly: **interventions are inactive by default and enabled by scenario**, which makes the baseline unambiguous. And because [common random numbers](stochasticity-and-reproducibility.md) are on, the paired difference is the effect rather than the noise.
+camdl's discipline is worth copying exactly: **interventions are inactive by default and enabled by scenario**, which makes the baseline unambiguous. And because [common random numbers](stochasticity-and-reproducibility.md) are on, the paired difference is the effect rather than the noise. *[CK: unclear what this means, often a baseline will have interventions active, eg ART for HIV.]*
 
 ## Trade-offs
 
@@ -216,12 +216,12 @@ camdl's discipline is worth copying exactly: **interventions are inactive by def
 - **A class lattice per intervention type.** Starsim's `routine_screening` / `campaign_screening` / `routine_triage` / `campaign_triage` / `routine_vx` / `campaign_vx` is a Cartesian product of two axes spelled out as classes. Keyword arguments, one class each.
 - **Interventions as contact reductions only** (Epydemix, MEmilio). Covers COVID-era scenarios and nothing else.
 - **Interventions as extra compartments** (Epydemix's answer for vaccination, MEmilio's `secirvvs`). This is what `ss.transfer` between strata replaces, and it is why vaccination need not touch the disease model.
-- **Opaque eligibility callables as the primary mechanism** (Starsim today). Available as an escape hatch, priced.
+- **Opaque eligibility callables as the primary mechanism** (Starsim today). Available as an escape hatch.
 - **A separate rule language** (EpiHiper's variables/sets/triggers/operations). The semantics are the best in the review; the syntax is 200 lines of JSON for one Friday. Python operators give the same semantics in one line.
 - **Budget optimization in v1** (Atomica, PyRoss). Do not foreclose; do not build.
 
 ## Open questions
 
-- **Stock constraints.** "Vaccinate as many as we have doses for" is EMOD's `NChooser` (target a number, not a fraction) and is common in real programmes. Coverage-as-a-number versus coverage-as-a-fraction is a real distinction and probably belongs in `coverage=`.
-- **Does eligibility need edge predicates?** EpiHiper's set algebra covers edges as well as nodes, which is what makes "close school contacts" expressible directly rather than as a layer. Layers may be enough.
-- **Cascades with state.** "Screen, and if positive, triage, and if positive, treat" is a chain where each step has its own coverage and loss-to-follow-up. `on_positive=` handles depth two; deeper cascades may need a different shape.
+- **Stock constraints.** "Vaccinate as many as we have doses for" is EMOD's `NChooser` (target a number, not a fraction) and is common in real programmes. Coverage-as-a-number versus coverage-as-a-fraction is a real distinction and probably belongs in `coverage=`. *[CK: yes, this is important.]*
+- **Does eligibility need edge predicates?** EpiHiper's set algebra covers edges as well as nodes, which is what makes "close school contacts" expressible directly rather than as a layer. Layers may be enough. *[CK: agree layers -- well, networks -- are enough.]*
+- **Cascades with state.** "Screen, and if positive, triage, and if positive, treat" is a chain where each step has its own coverage and loss-to-follow-up. `on_positive=` handles depth two; deeper cascades may need a different shape. *[CK: yes, it works if the triggered-intervention can then trigger its own follow-up interventions.]*
