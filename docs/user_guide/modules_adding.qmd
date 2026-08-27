@@ -57,23 +57,27 @@ self.define_states(
 
 Each state becomes an attribute (`self.vaccinated`) and is automatically connected to the `People` object. A handy shortcut: every `ss.BoolState` automatically generates a corresponding `n_<name>` count result (e.g. `n_vaccinated`), so you often don't need to define that result yourself.
 
-#### Aliases and derived states
+#### Aliases
 
-Any keyword arguments to `define_states()` are passed to `define_aliases()`, which defines a name that resolves to something else. An alias is either the name of another state, or a callable that computes a value from other states:
+`define_aliases()` defines a name that resolves to something else: either the name of another state, or a callable taking the module as its only argument.
+
+```python
+self.define_aliases(infectious='infected') # Another name for an existing state
+self.define_aliases(asymptomatic=lambda self: self.infected & ~self.symptomatic) # Derived from other states
+```
+
+Any keyword arguments to `define_states()` are passed to `define_aliases()`, so states and their aliases can also be defined together:
 
 ```python
 self.define_states(
-    ss.BoolState('infectious', label='Infectious'),
-    exposed = lambda self: self.infected & ~self.infectious, # Derived from other states
-    ti_exposed = 'ti_infected', # Shorthand for another state
+    ss.BoolState('symptomatic', label='Symptomatic'),
+    asymptomatic = lambda self: self.infected & ~self.symptomatic,
 )
 ```
 
-Aliases exist so that a base class can provide a sensible default that a subclass can replace. `ss.Infection` declares `infectious = 'infected'`, because for an SIR model everyone infected is infectious; an SEIR subclass overrides that simply by declaring `infectious` as a state of its own, with no property to override and no `super()` call. See [Infected vs. infectious](modules_diseases.qmd#infected-vs-infectious) for the full example.
+An alias is only consulted when the attribute isn't otherwise defined, so a base class can use one to supply a default that a subclass replaces just by defining a state (or another alias) of the same name. This is how `ss.Infection` treats everyone infected as infectious, while letting a subclass say otherwise; see [Infected vs. infectious](modules_diseases.qmd#infected-vs-infectious).
 
-Unlike states, which cannot be redefined without `define_states(..., reset=True)`, an alias may replace an existing state or alias of the same name — so a subclass can derive a state that its parent stored directly.
-
-A callable alias is a **derived state**. It generates an `n_<name>` result like a real state, but it has no storage: it's recomputed on each access and returned read-only, so writing to it raises an error rather than silently discarding the write. It also doesn't appear in `state_list` or `state_dict`.
+A callable alias behaves like a property: it's recomputed on each access, so it can be read but not written to, and it doesn't appear in `state_list`/`state_dict` or generate an `n_<name>` result. Note that a callable alias written as a lambda can't be saved with plain `pickle` (`sc.save()` and `ss.MultiSim` are fine); use a module-level function, or a property, if that matters to you.
 
 ### Results: `define_results()`
 

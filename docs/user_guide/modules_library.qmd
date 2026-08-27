@@ -44,22 +44,12 @@ The library includes four example diseases, spanning a range of complexity:
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `ssl.Measles` | `ss.SIR` | Measles as an SEIR model, with CDC natural history parameters |
-| `ssl.Ebola` | `ss.SIR` | Ebola with severe disease and continued transmission from unburied bodies |
-| `ssl.Cholera` | `ss.Infection` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
+| `ssl.Measles` | `ss.SEIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `ssl.Ebola` | `ss.SEIR` | Ebola with severe disease and continued transmission from unburied bodies |
+| `ssl.Cholera` | `ss.SEIR` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
 | `ssl.HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
 
-`Measles` and `Ebola` show the most common pattern for a new disease: subclass `ss.SIR`, add extra states in `define_states()`, and extend `set_prognoses()` and `step_state()` to move agents between them. `Measles` adds an exposed (latent) state; `Ebola` additionally makes severe and unburied agents more infectious, via `rel_trans`.
-
-All three of the SEIR-type models here (`Measles`, `Ebola`, `Cholera`) keep `infected` spanning the whole infected period, add `infectious` as a state that starts after the latent period, and derive the exposed compartment from the gap between them:
-
-```python
-exposed = lambda self: self.infected & ~self.infectious
-```
-
-So `n_infected` counts everyone carrying the infection (E+I), while only `infectious` agents transmit, and `new_infections` counts infection events rather than onsets of infectiousness. Because `infected` keeps the meaning it has in `ss.SIR`, `Measles` inherits `ss.SIR.set_prognoses()` and most of `step_state()` rather than reimplementing them. See [Infected vs. infectious](modules_diseases.qmd#infected-vs-infectious) if you're writing a model with a latent period.
-
-`Cholera` goes further and subclasses `ss.Infection` directly, because it needs a transmission route that isn't a network: it overrides `infect()` to add environmental transmission on top of the usual person-to-person transmission. This is the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
+All three latent-period models subclass `ss.SEIR`, which owns the S→E→I→R lifecycle. `Measles` supplies only parameter values. `Ebola` and `Cholera` additionally override `set_progression()` for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. `Cholera` also extends `infect()` to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
 
 ```{python}
 sim = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(), **outbreak)

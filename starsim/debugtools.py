@@ -463,6 +463,7 @@ def mock_sim(n_agents=100, **kwargs):
         networks = sc.objdict(), # Needed for infections
         analyzers = sc.objdict(), # Needed for infection log
         diagnostics = None,
+        initialized = True, # A mock sim stands in for an initialized sim
     )
     return sim
 

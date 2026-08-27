@@ -94,99 +94,76 @@ You can see how the two diseases interact - HIV creates a vulnerable population 
 
 ## Step 3: Creating your own disease model
 
-Now for the fun part - creating your own disease from scratch! Let's modify the SIR model to create an SEIR model, which adds an "Exposed" state where people are infected but not yet infectious.
+Now for the fun part - creating your own disease from scratch! Rather than starting from a blank page, the easiest approach is usually to inherit from one of the templates in `diseases.py` and change only what's different.
 
-This is a common pattern in epidemiology - think of it as the incubation period before someone becomes contagious.
-
-If you want to make your own disease, you could either inherit from one of the templates in diseases.py, or you could copy the examples and extend them to capture features of the disease that you want to model. For example, suppose you wanted to change the SIR model to an SEIR model, i.e. add an 'exposed' state where people are infected but not yet infectious. You might hope that this would be a relatively simple change to make. Here's how it would look:
-
-Before writing the code, it's worth being precise about what the compartments mean, since this is the part that's easy to get wrong. In Starsim, `infected` means "has the infection" and `infectious` means "can transmit it". For SIR these are the same thing, so `ss.Infection` defines `infectious` as an alias of `infected`. For SEIR they come apart: an exposed agent is infected but not yet infectious.
-
-The neat way to handle this is to notice that SIR's infected compartment is *already* what we want `infected` to mean — an agent is infected from the moment of transmission until they recover, whether or not they're infectious yet. So we keep `infected` exactly as SIR manages it, add `infectious` as a new state that starts later, and *derive* the exposed compartment from the gap between them:
-
-```python
-exposed = lambda self: self.infected & ~self.infectious
-```
-
-This means we inherit almost all of SIR's behaviour rather than rewriting it: SEIR becomes "SIR, but infectiousness is delayed". It also keeps `new_infections` correct, since that counts agents entering `infected`, which is still the moment of transmission.
+Let's turn the SIR model into an SIRS model, where immunity wanes: recovered agents eventually become susceptible again. This is what lets a disease settle into endemic transmission rather than burning through the population once and disappearing.
 
 ```{python}
+import numpy as np
 import starsim as ss
-import matplotlib.pyplot as plt
 
-class SEIR(ss.SIR):
+class SIRS(ss.SIR):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            dur_exp = ss.lognorm_ex(0.5),
+            dur_imm = ss.lognorm_ex(mean=ss.years(10)), # How long immunity lasts after recovery
         )
         self.update_pars(pars, **kwargs)
 
-        # Additional states beyond the SIR ones
+        # SIR states are added automatically; here we add the time of losing immunity
         self.define_states(
-            ss.BoolState('infectious', label='Infectious'),
-            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
-            exposed = lambda self: self.infected & ~self.infectious, # Infected, but not yet infectious
+            ss.FloatArr('ti_susceptible', label='Time of becoming susceptible again'),
         )
         return
 
-    def set_prognoses(self, uids, sources=None):
-        """ Carry out state changes associated with infection """
-        super().set_prognoses(uids, sources) # Infects the agents and schedules recovery/death
-
-        # Delay the onset of infectiousness, and push recovery and death back to match
-        dur_exp = self.pars.dur_exp.rvs(uids)
-        self.ti_infectious[uids] = self.ti + dur_exp
-        self.ti_recovered[uids] += dur_exp
-        self.ti_dead[uids] += dur_exp
+    def set_progression(self, uids):
+        """ Schedule recovery and death as usual, then schedule the waning of immunity """
+        super().set_progression(uids)
+        recovering = uids[np.isfinite(self.ti_recovered[uids])] # Agents who are going to die have ti_recovered = NaN
+        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + self.pars.dur_imm.rvs(recovering)
         return
 
     def step_state(self):
-        """ Make all the updates from the SIR model, plus the exposed -> infectious transition """
-        becoming = (self.exposed & (self.ti_infectious <= self.ti)).uids
-        self.infectious[becoming] = True
-        super().step_state() # Infected -> recovered, and deaths
-        self.infectious[~self.infected] = False # Recovering or dying also ends infectiousness
+        """ Do the usual SIR transitions, then return agents whose immunity has waned to susceptible """
+        super().step_state()
+        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
+        self.recovered[waning] = False
+        self.susceptible[waning] = True
         return
-
-    def step_die(self, uids):
-        super().step_die(uids)
-        self.infectious[uids] = False
-        return
-    
-    def plot(self):
-        """ Update the plot with the exposed compartment """
-        with ss.options.context(show=False): # Don't show yet since we're adding another line
-            fig = super().plot()
-            ax = plt.gca()
-            res = self.results.n_exposed
-            ax.plot(res.timevec, res, label=res.label)
-            plt.legend()
-        return ss.return_fig(fig)
 ```
 
 The new class includes the following main changes:
 
-1. In `__init__` we added the extra pars and states needed for our model, and derived `exposed` from `infected & ~infectious`
-2. `set_prognoses` calls `super()` to do the actual infecting, then simply delays the onset of infectiousness
-3. `step_state` and `step_die` likewise call `super()` and add only the exposed → infectious transition
+1. In `__init__` we added the extra parameter (`dur_imm`) and state (`ti_susceptible`) that the model needs. We don't need to redefine the SIR states, since we inherit them.
+2. `ss.SIR.set_prognoses()` does two things: it calls `set_infection()` to make the agents infectious, then `set_progression()` to schedule what happens to them next. Waning immunity is part of the second, so that's the only one we extend - we call `super()` to do the usual scheduling, then sample a waning time for everyone who is going to recover. Agents who are going to die instead have `ti_recovered` set to `NaN`, which is how we filter them out.
+3. `step_state()` likewise calls `super()` and adds only the recovered → susceptible transition.
 
-Notice that every method is `super()` plus two or three lines: because SIR's infected compartment already means "infected from transmission until recovery", we get to inherit it rather than replace it.
-
-One detail is worth calling out, because it's easy to trip over: recovery and death are pushed back by `dur_exp` rather than being left where SIR put them. Otherwise the latent period would eat into the infectious period instead of delaying it, and a long enough `dur_exp` would let agents recover before they ever became infectious. Note that `+= dur_exp` works on both `ti_recovered` and `ti_dead` without having to split the agents up, because whichever one doesn't apply to a given agent is `NaN`, and `NaN` plus anything is still `NaN`.
-
-Here's how it would look in practice:
+Here's how it looks in practice:
 
 ```{python}
-seir = SEIR()
-sim = ss.Sim(diseases=seir, networks='random')
+sirs = SIRS(dur_imm=ss.lognorm_ex(mean=ss.years(5)))
+sim = ss.Sim(diseases=sirs, networks='random', dur=100, verbose=0)
 sim.run()
-sim.plot()
+sim.diseases.sirs.plot()
+```
+
+Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes.
+
+The other classic extension is to add an "exposed" state, for agents who are infected but not yet infectious. That one is built into Starsim as `ss.SEIR`, and it's made in exactly the same way as `SIRS` above - except that it overrides `set_infection()` rather than `set_progression()`, so that agents enter `exposed` at the moment of transmission and `infected` only after the latent period `dur_exp` has passed:
+
+```{python}
+sim = ss.Sim(diseases=ss.SEIR(), networks='random', verbose=0)
+sim.run()
 sim.diseases.seir.plot()
 ```
 
-## Exercises
-1. **Parameter exploration**: Try different values of `dur_exp` in the SEIR model - how does it affect the epidemic curve?
-2. **SEIRS model**: Adapt the SEIR example above to be SEIRS (where recovered people can become susceptible again)
-3. **Multi-strain model**: Can you create a model with two strains of the same disease that provide partial cross-immunity?
+Note that an exposed agent doesn't transmit, because transmission uses `infectious`, which by default is an alias of `infected`. If you wanted presymptomatic transmission instead, you'd say so explicitly:
 
+```python
+self.define_aliases(infectious=lambda self: self.exposed | self.infected)
+```
+
+## Exercises
+1. **Parameter exploration**: Try different values of `dur_imm` in the SIRS model - how does it affect the epidemic curve?
+2. **SEIRS model**: Apply the same waning immunity to `ss.SEIR` to make an SEIRS model.
+3. **Multi-strain model**: Can you create a model with two strains of the same disease that provide partial cross-immunity?

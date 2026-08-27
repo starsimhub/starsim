@@ -10,7 +10,6 @@ modules live in the corresponding test files (e.g. test_diseases.py).
 import inspect
 import sciris as sc
 import numpy as np
-import pytest
 import starsim as ss
 import starsim.library as ssl
 
@@ -82,16 +81,17 @@ def test_diseases():
 @sc.timer()
 def test_compartments():
     """
-    Check the SEIR-type library diseases keep their compartments consistent
+    Check the SEIR-type library diseases keep consistent compartments
 
-    In particular, 'infected' spans exposed + infectious (with 'exposed' derived from
-    the two), so seed infections enter 'infected' at ti=0 and are excluded from
-    new_infections exactly once. Regression test for negative new_infections on the
-    first timestep (issue #1389).
+    'exposed' and 'infected' are the literal E and I compartments, and infections are
+    counted when they happen rather than inferred from ti_infected, so seed infections
+    are excluded exactly once. Regression test for negative first-step incidence
+    (issue #1389).
     """
     sc.heading('Testing disease compartments...')
 
     diseases = dict(
+        seir    = ss.SEIR(beta=ss.perday(0.3), init_prev=0.1),
         cholera = ssl.Cholera(beta=ss.perday(0.5), init_prev=0.1),
         ebola   = ssl.Ebola(beta=ss.perday(0.1), init_prev=0.1),
         measles = ssl.Measles(beta=ss.perday(0.3), init_prev=0.1),
@@ -101,23 +101,20 @@ def test_compartments():
         sim.run()
         dis = sim.diseases[name]
         res = sim.results[name]
-        n_inf = np.array(res.n_infected)
         n_exp = np.array(res.n_exposed)
-        n_ifs = np.array(res.n_infectious)
+        n_inf = np.array(res.n_infected)
         new = np.array(res.new_infections)
+        total = n_exp + n_inf + np.array(res.n_susceptible) + np.array(res.n_recovered)
         print(f'  {name}: new_infections[0]={new[0]:n}, min={new.min():n}')
 
         assert new.min() >= 0, f'{name} has negative new_infections: seeds are being double-counted'
         assert new[0] == 0, f'{name} counted its seed infections as new infections'
         assert new.sum() == res.cum_infections[-1], f'{name} cumulative infections do not match the sum'
-        assert np.array_equal(n_inf, n_exp + n_ifs), f'{name} infected should be exposed + infectious'
-        assert not (dis.exposed & dis.infectious).any(), f'{name} has agents both exposed and infectious'
-        assert not (dis.infectious & ~dis.infected).any(), f'{name} has infectious agents that are not infected'
-        assert n_ifs.max() > 0, f'{name} never had any infectious agents'
-
-        # Derived states have no storage, so writing to them should fail rather than be discarded
-        with pytest.raises(ValueError):
-            dis.exposed[ss.uids(0)] = True
+        assert not (dis.exposed & dis.infected).any(), f'{name} has agents in both E and I'
+        assert np.array_equal(total, np.array(sim.results.n_alive)), f'{name} compartments do not sum to the population'
+        assert dis.infectious is dis.infected, f'{name} should transmit from its I compartment'
+        assert n_exp.max() > 0, f'{name} never had any exposed agents'
+        assert n_inf.max() > 0, f'{name} never had any infectious agents'
 
     sc.printgreen('✓ Disease compartment tests passed')
     return

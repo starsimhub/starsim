@@ -3,6 +3,7 @@ Run tests of disease models
 """
 
 # %% Imports and settings
+import pytest
 import sciris as sc
 import matplotlib.pyplot as plt
 import numpy as np
@@ -106,6 +107,81 @@ def test_sir_epi():
         print(f'✓ ({v0} <= {v1})')
 
     return s0, s1
+
+
+@sc.timer()
+def test_seir():
+    sc.heading('Testing SEIR dynamics')
+
+    # A longer latent period should delay and flatten the epidemic
+    sims = []
+    for dur_exp in [ss.days(1), ss.days(20)]:
+        seir = ss.SEIR(dur_exp=ss.lognorm_ex(mean=dur_exp), dur_inf=ss.lognorm_ex(mean=ss.days(10)), beta=ss.perday(0.05))
+        sim = ss.Sim(n_agents=n_agents, diseases=seir, networks='random', dur=ss.years(1), dt=ss.days(1), verbose=0)
+        sim.run()
+        sims.append(sim)
+    short, long = sims
+    print(f'  Peak infected: {short.results.seir.n_infected.max():n} (short) vs {long.results.seir.n_infected.max():n} (long)')
+    assert np.argmax(long.results.seir.n_infected) > np.argmax(short.results.seir.n_infected), 'A longer latent period should delay the peak'
+
+    # Check the compartments and incidence
+    sim = short
+    seir = sim.diseases.seir
+    res = sim.results.seir
+    assert not (seir.exposed & seir.infected).any(), 'Agents should not be in both E and I'
+    assert seir.infectious is seir.infected, 'infectious should be an alias of infected'
+    assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
+    assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
+
+    # Latent agents should not transmit: with no infectious period, there should be no epidemic
+    latent = ss.SEIR(dur_exp=ss.lognorm_ex(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
+    nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', dur=ss.days(100), dt=ss.days(1), verbose=0).run()
+    assert nosim.results.seir.cum_infections[-1] == 0, 'Exposed agents should not transmit'
+
+    sim.diseases.seir.plot()
+    return sims
+
+
+@sc.timer()
+def test_aliases():
+    sc.heading('Testing state aliases')
+
+    # A string alias points at another state, and a subclass can replace it with a callable
+    class PresympSEIR(ss.SEIR):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_aliases(infectious=lambda self: self.exposed | self.infected) # Presymptomatic transmission
+            return
+
+    sir = ss.SIR()
+    assert sir.infectious is sir.infected, 'By default, infectious should be an alias of infected'
+
+    sim = ss.Sim(n_agents=n_agents, diseases=PresympSEIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
+                 dur=ss.days(50), dt=ss.days(1), verbose=0).run()
+    dis = sim.diseases.presympseir
+    assert (dis.infectious == (dis.exposed | dis.infected)).all(), 'The derived alias should combine E and I'
+    assert sim.results.presympseir.cum_infections[-1] > 0, 'Exposed agents should transmit if infectious includes E'
+
+    # Aliases can also be defined alongside the states they refer to
+    class AliasSIR(ss.SIR):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(
+                ss.BoolState('symptomatic', label='Symptomatic'),
+                asymptomatic = lambda self: self.infected & ~self.symptomatic,
+                ti_onset = 'ti_infected',
+            )
+            return
+
+    alias_sir = AliasSIR()
+    alias_sir.init_mock()
+    assert alias_sir.ti_onset is alias_sir.ti_infected, 'A string alias should resolve to the state it names'
+    assert (alias_sir.asymptomatic == (alias_sir.infected & ~alias_sir.symptomatic)).all(), 'A callable alias should be recomputed from its states'
+
+    # A missing attribute should still raise an AttributeError
+    with pytest.raises(AttributeError):
+        sir.not_an_attribute
+    return sim
 
 
 @sc.timer()
@@ -382,6 +458,8 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     sir   = test_sir()
     s1,s2 = test_sir_epi()
+    seir  = test_seir()
+    alias = test_aliases()
     sis   = test_sis()
     ncd   = test_ncd()
     gavi  = test_gavi()

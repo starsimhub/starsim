@@ -115,8 +115,7 @@ class HIV(ss.Infection):
         return
 
     def set_prognoses(self, uids, sources=None):
-        super().set_prognoses(uids, sources)
-        self.susceptible[uids] = False
+        super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
         self.infected[uids] = True
         self.ti_infected[uids] = self.ti
         return

@@ -9,7 +9,7 @@ import numpy as np
 import starsim as ss
 
 
-class Cholera(ss.Infection):
+class Cholera(ss.SEIR):
     """
     Cholera, with both direct and environmental (waterborne) transmission.
 
@@ -26,7 +26,7 @@ class Cholera(ss.Infection):
     Args:
         beta (prob):            per-contact transmission probability
         init_prev (Dist):       initial prevalence
-        dur_exp2inf (Dist):     duration from exposure to infectiousness
+        dur_exp (Dist):         duration from exposure to infectiousness
         dur_asymp2rec (Dist):   duration from infection to recovery, asymptomatic agents
         dur_symp2rec (Dist):    duration from symptoms to recovery
         dur_symp2dead (Dist):   duration from symptoms to death
@@ -39,17 +39,12 @@ class Cholera(ss.Infection):
         decay_rate (rate):      rate at which environmental bacteria die off
         p_env_transmit (Dist):  environmental transmission probability (set each step)
 
-    Note that `infected` covers both the exposed and infectious compartments, so
-    `n_infected` is E+I, while only `infectious` agents transmit and shed; `exposed` is
-    derived as `infected & ~infectious`. `ti_infected` is the time of infection;
-    `ti_infectious` is the time of becoming infectious.
-
     Attributes:
-        infectious (BoolState):     infectious (shedding)
-        exposed (derived):          infected but not yet infectious
+        exposed (BoolState):        infected but not yet infectious
+        asymptomatic (alias):       infectious but not symptomatic
         symptomatic (BoolState):    currently symptomatic
         recovered (BoolState):      recovered and immune
-        ti_infectious (FloatArr):   timestep of becoming infectious
+        ti_exposed (FloatArr):      timestep of exposure
         ti_symptomatic (FloatArr):  timestep symptoms began
         ti_recovered (FloatArr):    timestep of recovery
         ti_dead (FloatArr):         timestep of death
@@ -67,13 +62,14 @@ class Cholera(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         """ Initialize with parameters """
         super().__init__()
+        self.pars.pop('dur_inf') # Cholera schedules its own outcomes, so it doesn't use SIR's single infectious duration
         self.define_pars(
             # Initial conditions and beta
             beta = ss.prob(1.0, ss.days(1)), # Placeholder value
             init_prev = ss.bernoulli(0.005),
 
             # Natural history parameters, all specified in days
-            dur_exp2inf   = ss.lognorm_ex(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
+            dur_exp       = ss.lognorm_ex(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=ss.days(1), high=ss.days(10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
             dur_symp2rec  = ss.lognorm_ex(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
             dur_symp2dead = ss.lognorm_ex(mean=ss.days(1), std=ss.days(0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
@@ -92,21 +88,14 @@ class Cholera(ss.Infection):
 
         # Boolean states
         self.define_states(
-            # Susceptible & infected are added automatically, here we add the rest
-            ss.BoolState('infectious', label='Infectious'),
+            # SEIR states are added automatically, here we add symptoms
             ss.BoolState('symptomatic', label='Symptomatic'),
-            ss.BoolState('recovered', label='Recovered'),
 
             # Timepoint states
-            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
             ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
 
-            # Derived states: infected covers both E and I, and only infectious agents shed
-            exposed = lambda self: self.infected & ~self.infectious,
-            asymptomatic = lambda self: self.infectious & ~self.symptomatic,
-            ti_exposed = 'ti_infected', # Exposure and infection are the same event
+            # Aliases
+            asymptomatic = lambda self: self.infected & ~self.symptomatic, # Infectious, but shedding much less
         )
         return
 
@@ -126,26 +115,15 @@ class Cholera(ss.Infection):
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
-        # Progress exposed -> infectious
+        super().step_state()
         ti = self.ti
-        infectious = (self.exposed & (self.ti_infectious <= ti)).uids
-        self.infectious[infectious] = True
 
         # Progress infectious -> symptomatic
-        symptomatic = (self.infectious & (self.ti_symptomatic <= ti)).uids
+        symptomatic = (self.infected & (self.ti_symptomatic <= ti)).uids
         self.symptomatic[symptomatic] = True
 
-        # Progress symptomatic -> recovered
-        recovered = (self.infectious & (self.ti_recovered <= ti)).uids
-        self.infected[recovered] = False
-        self.infectious[recovered] = False
-        self.symptomatic[recovered] = False
-        self.recovered[recovered] = True
-
-        # Trigger deaths
-        deaths = (self.ti_dead <= ti).uids
-        if len(deaths):
-            self.sim.people.request_death(deaths)
+        # Recovery ends symptoms too
+        self.symptomatic[~self.infected] = False
 
         # Update today's environmental prevalence
         self.calc_environmental_prev()
@@ -171,23 +149,13 @@ class Cholera(ss.Infection):
         r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
         return
 
-    def set_prognoses(self, uids, sources=None):
-        """ Set prognoses for those who get infected """
-        super().set_prognoses(uids, sources)
-        ti = self.ti
-
-        self.susceptible[uids] = False
-        self.infected[uids] = True
-        self.ti_infected[uids] = ti # Agents are infected (exposed) as soon as they are transmitted to
-
+    def set_progression(self, uids):
+        """ Schedule symptoms, recovery, and death """
         p = self.pars
-
-        # Determine when exposed become infectious
-        self.ti_infectious[uids] = ti + p.dur_exp2inf.rvs(uids)
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
-        self.ti_symptomatic[symp_uids] = self.ti_infectious[symp_uids]
+        self.ti_symptomatic[symp_uids] = self.ti_infected[symp_uids]
 
         # Determine who dies and when
         dead_uids = p.p_death.filter(symp_uids)
@@ -215,15 +183,15 @@ class Cholera(ss.Infection):
 
         if len(new_cases_env):
             new_cases = new_cases + new_cases_env
-            sources = np.concatenate([sources, np.full_like(new_cases_env, fill_value=np.nan)])
-            networks = np.concatenate([networks, np.full_like(new_cases_env, fill_value=np.nan)])
+            sources = np.concatenate([sources, np.full_like(new_cases_env, fill_value=ss.dtypes.int_nan)]) # No source agent or network for environmental transmission
+            networks = np.concatenate([networks, np.full_like(new_cases_env, fill_value=ss.dtypes.int_nan)])
 
         return new_cases, sources, networks
 
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
-        for state in ['susceptible', 'infected', 'infectious', 'symptomatic', 'recovered']:
-            self.state_dict[state][uids] = False
+        super().step_die(uids)
+        self.symptomatic[uids] = False
         return
 
     def update_results(self):
