@@ -188,3 +188,5 @@ For a richer natural history, `ss.SIR.set_prognoses()` splits into two methods y
 | `set_progression(uids)` | Schedule what happens next: recovery, death, and any other stages. Schedule these relative to `ti_infected`, so that a latent period delays them rather than eating into them. |
 
 `ssl.Ebola` and `ssl.Cholera` both override `set_progression()` for their extra states (severe/buried and symptomatic respectively), and inherit everything else from `ss.SEIR`.
+
+If your model adds a compartment, list it in `plot_states` so that `disease.plot()` shows it. This is a class attribute holding the names of the results to plot, so it can be set in one line at the top of the class body — `ss.SEIR` sets `plot_states = ['n_susceptible', 'n_exposed', 'n_infected', 'n_recovered']`. Assign a new list rather than modifying the inherited one, since a class attribute is shared by every instance of the class.
