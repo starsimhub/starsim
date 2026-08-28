@@ -79,12 +79,13 @@ An alias is only consulted when the attribute isn't otherwise defined, so a base
 
 A callable alias behaves like a property: it's recomputed on each access, and writing to it raises an error rather than silently discarding the write. It doesn't appear in `state_list`/`state_dict`, but it *does* generate an `n_<name>` result, since unlike a string alias it's a derived quantity that isn't counted anywhere else. Note that a callable alias written as a lambda can't be saved with plain `pickle` (`sc.save()` and `ss.MultiSim` are fine); use a module-level function, or a property, if that matters to you.
 
-To replace an inherited state or alias rather than add to it, remove it first with `define_states(reset=...)`, which takes a name or list of names (or `True` for all of them):
+To replace an inherited state or alias rather than add to it, pass `overwrite=True`. To remove one without replacing it, name it in `reset`, which takes a name or list of names (or `True` for all of them); the name is then undefined, so accessing it raises an `AttributeError`:
 
 ```python
 self.define_states(
     ss.BoolState('infectious', label='Infectious'), # Replaces the inherited `infectious` alias
-    reset = ['infectious', 'ti_infected'], # Removing without redefining leaves the name undefined, so accessing it raises an AttributeError
+    reset = 'ti_infected', # Removes the inherited state without replacing it
+    overwrite = True,
 )
 ```
 

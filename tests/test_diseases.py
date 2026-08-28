@@ -203,19 +203,22 @@ def test_aliases():
     with pytest.raises(ValueError):
         alias_sir.asymptomatic[ss.uids(0)] = True # A callable alias is derived, so it can't be written to
 
-    # A state can replace an alias, and an alias a state, by resetting it by name first
+    # A state can replace an alias or another state, either with overwrite=True or by resetting it by name
     class ReplaceSIR(ss.SIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
                 ss.BoolState('infectious', label='Infectious'), # Replaces the inherited alias
-                reset = 'infectious',
+                ss.BoolState('infected', label='Redefined'), # Replaces the inherited state
+                overwrite = True,
             )
             return
 
     rep_sir = ReplaceSIR()
     rep_sir.init_mock()
     assert 'infectious' in rep_sir.state_dict, 'A state should be able to replace an alias'
+    assert [state.name for state in rep_sir.auto_state_list].count('infected') == 1, 'Overwriting a state should replace it, not duplicate it'
+    assert rep_sir.results.n_infected.label == 'Redefined', 'The replacement state should be the one that generates the result'
 
     # An alias that a state would shadow should raise, rather than silently never being consulted
     with pytest.raises(AttributeError):

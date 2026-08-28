@@ -533,7 +533,7 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
-    def define_states(self, *args, check=True, reset=False, lock=True, **kwargs):
+    def define_states(self, *args, reset=False, lock=True, overwrite=False, **kwargs):
         """
         Define states of the module with the same attribute name as the state
 
@@ -545,15 +545,15 @@ class Module(Base):
 
         Args:
             args (states): list of states to add
-            check (bool): whether to check that the object being added is a state, and that it's not already present
             reset (bool/str/list): if True, remove all existing states and aliases; if a name or list of names, remove only those
             lock (bool): if True, prevent the state attributes from being overwritten after definition
+            overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
             kwargs (dict): passed to `define_aliases()`
 
         **Examples**:
 
             self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
-            self.define_states(ss.BoolState('infectious'), reset='infectious') # Replace an inherited state or alias
+            self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias
         """
         # Optionally remove existing states and aliases: all of them (reset=True), or just the named
         # ones (note: does not remove them from the people object or others if already added); see example in ss.SIR()
@@ -561,11 +561,6 @@ class Module(Base):
             names = ([state.name for state in self.state_list] + list(self._state_aliases)) if reset is True else sc.tolist(reset)
             for name in names:
                 self._remove_state(name)
-
-        # If we're not checking, don't lock the attrs
-        if not check:
-            orig_lock_attrs = self._lock_attrs
-            self._lock_attrs = False
 
         # Add the new states
         for arg in args:
@@ -575,17 +570,18 @@ class Module(Base):
                 state = ss.BoolState(**arg)
             else:
                 state = arg
+            assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
 
-            if check:
-                assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
-
-            # Add the state to the module
+            # Add the state to the module, replacing any existing state or alias of the same
+            # name if overwrite=True (removing it first, so it isn't listed or counted twice)
             attr = state.name
-            if check and hasattr(self, attr):
+            if overwrite:
+                self._remove_state(attr, die=False)
+            elif hasattr(self, attr):
                 present = [s.name for s in self.state_list]
                 new = [s.name for s in args]
                 errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module (as a state or an alias).\n'
-                errormsg += 'Did you mean to use define_states(reset=...) (remove it first, by name or all of them) or define_states(check=False) (skip this check)?\n'
+                errormsg += 'Did you mean to use define_states(overwrite=True) (replace it) or define_states(reset=...) (remove it first, by name or all of them)?\n'
                 errormsg += f'States already in module:\n{present}\n'
                 errormsg += f'Aliases already in module:\n{list(self._state_aliases)}\n'
                 errormsg += f'New states being added:\n{new}\n'
@@ -598,16 +594,12 @@ class Module(Base):
             if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
 
-        # Reset the lock state
-        if not check:
-            self._lock_attrs = orig_lock_attrs
-
         # Handle any aliases
         if kwargs:
-            self.define_aliases(**kwargs)
+            self.define_aliases(overwrite=overwrite, **kwargs)
         return
 
-    def define_aliases(self, **kwargs):
+    def define_aliases(self, overwrite=False, **kwargs):
         """
         Define aliases for states, e.g. `self.define_aliases(infectious='infected')`
 
@@ -629,6 +621,7 @@ class Module(Base):
         since the state it points to is already counted under its own name.
 
         Args:
+            overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
             kwargs (dict): mapping of alias name to either the name of a state, or a callable
 
         **Examples**:
@@ -638,9 +631,11 @@ class Module(Base):
             self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
         """
         for key in kwargs:
-            if key not in self._state_aliases and hasattr(self, key): # An alias would never be consulted, since the state takes precedence
+            if overwrite:
+                self._remove_state(key, die=False)
+            elif key not in self._state_aliases and hasattr(self, key): # An alias would never be consulted, since the state takes precedence
                 errormsg = f'Cannot define alias "{key}" in {self._debug_name} since a state of that name already exists; '
-                errormsg += f'use define_states(reset="{key}") to remove it first.'
+                errormsg += f'use overwrite=True to replace it, or define_states(reset="{key}") to remove it first.'
                 raise AttributeError(errormsg)
         self._state_aliases = self._state_aliases | kwargs # Copy rather than update in place, since the default is defined on the class
         return
@@ -660,8 +655,9 @@ class Module(Base):
             raise AttributeError(errormsg)
         return
 
-    def define_results(self, *args, check=True):
+    def define_results(self, *args):
         """ Add results to the module """
+        auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate an n_<name> result
         for arg in args:
             if isinstance(arg, (list, tuple)):
                 result = ss.Result(*arg)
@@ -674,8 +670,8 @@ class Module(Base):
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
-            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in {state.name for state in self.auto_state_list}:
-                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the BoolState "{result.name[2:]}".'
+            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in auto_names:
+                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the state "{result.name[2:]}".'
                 raise ValueError(msg)
             self.results += result
         return
