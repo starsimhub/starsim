@@ -518,10 +518,6 @@ class People:
             res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
-        # Running cumulative sum: O(1) per step instead of the previous O(n) np.sum(new_deaths[:ti]),
-        # which made the whole calculation O(n²). This also fixes a one-timestep lag in the previous
-        # version (which summed new_deaths[:ti], excluding the current step): cum_deaths now satisfies
-        # cum_deaths == np.cumsum(new_deaths), matching the cum_infections convention.
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 

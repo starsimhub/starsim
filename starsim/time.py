@@ -904,6 +904,25 @@ Examples:
     def ndim(self):
         return np.ndim(self.value)
 
+    def replace(self, value):
+        """
+        Return a copy of this TimePar with a different value
+
+        Copying rather than constructing a new object preserves the base as well as the
+        class, so `ss.perweek(0.1).replace(0.2)` is a rate per week, not per year.
+        Analogous to `ss.date.replace()`.
+
+        Args:
+            value (float/array): the value to use
+
+        **Example**:
+
+            ss.years(5).replace(6) # Returns ss.years(6)
+        """
+        out = sc.dcp(self)
+        out.value = value if sc.isnumber(value) else sc.toarray(value)
+        return out
+
     def to(self, unit):
         """ Convert this TimePar to one of a different class """
         unit = get_unit_class(self.timepar_type, unit)
@@ -1025,7 +1044,7 @@ class dur(TimePar):
                     self.base = base
                     self._set_factors()
                 else:
-                    errormsg = f'Cannot change the base of `ss.dur` from {self.base} to {base}; use `dur.mutate()` instead'
+                    errormsg = f'Cannot change the base of `ss.dur` from {self.base} to {base}. To reinterpret the value in the new base, construct it directly, e.g. ss.{base}({value}); to convert it, use e.g. ss.{self.base}({value}).to({base!r}).'
                     raise AttributeError(errormsg)
         else:
             errormsg = f'Expecting scalar, array, or ss.dur as value, not {value}'
@@ -1334,6 +1353,16 @@ class datedur(dur):
             return dur_class(value)
         else:
             return ss.years(0)
+
+    def replace(self, value):
+        """
+        Return an `ss.dur` with the supplied value; see `TimePar.replace()`
+
+        Unlike other timepars, a `datedur` stores its value as a date offset rather than
+        a number, so it can't simply be copied. Instead, the finest unit the `datedur`
+        was specified with is used, e.g. `ss.datedur(days=10).replace(20)` is `ss.days(20)`.
+        """
+        return self.to_dur().replace(value)
 
     def to(self, unit):
         """

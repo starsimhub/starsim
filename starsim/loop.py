@@ -179,7 +179,7 @@ class Loop:
         if sim.pars.get('people_results', True): # People results can be opted out for lightweight sims
             self += sim.people.update_results
         for mod in sim.modules:
-            if not self._is_noop_update_results(mod):
+            if not self._null_update_results(mod):
                 self += mod.update_results
 
         # Apply analyzers
@@ -195,7 +195,7 @@ class Loop:
         return self.funcs
 
     @staticmethod
-    def _is_noop_update_results(mod):
+    def _null_update_results(mod):
         """
         Return True if a module's `update_results` is a guaranteed no-op and can be skipped
 

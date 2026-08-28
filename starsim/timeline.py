@@ -6,15 +6,6 @@ import numpy as np
 import starsim as ss
 
 
-def _first_date(t):
-    """ Return the first element of a timeline's datevec, without materializing the whole datevec """
-    if t._datevec is not None: # Already built: just index it
-        return t._datevec[0]
-    if isinstance(t.start, ss.date): # Date-based: the first tvec element is the first date
-        return t.tvec[0]
-    return ss.date.from_array(np.asarray(t.yearvec[:1]), allow_zero=True)[0] # Duration-based: convert only the first year
-
-
 class Timeline:
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
@@ -577,9 +568,18 @@ class Timeline:
 
     def _capture_relvec_context(self, sim):
         """ Capture the reference start date (date0) and duration class used by the lazy relvec property """
+        
+        def first_date(t):
+            """ Return the first element of a timeline's datevec, without materializing the whole datevec """
+            if t._datevec is not None: # Already built: just index it
+                return t._datevec[0]
+            if isinstance(t.start, ss.date): # Date-based: the first tvec element is the first date
+                return t.tvec[0]
+            return ss.date.from_array(np.asarray(t.yearvec[:1]), allow_zero=True)[0] # Duration-based: convert only the first year
+
         try:
             ref_t = sim.t # The sim's timeline (may be self, for the sim's own timeline)
-            date0 = _first_date(ref_t)
+            date0 = first_date(ref_t)
             rel_dt = ref_t.dt
         except Exception:
             date0 = None # Standalone timeline: the relvec property will fall back to self.datevec[0]

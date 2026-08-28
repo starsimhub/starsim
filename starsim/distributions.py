@@ -240,32 +240,6 @@ class Dists(sc.prettyobj):
         return new
 
 
-def to_timepar(template, value):
-    """
-    Convert a plain number to a timepar matching the supplied template
-
-    For example, `to_timepar(ss.years(5), 6)` returns `ss.years(6)`. Copying the template
-    rather than constructing a new object preserves the base as well as the class, e.g.
-    `to_timepar(ss.per(0.1, 'weeks'), 0.2)` returns a rate per week, not per year.
-
-    Args:
-        template (TimePar): the timepar whose class and base should be matched
-        value (float/array): the value to convert
-
-    Returns:
-        A new `TimePar` of the same type as the template
-    """
-    if isinstance(template, ss.datedur): # datedur stores its value as a date offset rather than a number, so can't be reused
-        kwds = template.value.kwds # Instead, use the finest unit the datedur was specified with, e.g. days for ss.datedur(days=10)
-        for unit in ['days', 'weeks', 'months', 'years']:
-            if kwds.get(unit):
-                return getattr(ss, unit)(value)
-        return ss.years(value) # No recognized units, so fall back to the default
-    out = sc.dcp(template)
-    out.value = value
-    return out
-
-
 class scale_types(sc.prettyobj):
     """ Define how distributions scale
 
@@ -526,10 +500,8 @@ class Dist:
         for key,new in kwargs.items():
             old = self.pars.get(key)
             if isinstance(old, ss.TimePar) and not isinstance(new, ss.TimePar):
-                if sc.isnumber(new):
-                    kwargs[key] = to_timepar(old, new)
-                elif sc.checktype(new, 'arraylike'):
-                    kwargs[key] = to_timepar(old, sc.toarray(new))
+                if sc.isnumber(new) or sc.checktype(new, 'arraylike'):
+                    kwargs[key] = old.replace(new)
                 # Otherwise (e.g. a function or None), use the new value directly
         return
 
@@ -961,7 +933,7 @@ class Dist:
         # Convert the plain numbers to the same timepar as their siblings
         template = timepars[0]
         for key,val in plain.items():
-            self._pars[key] = to_timepar(template, val if sc.isnumber(val) else sc.toarray(val))
+            self._pars[key] = template.replace(val)
         return
 
     def convert_callable(self, parkey, func, size, uids):
