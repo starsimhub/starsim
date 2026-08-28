@@ -6,7 +6,6 @@ import numpy as np
 import starsim as ss
 
 
-
 class Timeline:
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
@@ -77,14 +76,19 @@ class Timeline:
         self.default_dur = 50
         self.default_dt = 1.0
 
-        # Populated later
+        # Populated later. The canonical vectors (tvec, tivec, yearvec) are built eagerly at
+        # init; the human-friendly vectors (timevec, datevec, relvec) are derived lazily on
+        # first access (see the properties below), so that sims that never read them do not
+        # pay to construct date sequences. Underscore attributes are the lazy backing stores.
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.tvec    = None # The time vector for this instance in date or dur format
         self.tivec   = None # The time index vector
-        self.timevec = None # The human-friendly time representation
         self.yearvec = None # Time vector as floating point years
-        self.datevec = None # Time vector as date objects
-        self.relvec  = None # Time vector in sim time units
+        self._timevec = None # Backing store for the lazy timevec property (human-friendly representation)
+        self._datevec = None # Backing store for the lazy datevec property (date objects)
+        self._relvec  = None # Backing store for the lazy relvec property (relative time in sim units)
+        self._rel_date0 = None # Reference date0 for relvec, captured at init (None => use self.datevec[0])
+        self._rel_dur_class = None # Duration class for relvec, captured at init
         self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.initialized = False # Call self.init(sim) to initialize the object
 
@@ -114,6 +118,51 @@ class Timeline:
             return self.tvec.shape[0]
         except:
             return 0
+
+    @property
+    def datevec(self):
+        """ Time vector as `ss.date` objects (derived lazily from tvec/yearvec) """
+        if self._datevec is None and self.tvec is not None:
+            if isinstance(self.start, ss.date): # Date-based: tvec already holds dates
+                self._datevec = ss.DateArray(self.tvec)
+            else: # Duration-based: reconstruct dates from the canonical year vector
+                self._datevec = ss.date.from_array(self.yearvec, allow_zero=True)
+        return self._datevec
+
+    @datevec.setter
+    def datevec(self, value):
+        self._datevec = value
+
+    @property
+    def timevec(self):
+        """ Human-friendly (plotting-friendly) representation of tvec (derived lazily) """
+        if self._timevec is None and self.tvec is not None:
+            self._timevec = self.tvec.to_human() # Dates if possible, else floats
+        return self._timevec
+
+    @timevec.setter
+    def timevec(self, value):
+        self._timevec = value
+
+    @property
+    def relvec(self):
+        """ Relative time in the sim's time units (derived lazily) """
+        if self._relvec is None and self.yearvec is not None:
+            date0 = self._rel_date0
+            if date0 is None: # Standalone timeline: measure relative to our own start
+                date0 = self.datevec[0]
+            dur_class = self._rel_dur_class or self.default_type
+            if isinstance(date0, ss.date): # Convert this Timeline's datevec to durations relative to the sim start date
+                dur_vec = self.datevec - date0
+            else: # Otherwise, use years
+                dur_vec = ss.years(self.yearvec - self.yearvec[0])
+            dur_vec = dur_class(dur_vec) # Convert to the intended class
+            self._relvec = dur_vec.to_array() # Only keep the numeric array
+        return self._relvec
+
+    @relvec.setter
+    def relvec(self, value):
+        self._relvec = value
 
     def to_dict(self):
         """ Return a dictionary of all time vectors """
@@ -207,7 +256,7 @@ class Timeline:
         else: # Special case, we are before or after the sim period
             now = self.tvec[0] + self.dt*self.ti
             if key == 'yearvec':
-                now = float(now)
+                now = now.years # Not float(), which for a dur gives the magnitude without the unit, e.g. float(ss.days(500)) = 500
 
         if to_str:
             now = str(now)
@@ -430,24 +479,15 @@ class Timeline:
             if sim.t.initialized: # It's initialized
                 if all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in tvkeys]): # Types match
                     if all([getattr(self, key) == getattr(sim.t, key) for key in tvkeys]): # Values match
-                        for attr in self._time_vecs: # Copy the time vectors over
-                            new = sc.dcp(getattr(sim.t, attr))
-                            setattr(self, attr, new)
+                        self._share_from(sim.t)
                         self.initialized = True
                         return self
 
-        # We need to make the tvec (ss.dates/ss.durs) the yearvec (years), and the datevec (dates). However, we
-        # need to decide which of these quantities to prioritise considering that the calendar dates
-        # don't convert consistently into fractional years due to varying month/year lengths. We will
-        # prioritise one or the other depending on what type of quantity the user has specified for start
-        self.datevec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
-        n_steps = len(self.datevec)
-        if n_steps > max_steps and ss.options.warn_convert:
-            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
-            warnmsg += f'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
-            warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
-            ss.warn(warnmsg)
-
+        # Build the canonical vectors: tvec (ss.date/ss.dur) and yearvec (float years). We need to
+        # decide which to prioritise, since calendar dates don't convert consistently into fractional
+        # years (varying month/year lengths); we prioritise based on the type the user gave for start.
+        # The human-friendly datevec/timevec/relvec are derived lazily (see the properties above), so
+        # they are not eagerly constructed here.
         if isinstance(self.dt, ss.datedur):
             if isinstance(self.start, ss.dur): # e.g. ss.Sim(start=ss.years(2000), dt=ss.datedur(months=1))
                 self.tvec = ss.dur.arange(self.start, self.stop, self.dt)
@@ -473,53 +513,86 @@ class Timeline:
                     self.yearvec = np.round(start + sc.inclusiverange(0, stop-start+eps, dt), decimals=decimals)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
                     self.tvec = self.default_type(ss.years(self.yearvec))
             elif isinstance(self.start, ss.date): # e.g. ss.Sim(ss.date(2000))
-                self.tvec = self.datevec
-                self.yearvec = self.datevec.years
+                # Date-based: tvec is the calendar-accurate date sequence (datevec returns this lazily)
+                self.tvec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
+                self.yearvec = self.tvec.years
             else:
                 errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
                 raise TypeError(errormsg)
 
-        # Ensure datevec is derived from the canonical tvec/yearvec for dur-based inputs;
-        # datevec was computed above via date.arange which uses calendar-accurate stepping,
-        # but when start is a dur, tvec/yearvec (from float arithmetic) are canonical and
-        # may have a different length due to calendar vs. float-year discrepancies.
-        if isinstance(self.start, ss.dur):
-            self.datevec = ss.date.from_array(self.yearvec, allow_zero=True)
-
-        # Finalize timevecs
+        # Finalize the eager vectors: tvec (as a DateArray) and the time-index vector
         self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray
         self.tivec = np.arange(self.npts) # Simple time indices
-        self.timevec = self.tvec.to_human() # The most human-friendly version of the dates: dates if possible, else floats
+        n_steps = self.npts
 
-        # Finally, create a vector of relative times in the sim's time unit (if available)
-        try:
-            date0 = sim.t.datevec[0]
-            dt = sim.t.dt
-        except:
-            date0 = self.datevec[0]
-            dt = self.dt
+        # Warn if the number of steps is very large
+        if n_steps > max_steps and ss.options.warn_convert:
+            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
+            warnmsg += f'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
+            warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
+            ss.warn(warnmsg)
 
-        # Get the class for dt, which we use as the unit for the durations
-        if isinstance(dt, ss.dur):
-            dur_class = type(dt)
-            if dur_class == ss.datedur: # Don't use ss.datedur for dt, since we want something numeric
-                dur_class = type(dt.to_dur())
-        else:
-            dur_class = self.default_type
+        # Capture the reference start and duration class so the lazy relvec property can be
+        # built later without needing the sim (relvec is expressed in the sim's time units)
+        self._capture_relvec_context(sim)
 
-        if isinstance(date0, ss.date): # This check is necessary for skipping this step for mock modules -- TODO, make tidier
-            dur_vec = self.datevec - date0 # Convert this Timeline's datevec to dates relative to sim start date
-        else: # If it's not, use years
-            dur_vec = ss.years(self.yearvec - self.yearvec[0])
-        dur_vec = dur_class(dur_vec) # Convert to the intended class
-        self.relvec = dur_vec.to_array() # Only keep the numeric array
-
-        # Check that everything is the same
-        for k,v in self.to_dict().items():
-            if len(v) != len(self):
-                errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={len(self)}'
+        # Check that the eagerly-built vectors are the expected length (the lazy vectors are
+        # derived from yearvec and share its length by construction)
+        for k in ['tvec', 'tivec', 'yearvec']:
+            v = getattr(self, k)
+            if len(v) != n_steps:
+                errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={n_steps}'
                 raise ValueError(errormsg)
 
         # We're done, phew
         self.initialized = True
         return self
+
+    def _share_from(self, source):
+        """
+        Copy the time vectors from a matching (sim) timeline
+
+        Eager vectors are shallow-copied into independent array containers (sharing the
+        immutable date/dur elements; see the deepcopy note in the rc3.6.0 performance work).
+        The lazy vectors are copied only if the source has already materialized them, so a
+        module that never reads e.g. datevec does not force the sim to build it.
+        """
+        for attr in ['tvec', 'tivec', 'yearvec']:
+            setattr(self, attr, getattr(source, attr).copy())
+        for attr in ['_timevec', '_datevec', '_relvec']:
+            src = getattr(source, attr)
+            setattr(self, attr, src.copy() if src is not None else None)
+        self._rel_date0 = source._rel_date0
+        self._rel_dur_class = source._rel_dur_class
+        return
+
+    def _capture_relvec_context(self, sim):
+        """ Capture the reference start date (date0) and duration class used by the lazy relvec property """
+        
+        def first_date(t):
+            """ Return the first element of a timeline's datevec, without materializing the whole datevec """
+            if t._datevec is not None: # Already built: just index it
+                return t._datevec[0]
+            if isinstance(t.start, ss.date): # Date-based: the first tvec element is the first date
+                return t.tvec[0]
+            return ss.date.from_array(np.asarray(t.yearvec[:1]), allow_zero=True)[0] # Duration-based: convert only the first year
+
+        try:
+            ref_t = sim.t # The sim's timeline (may be self, for the sim's own timeline)
+            date0 = first_date(ref_t)
+            rel_dt = ref_t.dt
+        except Exception:
+            date0 = None # Standalone timeline: the relvec property will fall back to self.datevec[0]
+            rel_dt = self.dt
+
+        # Get the class for dt, which we use as the unit for the relative durations
+        if isinstance(rel_dt, ss.dur):
+            dur_class = type(rel_dt)
+            if dur_class == ss.datedur: # Don't use ss.datedur, since we want something numeric
+                dur_class = type(rel_dt.to_dur())
+        else:
+            dur_class = self.default_type
+
+        self._rel_date0 = date0
+        self._rel_dur_class = dur_class
+        return

@@ -221,6 +221,7 @@ class SimPars(Pars):
         birth_rate (float): If provided, include births with this rate (per 1000 people per year)
         death_rate (float): If provided, include deaths with this rate (per 1000 people per year)
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
+        people_results (bool): Whether to collect the automatic People-level results (n_alive, n_female, new_deaths, cum_deaths, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.n_alive)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
         networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
         demographics (str/list/Module): As above
@@ -240,6 +241,7 @@ class SimPars(Pars):
         self.n_agents  = 10e3 # Number of agents
         self.total_pop = None # If defined, used for calculating the scale factor
         self.pop_scale = None # How much to scale the population
+        self.people_results = True # Whether to collect automatic People-level results every timestep (see docstring)
 
         # Simulation parameters
         self.start     = None  # Start of the simulation (default 2000)

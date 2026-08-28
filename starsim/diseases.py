@@ -23,7 +23,7 @@ class Disease(ss.Module):
     Diseases define how agents become infected, progress through health states, and
     potentially die. They are transmitted via `ss.Network` objects and can be modified
     by `ss.Intervention` and `ss.Connector` modules. See `ss.Infection` for the
-    standard base class for infectious diseases, and `ss.SIR`/`ss.SIS` for common
+    standard base class for infectious diseases, and `ss.SIR`/`ss.SEIR`/`ss.SIS` for common
     compartmental patterns.
     """
 
@@ -124,6 +124,7 @@ class Infection(Disease):
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
+            infectious = 'infected', # Only infectious agents transmit; by default, everyone infected is infectious
         )
 
         self.define_pars(
@@ -140,14 +141,6 @@ class Infection(Disease):
         self.validate_beta()
         return
 
-    @property
-    def infectious(self):
-        """
-        Generally defined as an alias for infected, although these may differ in some diseases.
-        Transmission comes from infectious people; prevalence estimates may include infected people who don't transmit
-        """
-        return self.infected
-
     def init_post(self):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
@@ -162,9 +155,6 @@ class Infection(Disease):
         initial_cases = self.pars.init_prev.filter()
         if len(initial_cases):
             self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
-
-        # Store initial cases to exclude them from results on the first timestep
-        self.pars._n_initial_cases = len(initial_cases)
         return initial_cases
 
     def init_results(self):
@@ -212,6 +202,14 @@ class Infection(Disease):
             raise ValueError(errormsg)
 
         return betamap
+
+    def set_prognoses(self, uids, sources=None):
+        """ Make the agents non-susceptible, and record the new infections """
+        super().set_prognoses(uids, sources)
+        self.susceptible[uids] = False
+        if self.sim.initialized: # Infections seeded by init_post() are prevalent, not incident, so don't count them
+            self.results.new_infections[self.ti] += len(uids) # Count infections when they happen, rather than inferring them from ti_infected
+        return
 
     def step(self):
         """
@@ -331,6 +329,13 @@ class Infection(Disease):
         self.set_prognoses(uids[~congenital], src_p)
         return
 
+    # Birth outcomes that trigger request_death rather than setting a bool state.
+    # Prenatal outcomes are fetal losses and must fire while the agent is still unborn;
+    # postnatal outcomes happen to a live newborn. See set_congenital() for why this matters.
+    prenatal_death_keys = {'miscarriage', 'stillborn'}
+    postnatal_death_keys = {'neonatal_deaths'}
+    congenital_death_keys = prenatal_death_keys | postnatal_death_keys
+
     def set_congenital(self, target_uids, source_uids=None):
         """
         Default implementation for assigning congenital outcomes during in-utero
@@ -352,6 +357,12 @@ class Infection(Disease):
         outcomes also need a BoolArr of the same name. Death outcomes ('miscarriage',
         'neonatal_deaths', 'stillborn') fire via `request_death`; others set a bool state.
 
+        Outcomes are scheduled for the mother's delivery timestep, except for fetal
+        losses ('miscarriage', 'stillborn'), which are scheduled one timestep earlier so
+        that they occur before the fetus is delivered and are classified as fetal losses
+        rather than neonatal deaths. A fetus infected within one timestep of delivery is
+        therefore born alive, and a lethal outcome for it counts as a neonatal death.
+
         For state- or GA-dependent probabilities, provide multiple keyed
         distributions in `birth_outcomes` and override
         `_assign_congenital_outcomes`.
@@ -359,7 +370,7 @@ class Infection(Disease):
         Call `step_congenital` from the disease's `step_state()` to
         execute the scheduled events each timestep.
         """
-        if not hasattr(self.pars, 'birth_outcomes') or self.pars.birth_outcomes is None:
+        if 'birth_outcomes' not in self.pars or self.pars.birth_outcomes is None:
             return
 
         # Prevent repeated MTC transmission each timestep of pregnancy
@@ -385,7 +396,16 @@ class Infection(Disease):
             if len(o_uids):
                 ti_key = f'ti_{key}'
                 if hasattr(self, ti_key):
-                    getattr(self, ti_key)[o_uids] = self.ti + dt_delivery[s_uids]
+                    ti_event = self.ti + dt_delivery[s_uids]
+                    if key in self.prenatal_death_keys:
+                        # Fetal losses must fire while the agent is still unborn. Pregnancy.step()
+                        # runs before diseases' step_state() in the integration loop, so an event
+                        # scheduled at ti_delivery would kill an already-delivered newborn: it would
+                        # be counted as a live birth and then as a neonatal death, rather than as a
+                        # fetal loss. Firing a timestep early also matches the biology, since a
+                        # stillborn fetus dies in utero before labor.
+                        ti_event = np.maximum(ti_event - 1, self.ti)
+                    getattr(self, ti_key)[o_uids] = ti_event
         return
 
     def _assign_congenital_outcomes(self, target_uids, source_uids):
@@ -394,10 +414,8 @@ class Infection(Disease):
         Must return an integer array of outcome indices (one per target_uid),
         corresponding to `self.pars.birth_outcome_keys`.
         """
-        raise NotImplementedError(
-            'Subclass must implement _assign_congenital_outcomes or use a single '
-            '"default" distribution in birth_outcomes'
-        )
+        errormsg = 'Subclass must implement _assign_congenital_outcomes or use a single "default" distribution in birth_outcomes'
+        raise NotImplementedError(errormsg)
 
     def step_congenital(self):
         """
@@ -407,9 +425,9 @@ class Infection(Disease):
         pars. Call from the disease's `step_state()`; see `set_congenital`
         for setup details.
         """
-        if not hasattr(self.pars, 'birth_outcome_keys'):
+        if 'birth_outcome_keys' not in self.pars:
             return
-        death_keys = {'miscarriage', 'neonatal_deaths', 'stillborn'}  # Birth outcomes that trigger request_death
+        death_keys = self.congenital_death_keys
         for key in self.pars.birth_outcome_keys:
             ti_key = f'ti_{key}'
             if not hasattr(self, ti_key):
@@ -425,19 +443,11 @@ class Infection(Disease):
         return
 
     def update_results(self):
-        """ Update new_infections and prevalence for the current timestep. """
+        """ Update prevalence; new_infections is recorded by set_prognoses() as infections happen """
         super().update_results()
         res = self.results
         ti = self.ti
-        n_infections = np.count_nonzero(np.round(self.ti_infected) == ti)  # Round since ti_infected is FloatArr
-
-        # Update new infections to remove initial cases on first timestep
-        if ti == 0:
-            n_initial_cases = self.pars.pop('_n_initial_cases', 0)
-            n_infections -= n_initial_cases
-
-        res.new_infections[ti] = n_infections
-        res.prevalence[ti] = res.n_infected[ti] / len(self.sim.people)
+        res.prevalence[ti] = res.n_infected[ti] / self.sim.people.n_alive
         return
 
     def finalize_results(self):
@@ -563,7 +573,7 @@ class NCD(Disease):
         self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             dur_risk = ss.expon(scale=ss.years(10)),
-            prognosis = ss.weibull(c=ss.years(2), scale=5), # Time in years between first becoming affected and death
+            prognosis = ss.weibull(c=2, scale=ss.years(5)), # Time between first becoming affected and death; c is the (dimensionless) shape parameter
         )
         self.update_pars(pars, **kwargs)
 
@@ -627,7 +637,7 @@ class NCD(Disease):
         super().update_results()
         ti = self.ti
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(self.sim.people)
+        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
         self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
         return
 
@@ -646,6 +656,8 @@ class SIR(Infection):
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
+    plot_states = ['n_susceptible', 'n_infected', 'n_recovered'] # Which results to show in plot()
+
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
         self.define_pars(
@@ -659,14 +671,15 @@ class SIR(Infection):
         # Example of defining all states, redefining those from ss.Infection, using overwrite=True
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infectious'),
+            ss.BoolState('infected', label='Infected'),
             ss.BoolState('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-            reset = True, # Remove any existing states (from super().define_states())
+            reset = True, # Remove any existing states and aliases (from super().define_states())
+            infectious = 'infected', # Everyone infected is infectious; ss.SEIR replaces this with a state of its own
         )
         return
 
@@ -674,7 +687,7 @@ class SIR(Infection):
         # Progress infectious -> recovered
         sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
-        self.infected[recovered] = False
+        self.clear_infection(recovered)
         self.recovered[recovered] = True
 
         # Trigger deaths
@@ -684,31 +697,45 @@ class SIR(Infection):
         return
 
     def set_prognoses(self, uids, sources=None):
-        """ Set prognoses """
+        """ Set prognoses: infect the agents, then schedule what happens to them """
         super().set_prognoses(uids, sources)
-        ti = self.t.ti
-        self.susceptible[uids] = False
-        self.infected[uids] = True
-        self.ti_infected[uids] = ti
+        self.set_infection(uids)
+        self.set_progression(uids)
+        return
 
+    def set_infection(self, uids):
+        """ Make the agents infectious, immediately (`ss.SEIR` overrides this to add a latent period) """
+        self.infected[uids] = True
+        self.ti_infected[uids] = self.ti
+        return
+
+    def clear_infection(self, uids):
+        """ Clear the infection states, on recovery or death (`ss.SEIR` overrides this, since its `infected` is derived) """
+        self.infected[uids] = False
+        return
+
+    def set_progression(self, uids):
+        """ Schedule recovery or death, relative to when each agent becomes infectious """
         p = self.pars
 
         # Sample duration of infection, being careful to only sample from the
         # distribution once per timestep.
         dur_inf = p.dur_inf.rvs(uids)
 
-        # Determine who dies and who recovers and when
+        # Determine who dies and who recovers and when. In ss.SIR agents are infectious as
+        # soon as they are infected, so the infectious period runs from ti_infected;
+        # ss.SEIR overrides this to run it from ti_infectious instead.
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = ti + dur_inf[will_die] # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die]
+        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die] # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die]
         return
 
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
-        self.infected[uids] = False
+        self.clear_infection(uids)
         self.recovered[uids] = False
         return
 
@@ -717,7 +744,7 @@ class SIR(Infection):
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
         res = self.results
-        for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
+        for rkey in self.plot_states:
             plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
@@ -726,6 +753,84 @@ class SIR(Infection):
         sc.boxoff()
         sc.commaticks()
         return ss.return_fig(fig)
+
+
+class SEIR(SIR):
+    """
+    Example SEIR model
+
+    This class extends `ss.SIR` with an exposed state: agents who are infected but not
+    yet infectious. `exposed` and `infectious` are the literal E and I compartments, and
+    `infected` is derived from them: an agent is infected from the moment it acquires the
+    infection, whether or not it is yet transmitting. So `n_infected` and `prevalence`
+    count E plus I, while transmission depends on `infectious` alone.
+
+    Correspondingly, `ti_exposed` is the time of acquisition and `ti_infectious` is the
+    time of becoming infectious. `ti_infected` is deliberately not defined, since it is
+    too easily confused with `ti_infectious`.
+
+    Args:
+        beta (float/`ss.prob`): the infectiousness
+        init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
+        dur_exp (float/`ss.dur`/`ss.Dist`): how long people are exposed (latent) for
+        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infectious for
+        p_death (float/`ss.bernoulli`): the probability of death from infection
+    """
+    plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']
+
+    def __init__(self, pars=None, dur_exp=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            dur_exp = ss.lognorm_ex(mean=ss.years(0.5)),
+        )
+        self.update_pars(pars, **kwargs)
+
+        # SIR states are added automatically; here we split I off from "infected", which
+        # becomes E plus I, and drop ti_infected in favor of ti_exposed and ti_infectious
+        self.define_states(
+            ss.BoolState('exposed', label='Exposed'),
+            ss.BoolState('infectious', label='Infectious'),
+            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
+            reset = ['infected', 'infectious', 'ti_infected'],
+            infected = lambda self: self.exposed | self.infectious, # Derived: E and I are both infected
+        )
+        return
+
+    def set_infection(self, uids):
+        """ Agents are exposed first, and become infectious after the latent period """
+        self.exposed[uids] = True
+        self.ti_exposed[uids] = self.ti
+        self.ti_infectious[uids] = self.ti + self.pars.dur_exp.rvs(uids)
+        return
+
+    def set_progression(self, uids):
+        """ Schedule recovery or death, relative to the end of the latent period """
+        p = self.pars
+        dur_inf = p.dur_inf.rvs(uids)
+
+        # As ss.SIR, except that the infectious period runs from ti_infectious rather than
+        # from the time of acquisition, so the latent period delays it rather than eating into it
+        will_die = p.p_death.rvs(uids)
+        dead_uids = uids[will_die]
+        rec_uids = uids[~will_die]
+        self.ti_dead[dead_uids] = self.ti_infectious[dead_uids] + dur_inf[will_die]
+        self.ti_recovered[rec_uids] = self.ti_infectious[rec_uids] + dur_inf[~will_die]
+        return
+
+    def clear_infection(self, uids):
+        """ `infected` is derived, so clear the states it is derived from """
+        self.exposed[uids] = False
+        self.infectious[uids] = False
+        return
+
+    def step_state(self):
+        """ Progress exposed -> infectious, then the usual SIR transitions """
+        infectious = (self.exposed & (self.ti_infectious <= self.ti)).uids
+        self.exposed[infectious] = False
+        self.infectious[infectious] = True
+        super().step_state()
+        return
 
 
 class SIS(Infection):
@@ -778,8 +883,7 @@ class SIS(Infection):
 
     def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
-        super().set_prognoses(uids, sources)
-        self.susceptible[uids] = False
+        super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
         self.infected[uids] = True
         self.ti_infected[uids] = self.ti
         self.immunity[uids] += self.pars.imm_boost

@@ -6,8 +6,6 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['HouseholdNet']
-
 _ = None # Sentinel for "not provided" default arguments
 
 

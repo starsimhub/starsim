@@ -187,105 +187,81 @@ print(f'Population size in year {pars.stop}: {answer} million')
 
 ## T4 Solutions
 
-These solutions build on the `SEIR` class from the tutorial, so we define it again here:
+These solutions build on the `SIRS` class from the tutorial, so we define it again here:
 
 ```{python}
 import numpy as np
 import starsim as ss
 
-class SEIR(ss.SIR):
+class SIRS(ss.SIR):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.define_pars(dur_exp=ss.lognorm_ex(0.5))
+        self.define_pars(dur_imm=ss.lognorm_ex(mean=ss.years(10)))
         self.update_pars(pars, **kwargs)
-        self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
-        )
+        self.define_states(ss.FloatArr('ti_susceptible'))
         return
 
-    @property
-    def infectious(self):
-        return self.infected | self.exposed
+    def set_progression(self, uids):
+        super().set_progression(uids)
+        recovering = uids[np.isfinite(self.ti_recovered[uids])]
+        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + self.pars.dur_imm.rvs(recovering)
+        return
 
     def step_state(self):
         super().step_state()
-        infected = self.exposed & (self.ti_infected <= self.ti)
-        self.exposed[infected] = False
-        self.infected[infected] = True
-        return
-
-    def step_die(self, uids):
-        super().step_die(uids)
-        self.exposed[uids] = False
-        return
-
-    def set_prognoses(self, uids, sources=None):
-        super().set_prognoses(uids, sources)
-        ti = self.ti
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = ti
-        p = self.pars
-        dur_exp = p.dur_exp.rvs(uids)
-        self.ti_infected[uids] = ti + dur_exp
-        dur_inf = p.dur_inf.rvs(uids)
-        will_die = p.p_death.rvs(uids)
-        self.ti_recovered[uids[~will_die]] = ti + dur_inf[~will_die]
-        self.ti_dead[uids[will_die]] = ti + dur_inf[will_die]
+        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
+        self.recovered[waning] = False
+        self.susceptible[waning] = True
         return
 ```
 
 ### Question 1
 
-**Q: Try different values of `dur_exp` in the SEIR model — how does it affect the epidemic curve?**
+**Q: Try different values of `dur_imm` in the SIRS model — how does it affect the epidemic curve?**
 
-A: A longer exposed (latent) period delays the onset of infectiousness, so the epidemic peak comes later and is somewhat lower and broader:
+A: The shorter immunity is, the faster the susceptible pool is replenished, so transmission settles at a higher endemic level. With long-lasting immunity the model behaves much more like SIR: a single epidemic, followed by a slow return of susceptibles:
 
 ```{python}
 sims = []
-for dur_exp in [0.5, 2, 5]:
-    seir = SEIR(dur_exp=ss.lognorm_ex(dur_exp))
-    sims.append(ss.Sim(diseases=seir, networks='random', verbose=0, label=f'dur_exp={dur_exp}'))
+for dur_imm in [2, 5, 20]:
+    sirs = SIRS(dur_imm=ss.lognorm_ex(mean=ss.years(dur_imm)))
+    sims.append(ss.Sim(diseases=sirs, networks='random', dur=100, verbose=0, label=f'dur_imm={dur_imm}'))
 msim = ss.parallel(sims)
-msim.plot('seir_n_infected')
+msim.plot('sirs_n_infected')
 ```
 
 ### Question 2
 
-**Q: Adapt the SEIR example to be SEIRS (where recovered people can become susceptible again).**
+**Q: Apply the same waning immunity to `ss.SEIR` to make an SEIRS model.**
 
-A: We add a duration of immunity (`dur_imm`) and, in `step_state()`, move recovered agents back to susceptible once their immunity has waned. We schedule the waning time in `set_prognoses()` for everyone who is going to recover:
+A: The two new methods are identical to the ones in `SIRS`; only the base class changes. This works because `ss.SEIR` splits infection and progression the same way `ss.SIR` does, so overriding `set_progression()` picks up the latent period for free:
 
 ```{python}
-class SEIRS(SEIR):
+class SEIRS(ss.SEIR):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.define_pars(dur_imm=ss.lognorm_ex(10))  # Duration of immunity after recovery
+        self.define_pars(dur_imm=ss.lognorm_ex(mean=ss.years(10)))
         self.update_pars(pars, **kwargs)
         self.define_states(ss.FloatArr('ti_susceptible'))
         return
 
-    def step_state(self):
-        super().step_state()
-        # Recovered agents whose immunity has waned return to susceptible
-        waning = self.recovered & (self.ti_susceptible <= self.ti)
-        self.recovered[waning] = False
-        self.susceptible[waning] = True
+    def set_progression(self, uids):
+        super().set_progression(uids)
+        recovering = uids[np.isfinite(self.ti_recovered[uids])]
+        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + self.pars.dur_imm.rvs(recovering)
         return
 
-    def set_prognoses(self, uids, sources=None):
-        super().set_prognoses(uids, sources)
-        # Schedule waning of immunity for those who will recover
-        recovering = uids[~np.isnan(self.ti_recovered[uids])]
-        dur_imm = self.pars.dur_imm.rvs(recovering)
-        self.ti_susceptible[recovering] = self.ti_recovered[recovering] + dur_imm
+    def step_state(self):
+        super().step_state()
+        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
+        self.recovered[waning] = False
+        self.susceptible[waning] = True
         return
 
 seirs = SEIRS()
 sim = ss.Sim(diseases=seirs, networks='random', dur=100, verbose=0)
 sim.run()
-sim.plot('seirs')
+sim.diseases.seirs.plot()
 ```
 
 Unlike the SEIR model, the SEIRS model can sustain endemic transmission, because the pool of susceptibles is continually replenished as immunity wanes.
@@ -477,4 +453,3 @@ def auto_search(efficacy=1.0):
 mid, lb, ub = grid_search()
 out = auto_search()
 ```
-

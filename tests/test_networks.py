@@ -140,6 +140,65 @@ def test_randomsafe():
     return o
 
 
+@sc.timer()
+def test_random_stratified():
+    """ Test that RandomNet reproduces the mixing structure of a risk-stratified network (issue #1399) """
+    sc.heading('Testing RandomNet with risk stratification')
+    n = 20_000
+    fracs = [0.75, 0.20, 0.05]
+    contacts = np.array([0.25, 0.93, 8.55]) # Realized degree per risk group
+    rng = np.random.default_rng(1)
+    group = rng.choice([0, 1, 2], size=n, p=fracs)
+    n_contacts = ss.constant(v=lambda self, sim, uids: contacts[group[np.asarray(uids)]])
+
+    def measure(net):
+        sim = ss.Sim(n_agents=n, networks=net, rand_seed=1, verbose=0).init()
+        nw = sim.networks[0]
+        p1, p2 = np.asarray(nw.p1), np.asarray(nw.p2)
+        deg = np.bincount(np.concatenate([p1, p2]), minlength=n)
+        degrees = np.array([deg[group == g].mean() for g in range(3)])
+        core = np.mean((group[p1] == 2) & (group[p2] == 2)) # Fraction of edges within the high-risk core
+        return degrees, core
+
+    exact_deg, exact_core = measure(ss.RandomExactNet(n_contacts=n_contacts))
+    fast_deg, fast_core = measure(ss.RandomNet(n_contacts=n_contacts))
+    print(f'Requested degrees:      {contacts}')
+    print(f'RandomExactNet degrees: {exact_deg}, core edge fraction: {exact_core:n}')
+    print(f'RandomNet degrees:      {fast_deg}, core edge fraction: {fast_core:n}')
+
+    # The realized degree per risk group must match what was requested, not just on average
+    assert np.allclose(fast_deg, contacts, rtol=0.1), f'RandomNet degrees {fast_deg} do not match requested {contacts}'
+    assert np.allclose(fast_deg, exact_deg, rtol=0.1), f'RandomNet degrees {fast_deg} do not match RandomExactNet {exact_deg}'
+
+    # Most edges should involve the high-risk core on both ends, as with RandomExactNet
+    assert np.isclose(fast_core, exact_core, rtol=0.1), f'RandomNet core clustering {fast_core:n} does not match RandomExactNet {exact_core:n}'
+
+    o = sc.objdict(exact_deg=exact_deg, fast_deg=fast_deg, exact_core=exact_core, fast_core=fast_core)
+    return o
+
+
+@sc.timer()
+def test_network_uids():
+    """ Test that all networks form edges between valid UIDs, not positional indices (issue #1418) """
+    sc.heading('Testing that network edges reference valid UIDs')
+    netclasses = [ss.RandomNet, ss.RandomExactNet, ss.RandomSafeNet]
+    out = sc.objdict()
+    for netclass in netclasses:
+        name = netclass.__name__
+        # A sim with births and deaths, so the UIDs of living agents are not contiguous
+        sim = ss.Sim(n_agents=medium, networks=netclass(), diseases='sis', demographics=True, start=2000, stop=2005, rand_seed=1, verbose=0).run()
+        nw = sim.networks[0]
+        alive = set(sim.people.auids.tolist())
+        refs = set(np.concatenate([np.asarray(nw.p1), np.asarray(nw.p2)]).tolist())
+        invalid = sorted(refs - alive)
+        print(f'{name}: {len(nw)} edges, {len(invalid)} references to non-living agents')
+        assert not len(invalid), f'{name} formed edges with {len(invalid)} non-living agents: {invalid[:10]}'
+        assert isinstance(nw.p1, ss.uids), f'{name}.p1 should be ss.uids, not {type(nw.p1)}'
+        assert isinstance(nw.p2, ss.uids), f'{name}.p2 should be ss.uids, not {type(nw.p2)}'
+        out[name] = sim
+    return out
+
+
 
 @sc.timer()
 def test_erdosrenyi():
@@ -395,6 +454,8 @@ if __name__ == '__main__':
     rand = test_random()
     fast = test_randomfast()
     safe = test_randomsafe()
+    strat = test_random_stratified()
+    nuids = test_network_uids()
     stat = test_static()
     erdo = test_erdosrenyi()
     disk = test_disk()

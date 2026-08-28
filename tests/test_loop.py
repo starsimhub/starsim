@@ -49,10 +49,17 @@ def test_run_options():
 @sc.timer()
 def test_loop_plotting():
     sc.heading('Testing loop plotting...')
-    sim = ss.Sim(pars).run()
+    sim = ss.Sim(pars).run(profile=True) # profile=True populates cpu_time for plot_cpu
+    assert len(sim.loop.cpu_time), 'Profiling should record per-entry CPU times'
     sim.loop.plot()
     sim.loop.plot_cpu()
     sim.loop.plot_step_order()
+
+    # A non-profiled run should still produce a usable plan DataFrame, just without cpu_time
+    sim2 = ss.Sim(pars).run()
+    assert not len(sim2.loop.cpu_time), 'Default run should not record CPU times'
+    df = sim2.loop.to_df()
+    assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
     return sim.loop
 
 

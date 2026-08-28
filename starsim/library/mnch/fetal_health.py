@@ -41,8 +41,6 @@ eligibility criteria or reversal logic.
 import numpy as np
 import starsim as ss
 
-__all__ = ['FetalHealth', 'fetal_infection', 'treat_pregnant']
-
 
 class FetalHealth(ss.Module):
     """
@@ -359,16 +357,14 @@ class treat_pregnant(ss.Intervention):
     specified, defaults to the full simulation period.
 
     Args:
-        disease (str):          name of the target disease (default: 'sir')
-        start_year (float):     first year treatment is available (default: sim start)
-        end_year (float):       last year treatment is available (default: sim end)
+        disease (str):              name of the target disease (default: 'sir')
+        start_year (float):         first year treatment is available (default: sim start)
+        end_year (float):           last year treatment is available (default: sim end)
+        p_treat (Dist):             par: probability of treating an eligible woman per timestep
+        tx_growth_reversal (float): par: fraction of growth restriction to reverse (0-1)
+        tx_timing_reversal (float): par: fraction of timing shift to reverse (0-1)
 
-    Pars:
-        p_treat (Dist):             probability of treating an eligible woman per timestep
-        tx_growth_reversal (float): fraction of growth restriction to reverse (0-1)
-        tx_timing_reversal (float): fraction of timing shift to reverse (0-1)
-
-    States:
+    Attributes:
         ti_treated (FloatArr):  timestep when each agent was treated
 
     Example — treatment starting in 2025 with 50% coverage::
@@ -448,7 +444,7 @@ class fetal_infection(ss.Connector):
 
     Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease in `diseases`.
 
-    Pars:
+    Args:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)
         growth_penalty (float): fractional birth weight reduction per infection (default: 0.15 = 15%)
 

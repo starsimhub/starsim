@@ -144,6 +144,17 @@ class People:
     def __len__(self):
         """ Length of people """
         return len(self.auids)
+
+    @property
+    def n_alive(self):
+        """
+        The number of living agents, which is what `results.n_alive` records
+
+        This is not the same as `len(people)`: agents who died on the current timestep are
+        not removed from `auids` until `finish_step()`, so that analyzers can still inspect
+        them. Use this rather than `len(people)` for any per-timestep denominator.
+        """
+        return np.count_nonzero(self.alive)
     
     def __repr__(self):
         return self.brief(output=True)
@@ -266,7 +277,12 @@ class People:
 
         This method also creates the standard people-related results like new_deaths,
         new_emigrants, and cum_deaths.
+
+        If `sim.pars.people_results` is False, People-level result collection is disabled
+        (no results are created here and `People.update_results` is skipped in the loop).
         """
+        if not self.sim.pars.get('people_results', True): # Opt-out: skip People-level results entirely
+            return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
         results = []
 
@@ -502,7 +518,7 @@ class People:
             res[f'n_{state.name}'][ti] = np.count_nonzero(getattr(self, state.name))
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.new_emigrants[ti] = np.count_nonzero(self.ti_removed == ti)
-        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+        res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
     def finish_step(self):
