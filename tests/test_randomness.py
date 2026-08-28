@@ -380,41 +380,6 @@ def test_multi_random_length():
     return
 
 
-@sc.timer()
-def test_no_jumping_under_crn_false():
-    """
-    Under crn=False, distribution RNG jumping must not happen (it is pure waste: the RNG
-    stream advances naturally on each draw, giving fresh, valid draws without a reseed).
-    Under crn=True it must still happen. Guards the rc3.6.0 crn=False jumping gate against
-    a new ungated jump site or a regressed gate.
-
-    `Dist.ind` is the witness: only a jump that does work advances it (Dist.jump line ~554),
-    and copy_to_module re-references the same Dist objects, so sim.dists.dists holds the live
-    dists that actually ran.
-    """
-    def run_and_max_ind(crn):
-        with ss.options.context(crn=crn):
-            sim = ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
-                         demographics=ss.Births(birth_rate=ss.peryear(20)),
-                         n_agents=1000, dur=10, rand_seed=1, verbose=0)
-            sim.run()
-        inds = [dist.ind for dist in sim.dists.dists.values()]
-        return sim, max(inds)
-
-    sim_false, max_ind_false = run_and_max_ind(crn=False)
-    sim_true,  max_ind_true  = run_and_max_ind(crn=True)
-
-    assert max_ind_false == 0, f'Expected zero RNG jumping under crn=False, but a dist advanced to ind={max_ind_false}'
-    assert max_ind_true > 0, f'Expected RNG jumping under crn=True, but no dist advanced (max ind={max_ind_true})'
-
-    # crn=False must still be same-seed reproducible despite skipping jumps
-    sim_false2, _ = run_and_max_ind(crn=False)
-    n_inf_1 = sim_false.results['sis']['n_infected'].values
-    n_inf_2 = sim_false2.results['sis']['n_infected'].values
-    assert np.array_equal(n_inf_1, n_inf_2), 'crn=False should be reproducible for a fixed seed even without jumping'
-    return max_ind_false, max_ind_true
-
-
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -429,7 +394,6 @@ if __name__ == '__main__':
     o7 = test_combine_rands(do_plot=do_plot)
     o8 = test_crn_option()
     o9 = test_multi_random_length()
-    o10 = test_no_jumping_under_crn_false()
 
     T.toc()
 

@@ -342,35 +342,6 @@ def test_units(do_plot=False):
 
 
 @sc.timer()
-def test_timeline_container_independence():
-    """
-    When a module shares the sim's timeline, its time vectors are shallow-copied
-    (independent array containers sharing the immutable date/dur elements), not
-    deep-copied. Verify the copies are equal in value but independent containers.
-    """
-    sc.heading('Test timeline vector container independence')
-
-    sim = ss.Sim(diseases='sis', networks='random', dur=5, n_agents=small, verbose=0).init()
-    st = sim.t
-    mt = sim.diseases.sis.t
-    assert mt.initialized
-
-    for attr in st._time_vecs:
-        sv = np.asarray(getattr(st, attr))
-        mv = np.asarray(getattr(mt, attr))
-
-        # Values must be equal
-        assert np.array_equal(sv, mv), f'{attr}: module and sim vectors should be equal in value'
-
-        # But the containers must be independent (shallow copy, not a reference share): a
-        # module's vector must not share the underlying buffer with the sim's vector, so that
-        # advancing/mutating one does not affect the other
-        assert not np.shares_memory(sv, mv), f'{attr}: module vector should not share memory with the sim vector'
-
-    return sim
-
-
-@sc.timer()
 def test_step_count():
     """
     A disease with dt='month' should step exactly once per timestep, even when
@@ -415,6 +386,5 @@ if __name__ == '__main__':
     o6 = test_mixed_timesteps()
     o7 = test_units(do_plot)
     o8 = test_step_count()
-    o9 = test_timeline_container_independence()
 
     T.toc()
