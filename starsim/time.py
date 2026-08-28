@@ -165,8 +165,9 @@ class DateArray(np.ndarray):
     def subdaily(self):
         """ Check if the array has sub-daily timesteps """
         try:
-            delta = float(self[1] - self[0]) # float should return years
-            return ss.date.subdaily(delta)
+            delta = self[1] - self[0]
+            years = getattr(delta, 'years', delta) # A date or duration difference must be converted to years, since that is what ss.date.subdaily() expects; a plain float is already in years
+            return ss.date.subdaily(years)
         except:
             return False
 
@@ -200,7 +201,14 @@ class DateArray(np.ndarray):
 
     def to_float(self, inplace=False, to_numpy=False):
         """ Convert to a float, returning a new DateArray unless inplace=True """
-        vals = [float(x) for x in self]
+        if not len(self):
+            vals = []
+        elif self.is_dur and not self.is_datedur:
+            vals = [x.value for x in self] # Use the magnitude in the array's own units, e.g. days(100) -> 100.0
+        elif self.is_date or self.is_datedur: # Neither has a magnitude of its own, so use years
+            vals = [x.years for x in self]
+        else:
+            vals = [float(x) for x in self] # Already floats
         if inplace:
             self[:] = vals
         else:
@@ -720,6 +728,10 @@ class Factors(sc.dictobj):
 # Preallocate for performance
 factors = Factors()
 
+# Single-input ufuncs whose result does not depend on a rate's denominator, and so are
+# safe to apply to the numerator alone; everything else (np.exp, np.log, ...) raises
+unit_safe_ufuncs = {np.isnan, np.isinf, np.isfinite, np.sign, np.signbit}
+
 
 #%% Define TimePars
 
@@ -728,6 +740,7 @@ class TimePar:
     base = None # e.g. 'years', 'days', etc
     timepar_type = None # 'dur' or 'rate'
     timepar_subtype = None # e.g. 'datedur' or 'prob'
+    default_dur = None # The timestep to resolve against, set by `Module.link_timepars()`; see `TimePar.to_dt()`
 
     def __new__(cls, *args, **kwargs):
         """Special handling for ss.Dist
@@ -808,15 +821,17 @@ class TimePar:
         else:
             return hash(tuple(years))
 
+    def __float__(self):
+        """ Disallowed: converting a timepar to a float would silently discard its unit; see `ss.Rate.__float__()` for the rate version """
+        errormsg = f'Converting a TimePar to a float is ambiguous ({self!r}). Use tp.value for the raw value, tp.years for the value in years, and tp.to_dt() to convert to timesteps.'
+        raise TypeError(errormsg)
+
     def __format__(self, format_spec=''):
         """Delegate to the underlying value for format specifiers like :n, :g, :f, etc."""
         return format(self.value, format_spec)
 
     def disp(self):
         return sc.pr(self)
-
-    def to_numpy(self):
-        return self.to_array()
 
     def to_array(self, *args, **kwargs):
         """ Force conversion to an array """
@@ -825,6 +840,8 @@ class TimePar:
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
         if len(inputs) == 1 and inputs[0] is self: # With a single input, operate on the value
+            if isinstance(self, ss.Rate) and ufunc not in unit_safe_ufuncs: # Would silently discard the denominator, e.g. np.exp(ss.peryear(1)) == np.exp(ss.perday(1))
+                raise self._no_float_error(f'np.{ufunc.__name__}()')
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
 
@@ -891,6 +908,48 @@ Examples:
         """ Convert this TimePar to one of a different class """
         unit = get_unit_class(self.timepar_type, unit)
         return unit(self)
+
+    def set_default_dur(self, dur):
+        """ Set the default duration, e.g. `module.dt`, so `.to_dt()` and `.to_prob()` can be used with no input """
+        self.default_dur = dur
+        return self
+
+    def _get_dt(self, dt=None):
+        """ Return the timestep to resolve against, either supplied explicitly or set by the module """
+        if dt is None:
+            dt = self.default_dur
+        if dt is None:
+            errormsg = f'Cannot resolve {self!r} against a timestep, since no timestep was supplied and this timepar is not linked to a module. '
+            errormsg += 'Timepars stored in a module\'s pars are linked automatically during initialization; otherwise, supply the timestep explicitly, e.g. tp.to_dt(ss.months(1)).'
+            raise ValueError(errormsg)
+        return dt
+
+    def to_dt(self, dt=None):
+        """
+        Resolve this timepar against the timestep, returning a plain number of timesteps
+        (for a duration) or the per-timestep value (for a rate)
+
+        This is the conversion that must happen before a timepar can be used in
+        timestep arithmetic, e.g. when scheduling a future event in a state array.
+        Without it, the unit is silently discarded and the value is interpreted as
+        a number of timesteps regardless of its units.
+
+        Args:
+            dt (`ss.dur`): the timestep to resolve against; if not supplied, use the module's `dt` (set during initialization)
+
+        **Examples**:
+
+            ```python
+            # Inside a module with dt = ss.months(1)
+            self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist.to_dt() # ✓ Right
+            self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist # × WRONG -- discards the unit
+
+            # Standalone, with an explicit timestep
+            ss.years(100).to_dt(ss.months(1)) # 1200.0
+            ss.peryear(0.1).to_dt(ss.months(1)) # 0.00830...  (a per-timestep probability)
+            ```
+        """
+        raise NotImplementedError(f'{type(self)} does not implement to_dt()')
 
     @classmethod
     def to_base(cls, other):
@@ -992,8 +1051,9 @@ class dur(TimePar):
     def __hash__(self):
         return hash(self.years)
 
-    def __float__(self):
-        return float(self.value)
+    def to_dt(self, dt=None):
+        """ Convert this duration to a number of timesteps; see `TimePar.to_dt()` """
+        return self/self._get_dt(dt)
 
     @property
     def years(self):
@@ -1209,9 +1269,6 @@ class datedur(dur):
             time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
             return 'datedur(' +  ', '.join([f'{k}={int(v)}' for k, v in zip(self.factor_keys[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + ')' # Sorry
 
-    def __float__(self):
-        return float(self.years)
-
     @classmethod
     def _as_array(cls, dateoffset, *args, **kwargs):
         """
@@ -1259,10 +1316,6 @@ class datedur(dur):
     def to_array(self, *args, **kwargs):
         """ Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years """
         return self._as_array(self.value, *args, **kwargs)
-
-    def to_numpy(self):
-        # TODO: This is a quick fix to get plotting to work, but this should do something more sensible
-        return self.years
 
     def to_dict(self):
         """ Convert to a dictionary """
@@ -1509,8 +1562,7 @@ class Rate(TimePar):
 
         # Convert from one rate to another
         if isinstance(value, ss.Rate):
-            factor = self.unit/value.unit
-            value = value.value*factor
+            value = self._convert_rate(value)
 
         if isinstance(value, list):
             value = np.array(value)
@@ -1524,6 +1576,20 @@ class Rate(TimePar):
         self._set_base()
         return
 
+    @property
+    def rate(self):
+        """ The instantaneous rate; an alias to `self.value`, except for `ss.prob`, where it is `-log(1-value)` """
+        return self.value
+
+    def _convert_rate(self, other):
+        """
+        Convert another rate to this rate's units, e.g. `ss.peryear(ss.permonth(1))`
+
+        The conversion is done on the instantaneous rate rather than the raw value, since
+        the two differ for `ss.prob`; see `prob._convert_rate()`.
+        """
+        return other.rate*(self.unit/other.unit)
+
     def _set_base(self):
         """ Rates can have either unit or base set; handle either """
         if self.base is None and isinstance(self.unit, ss.TimePar):
@@ -1533,10 +1599,49 @@ class Rate(TimePar):
             raise ValueError(errormsg)
         return self
 
-    def set_default_dur(self, dur):
-        """ Set the default duration, e.g. module.dt, so .to_prob() can be used with no input """
-        self.default_dur = dur
-        return self
+    def _no_float_error(self, op='float()'):
+        """ Construct the error raised when a rate is stripped of its denominator; see `Rate.__float__()` """
+        errormsg = f'Cannot apply {op} to {self!r}, since a rate is a numerator and a denominator, and {op} would silently discard the denominator. '
+        errormsg += f'For example, ss.peryear(1), ss.permonth(1) and ss.perday(1) would all give {op} = 1, even though they differ by a factor of 365. '
+        errormsg += 'Resolve the units first, e.g. rate.to_dt() (per timestep), rate.to_prob(dt), rate.to_events(dt), or rate.to(ss.permonth). '
+        errormsg += 'If you really do want the numerator on its own, use rate.value.'
+        return TypeError(errormsg)
+
+    def to_dt(self, dt=None):
+        """ Convert this rate to its per-timestep value; see `TimePar.to_dt()` """
+        return self*self._get_dt(dt)
+
+    def to(self, unit):
+        """
+        Convert this rate to one with a different denominator
+
+        As well as the rate classes (e.g. `ss.permonth`), a duration unit can be
+        supplied (e.g. `'month'` or `ss.months`), in which case the matching rate
+        class of the same subtype is used -- so `ss.peryear(1).to('month')` gives
+        `permonth(0.0833)`, while `ss.probperyear(1).to('month')` gives `probpermonth(...)`.
+
+        Note that for `ss.prob` the conversion is not linear, since a probability has to be
+        converted via the underlying rate: `ss.probperyear(0.5).to(ss.probpermonth)` gives
+        `probpermonth(0.0561)`, not `probpermonth(0.0417)`. This matches `prob.to_prob()`.
+        """
+        if unit is None:
+            errormsg = f'Cannot convert {self!r} to unit None; specify the unit to convert to, e.g. rate.to(ss.permonth) or rate.to("month")'
+            raise TypeError(errormsg)
+        try:
+            unit_cls = get_unit_class(self.timepar_type, unit)
+        except Exception:
+            unit_cls = None
+        if unit_cls is None or not issubclass(unit_cls, Rate): # Not a rate class, so see if it's a duration unit, e.g. 'month' or ss.months
+            dur_cls = get_dur_class(unit) # Will raise if it isn't a valid duration unit either
+            if dur_cls.base is None: # e.g. ss.dur itself, which has no unit of its own
+                errormsg = f'Cannot convert {self!r} to "{unit}", since it does not correspond to a time unit; use e.g. ss.months or "month"'
+                raise TypeError(errormsg)
+            base = dur_cls.base.removesuffix('s') # e.g. 'months' -> 'month'
+            prefix = dict(per='per', prob='probper', freq='freqper').get(self.timepar_subtype)
+            if prefix is None: # e.g. a bare ss.Rate, which has no per-unit subclasses
+                return self.__class__(self, unit=dur_cls(1))
+            unit_cls = get_rate_class(prefix+base) # e.g. 'per'+'month' -> ss.permonth
+        return unit_cls(self) # The conversion itself is done by the constructor, via Rate._convert_rate()
 
     def __repr__(self):
         name = self.__class__.__name__
@@ -1553,7 +1658,8 @@ class Rate(TimePar):
         return out
 
     def __float__(self):
-        return float(self.value)
+        """ Disallowed: a rate cannot be converted to a float without first resolving its denominator """
+        raise self._no_float_error('float()')
 
     def __mul__(self, other):
         errormsg = 'ss.Rate() does not implement multiplication; this is implemented differently by its subclasses. '
@@ -1817,6 +1923,21 @@ class prob(Rate):
     def _base_prob(self):
         """ Used by to_prob() """
         return self.value
+
+    def _convert_rate(self, other):
+        """
+        Convert another rate to a probability over this rate's unit, e.g. `ss.probperyear(ss.probpermonth(0.05))`
+
+        Unlike `ss.per` and `ss.freq`, a probability is not linear in time, so it cannot
+        simply be rescaled: a 50% annual probability corresponds to a 5.6% monthly
+        probability, not 50%/12 = 4.2%. The conversion is therefore done via the underlying
+        rate, exactly as `to_prob()` does.
+        """
+        if self.unit is None:
+            errormsg = f'Cannot convert {other!r} to a unitless probability, since the conversion depends on the time unit. '
+            errormsg += 'Use e.g. ss.probperyear() rather than ss.prob(), or supply a unit, e.g. ss.prob(value, unit=ss.years(1)).'
+            raise TypeError(errormsg)
+        return other.to_prob(self.unit)
 
     def disp(self):
         return sc.pr(self)
@@ -2343,18 +2464,24 @@ class DateConverter(matplotlib.units.ConversionInterface):
 
     @staticmethod
     def default_units(x, axis):
-        if isinstance(x, ss.DateArray) and x.is_dur:
-            return ss.dur
-        elif isinstance(x, ss.dur):
+        if isinstance(x, ss.DateArray):
+            return ss.dur if (len(x) and x.is_dur) else ss.date
+        elif sc.isiterable(x) and not isinstance(x, ss.TimePar): # e.g. a list or pandas Series of durations, so check the first entry
+            x = next(iter(x), None)
+        if isinstance(x, ss.dur):
             return ss.dur
         else:
             return ss.date
 
     @staticmethod
     def _convert_single(v):
-        """ Convert a single date-like value to years; pass through numeric values unchanged """
+        """ Convert a single date-like or duration value to a number; pass through numeric values unchanged """
         if isinstance(v, ss.date):
             return v.years
+        elif isinstance(v, ss.datedur): # Has no magnitude of its own, so use years
+            return v.years
+        elif isinstance(v, ss.dur): # Use the magnitude in the duration's own units, e.g. days(100) -> 100
+            return v.value
         elif isinstance(v, (pd.Timestamp, dt.date, dt.datetime)):
             return ss.date(v).years
         else:
@@ -2364,15 +2491,16 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def convert(value, unit, axis):
         # Handle the conversion of registered class instances to numerical values
         # that will appear as the x-values for any plotted data - this is the crucial
-        # part so that plotting float year data is compatible with date data.
-        if issubclass(unit, ss.dur):
+        # part so that plotting float year data is compatible with date data. Timepars
+        # are converted here rather than by float(), which is deliberately disallowed.
+        if isinstance(value, np.ndarray) and value.dtype != object: # Already numeric, e.g. float years
             return value
+        elif sc.isiterable(value):
+            return [DateConverter._convert_single(v) for v in value]
         else:
-            if sc.isiterable(value):
-                return [DateConverter._convert_single(v) for v in value]
-            else:
-                return DateConverter._convert_single(value)
+            return DateConverter._convert_single(value)
 
 # Register the converter for the Starsim date classes
 matplotlib.units.registry[date] = DateConverter()
 matplotlib.units.registry[DateArray] = DateConverter()
+matplotlib.units.registry[dur] = DateConverter() # Durations are converted here rather than by float(), which is deliberately disallowed

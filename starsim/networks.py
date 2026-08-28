@@ -908,7 +908,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=float(self.t.dt)) # TODO: check
+        self.set_network_states(upper_age=self.t.dt.years) # Assign debut age and participation to agents born since the last step, i.e. those younger than one timestep; ages are in years, so the timestep must be too
         self.add_pairs()
         return
 

@@ -661,7 +661,7 @@ class Module(Base):
             self.setattribute('sim', sim) # Link back to the sim object
             ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
-            self.link_rates() # Add module dt to the timepars
+            self.link_timepars() # Add module dt to the timepars
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
@@ -670,14 +670,22 @@ class Module(Base):
         return
 
     @required()
-    def link_rates(self, force=False):
-        """ Find all time parameters in the module and link them to the module's dt """
-        rates = sc.search(self, type=ss.Rate, skip=dict(keys=['sim', 'module'])) # Should it be self or self.pars?
+    def link_timepars(self, force=False):
+        """
+        Find all time parameters in the module and link them to the module's `dt`
+
+        This is what lets a timepar resolve itself against the timestep with no
+        argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
+        """
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'])) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
-        for rate in rates.values():
-            if force or rate.default_dur is None:
-                rate.set_default_dur(self.t.dt)
+        dt = self.t.dt
+        for timepar in timepars.values():
+            if timepar is dt: # Avoid a self-reference, which would recurse when serializing
+                continue
+            if force or timepar.default_dur is None:
+                timepar.set_default_dur(dt)
         return
 
     @required()

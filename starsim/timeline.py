@@ -265,7 +265,7 @@ class Timeline:
         else: # Special case, we are before or after the sim period
             now = self.tvec[0] + self.dt*self.ti
             if key == 'yearvec':
-                now = float(now)
+                now = now.years # Not float(), which for a dur gives the magnitude without the unit, e.g. float(ss.days(500)) = 500
 
         if to_str:
             now = str(now)
