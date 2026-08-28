@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -509,12 +512,41 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Utilities</strong></span></a>
+ <span class="menu-text"><strong>Library</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
       <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.mnch.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">mnch</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">networks</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Utilities</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
@@ -664,7 +696,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td><a href="#starsim.loop.Loop.collect_abs_tvecs">collect_abs_tvecs</a></td>
-<td>Collect numerical time arrays for each module</td>
+<td>Collect time arrays for each module</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.loop.Loop.collect_funcs">collect_funcs</a></td>
@@ -712,7 +744,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td><a href="#starsim.loop.Loop.store_time">store_time</a></td>
-<td>Store the current time in as high resolution as possible</td>
+<td>Store the current time in as high resolution as possible (only called when profiling)</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.loop.Loop.to_df">to_df</a></td>
@@ -723,7 +755,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="starsim.loop.Loop.collect_abs_tvecs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.collect_abs_tvecs">collect_abs_tvecs</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.collect_abs_tvecs()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Collect numerical time arrays for each module</p>
+<p>Collect time arrays for each module</p>
+<p>Two parallel arrays are stored per module: <code>abs_tvecs</code> holds the ground-truth time objects (<a href="../api/time.html#starsim.time.date" title="0"><code>ss.date</code></a>/<a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur</code></a>, used verbatim as each plan entry’s time), and <code>abs_numvecs</code> holds the canonical numeric representation (float years). The numeric arrays are what <code>make_plan()</code> uses to decide uniformity and to sort, so that date/dur objects are never compared during plan construction.</p>
 </section>
 <section id="starsim.loop.Loop.collect_funcs" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.collect_funcs">collect_funcs</h5>
@@ -816,6 +849,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.make_plan">make_plan</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.make_plan()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Combine the module ordering and the time vectors into the integration plan</p>
+<p>The plan is the list of <code>LoopEntry</code> events in execution order: tick-major, and within each tick ordered by function order. When every module shares the sim’s canonical timeline (the common case) this order can be generated directly, with no sort. Otherwise a numeric sort is used. In neither case are date/dur objects compared (which is slow); the canonical numeric time vectors (<code>abs_numvecs</code>) are used instead.</p>
 </section>
 <section id="starsim.loop.Loop.plan_metadata" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.plan_metadata">plan_metadata</h5>
@@ -991,8 +1025,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.loop.Loop.run" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.run">run</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.run(until<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.run(until<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, profile<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Actually run the integration loop; usually called by sim.run()</p>
+<p>By default, per-entry CPU timing is <em>not</em> recorded and the plan DataFrame is <em>not</em> built at the end of the run – both are pure overhead (~15–25 ms for a bare 10-year sim) that most runs do not use. Pass <code>profile=True</code> to record per-entry timing (which <code>to_df()</code>/<code>plot_cpu()</code> then expose as the <code>cpu_time</code> column); otherwise <code>cpu_time</code> is <code>NaN</code>. The plan metadata (via <code>to_df()</code>) is always available on demand regardless.</p>
 <section id="parameters-4" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
 <table class="caption-top table">
@@ -1017,6 +1052,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>if True, print each function call as it runs</td>
 <td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
+<tr class="odd">
+<td>profile</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if True, record per-entry CPU timing (default: keep the current setting)</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -1035,12 +1076,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="starsim.loop.Loop.store_time" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.store_time">store_time</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.store_time()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Store the current time in as high resolution as possible</p>
+<p>Store the current time in as high resolution as possible (only called when profiling)</p>
 </section>
 <section id="starsim.loop.Loop.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.loop.Loop.to_df">to_df</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>loop.Loop.to_df()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return a user-friendly version of the plan, omitting object columns</p>
+<p>The <code>cpu_time</code> column is populated only if the run recorded per-entry timing (i.e.&nbsp;<code>sim.run(profile=True)</code>); otherwise it is <code>NaN</code>. This is built lazily and cached in <code>self.df</code>/<code>self.cpu_df</code>.</p>
 </section>
 </section>
 </section>
@@ -1048,6 +1090,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="starsim.loop.LoopEntry">LoopEntry</h3>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>loop.LoopEntry(time, ti, func_order, func, label, module, func_name)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>One executable event in the integration loop</p>
+<p>Note: <code>slots=True</code> is used primarily to reduce the memory footprint across the 10⁴–10⁵ instances created for a typical plan (no per-instance <code>__dict__</code>).</p>
 
 
 </section>
@@ -1487,7 +1530,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

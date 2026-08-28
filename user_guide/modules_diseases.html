@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -122,7 +125,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
 
   <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
-  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
 
 <script type="text/javascript">
 const typesetMath = (el) => {
@@ -406,12 +409,6 @@ window.Quarto = {
  <span class="menu-text"><strong>What’s new</strong></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><strong>API reference</strong></span></a>
-  </div>
-</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -591,6 +588,12 @@ window.Quarto = {
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_library.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Adding new modules</span></a>
   </div>
@@ -719,14 +722,16 @@ window.Quarto = {
   <ul>
   <li><a href="#ss.disease" id="toc-ss.disease" class="nav-link" data-scroll-target="#ss.disease"><code>ss.Disease</code></a></li>
   <li><a href="#ss.infection" id="toc-ss.infection" class="nav-link" data-scroll-target="#ss.infection"><code>ss.Infection</code></a></li>
+  <li><a href="#ss.sir-and-ss.seir" id="toc-ss.sir-and-ss.seir" class="nav-link" data-scroll-target="#ss.sir-and-ss.seir"><code>ss.SIR</code> and <code>ss.SEIR</code></a></li>
   </ul></li>
   <li><a href="#key-implementation-methods" id="toc-key-implementation-methods" class="nav-link" data-scroll-target="#key-implementation-methods">Key implementation methods</a></li>
   <li><a href="#core-states-and-parameters" id="toc-core-states-and-parameters" class="nav-link" data-scroll-target="#core-states-and-parameters">Core states and parameters</a></li>
   <li><a href="#susceptibility-and-transmissibility" id="toc-susceptibility-and-transmissibility" class="nav-link" data-scroll-target="#susceptibility-and-transmissibility">Susceptibility and transmissibility</a></li>
+  <li><a href="#infected-vs.-infectious" id="toc-infected-vs.-infectious" class="nav-link" data-scroll-target="#infected-vs.-infectious">Infected vs.&nbsp;infectious</a></li>
   <li><a href="#implementation-patterns" id="toc-implementation-patterns" class="nav-link" data-scroll-target="#implementation-patterns">Implementation patterns</a>
   <ul>
   <li><a href="#pattern-1-extending-existing-diseases" id="toc-pattern-1-extending-existing-diseases" class="nav-link" data-scroll-target="#pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</a></li>
-  <li><a href="#pattern-2-adding-new-states" id="toc-pattern-2-adding-new-states" class="nav-link" data-scroll-target="#pattern-2-adding-new-states">Pattern 2: Adding new states</a></li>
+  <li><a href="#pattern-2-extending-an-seir-model" id="toc-pattern-2-extending-an-seir-model" class="nav-link" data-scroll-target="#pattern-2-extending-an-seir-model">Pattern 2: Extending an SEIR model</a></li>
   </ul></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
@@ -758,7 +763,7 @@ window.Quarto = {
 <p>For a learning-oriented introduction, see <a href="../tutorials/t4_diseases.html">Tutorial 4 - Diseases</a>.</p>
 <section id="disease-class-architecture" class="level2">
 <h2 class="anchored" data-anchor-id="disease-class-architecture">Disease class architecture</h2>
-<p>Starsim has a two-tier disease class hierarchy:</p>
+<p>Starsim provides a small disease hierarchy, from general transmission machinery to common compartment patterns:</p>
 <section id="ss.disease" class="level3">
 <h3 class="anchored" data-anchor-id="ss.disease"><a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a></h3>
 <ul>
@@ -778,6 +783,14 @@ window.Quarto = {
 <li>Handles network-based transmission automatically</li>
 <li>Applies network-specific betas and agent susceptibility/transmissibility</li>
 </ul>
+</section>
+<section id="ss.sir-and-ss.seir" class="level3">
+<h3 class="anchored" data-anchor-id="ss.sir-and-ss.seir"><a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a> and <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a></h3>
+<ul>
+<li>Inherit from <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a></li>
+<li>Implement the standard S→I→R and S→E→I→R lifecycles</li>
+<li>Are usually the best bases for diseases with these compartment structures</li>
+</ul>
 <p><strong>Important:</strong> Almost all diseases should inherit from <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a>. Do <strong>not</strong> write your own <code>infect()</code> method unless you have very specific requirements - the built-in method correctly handles:</p>
 <ul>
 <li>Looping over agents in each network</li>
@@ -790,11 +803,6 @@ window.Quarto = {
 <section id="key-implementation-methods" class="level2">
 <h2 class="anchored" data-anchor-id="key-implementation-methods">Key implementation methods</h2>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 22%">
-<col style="width: 25%">
-<col style="width: 51%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Method</th>
@@ -805,13 +813,13 @@ window.Quarto = {
 <tbody>
 <tr class="odd">
 <td><code>define_states()</code></td>
-<td>Initialize disease states (S, I, R, etc.)</td>
-<td>Always for custom diseases</td>
+<td>Initialize additional disease states</td>
+<td>When adding states not supplied by the base class</td>
 </tr>
 <tr class="even">
 <td><code>set_prognoses()</code></td>
 <td>Set outcomes for newly infected people</td>
-<td>(Almost) always for custom diseases</td>
+<td>For fully custom acquisition logic; call <a href="https://docs.python.org/3/library/functions.html#super" title="1"><code>super()</code></a></td>
 </tr>
 <tr class="odd">
 <td><code>step_state()</code></td>
@@ -851,12 +859,12 @@ window.Quarto = {
 <tr class="even">
 <td><code>infected</code></td>
 <td><a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a></td>
-<td>Whether an agent is currently infected</td>
+<td>Whether an agent currently has the infection</td>
 </tr>
 <tr class="odd">
 <td><code>infectious</code></td>
-<td>property</td>
-<td>Whether an agent can currently transmit (often <code>== infected</code>)</td>
+<td>alias</td>
+<td>Agents that can currently transmit (by default, an alias of <code>infected</code>)</td>
 </tr>
 <tr class="even">
 <td><code>rel_sus</code></td>
@@ -871,7 +879,7 @@ window.Quarto = {
 <tr class="even">
 <td><code>ti_infected</code></td>
 <td><a href="../api/arrays.html#starsim.arrays.FloatArr" title="0"><code>FloatArr</code></a></td>
-<td>Timestep at which each agent was infected</td>
+<td>Timestep at which each agent acquired the infection</td>
 </tr>
 <tr class="odd">
 <td><code>beta</code></td>
@@ -903,7 +911,7 @@ window.Quarto = {
 <li>A <a href="../user_guide/modules_connectors.html">connector</a> between two diseases might increase <code>rel_sus</code> to one disease for agents infected with another (co-infection).</li>
 </ul>
 <p>Because they’re ordinary per-agent arrays, you can also set them directly. Here we fully protect everyone under 20 by setting their <code>rel_sus</code> to 0, and see that they avoid infection (aside from the handful seeded as infected at the start via <code>init_prev</code>):</p>
-<div id="57fdf7bb" class="cell" data-execution_count="1">
+<div id="b3c3250f" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -952,59 +960,104 @@ Warning
 </div>
 </div>
 </section>
+<section id="infected-vs.-infectious" class="level2">
+<h2 class="anchored" data-anchor-id="infected-vs.-infectious">Infected vs.&nbsp;infectious</h2>
+<p>Transmission comes from <code>infectious</code> agents. For an SIR model “infected” and “infectious” are the same thing, so <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a> declares <code>infectious</code> as an <strong>alias</strong> of <code>infected</code>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="va">self</span>.define_states(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    ss.BoolState(<span class="st">'susceptible'</span>, default<span class="op">=</span><span class="va">True</span>, label<span class="op">=</span><span class="st">'Susceptible'</span>),</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    ss.BoolState(<span class="st">'infected'</span>, label<span class="op">=</span><span class="st">'Infected'</span>),</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    ...</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    infectious <span class="op">=</span> <span class="st">'infected'</span>, <span class="co"># Everyone infected is infectious, unless a subclass says otherwise</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>An alias is only consulted when the attribute isn’t otherwise defined, so it’s a default that a subclass can replace, either with a state of its own or with another alias. That’s what <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> does: for a disease with a latent period the two names come apart, since <strong>E and I are both infected, but only I is infectious</strong>. So <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> makes <code>exposed</code> and <code>infectious</code> the literal E and I compartments, and derives <code>infected</code> from them:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="va">self</span>.define_states(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    ss.BoolState(<span class="st">'exposed'</span>, label<span class="op">=</span><span class="st">'Exposed'</span>),</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    ss.BoolState(<span class="st">'infectious'</span>, label<span class="op">=</span><span class="st">'Infectious'</span>),</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    ...</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    reset <span class="op">=</span> [<span class="st">'infected'</span>, <span class="st">'infectious'</span>, <span class="st">'ti_infected'</span>],</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    infected <span class="op">=</span> <span class="kw">lambda</span> <span class="va">self</span>: <span class="va">self</span>.exposed <span class="op">|</span> <span class="va">self</span>.infectious, <span class="co"># Derived: E and I are both infected</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. Unlike a string alias, it generates an automatic result, so <code>n_infected</code> still exists and counts E plus I. See <a href="../user_guide/modules_adding.html#aliases">Aliases</a> for more.</p>
+<p>Incidence is a separate concept from any compartment. <a href="../api/diseases.html#starsim.diseases.Infection.set_prognoses" title="0"><code>ss.Infection.set_prognoses()</code></a> records each infection as it happens, so <code>new_infections</code> doesn’t depend on what a model does with the <code>ti_</code> states or how many stages it has. Seed infections from <code>init_prev</code> are prevalent cases, and are excluded from incidence.</p>
+<p>The result is that each name means one thing:</p>
+<ul>
+<li><code>n_exposed</code> is the E compartment and <code>n_infectious</code> is the I compartment, while <code>n_infected</code> and <code>prevalence</code> cover both — an agent in the latent period has the infection, and counts towards prevalence.</li>
+<li><code>ti_exposed</code> is the time of acquisition and <code>ti_infectious</code> is the time of becoming infectious. In general, <code>ti_&lt;state&gt;</code> is the time the agent entered <code>&lt;state&gt;</code>.</li>
+<li><a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> deliberately does <strong>not</strong> define <code>ti_infected</code>, since it is too easily confused with <code>ti_infectious</code>; use <code>ti_exposed</code> for the time of acquisition. <code>ti_infectious</code> exists only where it means something different from <code>ti_infected</code>, so SIR and SIS have <code>ti_infected</code> alone.</li>
+<li><code>new_infections</code> counts infection events (S→E for SEIR, S→I for SIR).</li>
+</ul>
+<p>If you wanted presymptomatic transmission instead, so that exposed agents transmit too, you would override the states that drive transmission rather than the ones that define infection — for example by giving exposed agents a nonzero <code>rel_trans</code>.</p>
+</section>
 <section id="implementation-patterns" class="level2">
 <h2 class="anchored" data-anchor-id="implementation-patterns">Implementation patterns</h2>
 <section id="pattern-1-extending-existing-diseases" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</h3>
 <p>When you need to modify an existing disease model, inherit from it and override specific methods:</p>
-<div id="b92ff877" class="cell" data-execution_count="2">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyCustomSIR(ss.SIR):</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom parameters</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(my_param<span class="op">=</span><span class="fl">0.5</span>)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom progression logic</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Additional custom logic here</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="c587e91d" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyCustomSIR(ss.SIR):</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom parameters</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(my_param<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom progression logic</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Additional custom logic here</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </section>
-<section id="pattern-2-adding-new-states" class="level3">
-<h3 class="anchored" data-anchor-id="pattern-2-adding-new-states">Pattern 2: Adding new states</h3>
-<p>To add states to an existing disease:</p>
-<div id="f98faebd" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SIR):</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add new parameters</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(dur_exp<span class="op">=</span>ss.lognorm_ex(<span class="fl">0.5</span>))</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add new states</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'exposed'</span>, label<span class="op">=</span><span class="st">'Exposed'</span>),</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>            ss.FloatArr(<span class="st">'ti_exposed'</span>, label<span class="op">=</span><span class="st">'Time of exposure'</span>),</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">@property</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> infectious(<span class="va">self</span>):</span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define who can transmit (both infected and exposed)</span></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.infected <span class="op">|</span> <span class="va">self</span>.exposed</span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_state(<span class="va">self</span>):</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Call parent state updates first</span></span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_state()</span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>        </span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Add custom state transitions</span></span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>        transitioning <span class="op">=</span> <span class="va">self</span>.exposed <span class="op">&amp;</span> (<span class="va">self</span>.ti_infected <span class="op">&lt;=</span> <span class="va">self</span>.ti)</span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.exposed[transitioning] <span class="op">=</span> <span class="va">False</span></span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.infected[transitioning] <span class="op">=</span> <span class="va">True</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="pattern-2-extending-an-seir-model" class="level3">
+<h3 class="anchored" data-anchor-id="pattern-2-extending-an-seir-model">Pattern 2: Extending an SEIR model</h3>
+<p>For a disease with a latent period, start from <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>. A simple model needs only new parameter defaults:</p>
+<div id="85a81e62" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SEIR):</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>            dur_exp <span class="op">=</span> ss.lognorm_ex(<span class="fl">0.5</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>            dur_inf <span class="op">=</span> ss.lognorm_ex(<span class="fl">1.0</span>),</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>MySEIR(init_prev<span class="op">=</span><span class="fl">0.05</span>), networks<span class="op">=</span><span class="st">'random'</span>, dur<span class="op">=</span><span class="dv">20</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>sim.diseases.myseir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(672x480)</code></pre>
 </div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_diseases_files/figure-html/cell-4-output-2.png" width="615" height="455" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>For a richer natural history, <a href="../api/diseases.html#starsim.diseases.SIR.set_prognoses" title="0"><code>ss.SIR.set_prognoses()</code></a> splits into two methods you can override separately:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>set_infection(uids)</code></td>
+<td>Make agents infectious. <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> overrides this to put them in <code>exposed</code> first, and set <code>ti_infectious</code> to the end of the latent period.</td>
+</tr>
+<tr class="even">
+<td><code>set_progression(uids)</code></td>
+<td>Schedule what happens next: recovery, death, and any other stages. Schedule these relative to the onset of infectiousness (<code>ti_infected</code> in <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a>, <code>ti_infectious</code> in <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>), so that a latent period delays them rather than eating into them.</td>
+</tr>
+</tbody>
+</table>
+<p><code>ssl.Ebola</code> and <code>ssl.Cholera</code> both override <code>set_progression()</code> for their extra states (severe/buried and symptomatic respectively), and inherit everything else from <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>.</p>
+<p>If your model adds a compartment, list it in <code>plot_states</code> so that <code>disease.plot()</code> shows it. This is a class attribute holding the names of the results to plot, so it can be set in one line at the top of the class body — <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> sets <code>plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']</code>. Assign a new list rather than modifying the inherited one, since a class attribute is shared by every instance of the class.</p>
 
 
 </section>
@@ -1443,7 +1496,7 @@ Warning
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

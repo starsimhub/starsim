@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>library.diseases – Starsim</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../api/library.mnch.html" rel="next">
+<link href="../api/samples.html" rel="prev">
+<link href="..//assets/favicon.ico" rel="icon">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
+
+<script type="text/javascript">
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
+</script>
+
+
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+      // Hack to workaround the fact that safari doesn't
+      // properly recolor the scrollbar when toggling (#1455)
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        window.scrollTo(0, 1);
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = false;
+    const darkModeDefault = authorPrefersDark;
+      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../whatsnew.html"> 
+<span class="menu-text">What’s new</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../tutorials.html"> 
+<span class="menu-text">Tutorials</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../user_guide.html"> 
+<span class="menu-text">User guide</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../examples.html"> 
+<span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../conduct.html"> 
+<span class="menu-text">Code of conduct</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../contributing.html"> 
+<span class="menu-text">Contributing</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../api/index.html"> 
+<span class="menu-text">API reference</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools tools-wide">
+    <a href="https://github.com/starsimhub/starsim" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-github"></i></a>
+    <a href="mailto:info@starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-envelope-at-fill"></i></a>
+    <a href="https://starsim-idm.slack.com" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-slack"></i></a>
+    <a href="https://starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-globe"></i></a>
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../api/library.diseases.html"><strong>Library</strong></a></li><li class="breadcrumb-item"><a href="../api/library.diseases.html">diseases</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Home</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>API reference</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Basics</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/sim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">sim</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/loop.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">loop</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/people.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">people</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/parameters.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">parameters</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/results.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">results</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Modules</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/modules.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">networks</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/demographics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">demographics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/products.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">products</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/analyzers.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">analyzers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/connectors.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">connectors</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Workflows</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/run.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">run</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/calibration.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">calibration</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/samples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">samples</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Library</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.diseases.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.mnch.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">mnch</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">networks</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Utilities</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">arrays</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/time.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">time</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/timeline.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">timeline</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/distributions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">distributions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/settings.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">settings</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/debugtools.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">debugtools</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/utils.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">utils</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="99">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#starsim.library.diseases" id="toc-starsim.library.diseases" class="nav-link active" data-scroll-target="#starsim.library.diseases">diseases</a>
+  <ul>
+  <li><a href="#classes" id="toc-classes" class="nav-link" data-scroll-target="#classes">Classes</a>
+  <ul>
+  <li><a href="#starsim.library.diseases.ART" id="toc-starsim.library.diseases.ART" class="nav-link" data-scroll-target="#starsim.library.diseases.ART">ART</a>
+  <ul class="collapse">
+  <li><a href="#parameters" id="toc-parameters" class="nav-link" data-scroll-target="#parameters">Parameters</a></li>
+  <li><a href="#examples" id="toc-examples" class="nav-link" data-scroll-target="#examples">Examples</a></li>
+  </ul></li>
+  <li><a href="#starsim.library.diseases.CD4_analyzer" id="toc-starsim.library.diseases.CD4_analyzer" class="nav-link" data-scroll-target="#starsim.library.diseases.CD4_analyzer">CD4_analyzer</a></li>
+  <li><a href="#starsim.library.diseases.Cholera" id="toc-starsim.library.diseases.Cholera" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera">Cholera</a>
+  <ul class="collapse">
+  <li><a href="#parameters-1" id="toc-parameters-1" class="nav-link" data-scroll-target="#parameters-1">Parameters</a></li>
+  <li><a href="#attributes" id="toc-attributes" class="nav-link" data-scroll-target="#attributes">Attributes</a></li>
+  <li><a href="#examples-1" id="toc-examples-1" class="nav-link" data-scroll-target="#examples-1">Examples</a></li>
+  <li><a href="#methods" id="toc-methods" class="nav-link" data-scroll-target="#methods">Methods</a>
+  <ul class="collapse">
+  <li><a href="#starsim.library.diseases.Cholera.calc_environmental_prev" id="toc-starsim.library.diseases.Cholera.calc_environmental_prev" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera.calc_environmental_prev">calc_environmental_prev</a></li>
+  <li><a href="#starsim.library.diseases.Cholera.infect" id="toc-starsim.library.diseases.Cholera.infect" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera.infect">infect</a></li>
+  <li><a href="#starsim.library.diseases.Cholera.init_results" id="toc-starsim.library.diseases.Cholera.init_results" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera.init_results">init_results</a></li>
+  <li><a href="#starsim.library.diseases.Cholera.set_progression" id="toc-starsim.library.diseases.Cholera.set_progression" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera.set_progression">set_progression</a></li>
+  <li><a href="#starsim.library.diseases.Cholera.step_die" id="toc-starsim.library.diseases.Cholera.step_die" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera.step_die">step_die</a></li>
+  <li><a href="#starsim.library.diseases.Cholera.step_state" id="toc-starsim.library.diseases.Cholera.step_state" class="nav-link" data-scroll-target="#starsim.library.diseases.Cholera.step_state">step_state</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#starsim.library.diseases.Ebola" id="toc-starsim.library.diseases.Ebola" class="nav-link" data-scroll-target="#starsim.library.diseases.Ebola">Ebola</a>
+  <ul class="collapse">
+  <li><a href="#parameters-2" id="toc-parameters-2" class="nav-link" data-scroll-target="#parameters-2">Parameters</a></li>
+  <li><a href="#attributes-1" id="toc-attributes-1" class="nav-link" data-scroll-target="#attributes-1">Attributes</a></li>
+  <li><a href="#examples-2" id="toc-examples-2" class="nav-link" data-scroll-target="#examples-2">Examples</a></li>
+  <li><a href="#methods-1" id="toc-methods-1" class="nav-link" data-scroll-target="#methods-1">Methods</a>
+  <ul class="collapse">
+  <li><a href="#starsim.library.diseases.Ebola.set_progression" id="toc-starsim.library.diseases.Ebola.set_progression" class="nav-link" data-scroll-target="#starsim.library.diseases.Ebola.set_progression">set_progression</a></li>
+  <li><a href="#starsim.library.diseases.Ebola.step_die" id="toc-starsim.library.diseases.Ebola.step_die" class="nav-link" data-scroll-target="#starsim.library.diseases.Ebola.step_die">step_die</a></li>
+  <li><a href="#starsim.library.diseases.Ebola.step_state" id="toc-starsim.library.diseases.Ebola.step_state" class="nav-link" data-scroll-target="#starsim.library.diseases.Ebola.step_state">step_state</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#starsim.library.diseases.HIV" id="toc-starsim.library.diseases.HIV" class="nav-link" data-scroll-target="#starsim.library.diseases.HIV">HIV</a>
+  <ul class="collapse">
+  <li><a href="#parameters-3" id="toc-parameters-3" class="nav-link" data-scroll-target="#parameters-3">Parameters</a></li>
+  <li><a href="#attributes-2" id="toc-attributes-2" class="nav-link" data-scroll-target="#attributes-2">Attributes</a></li>
+  <li><a href="#examples-3" id="toc-examples-3" class="nav-link" data-scroll-target="#examples-3">Examples</a></li>
+  <li><a href="#methods-2" id="toc-methods-2" class="nav-link" data-scroll-target="#methods-2">Methods</a>
+  <ul class="collapse">
+  <li><a href="#starsim.library.diseases.HIV.init_results" id="toc-starsim.library.diseases.HIV.init_results" class="nav-link" data-scroll-target="#starsim.library.diseases.HIV.init_results">init_results</a></li>
+  <li><a href="#starsim.library.diseases.HIV.step_state" id="toc-starsim.library.diseases.HIV.step_state" class="nav-link" data-scroll-target="#starsim.library.diseases.HIV.step_state">step_state</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#starsim.library.diseases.Measles" id="toc-starsim.library.diseases.Measles" class="nav-link" data-scroll-target="#starsim.library.diseases.Measles">Measles</a>
+  <ul class="collapse">
+  <li><a href="#parameters-4" id="toc-parameters-4" class="nav-link" data-scroll-target="#parameters-4">Parameters</a></li>
+  <li><a href="#attributes-3" id="toc-attributes-3" class="nav-link" data-scroll-target="#attributes-3">Attributes</a></li>
+  <li><a href="#examples-4" id="toc-examples-4" class="nav-link" data-scroll-target="#examples-4">Examples</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../api/library.diseases.html"><strong>Library</strong></a></li><li class="breadcrumb-item"><a href="../api/library.diseases.html">diseases</a></li></ol></nav></header>
+
+
+
+
+
+<section id="starsim.library.diseases" class="level1">
+<h1>diseases</h1>
+<p><a href="../api/library.diseases.html#starsim.library.diseases" title="0"><code>library.diseases</code></a></p>
+<p>Example disease models: cholera, Ebola, HIV, and measles.</p>
+<p>These are illustrative, lightly-parameterized models intended as starting points for building your own disease modules, not as validated models for any specific setting. Core disease base classes (<a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a>, <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a>, <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a>, etc.) live in <a href="../api/diseases.html#starsim.diseases" title="0"><code>starsim.diseases</code></a>.</p>
+<section id="classes" class="level2">
+<h2 class="anchored" data-anchor-id="classes">Classes</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.ART">ART</a></td>
+<td>Scale up antiretroviral therapy over time.</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.CD4_analyzer">CD4_analyzer</a></td>
+<td>Record the CD4 count of every agent at every timestep.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.Cholera">Cholera</a></td>
+<td>Cholera, with both direct and environmental (waterborne) transmission.</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.Ebola">Ebola</a></td>
+<td>Ebola, including severe disease and transmission from unburied bodies.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.HIV">HIV</a></td>
+<td>Simple HIV model with CD4 count dynamics and ART.</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.Measles">Measles</a></td>
+<td>Measles, as an SEIR model.</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.library.diseases.ART" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.library.diseases.ART">ART</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>library.diseases.ART(year, coverage, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Scale up antiretroviral therapy over time.</p>
+<p>Each timestep, agents infected <code>art_delay</code> ago are offered ART, and are treated with a probability interpolated from <code>coverage</code> at the corresponding <code>year</code>. Requires the <code>HIV</code> module.</p>
+<section id="parameters" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>year</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>year(s) at which coverage is specified</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>coverage</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>probability of ART initiation at each year</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>art_delay</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>par: delay from infection to ART eligibility</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="examples" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>art <span class="op">=</span> ssl.ART(year<span class="op">=</span>[<span class="dv">2000</span>, <span class="dv">2010</span>, <span class="dv">2020</span>], coverage<span class="op">=</span>[<span class="dv">0</span>, <span class="fl">0.4</span>, <span class="fl">0.8</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+</section>
+<section id="starsim.library.diseases.CD4_analyzer" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.library.diseases.CD4_analyzer">CD4_analyzer</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>library.diseases.CD4_analyzer(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Record the CD4 count of every agent at every timestep.</p>
+<p>Results are stored in <code>self.cd4</code>, a (timesteps × agents) array. Requires the <code>HIV</code> module. Note that this analyzer allocates a full dense array, so it is best suited to small simulations.</p>
+</section>
+<section id="starsim.library.diseases.Cholera" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.library.diseases.Cholera">Cholera</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Cholera, with both direct and environmental (waterborne) transmission.</p>
+<p>An SEIR-type model in which exposed agents become infected, a fraction of whom become symptomatic; symptomatic agents may die, and everyone else recovers. Asymptomatic agents are infectious but shed far less bacteria (<code>asymp_trans</code>). In addition to person-to-person transmission via the network, infectious agents shed into a single well-mixed environmental reservoir, which decays exponentially and drives indirect transmission with a dose-response governed by <code>half_sat_rate</code>.</p>
+<p>Parameter values are drawn from the literature; see the source for citations.</p>
+<section id="parameters-1" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>beta</td>
+<td><a href="../api/time.html#starsim.time.prob">prob</a></td>
+<td>per-contact transmission probability</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>init_prev</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>initial prevalence</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>dur_exp</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from exposure to infectiousness</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>dur_asymp2rec</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from infection to recovery, asymptomatic agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>dur_symp2rec</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from symptoms to recovery</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>dur_symp2dead</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from symptoms to death</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>p_death</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>probability of death among symptomatic agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>p_symp</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>probability an infection is symptomatic</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>asymp_trans</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>relative transmissibility of asymptomatic agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>beta_env</td>
+<td><a href="../api/time.html#starsim.time.prob">prob</a></td>
+<td>scale factor for environmental transmission</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>half_sat_rate</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>environmental dose infecting 50% of those exposed</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>shedding_rate</td>
+<td><a href="../api/time.html#starsim.time.freq">freq</a></td>
+<td>rate at which infectious agents shed to the environment</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>decay_rate</td>
+<td><a href="../api/time.html#starsim.time.rate">rate</a></td>
+<td>rate at which environmental bacteria die off</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>p_env_transmit</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>environmental transmission probability (set each step)</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="attributes" class="level4 doc-section doc-section-attributes">
+<h4 class="doc-section doc-section-attributes anchored" data-anchor-id="attributes">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>exposed</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>infected but not yet infectious</td>
+</tr>
+<tr class="even">
+<td>asymptomatic</td>
+<td><code>alias</code></td>
+<td>infectious but not symptomatic</td>
+</tr>
+<tr class="odd">
+<td>symptomatic</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>currently symptomatic</td>
+</tr>
+<tr class="even">
+<td>recovered</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>recovered and immune</td>
+</tr>
+<tr class="odd">
+<td>ti_exposed</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of exposure</td>
+</tr>
+<tr class="even">
+<td>ti_symptomatic</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep symptoms began</td>
+</tr>
+<tr class="odd">
+<td>ti_recovered</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of recovery</td>
+</tr>
+<tr class="even">
+<td>ti_dead</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of death</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="examples-1" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-1">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Cholera(), networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="methods" class="level4">
+<h4 class="anchored" data-anchor-id="methods">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.Cholera.calc_environmental_prev">calc_environmental_prev</a></td>
+<td>Calculate environmental prevalence</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.Cholera.infect">infect</a></td>
+<td>Add indirect transmission</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.Cholera.init_results">init_results</a></td>
+<td>Initialize results</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.Cholera.set_progression">set_progression</a></td>
+<td>Schedule symptoms, recovery, and death</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.Cholera.step_die">step_die</a></td>
+<td>Reset infected/recovered flags for dead agents</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.Cholera.step_state">step_state</a></td>
+<td>Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.library.diseases.Cholera.calc_environmental_prev" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Cholera.calc_environmental_prev">calc_environmental_prev</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera.calc_environmental_prev()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Calculate environmental prevalence</p>
+</section>
+<section id="starsim.library.diseases.Cholera.infect" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Cholera.infect">infect</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera.infect()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Add indirect transmission</p>
+</section>
+<section id="starsim.library.diseases.Cholera.init_results" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Cholera.init_results">init_results</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera.init_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Initialize results</p>
+</section>
+<section id="starsim.library.diseases.Cholera.set_progression" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Cholera.set_progression">set_progression</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera.set_progression(uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Schedule symptoms, recovery, and death</p>
+</section>
+<section id="starsim.library.diseases.Cholera.step_die" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Cholera.step_die">step_die</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera.step_die(uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Reset infected/recovered flags for dead agents</p>
+</section>
+<section id="starsim.library.diseases.Cholera.step_state" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Cholera.step_state">step_state</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Cholera.step_state()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py Original version by Dom Delport</p>
+</section>
+</section>
+</section>
+<section id="starsim.library.diseases.Ebola" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.library.diseases.Ebola">Ebola</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Ebola(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Ebola, including severe disease and transmission from unburied bodies.</p>
+<p>Extends <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> with severe and buried states. Exposed agents become infectious, a fraction progress to severe disease, and a fraction of those die; everyone else recovers. Severe agents are more infectious (<code>sev_factor</code>), and dead agents remain infectious until buried (<code>unburied_factor</code>), with safe burials happening immediately and unsafe burials after a delay.</p>
+<section id="parameters-2" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>init_prev</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>initial prevalence</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>beta</td>
+<td><a href="../api/time.html#starsim.time.prob">prob</a></td>
+<td>per-contact transmission probability</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>sev_factor</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>relative transmissibility of severe agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>unburied_factor</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>relative transmissibility of unburied bodies</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>dur_exp</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from exposure to symptoms (i.e.&nbsp;infectiousness)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>dur_symp2sev</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from symptoms to severe disease</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>dur_sev2dead</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from severe disease to death</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>dur_dead2buried</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from death to (unsafe) burial</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>dur_symp2rec</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from symptoms to recovery, non-severe agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>dur_sev2rec</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from severe disease to recovery</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>p_sev</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>probability of progressing to severe disease</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>p_death</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>probability of death among severe agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>p_safe_bury</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>probability of a safe (immediate) burial</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="attributes-1" class="level4 doc-section doc-section-attributes">
+<h4 class="doc-section doc-section-attributes anchored" data-anchor-id="attributes-1">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>exposed</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>infected but not yet infectious</td>
+</tr>
+<tr class="even">
+<td>severe</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>currently severely ill</td>
+</tr>
+<tr class="odd">
+<td>buried</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>dead and buried (no longer infectious)</td>
+</tr>
+<tr class="even">
+<td>ti_exposed</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of exposure</td>
+</tr>
+<tr class="odd">
+<td>ti_severe</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep severe symptoms began</td>
+</tr>
+<tr class="even">
+<td>ti_buried</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of burial</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="examples-2" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-2">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Ebola(), networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="methods-1" class="level4">
+<h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.Ebola.set_progression">set_progression</a></td>
+<td>Schedule severe disease, recovery, death, and burial</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.Ebola.step_die">step_die</a></td>
+<td>Reset states for dead agents</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.Ebola.step_state">step_state</a></td>
+<td>Progress exposed -&gt; infectious -&gt; severe -&gt; recovered/dead -&gt; buried</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.library.diseases.Ebola.set_progression" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Ebola.set_progression">set_progression</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Ebola.set_progression(uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Schedule severe disease, recovery, death, and burial</p>
+</section>
+<section id="starsim.library.diseases.Ebola.step_die" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Ebola.step_die">step_die</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Ebola.step_die(uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Reset states for dead agents</p>
+</section>
+<section id="starsim.library.diseases.Ebola.step_state" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.Ebola.step_state">step_state</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Ebola.step_state()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Progress exposed -&gt; infectious -&gt; severe -&gt; recovered/dead -&gt; buried</p>
+</section>
+</section>
+</section>
+<section id="starsim.library.diseases.HIV" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.library.diseases.HIV">HIV</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>library.diseases.HIV(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Simple HIV model with CD4 count dynamics and ART.</p>
+<p>Infected agents have a CD4 count that declines towards <code>cd4_min</code> while untreated and recovers towards <code>cd4_max</code> while on ART, at a rate set by <code>cd4_rate</code>. The per-timestep probability of death scales with how far the CD4 count has fallen, so agents with low CD4 counts die soonest. Agents on ART have their transmissibility reduced by <code>art_efficacy</code>. Vertical transmission is supported: <code>set_congenital()</code> infects the newborn.</p>
+<p>Use with <code>ART</code> to scale up treatment over time, and <code>CD4_analyzer</code> to record CD4 counts. Since <code>beta</code> defaults to 0, it must be set for transmission to occur.</p>
+<section id="parameters-3" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>beta</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>per-contact transmission probability (0 by default)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>cd4_min</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>CD4 count approached by untreated agents</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>cd4_max</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>CD4 count approached by agents on ART</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>cd4_rate</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>number of timesteps to close the CD4 gap</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>eff_condoms</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>efficacy of condoms (not currently used internally)</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>art_efficacy</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td>proportional reduction in transmission on ART</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>init_prev</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>initial prevalence</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>death_dist</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>death probability, by default CD4-modulated <code>p_death</code></td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>p_death</td>
+<td><a href="../api/time.html#starsim.time.rate">rate</a></td>
+<td>baseline death rate per unit time (not per infection)</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="attributes-2" class="level4 doc-section doc-section-attributes">
+<h4 class="doc-section doc-section-attributes anchored" data-anchor-id="attributes-2">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>on_art</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>currently on ART</td>
+</tr>
+<tr class="even">
+<td>ti_art</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of ART initiation</td>
+</tr>
+<tr class="odd">
+<td>ti_dead</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of HIV-caused death</td>
+</tr>
+<tr class="even">
+<td>cd4</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>current CD4 count (default 500)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="examples-3" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-3">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> ssl.HIV(beta<span class="op">=</span><span class="fl">0.02</span>, init_prev<span class="op">=</span><span class="fl">0.05</span>),</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    networks <span class="op">=</span> <span class="st">'random'</span>,</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    interventions <span class="op">=</span> ssl.ART(year<span class="op">=</span>[<span class="dv">2000</span>, <span class="dv">2020</span>], coverage<span class="op">=</span>[<span class="dv">0</span>, <span class="fl">0.8</span>]),</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="methods-2" class="level4">
+<h4 class="anchored" data-anchor-id="methods-2">Methods</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.library.diseases.HIV.init_results">init_results</a></td>
+<td>Initialize results</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.library.diseases.HIV.step_state">step_state</a></td>
+<td>Update CD4</td>
+</tr>
+</tbody>
+</table>
+<section id="starsim.library.diseases.HIV.init_results" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.HIV.init_results">init_results</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>library.diseases.HIV.init_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Initialize results</p>
+</section>
+<section id="starsim.library.diseases.HIV.step_state" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.library.diseases.HIV.step_state">step_state</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>library.diseases.HIV.step_state()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Update CD4</p>
+</section>
+</section>
+</section>
+<section id="starsim.library.diseases.Measles" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.library.diseases.Measles">Measles</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>library.diseases.Measles(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Measles, as an SEIR model.</p>
+<p>Configures <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> with measles natural-history parameters: exposed agents become infectious after <code>dur_exp</code>, then either die (with probability <code>p_death</code>) or recover after <code>dur_inf</code>. Natural history parameters are from the US CDC.</p>
+<section id="parameters-4" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>beta</td>
+<td><a href="../api/time.html#starsim.time.prob">prob</a></td>
+<td>per-contact transmission probability</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>init_prev</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>initial prevalence</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>dur_exp</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration from exposure to infectiousness</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>dur_inf</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration of infectiousness</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>p_death</td>
+<td><a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>probability of death among infected agents</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="attributes-3" class="level4 doc-section doc-section-attributes">
+<h4 class="doc-section doc-section-attributes anchored" data-anchor-id="attributes-3">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>exposed</td>
+<td><a href="../api/arrays.html#starsim.arrays.BoolState">BoolState</a></td>
+<td>infected but not yet infectious</td>
+</tr>
+<tr class="even">
+<td>ti_exposed</td>
+<td><a href="../api/arrays.html#starsim.arrays.FloatArr">FloatArr</a></td>
+<td>timestep of exposure</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="examples-4" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-4">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Measles(), networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+
+
+</section>
+</section>
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const a = window.document.createElement('a');
+      a.classList.add('top-right');
+      a.classList.add('quarto-color-scheme-toggle');
+      a.href = "";
+      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      a.appendChild(i);
+      window.document.body.appendChild(a);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../api/samples.html" class="pagination-link" aria-label="samples">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">samples</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../api/library.mnch.html" class="pagination-link" aria-label="mnch">
+        <span class="nav-page-text">mnch</span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/starsimhub/starsim">
+      <i class="bi bi-github" role="img" aria-label="GitHub">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="mailto:info@starsim.org">
+      <i class="bi bi-envelope-at-fill" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsimhub.slack.com">
+      <i class="bi bi-slack" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsim.org/">
+      <i class="bi bi-globe" role="img">
+</i> 
+    </a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

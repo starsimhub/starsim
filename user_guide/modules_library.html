@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Library modules – Starsim</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../user_guide/modules_adding.html" rel="next">
+<link href="../user_guide/modules_connectors.html" rel="prev">
+<link href="..//assets/favicon.ico" rel="icon">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-SVDSQH04EM"></script>
+
+<script type="text/javascript">
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
+</script>
+
+
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+      // Hack to workaround the fact that safari doesn't
+      // properly recolor the scrollbar when toggling (#1455)
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        window.scrollTo(0, 1);
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = false;
+    const darkModeDefault = authorPrefersDark;
+      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a href="../index.html" class="navbar-brand navbar-brand-logo">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo light-content">
+    <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../whatsnew.html"> 
+<span class="menu-text">What’s new</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../tutorials.html"> 
+<span class="menu-text">Tutorials</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../user_guide.html"> 
+<span class="menu-text">User guide</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../examples.html"> 
+<span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../conduct.html"> 
+<span class="menu-text">Code of conduct</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../contributing.html"> 
+<span class="menu-text">Contributing</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../api/index.html"> 
+<span class="menu-text">API reference</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools tools-wide">
+    <a href="https://github.com/starsimhub/starsim" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-github"></i></a>
+    <a href="mailto:info@starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-envelope-at-fill"></i></a>
+    <a href="https://starsim-idm.slack.com" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-slack"></i></a>
+    <a href="https://starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-globe"></i></a>
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_library.html">Library modules</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Home</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>What’s new</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Tutorials</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t1_intro.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T1 - Getting started</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t2_model.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T2 - Building your model</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t3_demographics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T3 - Demographics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t4_diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T4 - Diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t5_networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T5 - Networks</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/t6_interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">T6 - Interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../tutorials/solutions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Solutions</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>User guide</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Introduction</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/intro_starsim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">What is Starsim?</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/intro_models.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Starsim models</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Basic concepts</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/basics_model.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Model structure</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/basics_sim.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">The Sim object</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/basics_people.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">People, States, and Arrays</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/basics_parameters.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Parameters</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/basics_results.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Results</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text">Modules</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Networks</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_demographics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Demographics</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_interventions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Interventions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_products.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Products</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_analyzers.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Analyzers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_connectors.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Connectors</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_library.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">Library modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Adding new modules</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Workflows</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Multiple runs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_sir_calibration.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Parameter identification</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_calibration.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Calibration using Optuna-Starsim integration</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_deploy.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Deployment</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/workflows_samples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Samples</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+          <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Advanced topics</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth2 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Time</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_indexing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Array indexing</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_distributions.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Distributions</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_random.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Random numbers</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Profiling and debugging</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_nonstandard.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Nonstandard usage</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+      </ul>
+  </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../examples.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Examples</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../conduct.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Code of conduct</strong></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../contributing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><strong>Contributing</strong></span></a>
+  </div>
+</li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="99">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#importing-and-using-library-modules" id="toc-importing-and-using-library-modules" class="nav-link active" data-scroll-target="#importing-and-using-library-modules">Importing and using library modules</a></li>
+  <li><a href="#diseases" id="toc-diseases" class="nav-link" data-scroll-target="#diseases">Diseases</a>
+  <ul>
+  <li><a href="#hiv-and-its-companions" id="toc-hiv-and-its-companions" class="nav-link" data-scroll-target="#hiv-and-its-companions">HIV and its companions</a></li>
+  </ul></li>
+  <li><a href="#networks" id="toc-networks" class="nav-link" data-scroll-target="#networks">Networks</a>
+  <ul>
+  <li><a href="#household-networks" id="toc-household-networks" class="nav-link" data-scroll-target="#household-networks">Household networks</a></li>
+  </ul></li>
+  <li><a href="#maternal-newborn-and-child-health" id="toc-maternal-newborn-and-child-health" class="nav-link" data-scroll-target="#maternal-newborn-and-child-health">Maternal, newborn, and child health</a>
+  <ul>
+  <li><a href="#congenital-outcomes" id="toc-congenital-outcomes" class="nav-link" data-scroll-target="#congenital-outcomes">Congenital outcomes</a></li>
+  <li><a href="#neonatal-deaths" id="toc-neonatal-deaths" class="nav-link" data-scroll-target="#neonatal-deaths">Neonatal deaths</a></li>
+  <li><a href="#fetal-health" id="toc-fetal-health" class="nav-link" data-scroll-target="#fetal-health">Fetal health</a></li>
+  </ul></li>
+  <li><a href="#adapting-a-library-module" id="toc-adapting-a-library-module" class="nav-link" data-scroll-target="#adapting-a-library-module">Adapting a library module</a></li>
+  <li><a href="#contributing-to-the-library" id="toc-contributing-to-the-library" class="nav-link" data-scroll-target="#contributing-to-the-library">Contributing to the library</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_library.html">Library modules</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">Library modules</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Core Starsim (<code>import starsim as ss</code>) provides the framework and its generic building blocks: <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a>, <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a>, <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a>, and so on. The <strong>Starsim library</strong> (<code>import starsim.library as ssl</code>) is a separate collection of concrete, opinionated modules built on top of those: specific diseases such as measles and cholera, specialized networks such as households, and worked examples of harder modeling patterns such as congenital infection.</p>
+<p>The library is shipped with Starsim but is deliberately held to a lower bar than the core package. Library modules are <em>illustrative rather than validated</em>: parameter values are indicative, some are placeholders, and the APIs may change between versions. Treat them as starting points to copy and adapt, not as off-the-shelf models for a particular setting.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The library is where most modules that used to live in core Starsim ended up. If you are migrating older code, <code>ss.Measles</code> is now <code>ssl.Measles</code>, <code>ss.HIV</code> is now <code>ssl.HIV</code>, and so on.</p>
+</div>
+</div>
+<section id="importing-and-using-library-modules" class="level2">
+<h2 class="anchored" data-anchor-id="importing-and-using-library-modules">Importing and using library modules</h2>
+<p>Library classes are available both at the top level and via their submodule; the two are identical objects:</p>
+<div id="765fb872" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ssl.Measles <span class="kw">is</span> ssl.diseases.Measles)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>True</code></pre>
+</div>
+</div>
+<p>Otherwise they behave exactly like core modules, and can be mixed freely with them:</p>
+<div id="177cf12d" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>outbreak <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, dur<span class="op">=</span>ss.years(<span class="dv">1</span>), dt<span class="op">=</span>ss.days(<span class="dv">1</span>), n_agents<span class="op">=</span><span class="dv">2000</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Measles(beta<span class="op">=</span>ss.perday(<span class="fl">0.3</span>)), networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'measles'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
+  Running 2000.03 (10/366) (0.03 s)  ———————————————————— 3%
+  Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (0.11 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.17 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.18 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.20 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (0.22 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.24 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.26 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.27 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.29 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.31 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.33 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.35 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.37 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.39 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.40 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.42 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.44 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.45 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.47 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.49 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.51 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.53 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.54 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.56 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.58 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.60 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.62 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.64 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.66 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.68 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.69 s)  •••••••••••••••••••— 99%
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_library_files/figure-html/cell-3-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>Library diseases need a sub-year timestep
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The library’s outbreak diseases specify their natural history in days (incubation periods of a week or two, illness lasting days). With the default yearly timestep these durations collapse to zero and the dynamics are meaningless — <code>ssl.Cholera</code> in particular produces no infections at all, because its environmental reservoir never has time to build up. Set <code>dt=ss.days(1)</code> (or <code>ss.weeks(1)</code>) for these models. See <a href="../user_guide/advanced_time.html">Time handling</a> for more on timesteps.</p>
+</div>
+</div>
+</section>
+<section id="diseases" class="level2">
+<h2 class="anchored" data-anchor-id="diseases">Diseases</h2>
+<p>The library includes four example diseases, spanning a range of complexity:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Class</th>
+<th>Base</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ssl.Measles</code></td>
+<td><a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a></td>
+<td>Measles as an SEIR model, with CDC natural history parameters</td>
+</tr>
+<tr class="even">
+<td><code>ssl.Ebola</code></td>
+<td><a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a></td>
+<td>Ebola with severe disease and continued transmission from unburied bodies</td>
+</tr>
+<tr class="odd">
+<td><code>ssl.Cholera</code></td>
+<td><a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a></td>
+<td>Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir</td>
+</tr>
+<tr class="even">
+<td><code>ssl.HIV</code></td>
+<td><a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a></td>
+<td>HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission</td>
+</tr>
+</tbody>
+</table>
+<p>All three latent-period models subclass <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>, which owns the S→E→I→R lifecycle. <code>Measles</code> supplies only parameter values. <code>Ebola</code> and <code>Cholera</code> additionally override <code>set_progression()</code> for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. <code>Cholera</code> also extends <code>infect()</code> to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.</p>
+<div id="ba20fa4a" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Cholera(beta<span class="op">=</span>ss.perday(<span class="fl">0.5</span>)), networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'cholera'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
+  Running 2000.03 (10/366) (0.04 s)  ———————————————————— 3%
+  Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (0.11 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.18 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.20 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.22 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (0.24 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.27 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.29 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.32 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.34 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.36 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.39 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.41 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.43 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.46 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.48 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.50 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.53 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.55 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.57 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.60 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.62 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.64 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.66 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.69 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.71 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.73 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.75 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.78 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.80 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.82 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.85 s)  •••••••••••••••••••— 99%
+Figure(896x672)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_library_files/figure-html/cell-4-output-2.png" width="908" height="662" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Note the extra <code>env_prev</code> and <code>env_conc</code> results, which track the environmental reservoir.</p>
+<section id="hiv-and-its-companions" class="level3">
+<h3 class="anchored" data-anchor-id="hiv-and-its-companions">HIV and its companions</h3>
+<p><code>ssl.HIV</code> comes with two companion modules that illustrate how a disease, an intervention, and an analyzer fit together:</p>
+<ul>
+<li><code>ssl.ART</code> is an intervention that scales up treatment coverage over specified years, reducing transmissibility by <code>art_efficacy</code> and raising CD4 counts back towards <code>cd4_max</code>.</li>
+<li><code>ssl.CD4_analyzer</code> is an analyzer that records every agent’s CD4 count at every timestep.</li>
+</ul>
+<p>Since HIV mortality is CD4-dependent, treatment reduces deaths as well as transmission:</p>
+<p>Unlike the outbreak diseases above, HIV plays out over years, so a yearly timestep and a multi-decade horizon are appropriate:</p>
+<div id="7731e004" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>endemic <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2030</span>, n_agents<span class="op">=</span><span class="dv">2000</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> <span class="kw">lambda</span>: ssl.HIV(beta<span class="op">=</span>ss.peryear(<span class="fl">0.05</span>), init_prev<span class="op">=</span><span class="fl">0.05</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> <span class="kw">lambda</span>: ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">2</span>))</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>hiv(), networks<span class="op">=</span>net(), label<span class="op">=</span><span class="st">'No ART'</span>, <span class="op">**</span>endemic)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>hiv(), networks<span class="op">=</span>net(), label<span class="op">=</span><span class="st">'With ART'</span>, <span class="op">**</span>endemic,</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>            interventions<span class="op">=</span>ssl.ART(year<span class="op">=</span>[<span class="dv">2005</span>, <span class="dv">2015</span>], coverage<span class="op">=</span>[<span class="dv">0</span>, <span class="fl">0.9</span>]))</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.parallel(s1, s2)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>msim.plot(<span class="st">'hiv'</span>)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> sim <span class="kw">in</span> msim.sims:</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>sim<span class="sc">.</span>label<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>sim<span class="sc">.</span>results<span class="sc">.</span>hiv<span class="sc">.</span>new_deaths<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:n}</span><span class="ss"> deaths, '</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f'</span><span class="sc">{</span>sim<span class="sc">.</span>results<span class="sc">.</span>hiv<span class="sc">.</span>prevalence[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:0.1%}</span><span class="ss"> prevalence in 2030'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim "No ART" with 2000 agentsInitializing sim "With ART" with 2000 agents
+
+  Running "No ART": 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
+  Running "With ART": 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
+  Running "No ART": 2010 (10/31) (0.03 s)  •••••••————————————— 35%
+  Running "With ART": 2010 (10/31) (0.03 s)  •••••••————————————— 35%
+  Running "No ART": 2020 (20/31) (0.05 s)  •••••••••••••——————— 68%
+  Running "With ART": 2020 (20/31) (0.06 s)  •••••••••••••——————— 68%
+  Running "No ART": 2030 (30/31) (0.08 s)  •••••••••••••••••••• 100%
+
+  Running "With ART": 2030 (30/31) (0.09 s)  •••••••••••••••••••• 100%
+
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_library_files/figure-html/cell-5-output-2.png" width="758" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>No ART: 218 deaths, 26.7% prevalence in 2030
+With ART: 135 deaths, 16.7% prevalence in 2030</code></pre>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>ART</code> only offers treatment to agents infected <code>art_delay</code> ago, so it has no effect once an epidemic has saturated and there are no newly infected agents left. If you see <code>n_art</code> stuck at zero, check that transmission is still ongoing when treatment starts.</p>
+</div>
+</div>
+</section>
+</section>
+<section id="networks" class="level2">
+<h2 class="anchored" data-anchor-id="networks">Networks</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Class</th>
+<th>Base</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ssl.HouseholdNet</code></td>
+<td><a href="../api/networks.html#starsim.networks.Network" title="0"><code>ss.Network</code></a></td>
+<td>Households built from DHS-style survey data, optionally evolving over time</td>
+</tr>
+<tr class="even">
+<td><code>ssl.DiskNet</code></td>
+<td><a href="../api/networks.html#starsim.networks.Network" title="0"><code>ss.Network</code></a></td>
+<td>Agents move within a unit square and connect to others within a given radius</td>
+</tr>
+<tr class="odd">
+<td><code>ssl.ErdosRenyiNet</code></td>
+<td><a href="../api/networks.html#starsim.networks.DynamicNetwork" title="0"><code>ss.DynamicNetwork</code></a></td>
+<td>Every possible edge is created with probability <code>p</code> each timestep</td>
+</tr>
+<tr class="even">
+<td><code>ssl.NullNet</code></td>
+<td><a href="../api/networks.html#starsim.networks.Network" title="0"><code>ss.Network</code></a></td>
+<td>Self-connections only, with zero transmission</td>
+</tr>
+</tbody>
+</table>
+<p><code>DiskNet</code> is a spatial network: each agent has an <code>x</code>, <code>y</code> position and a heading, moves at speed <code>v</code> each timestep, bounces off the walls of the unit square, and is connected to every agent within radius <code>r</code>. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:</p>
+<div id="7ea6669c" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIS(beta<span class="op">=</span>ss.perday(<span class="fl">0.2</span>)), networks<span class="op">=</span>ssl.DiskNet(r<span class="op">=</span><span class="fl">0.05</span>), <span class="op">**</span>outbreak)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
+  Running 2000.03 (10/366) (0.30 s)  ———————————————————— 3%
+  Running 2000.05 (20/366) (0.59 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.87 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (1.16 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (1.44 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (1.73 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (2.01 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (2.30 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (2.59 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (2.87 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (3.15 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (3.43 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (3.71 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (4.01 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (4.29 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (4.59 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (4.87 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (5.15 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (5.43 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (5.71 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (6.00 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (6.30 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (6.60 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (6.90 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (7.19 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (7.49 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (7.78 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (8.07 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (8.36 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (8.64 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (8.93 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (9.22 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (9.50 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (9.78 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (10.06 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (10.34 s)  •••••••••••••••••••— 99%
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_library_files/figure-html/cell-6-output-2.png" width="757" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><code>ErdosRenyiNet</code> is the classic random graph, useful when you want to compare against analytic results. For general-purpose random mixing, prefer <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a>, which is much faster. <code>NullNet</code> gives every agent a single self-contact with zero transmission weight, which is handy as a placeholder while developing a model that doesn’t yet have a real network.</p>
+<section id="household-networks" class="level3">
+<h3 class="anchored" data-anchor-id="household-networks">Household networks</h3>
+<p><code>ssl.HouseholdNet</code> is the most substantial library network. It builds households from <a href="https://dhsprogram.com">DHS</a> household survey data, overriding each agent’s age and sex to match a randomly drawn real household. With <code>dynamic=True</code> (the default) households also evolve: one woman is designated head of each household, pregnant non-heads may move out to form new households, and births are added to their mother’s household.</p>
+<p>Real DHS data requires registration, so <code>dhs_data='default'</code> generates synthetic data with the same structure for demos and testing:</p>
+<div id="535f2fb5" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>ssl.HouseholdNet(dhs_data<span class="op">=</span><span class="st">'default'</span>),</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>             demographics<span class="op">=</span>ss.Pregnancy(), <span class="op">**</span>endemic)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Note: use the sim's copy of the network, since modules are copied on initialization</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> sim.networks.householdnet</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>hh_ids <span class="op">=</span> net.household_ids[net.household_ids.notnan] <span class="co"># Unborn agents have no household</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>sizes <span class="op">=</span> np.bincount(hh_ids.astype(<span class="bu">int</span>))</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>sizes <span class="op">=</span> sizes[sizes <span class="op">&gt;</span> <span class="dv">0</span>]</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Households: </span><span class="sc">{</span><span class="bu">len</span>(sizes)<span class="sc">}</span><span class="ss">; mean size: </span><span class="sc">{</span>sizes<span class="sc">.</span>mean()<span class="sc">:0.1f}</span><span class="ss">; max size: </span><span class="sc">{</span>sizes<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Mean age: </span><span class="sc">{</span>sim<span class="sc">.</span>people<span class="sc">.</span>age<span class="sc">.</span>mean()<span class="sc">:0.1f}</span><span class="ss"> years'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
+  Running 2010 (10/31) (0.06 s)  •••••••————————————— 35%
+  Running 2020 (20/31) (0.13 s)  •••••••••••••——————— 68%
+  Running 2030 (30/31) (0.20 s)  •••••••••••••••••••• 100%
+
+Households: 991; mean size: 3.3; max size: 11
+Mean age: 48.1 years</code></pre>
+</div>
+</div>
+<p>To use real data, download a Household Recode (HR) dataset in Stata format and load it with <code>HouseholdNet.load_dhs()</code>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>dhs_data <span class="op">=</span> ssl.HouseholdNet.load_dhs(<span class="st">'XXHR7xDT/XXHR7xFL.DTA'</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(networks<span class="op">=</span>ssl.HouseholdNet(dhs_data<span class="op">=</span>dhs_data))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>HouseholdNet</code> overwrites the age and sex of every agent when it initializes. Use it with caution alongside other modules that depend on or modify age and sex.</p>
+</div>
+</div>
+</section>
+</section>
+<section id="maternal-newborn-and-child-health" class="level2">
+<h2 class="anchored" data-anchor-id="maternal-newborn-and-child-health">Maternal, newborn, and child health</h2>
+<p>The <a href="../api/library.mnch.html#starsim.library.mnch" title="0"><code>ssl.mnch</code></a> submodule contains examples of vertical transmission and birth outcomes — patterns that are considerably harder to discover than a standard disease module. All of them build on <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> and <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>ss.PrenatalNet</code></a>.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Class</th>
+<th>Base</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="../api/library.mnch.html#starsim.library.mnch.CongenitalDisease" title="0"><code>ssl.mnch.CongenitalDisease</code></a></td>
+<td><a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a></td>
+<td>Congenital outcomes (stillbirth, congenital infection, normal) via the generic congenital framework</td>
+</tr>
+<tr class="even">
+<td><a href="../api/library.mnch.html#starsim.library.mnch.NeonatalSepsis" title="0"><code>ssl.mnch.NeonatalSepsis</code></a></td>
+<td><a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a></td>
+<td>Infects newborns at birth and kills some within days</td>
+</tr>
+<tr class="odd">
+<td><a href="../api/library.mnch.html#starsim.library.mnch.FetalHealth" title="0"><code>ssl.mnch.FetalHealth</code></a></td>
+<td><a href="../api/modules.html#starsim.modules.Module" title="0"><code>ss.Module</code></a></td>
+<td>Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA)</td>
+</tr>
+<tr class="even">
+<td><a href="../api/library.mnch.html#starsim.library.mnch.fetal_infection" title="0"><code>ssl.mnch.fetal_infection</code></a></td>
+<td><a href="../api/connectors.html#starsim.connectors.Connector" title="0"><code>ss.Connector</code></a></td>
+<td>Links a disease to fetal health outcomes</td>
+</tr>
+<tr class="odd">
+<td><a href="../api/library.mnch.html#starsim.library.mnch.treat_pregnant" title="0"><code>ssl.mnch.treat_pregnant</code></a></td>
+<td><a href="../api/interventions.html#starsim.interventions.Intervention" title="0"><code>ss.Intervention</code></a></td>
+<td>Treats infected pregnant women and partially reverses fetal damage</td>
+</tr>
+</tbody>
+</table>
+<section id="congenital-outcomes" class="level3">
+<h3 class="anchored" data-anchor-id="congenital-outcomes">Congenital outcomes</h3>
+<p><code>CongenitalDisease</code> demonstrates the generic congenital framework built into <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a>. When transmission occurs to an unborn agent via <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>ss.PrenatalNet</code></a>, <code>set_congenital()</code> samples an outcome from the <code>birth_outcomes</code> distribution and schedules it around delivery time; <code>step_congenital()</code> then executes it. Lethal outcomes call <code>request_death()</code>, while non-lethal outcomes set a boolean state. Fetal losses (<code>'stillborn'</code>, <code>'miscarriage'</code>) are scheduled one timestep before delivery so that they happen in utero — otherwise <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a>, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:</p>
+<div id="d066b8ee" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>mnch_pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2005</span>, n_agents<span class="op">=</span><span class="dv">2000</span>, dt<span class="op">=</span>ss.weeks(<span class="dv">1</span>))</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    diseases      <span class="op">=</span> ssl.mnch.CongenitalDisease(beta<span class="op">=</span>ss.peryear(<span class="dv">20</span>), init_prev<span class="op">=</span><span class="fl">0.2</span>),</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    demographics  <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    networks      <span class="op">=</span> [ss.PrenatalNet(), ss.RandomNet()],</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>mnch_pars,</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>preg <span class="op">=</span> sim.results.pregnancy</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Births:'</span>, preg.births.<span class="bu">sum</span>())</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Stillbirths:'</span>, preg.stillbirths.<span class="bu">sum</span>())</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Congenital infections:'</span>, sim.diseases.congenitaldisease.congenital.<span class="bu">sum</span>())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
+  Running 2000.19 (10/261) (0.07 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.13 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.20 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.26 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.32 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.39 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.45 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.51 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.58 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.65 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.71 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.78 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.85 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (0.91 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (0.97 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.04 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.10 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.17 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.23 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.30 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.36 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.43 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.49 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.55 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.62 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.68 s)  •••••••••••••••••••• 100%
+
+Births: 189.0
+Stillbirths: 81.0
+Congenital infections: 91</code></pre>
+</div>
+</div>
+<p>The stillbirth and congenital-infection counts should track the <code>birth_outcomes</code> probabilities (0.3 and 0.4 here).</p>
+<p>To use the framework in your own disease, define <code>birth_outcome_keys</code> and <code>birth_outcomes</code> in your pars, add a matching <code>ti_&lt;key&gt;</code> state for each outcome (plus a boolean state for each non-lethal one), and call <code>self.step_congenital()</code> from <code>step_state()</code>. Outcomes named <code>'stillborn'</code>, <code>'miscarriage'</code>, or <code>'neonatal_deaths'</code> are treated as deaths; the first two fire before delivery and the third after it.</p>
+</section>
+<section id="neonatal-deaths" class="level3">
+<h3 class="anchored" data-anchor-id="neonatal-deaths">Neonatal deaths</h3>
+<p><code>NeonatalSepsis</code> illustrates that neonatal death detection is <em>passive</em>: any mechanism that kills an agent aged 0–28 days is automatically classified as a neonatal death by the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> module, with no registration or callback needed. Results therefore appear on the pregnancy module, not the disease:</p>
+<div id="9945ba09" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    diseases     <span class="op">=</span> ssl.mnch.NeonatalSepsis(),</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    demographics <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    networks     <span class="op">=</span> [ss.PrenatalNet(), ss.RandomNet()],</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>mnch_pars,</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'New infections:'</span>, sim.results.neonatalsepsis.new_infections.<span class="bu">sum</span>())</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Births:'</span>, sim.results.pregnancy.births.<span class="bu">sum</span>())</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Neonatal deaths:'</span>, sim.results.pregnancy.neonatal_deaths.<span class="bu">sum</span>())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
+  Running 2000.19 (10/261) (0.31 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.36 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.41 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.47 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.52 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.58 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.64 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.70 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.75 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.81 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.87 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.93 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.99 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (1.04 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.10 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.16 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.21 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.27 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.33 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.39 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.45 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.51 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.56 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.62 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.68 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.74 s)  •••••••••••••••••••• 100%
+
+New infections: 43.0
+Births: 216.0
+Neonatal deaths: 32.0</code></pre>
+</div>
+</div>
+</section>
+<section id="fetal-health" class="level3">
+<h3 class="anchored" data-anchor-id="fetal-health">Fetal health</h3>
+<p><code>FetalHealth</code> is deliberately disease-agnostic: it tracks a baseline fetal weight percentile per pregnancy and exposes two levers that other modules pull — bringing delivery forward (preterm risk) and accumulating growth restriction (low birth weight). At delivery it computes <code>birth_weight</code> and classifies newborns as LBW, VLBW, or SGA.</p>
+<p>The <code>fetal_infection</code> connector pulls those levers when a pregnant woman is infected, and the <code>treat_pregnant</code> intervention partially reverses the damage when she is treated. Note that <code>FetalHealth</code> is passed via <code>custom</code>, since it is not a disease, network, demographic, or intervention:</p>
+<div id="3f894213" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    diseases      <span class="op">=</span> ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    demographics  <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    connectors    <span class="op">=</span> ssl.mnch.fetal_infection(),</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    interventions <span class="op">=</span> ssl.mnch.treat_pregnant(disease<span class="op">=</span><span class="st">'sir'</span>, start_year<span class="op">=</span><span class="dv">2005</span>),</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    custom        <span class="op">=</span> ssl.mnch.FetalHealth(),</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    networks      <span class="op">=</span> [ss.PrenatalNet(), ss.RandomNet()],</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>mnch_pars,</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'fetal_health'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
+  Running 2000.19 (10/261) (0.07 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.14 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.22 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.29 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.36 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.42 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.49 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.57 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.64 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.71 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.79 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.86 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.93 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (1.00 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.07 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.14 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.21 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.28 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.35 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.43 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.50 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.58 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.64 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.71 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.79 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.86 s)  •••••••••••••••••••• 100%
+
+Figure(896x672)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_library_files/figure-html/cell-10-output-2.png" width="892" height="662" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>To adapt this to a different disease, subclass <code>fetal_infection</code> and override <code>_apply_damage()</code> with disease-specific logic — for example, applying a larger growth penalty for severe infections than mild ones.</p>
+</section>
+</section>
+<section id="adapting-a-library-module" class="level2">
+<h2 class="anchored" data-anchor-id="adapting-a-library-module">Adapting a library module</h2>
+<p>Because library modules are ordinary Starsim modules, the usual customization routes all apply. The lightest touch is to override parameters:</p>
+<div id="475969f0" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>measles <span class="op">=</span> ssl.Measles(beta<span class="op">=</span>ss.perday(<span class="fl">0.4</span>), dur_exp<span class="op">=</span>ss.normal(loc<span class="op">=</span>ss.days(<span class="dv">10</span>)), p_death<span class="op">=</span><span class="fl">0.01</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>For structural changes, subclass. Here we give measles waning immunity by making recovered agents susceptible again after a delay:</p>
+<div id="2ede2b84" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WaningMeasles(ssl.Measles):</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, dur_immune<span class="op">=</span>ss.years(<span class="dv">1</span>), <span class="op">**</span>kwargs):</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(<span class="op">**</span>kwargs)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(dur_immune<span class="op">=</span>dur_immune)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(<span class="op">**</span>kwargs)</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(ss.FloatArr(<span class="st">'ti_susceptible'</span>, label<span class="op">=</span><span class="st">'Time of losing immunity'</span>))</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_susceptible[uids] <span class="op">=</span> <span class="va">self</span>.ti_recovered[uids] <span class="op">+</span> <span class="va">self</span>.pars.dur_immune <span class="op">/</span> <span class="va">self</span>.t.dt</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_state(<span class="va">self</span>):</span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_state()</span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>        waned <span class="op">=</span> (<span class="va">self</span>.recovered <span class="op">&amp;</span> (<span class="va">self</span>.ti_susceptible <span class="op">&lt;=</span> <span class="va">self</span>.ti)).uids</span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.recovered[waned] <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.susceptible[waned] <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>WaningMeasles(dur_immune<span class="op">=</span>ss.days(<span class="dv">60</span>), beta<span class="op">=</span>ss.perday(<span class="fl">0.3</span>)),</span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a>             networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'waningmeasles'</span>)</span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.waningmeasles</span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Susceptible at end: </span><span class="sc">{</span>res<span class="sc">.</span>n_susceptible[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:n}</span><span class="ss">; recovered at end: </span><span class="sc">{</span>res<span class="sc">.</span>n_recovered[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:n}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Initializing sim with 2000 agents
+  Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
+  Running 2000.03 (10/366) (0.02 s)  ———————————————————— 3%
+  Running 2000.05 (20/366) (0.05 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (0.10 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (0.12 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.13 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.15 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.17 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.19 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (0.21 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.23 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.25 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.27 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.29 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.31 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.32 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.34 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.36 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.38 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.40 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.42 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.44 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.46 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.48 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.49 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.51 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.53 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.55 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.57 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.59 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.61 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.62 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.64 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.66 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.68 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.70 s)  •••••••••••••••••••— 99%
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_library_files/figure-html/cell-12-output-2.png" width="761" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Susceptible at end: 1992; recovered at end: 0</code></pre>
+</div>
+</div>
+<p>The recovered population drains back into the susceptible pool, as intended. Note that this alone does not produce a second wave: the outbreak burns out before immunity wanes, so there are no infectious agents left to restart it. Recurring waves need a continuing source of infection — births (<a href="../api/demographics.html#starsim.demographics.Births" title="0"><code>ss.Births</code></a>), importation, or a slower-burning disease.</p>
+<p>If you find yourself copying a library module wholesale and editing it, that is also a perfectly good outcome — it’s what these modules are for. See <a href="../user_guide/modules_adding.html">Adding new modules</a> for a fuller treatment of writing modules from scratch.</p>
+</section>
+<section id="contributing-to-the-library" class="level2">
+<h2 class="anchored" data-anchor-id="contributing-to-the-library">Contributing to the library</h2>
+<p>New library modules are welcome, particularly ones that demonstrate a modeling pattern that is otherwise hard to discover. See <a href="https://github.com/starsimhub/starsim/blob/main/starsim/library/README.md"><code>starsim/library/README.md</code></a> for the specific conventions, and <a href="../contributing.html">Contributing</a> for the general process.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const a = window.document.createElement('a');
+      a.classList.add('top-right');
+      a.classList.add('quarto-color-scheme-toggle');
+      a.href = "";
+      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      a.appendChild(i);
+      window.document.body.appendChild(a);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../user_guide/modules_connectors.html" class="pagination-link" aria-label="Connectors">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Connectors</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../user_guide/modules_adding.html" class="pagination-link" aria-label="Adding new modules">
+        <span class="nav-page-text">Adding new modules</span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/starsimhub/starsim">
+      <i class="bi bi-github" role="img" aria-label="GitHub">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="mailto:info@starsim.org">
+      <i class="bi bi-envelope-at-fill" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsimhub.slack.com">
+      <i class="bi bi-slack" role="img">
+</i> 
+    </a>
+  </li>  
+    <li class="nav-item compact">
+    <a class="nav-link" href="https://starsim.org/">
+      <i class="bi bi-globe" role="img">
+</i> 
+    </a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+
+
+
+</body></html>

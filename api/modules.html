@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -509,12 +512,41 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Utilities</strong></span></a>
+ <span class="menu-text"><strong>Library</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
       <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.mnch.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">mnch</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">networks</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Utilities</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
@@ -592,6 +624,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.modules.Module.brief" id="toc-starsim.modules.Module.brief" class="nav-link" data-scroll-target="#starsim.modules.Module.brief">brief</a></li>
   <li><a href="#starsim.modules.Module.check_method_calls" id="toc-starsim.modules.Module.check_method_calls" class="nav-link" data-scroll-target="#starsim.modules.Module.check_method_calls">check_method_calls</a></li>
   <li><a href="#starsim.modules.Module.create" id="toc-starsim.modules.Module.create" class="nav-link" data-scroll-target="#starsim.modules.Module.create">create</a></li>
+  <li><a href="#starsim.modules.Module.define_aliases" id="toc-starsim.modules.Module.define_aliases" class="nav-link" data-scroll-target="#starsim.modules.Module.define_aliases">define_aliases</a></li>
   <li><a href="#starsim.modules.Module.define_pars" id="toc-starsim.modules.Module.define_pars" class="nav-link" data-scroll-target="#starsim.modules.Module.define_pars">define_pars</a></li>
   <li><a href="#starsim.modules.Module.define_results" id="toc-starsim.modules.Module.define_results" class="nav-link" data-scroll-target="#starsim.modules.Module.define_results">define_results</a></li>
   <li><a href="#starsim.modules.Module.define_states" id="toc-starsim.modules.Module.define_states" class="nav-link" data-scroll-target="#starsim.modules.Module.define_states">define_states</a></li>
@@ -603,7 +636,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.modules.Module.init_post" id="toc-starsim.modules.Module.init_post" class="nav-link" data-scroll-target="#starsim.modules.Module.init_post">init_post</a></li>
   <li><a href="#starsim.modules.Module.init_pre" id="toc-starsim.modules.Module.init_pre" class="nav-link" data-scroll-target="#starsim.modules.Module.init_pre">init_pre</a></li>
   <li><a href="#starsim.modules.Module.init_results" id="toc-starsim.modules.Module.init_results" class="nav-link" data-scroll-target="#starsim.modules.Module.init_results">init_results</a></li>
-  <li><a href="#starsim.modules.Module.link_rates" id="toc-starsim.modules.Module.link_rates" class="nav-link" data-scroll-target="#starsim.modules.Module.link_rates">link_rates</a></li>
+  <li><a href="#starsim.modules.Module.link_timepars" id="toc-starsim.modules.Module.link_timepars" class="nav-link" data-scroll-target="#starsim.modules.Module.link_timepars">link_timepars</a></li>
   <li><a href="#starsim.modules.Module.match_time_inds" id="toc-starsim.modules.Module.match_time_inds" class="nav-link" data-scroll-target="#starsim.modules.Module.match_time_inds">match_time_inds</a></li>
   <li><a href="#starsim.modules.Module.plot" id="toc-starsim.modules.Module.plot" class="nav-link" data-scroll-target="#starsim.modules.Module.plot">plot</a></li>
   <li><a href="#starsim.modules.Module.set_metadata" id="toc-starsim.modules.Module.set_metadata" class="nav-link" data-scroll-target="#starsim.modules.Module.set_metadata">set_metadata</a></li>
@@ -625,12 +658,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.modules.module_types" id="toc-starsim.modules.module_types" class="nav-link" data-scroll-target="#starsim.modules.module_types">module_types</a></li>
   <li><a href="#starsim.modules.register_modules" id="toc-starsim.modules.register_modules" class="nav-link" data-scroll-target="#starsim.modules.register_modules">register_modules</a>
   <ul class="collapse">
-  <li><a href="#parameters-5" id="toc-parameters-5" class="nav-link" data-scroll-target="#parameters-5">Parameters</a></li>
+  <li><a href="#parameters-6" id="toc-parameters-6" class="nav-link" data-scroll-target="#parameters-6">Parameters</a></li>
   <li><a href="#examples-1" id="toc-examples-1" class="nav-link" data-scroll-target="#examples-1">Examples</a></li>
   </ul></li>
   <li><a href="#starsim.modules.required" id="toc-starsim.modules.required" class="nav-link" data-scroll-target="#starsim.modules.required">required</a>
   <ul class="collapse">
-  <li><a href="#parameters-6" id="toc-parameters-6" class="nav-link" data-scroll-target="#parameters-6">Parameters</a></li>
+  <li><a href="#parameters-7" id="toc-parameters-7" class="nav-link" data-scroll-target="#parameters-7">Parameters</a></li>
   <li><a href="#examples-2" id="toc-examples-2" class="nav-link" data-scroll-target="#examples-2">Examples</a></li>
   </ul></li>
   </ul></li>
@@ -820,8 +853,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.modules.Module.alias_state_dict">alias_state_dict</a></td>
+<td>Dictionary of state aliases (see <code>define_aliases()</code>)</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.modules.Module.auto_state_list">auto_state_list</a></td>
 <td>List of “automatic” states with boolean type (<a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>ss.BoolState</code></a>) that were added</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.modules.Module.derived_state_names">derived_state_names</a></td>
+<td>Names of the aliases that are defined by a callable (see <code>define_aliases()</code>)</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.modules.Module.state_dict">state_dict</a></td>
@@ -857,90 +898,94 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Create a module instance by name</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.modules.Module.define_aliases">define_aliases</a></td>
+<td>Define aliases for states, e.g.&nbsp;<code>self.define_aliases(infectious='infected')</code></td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.modules.Module.define_pars">define_pars</a></td>
 <td>Create or merge Pars objects</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.define_results">define_results</a></td>
 <td>Add results to the module</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.define_states">define_states</a></td>
 <td>Define states of the module with the same attribute name as the state</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.finalize">finalize</a></td>
 <td>Perform any final operations, such as removing unneeded data</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.finalize_results">finalize_results</a></td>
 <td>Finalize results</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.finish_step">finish_step</a></td>
 <td>Define what should happen at the end of the step; at minimum, increment ti</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.from_func">from_func</a></td>
 <td>Create a module from a function</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.init_mock">init_mock</a></td>
 <td>Initialize with a mock simulation – for debugging purposes only</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.init_post">init_post</a></td>
 <td>Initialize the values of the states; the last step of initialization</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.init_pre">init_pre</a></td>
 <td>Perform initialization steps</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.init_results">init_results</a></td>
 <td>Initialize results output; called during <code>init_pre()</code></td>
 </tr>
-<tr class="odd">
-<td><a href="#starsim.modules.Module.link_rates">link_rates</a></td>
-<td>Find all time parameters in the module and link them to the module’s dt</td>
-</tr>
 <tr class="even">
+<td><a href="#starsim.modules.Module.link_timepars">link_timepars</a></td>
+<td>Find all time parameters in the module and link them to the module’s <code>dt</code></td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.modules.Module.match_time_inds">match_time_inds</a></td>
 <td>Find the nearest matching sim time indices for the current module</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.plot">plot</a></td>
 <td>Plot all results in the module</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.set_metadata">set_metadata</a></td>
 <td>Set metadata for the module</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.setattribute">setattribute</a></td>
 <td>Method for setting an attribute that does not perform checking against immutable attributes</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.shrink">shrink</a></td>
 <td>Shrink the size of the module for saving to disk</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.start_step">start_step</a></td>
 <td>Tasks to perform at the beginning of the step</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.step">step</a></td>
 <td>Define how the module updates over time – the key part of Starsim!!</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.to_json">to_json</a></td>
 <td>Export to a JSON-compatible format</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.modules.Module.update_pars">update_pars</a></td>
 <td>Pull out recognized parameters and update them; raises on unrecognized keys</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.modules.Module.update_results">update_results</a></td>
 <td>Update results; by default, compute counts of each state at each point in time</td>
 </tr>
@@ -983,24 +1028,71 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 </section>
 </section>
+<section id="starsim.modules.Module.define_aliases" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.modules.Module.define_aliases">define_aliases</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_aliases(overwrite<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Define aliases for states, e.g.&nbsp;<code>self.define_aliases(infectious='infected')</code></p>
+<p>An alias is only used if the attribute isn’t otherwise defined, so it acts as a default that a subclass overrides simply by defining a state of the same name. This is how <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a> treats everyone infected as infectious, while letting a subclass define <code>infectious</code> as a state (or another alias) in its own right.</p>
+<p>Each alias is either the name of another state, or a callable taking the module as its only argument. A callable behaves like a property: it is recomputed on each access, so it can be read but not written to.</p>
+<p>Note: a callable alias defined as a lambda can’t be saved with plain <a href="https://docs.python.org/3/library/pickle.html#module-pickle" title="1"><code>pickle</code></a> (<a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.save" title="0"><code>sc.save()</code></a> and <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim</code></a> are both fine, since they use <code>dill</code>). Use a module-level function, or a property, if plain pickling is required.</p>
+<p>A callable alias also generates an automatic result, in the same way a <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a> does: an alias named <code>infected</code> produces <code>n_infected</code>. A string alias does not, since the state it points to is already counted under its own name.</p>
+<section id="parameters-3" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>overwrite</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if True, replace any existing state or alias of the same name, rather than raising</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+<tr class="even">
+<td>kwargs</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>mapping of alias name to either the name of a state, or a callable</td>
+<td><code>{}</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Examples</strong>:</p>
+<pre><code>self.define_aliases(infectious='infected') # Everyone infected is infectious
+self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
+self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states</code></pre>
+</section>
+</section>
 <section id="starsim.modules.Module.define_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.define_pars">define_pars</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_pars(inherit<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_pars(inherit<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create or merge Pars objects</p>
 <p>Note: this method also automatically pulls in keyword arguments from the calling function (which is almost always a module’s <code>__init__()</code> method)</p>
 </section>
 <section id="starsim.modules.Module.define_results" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.define_results">define_results</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_results(<span class="op">*</span>args, check<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_results(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Add results to the module</p>
 </section>
 <section id="starsim.modules.Module.define_states" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.define_states">define_states</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_states(<span class="op">*</span>args, check<span class="op">=</span><span class="va">True</span>, reset<span class="op">=</span><span class="va">False</span>, lock<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>modules.Module.define_states(</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>args,</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    reset<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    lock<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    overwrite<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Define states of the module with the same attribute name as the state</p>
 <p>In addition to registering the state with the module by attribute, it adds it to <code>mod._auto_states</code>, which is used by <code>mod.state_list</code> and <code>mod.state_dict</code>.</p>
-<section id="parameters-3" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<p>Any keyword arguments other than the ones listed below are passed to <code>define_aliases()</code>, so states and their aliases can be defined together.</p>
+<section id="parameters-4" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1018,51 +1110,60 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td><code>()</code></td>
 </tr>
 <tr class="even">
-<td>check</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
-<td>whether to check that the object being added is a state, and that it’s not already present</td>
-<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
-</tr>
-<tr class="odd">
 <td>reset</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
-<td>whether to reset the list of module states and use only the ones provided</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a> / <a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td>if True, remove all existing states and aliases; if a name or list of names, remove only those</td>
 <td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>lock</td>
 <td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
 <td>if True, prevent the state attributes from being overwritten after definition</td>
 <td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
+<tr class="even">
+<td>overwrite</td>
+<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td>if True, replace any existing state or alias of the same name, rather than raising</td>
+<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+</tr>
+<tr class="odd">
+<td>kwargs</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>passed to <code>define_aliases()</code></td>
+<td><code>{}</code></td>
+</tr>
 </tbody>
 </table>
+<p><strong>Examples</strong>:</p>
+<pre><code>self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias</code></pre>
 </section>
 </section>
 <section id="starsim.modules.Module.finalize" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.finalize">finalize</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>modules.Module.finalize()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>modules.Module.finalize()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Perform any final operations, such as removing unneeded data</p>
 </section>
 <section id="starsim.modules.Module.finalize_results" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.finalize_results">finalize_results</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>modules.Module.finalize_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>modules.Module.finalize_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Finalize results</p>
 </section>
 <section id="starsim.modules.Module.finish_step" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.finish_step">finish_step</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>modules.Module.finish_step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>modules.Module.finish_step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Define what should happen at the end of the step; at minimum, increment ti</p>
 </section>
 <section id="starsim.modules.Module.from_func" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.from_func">from_func</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>modules.Module.from_func(func)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>modules.Module.from_func(func)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a module from a function</p>
 <p>Wraps a plain function into a module of the calling class, so that simple, one-off logic can be used anywhere a module is expected without writing a full class. The function must take the sim as its only argument; it becomes the module’s <code>step()</code> method and is therefore called once on every timestep (so it must do its own time gating, e.g.&nbsp;<code>if sim.now == 2015:</code>). The module’s <code>name</code> is taken from the function’s name.</p>
 <p>This is the mechanism behind “function-based” interventions and analyzers: passing a function to <code>interventions=</code>, <code>analyzers=</code>, or <code>custom=</code> automatically calls <code>from_func()</code> on the appropriate class (<a href="../api/interventions.html#starsim.interventions.Intervention" title="0"><code>ss.Intervention</code></a>, <a href="../api/analyzers.html#starsim.analyzers.Analyzer" title="0"><code>ss.Analyzer</code></a>, or <a href="../api/modules.html#starsim.modules.Module" title="0"><code>ss.Module</code></a> respectively), so usually you don’t need to call this method directly. Call it explicitly when you want to construct the module yourself, e.g.&nbsp;to add it to a sim later.</p>
 <p>Function-based modules are intentionally minimal: they have no parameters, states, or results of their own. As soon as you need <code>define_pars()</code>, <code>define_states()</code>, or <code>define_results()</code>, write a proper subclass instead.</p>
-<section id="parameters-4" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
+<section id="parameters-5" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1117,79 +1218,80 @@ sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)</code><
 </section>
 <section id="starsim.modules.Module.init_mock" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.init_mock">init_mock</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_mock(n_agents<span class="op">=</span><span class="dv">100</span>, dur<span class="op">=</span><span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_mock(n_agents<span class="op">=</span><span class="dv">100</span>, dur<span class="op">=</span><span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Initialize with a mock simulation – for debugging purposes only</p>
 </section>
 <section id="starsim.modules.Module.init_post" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.init_post">init_post</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_post()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_post()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Initialize the values of the states; the last step of initialization</p>
 </section>
 <section id="starsim.modules.Module.init_pre" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.init_pre">init_pre</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_pre(sim, force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_pre(sim, force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Perform initialization steps</p>
 <p>This method is called once, as part of initializing a Sim. Note: after initialization, initialized=False until init_vals() is called (which is after distributions are initialized).</p>
 </section>
 <section id="starsim.modules.Module.init_results" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.init_results">init_results</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>modules.Module.init_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Initialize results output; called during <code>init_pre()</code></p>
 <p>By default, modules all report on counts for any explicitly defined “States”, e.g.&nbsp;if a disease contains an <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>ss.BoolState</code></a> called ‘susceptible’ it will automatically contain a Result for ‘n_susceptible’. For identical behavior that does not automatically generate results, use <a href="../api/arrays.html#starsim.arrays.BoolArr" title="0"><code>ss.BoolArr</code></a> instead of <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>ss.BoolState</code></a>.</p>
 </section>
-<section id="starsim.modules.Module.link_rates" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.modules.Module.link_rates">link_rates</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>modules.Module.link_rates(force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Find all time parameters in the module and link them to the module’s dt</p>
+<section id="starsim.modules.Module.link_timepars" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.modules.Module.link_timepars">link_timepars</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>modules.Module.link_timepars(force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Find all time parameters in the module and link them to the module’s <code>dt</code></p>
+<p>This is what lets a timepar resolve itself against the timestep with no argument, e.g.&nbsp;<code>self.pars.death_rate.to_prob()</code> or <code>self.pars.dur_inf.to_dt()</code>.</p>
 </section>
 <section id="starsim.modules.Module.match_time_inds" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.match_time_inds">match_time_inds</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>modules.Module.match_time_inds(inds<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>modules.Module.match_time_inds(inds<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Find the nearest matching sim time indices for the current module</p>
 </section>
 <section id="starsim.modules.Module.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.plot">plot</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>modules.Module.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>modules.Module.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot all results in the module</p>
 </section>
 <section id="starsim.modules.Module.set_metadata" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.set_metadata">set_metadata</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>modules.Module.set_metadata(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>modules.Module.set_metadata(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Set metadata for the module</p>
 </section>
 <section id="starsim.modules.Module.setattribute" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.setattribute">setattribute</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>modules.Module.setattribute(attr, value)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>modules.Module.setattribute(attr, value)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Method for setting an attribute that does not perform checking against immutable attributes</p>
 </section>
 <section id="starsim.modules.Module.shrink" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.shrink">shrink</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>modules.Module.shrink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>modules.Module.shrink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shrink the size of the module for saving to disk</p>
 </section>
 <section id="starsim.modules.Module.start_step" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.start_step">start_step</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>modules.Module.start_step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>modules.Module.start_step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Tasks to perform at the beginning of the step</p>
 </section>
 <section id="starsim.modules.Module.step" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.step">step</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>modules.Module.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>modules.Module.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Define how the module updates over time – the key part of Starsim!!</p>
 </section>
 <section id="starsim.modules.Module.to_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.to_json">to_json</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>modules.Module.to_json()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>modules.Module.to_json()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Export to a JSON-compatible format</p>
 </section>
 <section id="starsim.modules.Module.update_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.update_pars">update_pars</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>modules.Module.update_pars(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>modules.Module.update_pars(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Pull out recognized parameters and update them; raises on unrecognized keys</p>
 </section>
 <section id="starsim.modules.Module.update_results" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.modules.Module.update_results">update_results</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>modules.Module.update_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>modules.Module.update_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Update results; by default, compute counts of each state at each point in time</p>
 <p>This function is executed after transmission in all modules has been resolved. This allows result updates at this point to capture outcomes dependent on multiple modules, where relevant.</p>
 </section>
@@ -1234,32 +1336,32 @@ sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)</code><
 </table>
 <section id="starsim.modules.find_modules" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.find_modules">find_modules</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>modules.find_modules(key<span class="op">=</span><span class="va">None</span>, flat<span class="op">=</span><span class="va">False</span>, verbose<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>modules.find_modules(key<span class="op">=</span><span class="va">None</span>, flat<span class="op">=</span><span class="va">False</span>, verbose<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Find all subclasses of Module present in Starsim, divided by type</p>
 </section>
 <section id="starsim.modules.is_module" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.is_module">is_module</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>modules.is_module(obj)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>modules.is_module(obj)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check whether something is a Starsim module</p>
 </section>
 <section id="starsim.modules.module_map" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.module_map">module_map</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>modules.module_map(key<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>modules.module_map(key<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Map modules to standard types</p>
 <p>This is the source of truth about module types. Modules with types that do not map to anything in the module_map are treated as custom modules.</p>
 </section>
 <section id="starsim.modules.module_types" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.module_types">module_types</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>modules.module_types()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>modules.module_types()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return a list of known module types; based on <a href="../api/modules.html#starsim.modules.module_map" title="0"><code>module_map()</code></a></p>
 </section>
 <section id="starsim.modules.register_modules" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.register_modules">register_modules</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>modules.register_modules(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>modules.register_modules(<span class="op">*</span>args)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Register custom modules with Starsim so they can be referred to by string.</p>
 <p>Note: “modules” here refers to Starsim modules. But this function registers Starsim “modules” (e.g.&nbsp;<a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a>) that are found within Python “modules” (e.g.&nbsp;<code>starsim</code>).</p>
-<section id="parameters-5" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h4>
+<section id="parameters-6" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1281,24 +1383,24 @@ sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)</code><
 </section>
 <section id="examples-1" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-1">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Standard use case, register modules automatically</span></span>
-<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> my_custom_disease_model <span class="im">as</span> mcdm</span>
-<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>ss.register_modules(mcdm)</span>
-<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a>ss.Sim(diseases<span class="op">=</span><span class="st">'mydisease'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run() <span class="co"># This will work if mcdm.MyDisease() is defined</span></span>
-<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Manual usage</span></span>
-<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>my_modules <span class="op">=</span> [mcdm.MyDisease, mcdm.MyNetwork]</span>
-<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a>ss.register_modules(my_modules)</span>
-<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a>ss.Sim(diseases<span class="op">=</span><span class="st">'mydisease'</span>, networks<span class="op">=</span><span class="st">'mynetwork'</span>).run()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Standard use case, register modules automatically</span></span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> my_custom_disease_model <span class="im">as</span> mcdm</span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>ss.register_modules(mcdm)</span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>ss.Sim(diseases<span class="op">=</span><span class="st">'mydisease'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run() <span class="co"># This will work if mcdm.MyDisease() is defined</span></span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb40-6"><a href="#cb40-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Manual usage</span></span>
+<span id="cb40-7"><a href="#cb40-7" aria-hidden="true" tabindex="-1"></a>my_modules <span class="op">=</span> [mcdm.MyDisease, mcdm.MyNetwork]</span>
+<span id="cb40-8"><a href="#cb40-8" aria-hidden="true" tabindex="-1"></a>ss.register_modules(my_modules)</span>
+<span id="cb40-9"><a href="#cb40-9" aria-hidden="true" tabindex="-1"></a>ss.Sim(diseases<span class="op">=</span><span class="st">'mydisease'</span>, networks<span class="op">=</span><span class="st">'mynetwork'</span>).run()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.modules.required" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.modules.required">required</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>modules.required(val<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>modules.required(val<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Decorator to mark module methods as required.</p>
 <p>A common gotcha in Starsim is to forget to call super(), or to mistype a method name so it’s never called. This decorator lets you mark methods (of Modules only) to be sure that they are called either on sim initialization or on sim run.</p>
-<section id="parameters-6" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h4>
+<section id="parameters-7" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1320,16 +1422,16 @@ sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)</code><
 </section>
 <section id="examples-2" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-2">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> CustomSIS(ss.SIS):</span>
-<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step()</span>
-<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.custom_step() <span class="co"># Will raise an exception if this line is not here</span></span>
-<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">@ss.required</span>() <span class="co"># Mark this method as required on run</span></span>
-<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> custom_step(<span class="va">self</span>):</span>
-<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">pass</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> CustomSIS(ss.SIS):</span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step()</span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.custom_step() <span class="co"># Will raise an exception if this line is not here</span></span>
+<span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">@ss.required</span>() <span class="co"># Mark this method as required on run</span></span>
+<span id="cb42-9"><a href="#cb42-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> custom_step(<span class="va">self</span>):</span>
+<span id="cb42-10"><a href="#cb42-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">pass</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 
 
 </section>
@@ -1770,7 +1872,7 @@ sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)</code><
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

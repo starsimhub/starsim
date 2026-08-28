@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -76,14 +79,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -508,12 +511,41 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Utilities</strong></span></a>
+ <span class="menu-text"><strong>Library</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
       <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.mnch.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">mnch</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">networks</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Utilities</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
@@ -620,25 +652,30 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#returns-4" id="toc-returns-4" class="nav-link" data-scroll-target="#returns-4">Returns</a></li>
   <li><a href="#examples-2" id="toc-examples-2" class="nav-link" data-scroll-target="#examples-2">Examples</a></li>
   </ul></li>
+  <li><a href="#starsim.utils.resolve_data_col" id="toc-starsim.utils.resolve_data_col" class="nav-link" data-scroll-target="#starsim.utils.resolve_data_col">resolve_data_col</a>
+  <ul class="collapse">
+  <li><a href="#parameters-7" id="toc-parameters-7" class="nav-link" data-scroll-target="#parameters-7">Parameters</a></li>
+  <li><a href="#returns-5" id="toc-returns-5" class="nav-link" data-scroll-target="#returns-5">Returns</a></li>
+  </ul></li>
   <li><a href="#starsim.utils.return_fig" id="toc-starsim.utils.return_fig" class="nav-link" data-scroll-target="#starsim.utils.return_fig">return_fig</a></li>
   <li><a href="#starsim.utils.save" id="toc-starsim.utils.save" class="nav-link" data-scroll-target="#starsim.utils.save">save</a>
   <ul class="collapse">
-  <li><a href="#parameters-7" id="toc-parameters-7" class="nav-link" data-scroll-target="#parameters-7">Parameters</a></li>
+  <li><a href="#parameters-8" id="toc-parameters-8" class="nav-link" data-scroll-target="#parameters-8">Parameters</a></li>
   </ul></li>
   <li><a href="#starsim.utils.show" id="toc-starsim.utils.show" class="nav-link" data-scroll-target="#starsim.utils.show">show</a></li>
   <li><a href="#starsim.utils.shrink" id="toc-starsim.utils.shrink" class="nav-link" data-scroll-target="#starsim.utils.shrink">shrink</a>
   <ul class="collapse">
-  <li><a href="#parameters-8" id="toc-parameters-8" class="nav-link" data-scroll-target="#parameters-8">Parameters</a></li>
+  <li><a href="#parameters-9" id="toc-parameters-9" class="nav-link" data-scroll-target="#parameters-9">Parameters</a></li>
   <li><a href="#examples-3" id="toc-examples-3" class="nav-link" data-scroll-target="#examples-3">Examples</a></li>
   </ul></li>
   <li><a href="#starsim.utils.standardize_data" id="toc-starsim.utils.standardize_data" class="nav-link" data-scroll-target="#starsim.utils.standardize_data">standardize_data</a>
   <ul class="collapse">
-  <li><a href="#parameters-9" id="toc-parameters-9" class="nav-link" data-scroll-target="#parameters-9">Parameters</a></li>
+  <li><a href="#parameters-10" id="toc-parameters-10" class="nav-link" data-scroll-target="#parameters-10">Parameters</a></li>
   </ul></li>
   <li><a href="#starsim.utils.standardize_netkey" id="toc-starsim.utils.standardize_netkey" class="nav-link" data-scroll-target="#starsim.utils.standardize_netkey">standardize_netkey</a></li>
   <li><a href="#starsim.utils.validate_sim_data" id="toc-starsim.utils.validate_sim_data" class="nav-link" data-scroll-target="#starsim.utils.validate_sim_data">validate_sim_data</a>
   <ul class="collapse">
-  <li><a href="#parameters-10" id="toc-parameters-10" class="nav-link" data-scroll-target="#parameters-10">Parameters</a></li>
+  <li><a href="#parameters-11" id="toc-parameters-11" class="nav-link" data-scroll-target="#parameters-11">Parameters</a></li>
   </ul></li>
   <li><a href="#starsim.utils.warn" id="toc-starsim.utils.warn" class="nav-link" data-scroll-target="#starsim.utils.warn">warn</a></li>
   </ul></li>
@@ -865,7 +902,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td><a href="#starsim.utils.load">load</a></td>
-<td>Alias to Sciris <code>sc.loadany()</code></td>
+<td>Alias to Sciris <a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.loadany" title="0"><code>sc.loadany()</code></a></td>
 </tr>
 <tr class="odd">
 <td><a href="#starsim.utils.match_result_keys">match_result_keys</a></td>
@@ -884,34 +921,38 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Process known plotting kwargs.</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.utils.resolve_data_col">resolve_data_col</a></td>
+<td>Find the column to use for a given data key, allowing for known synonyms</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.utils.return_fig">return_fig</a></td>
 <td>Do postprocessing on the figure: by default, don’t return if in Jupyter, but show instead; not for the user</td>
 </tr>
-<tr class="even">
-<td><a href="#starsim.utils.save">save</a></td>
-<td>Alias to Sciris <code>sc.save()</code></td>
-</tr>
 <tr class="odd">
+<td><a href="#starsim.utils.save">save</a></td>
+<td>Alias to Sciris <a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.save" title="0"><code>sc.save()</code></a></td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.utils.show">show</a></td>
 <td>Shortcut for matplotlib.pyplot.show()</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.shrink">shrink</a></td>
 <td>Replace one or more object attributes in-place with an <a href="../api/utils.html#starsim.utils.Shrunk" title="0"><code>ss.utils.Shrunk()</code></a> placeholder.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.utils.standardize_data">standardize_data</a></td>
 <td>Standardize formats of input data</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.standardize_netkey">standardize_netkey</a></td>
 <td>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.utils.validate_sim_data">validate_sim_data</a></td>
 <td>Validate data intended to be compared to the sim outputs, e.g.&nbsp;for calibration</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.utils.warn">warn</a></td>
 <td>Helper function to handle warnings – shortcut to warnings.warn</td>
 </tr>
@@ -1056,7 +1097,7 @@ array([False,  True,  True,  True, False])</code></pre>
 <section id="starsim.utils.load" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.load">load</h3>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>utils.load(filename, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Alias to Sciris <code>sc.loadany()</code></p>
+<p>Alias to Sciris <a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.loadany" title="0"><code>sc.loadany()</code></a></p>
 <p>Since Starsim uses Sciris for saving objects, they can be loaded back using this function. This can also be used to load other objects of known type (e.g.&nbsp;JSON), although this usage is discouraged.</p>
 <section id="parameters-4" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h4>
@@ -1079,7 +1120,7 @@ array([False,  True,  True,  True, False])</code></pre>
 <tr class="even">
 <td>kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>sc.loadany()</code></td>
+<td>passed to <a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.loadany" title="0"><code>sc.loadany()</code></a></td>
 <td><code>{}</code></td>
 </tr>
 </tbody>
@@ -1199,7 +1240,7 @@ array([False,  True,  True,  True, False])</code></pre>
 <tr class="odd">
 <td>fig_kw</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>sc.getrowscols()</code>, then <code>plt.subplots()</code> and <a href="https://matplotlib.org/stable/api/figure_api.html#module-plt.figure" title="1"><code>plt.figure()</code></a></td>
+<td>passed to <a href="https://docs.sciris.org/api/sc_plotting.html#sciris.sc_plotting.getrowscols" title="0"><code>sc.getrowscols()</code></a>, then <code>plt.subplots()</code> and <a href="https://matplotlib.org/stable/api/figure_api.html#module-plt.figure" title="1"><code>plt.figure()</code></a></td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
@@ -1266,18 +1307,76 @@ array([False,  True,  True,  True, False])</code></pre>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>kw <span class="op">=</span> ss.plot_args(kwargs, figsize<span class="op">=</span>(<span class="dv">10</span>,<span class="dv">10</span>)) <span class="co"># Shortcut since known keyword</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
+<section id="starsim.utils.resolve_data_col" class="level3">
+<h3 class="anchored" data-anchor-id="starsim.utils.resolve_data_col">resolve_data_col</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>utils.resolve_data_col(data, key, col)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Find the column to use for a given data key, allowing for known synonyms</p>
+<p>The configured column name always takes precedence; synonyms (see <code>ss.col_synonyms</code>) are only consulted if it is absent from the data.</p>
+<section id="parameters-7" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>data</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td>the data, as a dict of columns</td>
+<td><em>required</em></td>
+</tr>
+<tr class="even">
+<td>key</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the standardized key, e.g.&nbsp;“year”</td>
+<td><em>required</em></td>
+</tr>
+<tr class="odd">
+<td>col</td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td>the configured column name, e.g.&nbsp;“Year”</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="returns-5" class="level4 doc-section doc-section-returns">
+<h4 class="doc-section doc-section-returns anchored" data-anchor-id="returns-5">Returns</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td></td>
+<td></td>
+<td>The name of the column to use</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
 <section id="starsim.utils.return_fig" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.return_fig">return_fig</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>utils.return_fig(fig, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>utils.return_fig(fig, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Do postprocessing on the figure: by default, don’t return if in Jupyter, but show instead; not for the user</p>
 </section>
 <section id="starsim.utils.save" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.save">save</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>utils.save(filename, obj, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Alias to Sciris <code>sc.save()</code></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>utils.save(filename, obj, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Alias to Sciris <a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.save" title="0"><code>sc.save()</code></a></p>
 <p>While some Starsim objects have their own save methods, this function can be used to save any arbitrary object. It can then be loaded with ss.load().</p>
-<section id="parameters-7" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h4>
+<section id="parameters-8" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1303,7 +1402,7 @@ array([False,  True,  True,  True, False])</code></pre>
 <tr class="odd">
 <td>kwargs</td>
 <td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to <code>sc.save()</code></td>
+<td>passed to <a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.save" title="0"><code>sc.save()</code></a></td>
 <td><code>{}</code></td>
 </tr>
 </tbody>
@@ -1312,17 +1411,17 @@ array([False,  True,  True,  True, False])</code></pre>
 </section>
 <section id="starsim.utils.show" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.show">show</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>utils.show(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>utils.show(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shortcut for matplotlib.pyplot.show()</p>
 </section>
 <section id="starsim.utils.shrink" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.shrink">shrink</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>utils.shrink(obj<span class="op">=</span><span class="va">None</span>, attrs<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>utils.shrink(obj<span class="op">=</span><span class="va">None</span>, attrs<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Replace one or more object attributes in-place with an <a href="../api/utils.html#starsim.utils.Shrunk" title="0"><code>ss.utils.Shrunk()</code></a> placeholder.</p>
 <p>Used to save memory or remove circular references, especially when running large numbers of sims. It is good practice to write <a href="../api/utils.html#starsim.utils.shrink" title="0"><code>shrink()</code></a> methods for modules to remove any temporary arrays or other memory-intensive objects.</p>
 <p><a href="../api/utils.html#starsim.utils.shrink" title="0"><code>ss.shrink()</code></a> can be used to either manually replace an object, or replace multiple attributes of an object in-place. It is used rather than simply deleting attributes or setting them to <a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a> to make it clear that the attributes were intentionally removed.</p>
-<section id="parameters-8" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h4>
+<section id="parameters-9" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1356,24 +1455,24 @@ array([False,  True,  True,  True, False])</code></pre>
 </section>
 <section id="examples-3" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-3">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co"># "Shrink" (remove) the People object</span></span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim()</span>
-<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>ss.shrink(sim, <span class="st">'people'</span>)</span>
-<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Equivalent behavior, used manually</span></span>
-<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>sim.people <span class="op">=</span> ss.shrink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># "Shrink" (remove) the People object</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim()</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>ss.shrink(sim, <span class="st">'people'</span>)</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Equivalent behavior, used manually</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>sim.people <span class="op">=</span> ss.shrink()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.utils.standardize_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_data">standardize_data</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_data(</span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    min_year<span class="op">=</span><span class="dv">1800</span>,</span>
-<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    out_of_range<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    default_age<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>    default_year<span class="op">=</span><span class="dv">2024</span>,</span>
-<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_data(</span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    metadata<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    min_year<span class="op">=</span><span class="dv">1800</span>,</span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>    out_of_range<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>    default_age<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>    default_year<span class="op">=</span><span class="dv">2024</span>,</span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Standardize formats of input data</p>
 <p>Input data can arrive in many different forms. This function accepts a variety of data structures, and converts them into a Pandas Series containing one variable, based on specified metadata, or an <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> if the data is already an <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> object.</p>
 <p>The metadata is a dictionary that defines columns of the dataframe or keys of the dictionary to use as indices in the output Series. It should contain:</p>
@@ -1383,9 +1482,10 @@ array([False,  True,  True,  True, False])</code></pre>
 <li><code>metadata['data_cols']['age']</code> optionally specifying the column containing age values; otherwise the default age will be used</li>
 <li><code>metadata['data_cols'][&lt;arbitrary&gt;]</code> optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.</li>
 </ul>
+<p>If a configured column is not present in the data, a known synonym is used instead if one is available (see <code>ss.col_synonyms</code>); for example, year data labeled “Time” (as in UN World Population Prospects data) is used for a data column configured as “Year”. Explicitly configured column names always take precedence over synonyms.</p>
 <p>If a <code>sex</code> column is part of the index, the metadata can also optionally specify a string mapping to convert the sex labels in the input data into the ‘m’/‘f’ labels used by Starsim. In that case, the metadata can contain an additional key like <code>metadata['sex_keys'] = {'Female':'f','Male':'m'}</code> which in this case would map the strings ‘Female’ and ‘Male’ in the original data into ‘m’/‘f’ for Starsim.</p>
-<section id="parameters-9" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h4>
+<section id="parameters-10" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1431,15 +1531,15 @@ array([False,  True,  True,  True, False])</code></pre>
 </section>
 <section id="starsim.utils.standardize_netkey" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_netkey">standardize_netkey</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</p>
 </section>
 <section id="starsim.utils.validate_sim_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.validate_sim_data">validate_sim_data</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>utils.validate_sim_data(data<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>utils.validate_sim_data(data<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate data intended to be compared to the sim outputs, e.g.&nbsp;for calibration</p>
-<section id="parameters-10" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h4>
+<section id="parameters-11" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-11">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1468,7 +1568,7 @@ array([False,  True,  True,  True, False])</code></pre>
 </section>
 <section id="starsim.utils.warn" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.warn">warn</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>utils.warn(msg, category<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>utils.warn(msg, category<span class="op">=</span><span class="va">None</span>, verbose<span class="op">=</span><span class="va">None</span>, die<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to handle warnings – shortcut to warnings.warn</p>
 
 
@@ -1906,7 +2006,7 @@ array([False,  True,  True,  True, False])</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

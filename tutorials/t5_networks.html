@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -380,12 +383,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text"><strong>What’s new</strong></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><strong>API reference</strong></span></a>
-  </div>
-</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -565,6 +562,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_library.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Adding new modules</span></a>
   </div>
@@ -731,7 +734,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="overview-of-starsims-contact-network-structure" class="level2">
 <h2 class="anchored" data-anchor-id="overview-of-starsims-contact-network-structure">Overview of Starsim’s contact network structure</h2>
 <p>Starsim’s networks are stored in the <code>networks.py</code> file. At the top of this file you’ll see the <a href="../api/networks.html#starsim.networks.Network" title="0"><code>Network</code></a> class, which provides the template for all the other networks. At a high level, all you need to know is that network stores various <em>parameters</em> that determine how pairs of people form and dissolve, and a collection of all the <em>edges</em> that exist at a given point in time. Let’s look at a simple example of the <a href="https://docs.python.org/3/library/random.html#module-random" title="1"><code>random</code></a> network:</p>
-<div id="5db6faf2" class="cell" data-tags="[]" data-execution_count="2">
+<div id="76c8f994" class="cell" data-tags="[]" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -744,7 +747,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 <p>The network we just made stores two very important things: the list of contacts (found in <code>random.edges</code>) and the parameters (<code>random.pars</code>).</p>
 <p>If we just make a network on its own like this, it’s not very interesting. Like all components of Starsim, it needs to be initialized within a <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a> before the database of contacts gets populated:</p>
-<div id="90bf9d0a" class="cell" data-execution_count="3">
+<div id="51aeb222" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR()</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">50</span>, diseases<span class="op">=</span>sir, networks<span class="op">=</span>net) <span class="co"># Decreasing n_agents so we can plot the network below</span></span>
@@ -757,14 +760,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>We can easily take a look at the list of edges between agents. All networks are stored in <code>sim.networks</code>, and individual networks can be found at their class name after conversion to lower case. So for this example, <code>sim.networks.randomnet.edges</code> has all the information about which agents (referenced by their UID) are paired with which other agents as well as a per-edge transmission multiplier called <code>beta</code> and a per-edge duration, <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a>.</p>
-<div id="d4d03200" class="cell" data-execution_count="4">
+<div id="e8ee198d" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim.networks.randomnet</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="4">
 <pre><code>randomnet(n_edges=250; pars=[n_contacts, dur, beta]; states=[participant])</code></pre>
 </div>
 </div>
 <p>Networks provide some basic functionality, for example to identify contacts. Additionally, the edge list can be quickly converted to a <a href="https://pandas.pydata.org/pandas-docs/stable/index.html#module-pandas" title="1"><code>pandas</code></a> dataframe or <code>networkx</code> graph for further analysis and manipulation:</p>
-<div id="7419c580" class="cell" data-execution_count="5">
+<div id="aabb0f6a" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> sim.networks.randomnet</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use the "find_contacts" function to find all contacts of agent with uid 0</span></span>
@@ -889,7 +892,7 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <section id="sexual-networks" class="level2">
 <h2 class="anchored" data-anchor-id="sexual-networks">Sexual networks</h2>
 <p>Starsim contains a few basic sexual networks, including an <code>mf</code> network for modeling heterosexual partnerships and an <code>msm</code> network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here’s an example modeling HIV:</p>
-<div id="a798d127" class="cell" data-execution_count="6">
+<div id="4169ef7d" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the disease</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> ssl.diseases.HIV(</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.05</span>, <span class="fl">0.025</span>]},    <span class="co"># See notes below</span></span>
@@ -911,7 +914,7 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <section id="maternal-networks" class="level2">
 <h2 class="anchored" data-anchor-id="maternal-networks">Maternal networks</h2>
 <p>Maternal networks are useful for capturing mother-to-child transmission. If you want to use them, you also need to model pregnancy. As new agents are born via pregnancy, edges are automatically added between mother and prenatal child in the prenatal network. Here’s an example showing how you would do this for HIV:</p>
-<div id="2ec3c55b" class="cell" data-execution_count="7">
+<div id="82a9255f" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> ssl.diseases.HIV(</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> {<span class="st">'mf'</span>: [<span class="fl">0.05</span>, <span class="fl">0.025</span>], <span class="st">'prenatal'</span>: [<span class="fl">0.5</span>, <span class="dv">0</span>]}</span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>)</span>
@@ -928,32 +931,19 @@ Edges involving UID 0 extracted from the edge list data frame:</code></pre>
 <span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>sim.run().plot(show_module<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
-
   Running 2000 ( 0/121) (0.00 s)  ———————————————————— 1%
-
-  Running 2000.83 (10/121) (0.13 s)  •——————————————————— 9%
-
-  Running 2001.67 (20/121) (0.25 s)  •••————————————————— 17%
-
-  Running 2002.5 (30/121) (0.38 s)  •••••——————————————— 26%
-
-  Running 2003.33 (40/121) (0.50 s)  ••••••—————————————— 34%
-
-  Running 2004.17 (50/121) (0.62 s)  ••••••••———————————— 42%
-
-  Running 2005 (60/121) (0.73 s)  ••••••••••—————————— 50%
-
-  Running 2005.83 (70/121) (0.85 s)  •••••••••••————————— 59%
-
-  Running 2006.67 (80/121) (0.96 s)  •••••••••••••——————— 67%
-
-  Running 2007.5 (90/121) (1.07 s)  •••••••••••••••————— 75%
-
-  Running 2008.33 (100/121) (1.18 s)  ••••••••••••••••———— 83%
-
-  Running 2009.17 (110/121) (1.29 s)  ••••••••••••••••••—— 92%
-
-  Running 2010 (120/121) (1.40 s)  •••••••••••••••••••• 100%
+  Running 2000.83 (10/121) (0.11 s)  •——————————————————— 9%
+  Running 2001.67 (20/121) (0.20 s)  •••————————————————— 17%
+  Running 2002.5 (30/121) (0.30 s)  •••••——————————————— 26%
+  Running 2003.33 (40/121) (0.40 s)  ••••••—————————————— 34%
+  Running 2004.17 (50/121) (0.50 s)  ••••••••———————————— 42%
+  Running 2005 (60/121) (0.59 s)  ••••••••••—————————— 50%
+  Running 2005.83 (70/121) (0.69 s)  •••••••••••————————— 59%
+  Running 2006.67 (80/121) (0.78 s)  •••••••••••••——————— 67%
+  Running 2007.5 (90/121) (0.88 s)  •••••••••••••••————— 75%
+  Running 2008.33 (100/121) (0.97 s)  ••••••••••••••••———— 83%
+  Running 2009.17 (110/121) (1.06 s)  ••••••••••••••••••—— 92%
+  Running 2010 (120/121) (1.14 s)  •••••••••••••••••••• 100%
 
 Figure(1024x768)</code></pre>
 </div>
@@ -969,7 +959,7 @@ Figure(1024x768)</code></pre>
 <section id="making-your-own-contact-network" class="level2">
 <h2 class="anchored" data-anchor-id="making-your-own-contact-network">Making your own contact network</h2>
 <p>If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make an <code>mf</code> network that has more age structure, you could do something like this:</p>
-<div id="c09d385f" class="cell" data-execution_count="8">
+<div id="07ef7006" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> age_mf(ss.MFNet):</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> add_pairs(<span class="va">self</span>, people, ti<span class="op">=</span><span class="va">None</span>):</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Custom code to select pairs based on age</span></span>
@@ -981,7 +971,7 @@ Figure(1024x768)</code></pre>
 <h2 class="anchored" data-anchor-id="introduction-to-mixing-pools">Introduction to mixing pools</h2>
 <p>While contact networks model individual relationships, mixing pools model group-level transmission. This is useful for: - Large populations where individual contacts are impractical - Age-structured mixing (like school, work, household contacts) - When you have contact matrices from epidemiological studies</p>
 <p>Here’s a simple comparison:</p>
-<div id="bb88b1ce" class="cell" data-execution_count="9">
+<div id="d3358a79" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simple mixing pool example</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(beta<span class="op">=</span><span class="fl">1.0</span>, n_contacts<span class="op">=</span>ss.poisson(lam<span class="op">=</span><span class="dv">3</span>))</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>sir_mp <span class="op">=</span> ss.SIR()</span>
@@ -1456,7 +1446,7 @@ Figure(1024x768)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

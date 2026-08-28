@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -509,12 +512,41 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Utilities</strong></span></a>
+ <span class="menu-text"><strong>Library</strong></span></a>
           <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
             <i class="bi bi-chevron-right ms-2"></i>
           </a> 
       </div>
       <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.diseases.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">diseases</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.mnch.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">mnch</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../api/library.networks.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">networks</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
+ <span class="menu-text"><strong>Utilities</strong></span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../api/arrays.html" class="sidebar-item-text sidebar-link">
@@ -604,9 +636,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </ul></li>
   <li><a href="#starsim.time.Rate" id="toc-starsim.time.Rate" class="nav-link" data-scroll-target="#starsim.time.Rate">Rate</a>
   <ul class="collapse">
+  <li><a href="#attributes-1" id="toc-attributes-1" class="nav-link" data-scroll-target="#attributes-1">Attributes</a></li>
   <li><a href="#methods-3" id="toc-methods-3" class="nav-link" data-scroll-target="#methods-3">Methods</a>
   <ul class="collapse">
-  <li><a href="#starsim.time.Rate.set_default_dur" id="toc-starsim.time.Rate.set_default_dur" class="nav-link" data-scroll-target="#starsim.time.Rate.set_default_dur">set_default_dur</a></li>
+  <li><a href="#starsim.time.Rate.to" id="toc-starsim.time.Rate.to" class="nav-link" data-scroll-target="#starsim.time.Rate.to">to</a></li>
+  <li><a href="#starsim.time.Rate.to_dt" id="toc-starsim.time.Rate.to_dt" class="nav-link" data-scroll-target="#starsim.time.Rate.to_dt">to_dt</a></li>
   <li><a href="#starsim.time.Rate.to_events" id="toc-starsim.time.Rate.to_events" class="nav-link" data-scroll-target="#starsim.time.Rate.to_events">to_events</a></li>
   <li><a href="#starsim.time.Rate.to_prob" id="toc-starsim.time.Rate.to_prob" class="nav-link" data-scroll-target="#starsim.time.Rate.to_prob">to_prob</a></li>
   </ul></li>
@@ -615,17 +649,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#methods-4" id="toc-methods-4" class="nav-link" data-scroll-target="#methods-4">Methods</a>
   <ul class="collapse">
+  <li><a href="#starsim.time.TimePar.replace" id="toc-starsim.time.TimePar.replace" class="nav-link" data-scroll-target="#starsim.time.TimePar.replace">replace</a></li>
+  <li><a href="#starsim.time.TimePar.set_default_dur" id="toc-starsim.time.TimePar.set_default_dur" class="nav-link" data-scroll-target="#starsim.time.TimePar.set_default_dur">set_default_dur</a></li>
   <li><a href="#starsim.time.TimePar.to" id="toc-starsim.time.TimePar.to" class="nav-link" data-scroll-target="#starsim.time.TimePar.to">to</a></li>
   <li><a href="#starsim.time.TimePar.to_array" id="toc-starsim.time.TimePar.to_array" class="nav-link" data-scroll-target="#starsim.time.TimePar.to_array">to_array</a></li>
   <li><a href="#starsim.time.TimePar.to_base" id="toc-starsim.time.TimePar.to_base" class="nav-link" data-scroll-target="#starsim.time.TimePar.to_base">to_base</a></li>
+  <li><a href="#starsim.time.TimePar.to_dt" id="toc-starsim.time.TimePar.to_dt" class="nav-link" data-scroll-target="#starsim.time.TimePar.to_dt">to_dt</a></li>
   </ul></li>
   </ul></li>
   <li><a href="#starsim.time.UnitFactors" id="toc-starsim.time.UnitFactors" class="nav-link" data-scroll-target="#starsim.time.UnitFactors">UnitFactors</a></li>
   <li><a href="#starsim.time.date" id="toc-starsim.time.date" class="nav-link" data-scroll-target="#starsim.time.date">date</a>
   <ul class="collapse">
-  <li><a href="#parameters-2" id="toc-parameters-2" class="nav-link" data-scroll-target="#parameters-2">Parameters</a></li>
+  <li><a href="#parameters-4" id="toc-parameters-4" class="nav-link" data-scroll-target="#parameters-4">Parameters</a></li>
   <li><a href="#examples-1" id="toc-examples-1" class="nav-link" data-scroll-target="#examples-1">Examples</a></li>
-  <li><a href="#attributes-1" id="toc-attributes-1" class="nav-link" data-scroll-target="#attributes-1">Attributes</a></li>
+  <li><a href="#attributes-2" id="toc-attributes-2" class="nav-link" data-scroll-target="#attributes-2">Attributes</a></li>
   <li><a href="#methods-5" id="toc-methods-5" class="nav-link" data-scroll-target="#methods-5">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.time.date.arange" id="toc-starsim.time.date.arange" class="nav-link" data-scroll-target="#starsim.time.date.arange">arange</a></li>
@@ -643,9 +680,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </ul></li>
   <li><a href="#starsim.time.datedur" id="toc-starsim.time.datedur" class="nav-link" data-scroll-target="#starsim.time.datedur">datedur</a>
   <ul class="collapse">
-  <li><a href="#attributes-2" id="toc-attributes-2" class="nav-link" data-scroll-target="#attributes-2">Attributes</a></li>
+  <li><a href="#attributes-3" id="toc-attributes-3" class="nav-link" data-scroll-target="#attributes-3">Attributes</a></li>
   <li><a href="#methods-6" id="toc-methods-6" class="nav-link" data-scroll-target="#methods-6">Methods</a>
   <ul class="collapse">
+  <li><a href="#starsim.time.datedur.replace" id="toc-starsim.time.datedur.replace" class="nav-link" data-scroll-target="#starsim.time.datedur.replace">replace</a></li>
   <li><a href="#starsim.time.datedur.round_duration" id="toc-starsim.time.datedur.round_duration" class="nav-link" data-scroll-target="#starsim.time.datedur.round_duration">round_duration</a></li>
   <li><a href="#starsim.time.datedur.scale" id="toc-starsim.time.datedur.scale" class="nav-link" data-scroll-target="#starsim.time.datedur.scale">scale</a></li>
   <li><a href="#starsim.time.datedur.to" id="toc-starsim.time.datedur.to" class="nav-link" data-scroll-target="#starsim.time.datedur.to">to</a></li>
@@ -659,15 +697,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#methods-7" id="toc-methods-7" class="nav-link" data-scroll-target="#methods-7">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.time.dur.arange" id="toc-starsim.time.dur.arange" class="nav-link" data-scroll-target="#starsim.time.dur.arange">arange</a></li>
+  <li><a href="#starsim.time.dur.to_dt" id="toc-starsim.time.dur.to_dt" class="nav-link" data-scroll-target="#starsim.time.dur.to_dt">to_dt</a></li>
   </ul></li>
   </ul></li>
   <li><a href="#starsim.time.freq" id="toc-starsim.time.freq" class="nav-link" data-scroll-target="#starsim.time.freq">freq</a>
   <ul class="collapse">
-  <li><a href="#attributes-3" id="toc-attributes-3" class="nav-link" data-scroll-target="#attributes-3">Attributes</a></li>
+  <li><a href="#attributes-4" id="toc-attributes-4" class="nav-link" data-scroll-target="#attributes-4">Attributes</a></li>
   </ul></li>
   <li><a href="#starsim.time.per" id="toc-starsim.time.per" class="nav-link" data-scroll-target="#starsim.time.per">per</a>
   <ul class="collapse">
-  <li><a href="#attributes-4" id="toc-attributes-4" class="nav-link" data-scroll-target="#attributes-4">Attributes</a></li>
+  <li><a href="#attributes-5" id="toc-attributes-5" class="nav-link" data-scroll-target="#attributes-5">Attributes</a></li>
   </ul></li>
   <li><a href="#starsim.time.prob" id="toc-starsim.time.prob" class="nav-link" data-scroll-target="#starsim.time.prob">prob</a>
   <ul class="collapse">
@@ -681,7 +720,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#starsim.time.approx_compare" id="toc-starsim.time.approx_compare" class="nav-link" data-scroll-target="#starsim.time.approx_compare">approx_compare</a>
   <ul class="collapse">
-  <li><a href="#parameters-10" id="toc-parameters-10" class="nav-link" data-scroll-target="#parameters-10">Parameters</a></li>
+  <li><a href="#parameters-12" id="toc-parameters-12" class="nav-link" data-scroll-target="#parameters-12">Parameters</a></li>
   </ul></li>
   <li><a href="#starsim.time.assume_cal_year" id="toc-starsim.time.assume_cal_year" class="nav-link" data-scroll-target="#starsim.time.assume_cal_year">assume_cal_year</a></li>
   <li><a href="#starsim.time.get_dur_class" id="toc-starsim.time.get_dur_class" class="nav-link" data-scroll-target="#starsim.time.get_dur_class">get_dur_class</a></li>
@@ -982,6 +1021,23 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="starsim.time.Rate">Rate</h3>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>time.Rate(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Store a value per unit time e.g., 2 per day - self.value - the numerator (e.g., 2) - a scalar float - self.unit - the denominator (e.g., 1 day) - a dur object</p>
+<section id="attributes-1" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-1">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.time.Rate.rate">rate</a></td>
+<td>The instantaneous rate; an alias to <code>self.value</code>, except for <a href="../api/time.html#starsim.time.prob" title="0"><code>ss.prob</code></a>, where it is <code>-log(1-value)</code></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="methods-3" class="level4">
 <h4 class="anchored" data-anchor-id="methods-3">Methods</h4>
 <table class="caption-top table">
@@ -993,32 +1049,43 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
-<td><a href="#starsim.time.Rate.set_default_dur">set_default_dur</a></td>
-<td>Set the default duration, e.g.&nbsp;module.dt, so .to_prob() can be used with no input</td>
+<td><a href="#starsim.time.Rate.to">to</a></td>
+<td>Convert this rate to one with a different denominator</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.time.Rate.to_dt">to_dt</a></td>
+<td>Convert this rate to its per-timestep value; see <a href="../api/time.html#starsim.time.TimePar.to_dt" title="0"><code>TimePar.to_dt()</code></a></td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.time.Rate.to_events">to_events</a></td>
 <td>Simple multiplication: calculate the number of events over the time period</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.time.Rate.to_prob">to_prob</a></td>
 <td>Convert from one time probability to another</td>
 </tr>
 </tbody>
 </table>
-<section id="starsim.time.Rate.set_default_dur" class="level5">
-<h5 class="anchored" data-anchor-id="starsim.time.Rate.set_default_dur">set_default_dur</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>time.Rate.set_default_dur(dur)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Set the default duration, e.g.&nbsp;module.dt, so .to_prob() can be used with no input</p>
+<section id="starsim.time.Rate.to" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.Rate.to">to</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Convert this rate to one with a different denominator</p>
+<p>As well as the rate classes (e.g.&nbsp;<code>ss.permonth</code>), a duration unit can be supplied (e.g.&nbsp;<code>'month'</code> or <code>ss.months</code>), in which case the matching rate class of the same subtype is used – so <code>ss.peryear(1).to('month')</code> gives <code>permonth(0.0833)</code>, while <code>ss.probperyear(1).to('month')</code> gives <code>probpermonth(...)</code>.</p>
+<p>Note that for <a href="../api/time.html#starsim.time.prob" title="0"><code>ss.prob</code></a> the conversion is not linear, since a probability has to be converted via the underlying rate: <code>ss.probperyear(0.5).to(ss.probpermonth)</code> gives <code>probpermonth(0.0561)</code>, not <code>probpermonth(0.0417)</code>. This matches <a href="../api/time.html#starsim.time.prob.to_prob" title="0"><code>prob.to_prob()</code></a>.</p>
+</section>
+<section id="starsim.time.Rate.to_dt" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.Rate.to_dt">to_dt</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_dt(dt<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Convert this rate to its per-timestep value; see <a href="../api/time.html#starsim.time.TimePar.to_dt" title="0"><code>TimePar.to_dt()</code></a></p>
 </section>
 <section id="starsim.time.Rate.to_events" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.Rate.to_events">to_events</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_events(dur<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_events(dur<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Simple multiplication: calculate the number of events over the time period</p>
 </section>
 <section id="starsim.time.Rate.to_prob" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.Rate.to_prob">to_prob</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_prob(dur<span class="op">=</span><span class="va">None</span>, scale<span class="op">=</span><span class="fl">1.0</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>time.Rate.to_prob(dur<span class="op">=</span><span class="va">None</span>, scale<span class="op">=</span><span class="fl">1.0</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert from one time probability to another</p>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
@@ -1049,15 +1116,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>p_month <span class="op">=</span> ss.probpermonth(<span class="fl">0.05</span>)</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>p_year <span class="op">=</span> p_month.to_prob(ss.year) <span class="co"># Slightly less than 0.05*12</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>p_month <span class="op">=</span> ss.probpermonth(<span class="fl">0.05</span>)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>p_year <span class="op">=</span> p_month.to_prob(ss.year) <span class="co"># Slightly less than 0.05*12</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 </section>
 </section>
 <section id="starsim.time.TimePar" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.TimePar">TimePar</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>time.TimePar()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>time.TimePar()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Parent class for all TimePars – dur, Rate, etc.</p>
 <section id="methods-4" class="level4">
 <h4 class="anchored" data-anchor-id="methods-4">Methods</h4>
@@ -1070,6 +1137,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.time.TimePar.replace">replace</a></td>
+<td>Return a copy of this TimePar with a different value</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.time.TimePar.set_default_dur">set_default_dur</a></td>
+<td>Set the default duration, e.g.&nbsp;<code>module.dt</code>, so <code>.to_dt()</code> and <code>.to_prob()</code> can be used with no input</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.time.TimePar.to">to</a></td>
 <td>Convert this TimePar to one of a different class</td>
 </tr>
@@ -1081,36 +1156,111 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td><a href="#starsim.time.TimePar.to_base">to_base</a></td>
 <td>Class method to convert another TimePar object to this TimePar’s base units; in most cases</td>
 </tr>
+<tr class="even">
+<td><a href="#starsim.time.TimePar.to_dt">to_dt</a></td>
+<td>Resolve this timepar against the timestep, returning a plain number of timesteps</td>
+</tr>
 </tbody>
 </table>
+<section id="starsim.time.TimePar.replace" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.replace">replace</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.replace(value)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return a copy of this TimePar with a different value</p>
+<p>Copying rather than constructing a new object preserves the base as well as the class, so <code>ss.perweek(0.1).replace(0.2)</code> is a rate per week, not per year. Analogous to <a href="../api/time.html#starsim.time.date.replace" title="0"><code>ss.date.replace()</code></a>.</p>
+<section id="parameters-2" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>value</td>
+<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>the value to use</td>
+<td><em>required</em></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Example</strong>:</p>
+<pre><code>ss.years(5).replace(6) # Returns ss.years(6)</code></pre>
+</section>
+</section>
+<section id="starsim.time.TimePar.set_default_dur" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.set_default_dur">set_default_dur</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.set_default_dur(dur)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Set the default duration, e.g.&nbsp;<code>module.dt</code>, so <code>.to_dt()</code> and <code>.to_prob()</code> can be used with no input</p>
+</section>
 <section id="starsim.time.TimePar.to" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.TimePar.to">to</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert this TimePar to one of a different class</p>
 </section>
 <section id="starsim.time.TimePar.to_array" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.TimePar.to_array">to_array</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Force conversion to an array</p>
 </section>
 <section id="starsim.time.TimePar.to_base" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.TimePar.to_base">to_base</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_base(other)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_base(other)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Class method to convert another TimePar object to this TimePar’s base units; in most cases</p>
+</section>
+<section id="starsim.time.TimePar.to_dt" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.TimePar.to_dt">to_dt</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>time.TimePar.to_dt(dt<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Resolve this timepar against the timestep, returning a plain number of timesteps (for a duration) or the per-timestep value (for a rate)</p>
+<p>This is the conversion that must happen before a timepar can be used in timestep arithmetic, e.g.&nbsp;when scheduling a future event in a state array. Without it, the unit is silently discarded and the value is interpreted as a number of timesteps regardless of its units.</p>
+<section id="parameters-3" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>dt</td>
+<td><a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur</code></a></td>
+<td>the timestep to resolve against; if not supplied, use the module’s <code>dt</code> (set during initialization)</td>
+<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Examples</strong>:</p>
+<pre><code>```python
+# Inside a module with dt = ss.months(1)
+self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist.to_dt() # ✓ Right
+self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist # × WRONG -- discards the unit
+
+# Standalone, with an explicit timestep
+ss.years(100).to_dt(ss.months(1)) # 1200.0
+ss.peryear(0.1).to_dt(ss.months(1)) # 0.00830...  (a per-timestep probability)
+```</code></pre>
+</section>
 </section>
 </section>
 </section>
 <section id="starsim.time.UnitFactors" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.UnitFactors">UnitFactors</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>time.UnitFactors(base_factors, unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>time.UnitFactors(base_factors, unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Define conversion factors for a given unit, e.g.&nbsp;‘years’</p>
 </section>
 <section id="starsim.time.date" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.date">date</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>time.date()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>time.date()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Define a point in time, based on <a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timestamp.html#pd.Timestamp" title="1"><code>pd.Timestamp</code></a></p>
-<section id="parameters-2" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
+<section id="parameters-4" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1144,14 +1294,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-1" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-1">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="dv">2020</span>) <span class="co"># Returns &lt;2020-01-01&gt;</span></span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>ss.date(year<span class="op">=</span><span class="dv">2020</span>) <span class="co"># Returns &lt;2020-01-01&gt;</span></span>
-<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>ss.date(year<span class="op">=</span><span class="fl">2024.75</span>) <span class="co"># Returns &lt;2024-10-01&gt;</span></span>
-<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="st">'2024-04-04'</span>) <span class="co"># Returns &lt;2024-04-04&gt;</span></span>
-<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>ss.date(year<span class="op">=</span><span class="dv">2024</span>, month<span class="op">=</span><span class="dv">4</span>, day<span class="op">=</span><span class="dv">4</span>) <span class="co"># Returns &lt;2024-04-04&gt;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="dv">2020</span>) <span class="co"># Returns &lt;2020-01-01&gt;</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>ss.date(year<span class="op">=</span><span class="dv">2020</span>) <span class="co"># Returns &lt;2020-01-01&gt;</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>ss.date(year<span class="op">=</span><span class="fl">2024.75</span>) <span class="co"># Returns &lt;2024-10-01&gt;</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="st">'2024-04-04'</span>) <span class="co"># Returns &lt;2024-04-04&gt;</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>ss.date(year<span class="op">=</span><span class="dv">2024</span>, month<span class="op">=</span><span class="dv">4</span>, day<span class="op">=</span><span class="dv">4</span>) <span class="co"># Returns &lt;2024-04-04&gt;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
-<section id="attributes-1" class="level4">
-<h4 class="anchored" data-anchor-id="attributes-1">Attributes</h4>
+<section id="attributes-2" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-2">Attributes</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1225,14 +1375,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.time.date.arange" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.arange">arange</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>time.date.arange(</span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>    start,</span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    stop,</span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    step<span class="op">=</span><span class="fl">1.0</span>,</span>
-<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    inclusive<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    day_round<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    allow_zero<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>time.date.arange(</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>    start,</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>    stop,</span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    step<span class="op">=</span><span class="fl">1.0</span>,</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    inclusive<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    day_round<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    allow_zero<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Construct an array of dates</p>
 <p>Functions similarly to np.arange, but returns date objects</p>
 <p>Example usage:</p>
@@ -1243,8 +1393,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </blockquote>
 </blockquote>
 </blockquote>
-<section id="parameters-3" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
+<section id="parameters-5" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1287,15 +1437,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.date.disp" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.disp">disp</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>time.date.disp(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>time.date.disp(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Show the full object</p>
 </section>
 <section id="starsim.time.date.from_array" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.from_array">from_array</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>time.date.from_array(array, day_round<span class="op">=</span><span class="va">True</span>, allow_zero<span class="op">=</span><span class="va">True</span>, date_type<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>time.date.from_array(array, day_round<span class="op">=</span><span class="va">True</span>, allow_zero<span class="op">=</span><span class="va">True</span>, date_type<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert an array of float years into an array of date instances</p>
-<section id="parameters-4" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
+<section id="parameters-6" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1355,15 +1505,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.date.from_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.from_json">from_json</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>time.date.from_json(json)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>time.date.from_json(json)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Reconstruct a date from a JSON; reverse of <code>to_json()</code></p>
 </section>
 <section id="starsim.time.date.from_year" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.from_year">from_year</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>time.date.from_year(year, day_round<span class="op">=</span><span class="va">True</span>, allow_zero<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>time.date.from_year(year, day_round<span class="op">=</span><span class="va">True</span>, allow_zero<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert an int or float year to a date.</p>
-<section id="parameters-5" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-5">Parameters</h6>
+<section id="parameters-7" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1397,54 +1547,54 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-2" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-2">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>ss.date.from_year(<span class="dv">2020</span>) <span class="co"># Returns &lt;2020-01-01&gt;</span></span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>ss.date.from_year(<span class="fl">2024.75</span>) <span class="co"># Returns &lt;2024-10-01&gt;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>ss.date.from_year(<span class="dv">2020</span>) <span class="co"># Returns &lt;2020-01-01&gt;</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>ss.date.from_year(<span class="fl">2024.75</span>) <span class="co"># Returns &lt;2024-10-01&gt;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.time.date.replace" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.replace">replace</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>time.date.replace(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>time.date.replace(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Returns a new ss.date(); pd.Timestamp is immutable</p>
 </section>
 <section id="starsim.time.date.round" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.round">round</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>time.date.<span class="bu">round</span>(to<span class="op">=</span><span class="st">'d'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>time.date.<span class="bu">round</span>(to<span class="op">=</span><span class="st">'d'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Round to a given interval (by default a day)</p>
 </section>
 <section id="starsim.time.date.subdaily" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.subdaily">subdaily</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>time.date.subdaily(years)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>time.date.subdaily(years)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check if a subdaily timestep is used</p>
 <p>A date has no concept of a timestep, but add this as a convienence method since this is required by other methods (e.g.&nbsp;<a href="../api/time.html#starsim.time.date.arange" title="0"><code>ss.date.arange()</code></a>).</p>
 </section>
 <section id="starsim.time.date.to_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.to_json">to_json</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>time.date.to_json()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>time.date.to_json()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Returns a JSON representation of the date</p>
 </section>
 <section id="starsim.time.date.to_pandas" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.to_pandas">to_pandas</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>time.date.to_pandas()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>time.date.to_pandas()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to a standard pd.Timestamp instance</p>
 </section>
 <section id="starsim.time.date.to_year" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.date.to_year">to_year</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>time.date.to_year()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>time.date.to_year()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert a date to a floating-point year</p>
 <section id="examples-3" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-3">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="st">'2020-01-01'</span>).to_year() <span class="co"># Returns 2020.0</span></span>
-<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="st">'2024-10-01'</span>).to_year() <span class="co"># Returns 2024.7486</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="st">'2020-01-01'</span>).to_year() <span class="co"># Returns 2020.0</span></span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>ss.date(<span class="st">'2024-10-01'</span>).to_year() <span class="co"># Returns 2024.7486</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 </section>
 </section>
 <section id="starsim.time.datedur" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.datedur">datedur</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>time.datedur(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>time.datedur(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Date based duration e.g., if requiring a week to be 7 calendar days later</p>
-<section id="attributes-2" class="level4">
-<h4 class="anchored" data-anchor-id="attributes-2">Attributes</h4>
+<section id="attributes-3" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-3">Attributes</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1483,34 +1633,44 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.time.datedur.replace">replace</a></td>
+<td>Return an <a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur</code></a> with the supplied value; see <a href="../api/time.html#starsim.time.TimePar.replace" title="0"><code>TimePar.replace()</code></a></td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.time.datedur.round_duration">round_duration</a></td>
 <td>Round a dictionary of duration values by overflowing remainders</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.time.datedur.scale">scale</a></td>
 <td>Scale a pd.DateOffset by a factor</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.time.datedur.to">to</a></td>
 <td>Return approximate conversion into the provided quantity</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.time.datedur.to_array">to_array</a></td>
 <td>Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.time.datedur.to_dict">to_dict</a></td>
 <td>Convert to a dictionary</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.time.datedur.to_dur">to_dur</a></td>
 <td>Convert to the smallest non-zero value, e.g.&nbsp;ss.datedur(years=1, days=10).to_dur() = ss.days(375)</td>
 </tr>
 </tbody>
 </table>
+<section id="starsim.time.datedur.replace" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.datedur.replace">replace</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>time.datedur.replace(value)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return an <a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur</code></a> with the supplied value; see <a href="../api/time.html#starsim.time.TimePar.replace" title="0"><code>TimePar.replace()</code></a></p>
+<p>Unlike other timepars, a <a href="../api/time.html#starsim.time.datedur" title="0"><code>datedur</code></a> stores its value as a date offset rather than a number, so it can’t simply be copied. Instead, the finest unit the <a href="../api/time.html#starsim.time.datedur" title="0"><code>datedur</code></a> was specified with is used, e.g.&nbsp;<code>ss.datedur(days=10).replace(20)</code> is <code>ss.days(20)</code>.</p>
+</section>
 <section id="starsim.time.datedur.round_duration" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.datedur.round_duration">round_duration</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>time.datedur.round_duration(vals<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb47"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>time.datedur.round_duration(vals<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Round a dictionary of duration values by overflowing remainders</p>
 <p>The input can be - A numpy array of length <code>ss.time.factors</code> containing values in key order - A pd.DateOffset instance - A dictionary with keys from <code>ss.time.factors</code></p>
 <p>The output will be a pd.DateOffset with integer values, where non-integer values have been handled by overflow using the factors in <code>ss.time.factors</code>. For example, 2.5 weeks would first become 2 weeks and 0.5<em>7 = 3.5 days, and then become 3 days + 0.5</em>24 = 12 hours.</p>
@@ -1537,11 +1697,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.datedur.scale" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.datedur.scale">scale</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>time.datedur.scale(dateoffset, scale)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>time.datedur.scale(dateoffset, scale)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Scale a pd.DateOffset by a factor</p>
 <p>This function will automatically cascade remainders to finer units using <code>ss.time.factors</code> so for example 2.5 weeks would first become 2 weeks and 0.5<em>7 = 3.5 days, and then become 3 days + 0.5</em>24 = 12 hours.</p>
-<section id="parameters-6" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-6">Parameters</h6>
+<section id="parameters-8" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h6>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 16%">
@@ -1600,12 +1760,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.datedur.to" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.datedur.to">to</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb49"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Return approximate conversion into the provided quantity</p>
 <p>This allows interoperability with years objects (which would typically be expected to occur if module parameters have been entered with <a href="../api/time.html#starsim.time.datedur" title="0"><code>datedur</code></a> durations, but the simulation timestep is in <code>years</code> units).</p>
 <p>The conversion is based on <code>ss.time.factors</code> which defines the conversion from each time unit to the next.</p>
-<section id="parameters-7" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h6>
+<section id="parameters-9" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h6>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 7%">
@@ -1653,24 +1813,24 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.datedur.to_array" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.datedur.to_array">to_array</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb50"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_array(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to a Numpy array (NB, different than to_numpy() which converts to fractional years</p>
 </section>
 <section id="starsim.time.datedur.to_dict" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.datedur.to_dict">to_dict</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_dict()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb51"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_dict()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to a dictionary</p>
 </section>
 <section id="starsim.time.datedur.to_dur" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.datedur.to_dur">to_dur</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_dur()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a>time.datedur.to_dur()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to the smallest non-zero value, e.g.&nbsp;ss.datedur(years=1, days=10).to_dur() = ss.days(375)</p>
 </section>
 </section>
 </section>
 <section id="starsim.time.dur" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.dur">dur</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>time.dur(value<span class="op">=</span><span class="dv">1</span>, base<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb53"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>time.dur(value<span class="op">=</span><span class="dv">1</span>, base<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Base class for durations</p>
 <p>Note: this class should not be used by the user directly; instead, use ss.years(), ss.days(), etc. These classes can be interconverted using <code>.to()</code>, e.g.&nbsp;<code>ss.years(3).to('days')</code>.</p>
 <section id="methods-7" class="level4">
@@ -1687,14 +1847,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td><a href="#starsim.time.dur.arange">arange</a></td>
 <td>Construct an array of dur instances</td>
 </tr>
+<tr class="even">
+<td><a href="#starsim.time.dur.to_dt">to_dt</a></td>
+<td>Convert this duration to a number of timesteps; see <a href="../api/time.html#starsim.time.TimePar.to_dt" title="0"><code>TimePar.to_dt()</code></a></td>
+</tr>
 </tbody>
 </table>
 <section id="starsim.time.dur.arange" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.dur.arange">arange</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb47"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>time.dur.arange(start, stop, step<span class="op">=</span><span class="fl">1.0</span>, inclusive<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>time.dur.arange(start, stop, step<span class="op">=</span><span class="fl">1.0</span>, inclusive<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Construct an array of dur instances</p>
-<section id="parameters-8" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h6>
+<section id="parameters-10" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1727,15 +1891,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 </section>
 </section>
+<section id="starsim.time.dur.to_dt" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.time.dur.to_dt">to_dt</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb55"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>time.dur.to_dt(dt<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Convert this duration to a number of timesteps; see <a href="../api/time.html#starsim.time.TimePar.to_dt" title="0"><code>TimePar.to_dt()</code></a></p>
+</section>
 </section>
 </section>
 <section id="starsim.time.freq" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.freq">freq</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>time.freq(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb56"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a>time.freq(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Class for the number of events (rather than probability) in a specified period</p>
 <p>Identical to <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a>, except by default multiplication returns a number of events rather than a probability. Use <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a> for events (e.g., number of acts per year) and <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a> for probabilities (e.g., probability of death per year).</p>
-<section id="attributes-3" class="level4">
-<h4 class="anchored" data-anchor-id="attributes-3">Attributes</h4>
+<section id="attributes-4" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-4">Attributes</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1754,7 +1923,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.per" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.per">per</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb49"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a>time.per(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb57"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a>time.per(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> represents an instantaneous rate of an event occurring. Rates must be non-negative, but need not be less than 1.</p>
 <p>Through multiplication, rate can be modified or converted to a probability, depending on the data type of the object being multiplied.</p>
 <p>When a <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> is multiplied by a scalar or array, the rate is simply scaled. Such multiplication occurs frequently in epidemiological models, where the base rate is multiplied by “rate ratio” or “relative rate” to represent agents experiencing higher (multiplier &gt; 1) or lower (multiplier &lt; 1) event rates.</p>
@@ -1764,8 +1933,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>The difference between <a href="../api/time.html#starsim.time.prob" title="0"><code>prob</code></a> and <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> is subtle, but important. <a href="../api/time.html#starsim.time.per" title="0"><code>per</code></a> works directly with the instantaneous rate of an event occurring. In contrast, <a href="../api/time.html#starsim.time.prob" title="0"><code>prob</code></a> starts with a probability and a duration, and the underlying rate is calculated. On multiplication by a duration, * per: rate -&gt; probability * prob: probability -&gt; rate -&gt; probability</p>
 <p>The behavior of both classes is depending on the data type of the object being multiplied.</p>
 <p><a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a> is identical to <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a>, except by default multiplication returns a probability rather than a number of events. Use <a href="../api/time.html#starsim.time.per" title="0"><code>ss.per</code></a> for probabilities (e.g., probability of death per year), and <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a> for events (e.g., number of acts per year).</p>
-<section id="attributes-4" class="level4">
-<h4 class="anchored" data-anchor-id="attributes-4">Attributes</h4>
+<section id="attributes-5" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-5">Attributes</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1784,7 +1953,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.prob" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.prob">prob</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb50"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a>time.prob(value<span class="op">=</span><span class="va">None</span>, unit<span class="op">=</span><span class="va">None</span>, rate<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>time.prob(value<span class="op">=</span><span class="va">None</span>, unit<span class="op">=</span><span class="va">None</span>, rate<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p><a href="../api/time.html#starsim.time.prob" title="0"><code>prob</code></a> represents the probability of an event occurring during a specified period of time.</p>
 <p>The class is designed to allow conversion of a probability from one duration to another through multiplication. However, the behavior of this conversion depends on the data type of the the object being multiplied.</p>
 <p>When multiplied by a duration (type ss.dur), the underlying constant rate is calculated as <code>rate = -np.log(1 - self.value)</code>. Then, the probability over the new duration is <code>p = 1 - np.exp(-rate/factor)</code>, where <code>factor</code> is the ratio of the new duration to the original duration.</p>
@@ -1823,10 +1992,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.time.prob.to_prob" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.time.prob.to_prob">to_prob</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb51"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a>time.prob.to_prob(dur<span class="op">=</span><span class="va">None</span>, scale<span class="op">=</span><span class="fl">1.0</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb59"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>time.prob.to_prob(dur<span class="op">=</span><span class="va">None</span>, scale<span class="op">=</span><span class="fl">1.0</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert from one time probability to another</p>
-<section id="parameters-9" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h6>
+<section id="parameters-11" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-11">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1854,8 +2023,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-4" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-4">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb52"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a>p_month <span class="op">=</span> ss.probpermonth(<span class="fl">0.05</span>)</span>
-<span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>p_year <span class="op">=</span> p_month.to_prob(ss.year) <span class="co"># Slightly less than 0.05*12</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>p_month <span class="op">=</span> ss.probpermonth(<span class="fl">0.05</span>)</span>
+<span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a>p_year <span class="op">=</span> p_month.to_prob(ss.year) <span class="co"># Slightly less than 0.05*12</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 </section>
@@ -1915,11 +2084,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.time.approx_compare" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.approx_compare">approx_compare</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb53"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a>time.approx_compare(a, op<span class="op">=</span><span class="st">'=='</span>, b<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>time.approx_compare(a, op<span class="op">=</span><span class="st">'=='</span>, b<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Floating-point issues are common working with dates, so allow approximate matching</p>
 <p>Specifically, this replaces e.g.&nbsp;“a &lt;= b” with “a &lt; b or np.isclose(a,b)”</p>
-<section id="parameters-10" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h4>
+<section id="parameters-12" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-12">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1960,47 +2129,47 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.time.assume_cal_year" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.assume_cal_year">assume_cal_year</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>time.assume_cal_year(val)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb62"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a>time.assume_cal_year(val)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Whether a value should be interpreted as a calendar year – by default, a number greater than 1900</p>
 </section>
 <section id="starsim.time.get_dur_class" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.get_dur_class">get_dur_class</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb55"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>time.get_dur_class(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb63"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a>time.get_dur_class(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to get a Dur class</p>
 </section>
 <section id="starsim.time.get_rate_class" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.get_rate_class">get_rate_class</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb56"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a>time.get_rate_class(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb64"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a>time.get_rate_class(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to get a Rate class</p>
 </section>
 <section id="starsim.time.get_timepar_class" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.get_timepar_class">get_timepar_class</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb57"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a>time.get_timepar_class(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb65"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a>time.get_timepar_class(unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Helper function to get any Timepar class (either Dur or Rate)</p>
 </section>
 <section id="starsim.time.get_unit_class" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.get_unit_class">get_unit_class</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>time.get_unit_class(which, unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb66"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a>time.get_unit_class(which, unit)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Take a string or class and return the corresponding TimePar class</p>
 </section>
 <section id="starsim.time.normalize_unit" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.normalize_unit">normalize_unit</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb59"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>time.normalize_unit(base)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb67"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>time.normalize_unit(base)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Allow either e.g.&nbsp;‘year’ or ‘years’ as input – i.e.&nbsp;add an ‘s’</p>
 </section>
 <section id="starsim.time.rate" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.rate">rate</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>time.rate(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb68"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a>time.rate(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Backwards compatibility function for Rate</p>
 </section>
 <section id="starsim.time.rate_prob" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.rate_prob">rate_prob</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>time.rate_prob(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb69"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a>time.rate_prob(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Backwards compatibility function for per</p>
 </section>
 <section id="starsim.time.time_prob" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.time.time_prob">time_prob</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb62"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a>time.time_prob(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb70"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a>time.time_prob(value, unit<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Backwards compatibility function for prob</p>
 
 
@@ -2441,7 +2610,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

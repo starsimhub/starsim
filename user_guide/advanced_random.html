@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -377,12 +380,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text"><strong>What’s new</strong></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><strong>API reference</strong></span></a>
-  </div>
-</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -562,6 +559,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_library.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Adding new modules</span></a>
   </div>
@@ -726,7 +729,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="understanding-common-random-numbers-crn">Understanding Common Random Numbers (CRN)</h2>
 <p>Common Random Numbers (CRN) is a sophisticated technique that enables noise-free accounting of the effects of different parameters or interventions on outcomes like infections averted or lives saved. Starsim is the first and only simulation framework that fully supports CRN, including agent-agent interactions like disease transmission and vital dynamics including births.</p>
 <p>To understand CRN, you first have to know a little about where random numbers come from. As discussed in the <a href="../user_guide/advanced_distributions.html">Advanced Distributions guide</a>, random numbers are used to make stochastic decisions within the model. Individuals realizations are generated from a pseudo-random number generator (PRNG) using a user-specified seed. The PRNG produces a sequence of numbers that appear random but are actually deterministic, meaning that the same seed will always produce the same sequence of numbers. Here is a simple demonstration using the <a href="https://numpy.org/doc/stable/reference/index.html#module-numpy" title="1"><code>numpy</code></a> library:</p>
-<div id="cc445b49" class="cell" data-execution_count="1">
+<div id="9f96a083" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">42</span>) <span class="co"># Set the seed to 42</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>draws1 <span class="op">=</span> np.random.random(size<span class="op">=</span><span class="dv">10</span>) <span class="co"># Draw 10 realizations</span></span>
@@ -762,7 +765,7 @@ Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
 <p>Both simulations will use the same random number seed. Because the agents do not interact (they’re not actually competing for the same fish!), the only difference in outcomes should be that agent 0 does not go fishing and therefore will never catch a fish. However, because of the way random numbers are generated, the two simulations will use the same random numbers for different purposes. This means that banning agent 0 from fishing will <em>change which other agents go fishing and catch fish</em>!</p>
 <p><strong>NOTE:</strong> We have to specifically disable Starsim’s CRN to observe the problem that all other agent-based modeling frameworks face. To do that in Starsim, we set the <code>crn</code> option to <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a> in this example.</p>
 <p>As a first step, we will create a Fishing module:</p>
-<div id="33446569" class="cell" data-execution_count="2">
+<div id="f228b90d" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -796,7 +799,7 @@ Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
 <span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Now we can build and run the two simulations to compare the results:</p>
-<div id="ad251caa" class="cell" data-execution_count="3">
+<div id="50afc509" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="al">NOTE</span><span class="co">: For this example, we disable common random numbers (CRN)!</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ss.options.crn <span class="op">=</span> <span class="va">False</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -813,25 +816,23 @@ Second draws: [0.37 0.95 0.73 0.6  0.16 0.16 0.06 0.87 0.6  0.71]</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>SIMULATION A: WITHOUT BANNED AGENTS -------------------------
 Initializing sim with 20 agents
-
   Running days(0) ( 0/2) (0.00 s)  ••••••••••—————————— 50%
 Time step 0:
- * Agents going fishing: [ 0  5  7  9 11 19]
- * Agents that caught fish: []
+ * Agents going fishing: [ 2  3  6  7  8 10 11 12 15 16 17 19]
+ * Agents that caught fish: [11 12 15 16 17]
 Time step 1:
- * Agents going fishing: [ 0  4  5  7  9 10 11 13 14 17 19]
- * Agents that caught fish: [ 4 11]
+ * Agents going fishing: [ 0  1  2  4  5  6  7  8 14 15 17 18 19]
+ * Agents that caught fish: [1]
 
 SIMULATION B: WITH AGENT 0 BANNED -------------------------
 Initializing sim with 20 agents
-
   Running days(0) ( 0/2) (0.00 s)  ••••••••••—————————— 50%
 Time step 0:
- * Agents going fishing: [ 5  7  9 11 19]
- * Agents that caught fish: []
+ * Agents going fishing: [ 2  3  6  7  8 10 11 12 15 16 17 19]
+ * Agents that caught fish: [11 12 15 16 17]
 Time step 1:
- * Agents going fishing: [ 4  5  7  9 10 11 13 14 17 19]
- * Agents that caught fish: [ 5 13]</code></pre>
+ * Agents going fishing: [ 1  2  4  5  6  7  8 14 15 17 18 19]
+ * Agents that caught fish: [2]</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="3">
 <pre><code>Sim(n=20; 0—1.0)</code></pre>
@@ -840,7 +841,7 @@ Time step 1:
 <p>Comparing the two simulations, we can see that <em>different</em> agents go fishing and catch fish in A versus B – and in some timesteps <em>more</em> agents catch fish in B than in A, even though all we did was ban agent 0 from fishing! The agents do not interact, so there should not have been a difference.</p>
 <p>What we are seeing here is a simple example of the stochastic branching problem. This “random number noise” could easily make it look like banning agent 0 could result in more fish being caught, which should be physically impossible as there are fewer agents fishing.</p>
 <p>To see the benefit of CRN, we can simply repeat the above example, but this time restoring the <code>crn</code> option to its default value of <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a>. This will ensure that the same random numbers are used for the exact same decisions in both simulations, allowing us to see the true impact of banning agent 0 from fishing:</p>
-<div id="223803f2" class="cell" data-execution_count="4">
+<div id="645e7032" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Restore the crn option to True (this is the default, so you don't have to do this)</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ss.options.crn <span class="op">=</span> <span class="va">True</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -854,7 +855,6 @@ Time step 1:
 <div class="cell-output cell-output-stdout">
 <pre><code>SIMULATION A: WITHOUT BANNED AGENTS -------------------------
 Initializing sim with 20 agents
-
   Running days(0) ( 0/2) (0.00 s)  ••••••••••—————————— 50%
 Time step 0:
  * Agents going fishing: [ 0  1  3  4  5  8 10 11 12 14 16 17 19]
@@ -865,7 +865,6 @@ Time step 1:
 
 SIMULATION B: WITH AGENT 1 BANNED -------------------------
 Initializing sim with 20 agents
-
   Running days(0) ( 0/2) (0.00 s)  ••••••••••—————————— 50%
 Time step 0:
  * Agents going fishing: [ 0  3  4  5  8 10 11 12 14 16 17 19]
@@ -1376,7 +1375,7 @@ Time step 1:
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

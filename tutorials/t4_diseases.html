@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -377,12 +380,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text"><strong>What’s new</strong></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../api/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><strong>API reference</strong></span></a>
-  </div>
-</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -562,6 +559,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/modules_library.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Adding new modules</span></a>
   </div>
@@ -721,7 +724,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="step-1-modifying-disease-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="step-1-modifying-disease-parameters">Step 1: Modifying disease parameters</h2>
 <p>The easiest way to customize a disease is by changing its parameters. Much like sims or networks, a <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>Disease</code></a> can be customized by passing in a <code>pars</code> dictionary containing parameters. Let’s start with a simple SIR model and see how different parameters affect the simulation:</p>
-<div id="3ff84f42" class="cell" data-execution_count="2">
+<div id="ac1c5f89" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
@@ -729,18 +732,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>sim.run().plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
-
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
-
-  Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
-
-  Running 2020 (20/51) (0.06 s)  ••••••••———————————— 41%
-
-  Running 2030 (30/51) (0.08 s)  ••••••••••••———————— 61%
-
-  Running 2040 (40/51) (0.10 s)  ••••••••••••••••———— 80%
-
-  Running 2050 (50/51) (0.12 s)  •••••••••••••••••••• 100%
+  Running 2010 (10/51) (0.03 s)  ••••———————————————— 22%
+  Running 2020 (20/51) (0.05 s)  ••••••••———————————— 41%
+  Running 2030 (30/51) (0.07 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.08 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.10 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -759,7 +756,7 @@ Figure(896x672)</code></pre>
 <section id="step-2-simulating-multiple-diseases" class="level2">
 <h2 class="anchored" data-anchor-id="step-2-simulating-multiple-diseases">Step 2: Simulating multiple diseases</h2>
 <p>You can add multiple diseases to the same simulation, like so. Here we are making use of a “connector”. A connector is a module in Starsim that tells you how two things relate to one another - in this case, how HIV modifies a person’s transmissibility and susceptibility to SIS and vice versa. Unlike dieases, networks, interventions, etc., connectors don’t have any pre-specified location in the sim. Instead, they can be placed wherever they make the most sense (for example, a connector that mediated how two networks behaved might be placed at the beginning or end of the list of networks; for diseases, it might be placed at the beginning or end of the list of diseases).</p>
-<div id="23a437a9" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div id="ddaf5f7d" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -807,18 +804,12 @@ Figure(896x672)</code></pre>
 <span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
-
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
-
-  Running 2010 (10/51) (0.06 s)  ••••———————————————— 22%
-
-  Running 2020 (20/51) (0.12 s)  ••••••••———————————— 41%
-
-  Running 2030 (30/51) (0.17 s)  ••••••••••••———————— 61%
-
-  Running 2040 (40/51) (0.23 s)  ••••••••••••••••———— 80%
-
-  Running 2050 (50/51) (0.28 s)  •••••••••••••••••••• 100%
+  Running 2010 (10/51) (0.05 s)  ••••———————————————— 22%
+  Running 2020 (20/51) (0.10 s)  ••••••••———————————— 41%
+  Running 2030 (30/51) (0.15 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.19 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.24 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -844,132 +835,88 @@ Figure(768x576)</code></pre>
 </section>
 <section id="step-3-creating-your-own-disease-model" class="level2">
 <h2 class="anchored" data-anchor-id="step-3-creating-your-own-disease-model">Step 3: Creating your own disease model</h2>
-<p>Now for the fun part - creating your own disease from scratch! Let’s modify the SIR model to create an SEIR model, which adds an “Exposed” state where people are infected but not yet infectious.</p>
-<p>This is a common pattern in epidemiology - think of it as the incubation period before someone becomes contagious.</p>
-<p>If you want to make your own disease, you could either inherit from one of the templates in diseases.py, or you could copy the examples and extend them to capture features of the disease that you want to model. For example, suppose you wanted to change the SIR model to an SEIR model (i.e., add an ‘exposed’ state where people were transmissible but did not yet have symptoms. You might hope that this would be a relatively simple change to make. Here’s how it would look:</p>
-<div id="c0c19cb0" class="cell" data-execution_count="4">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<p>Now for the fun part - creating your own disease from scratch! Rather than starting from a blank page, the easiest approach is usually to inherit from one of the templates in <code>diseases.py</code> and change only what’s different.</p>
+<p>Let’s turn the SIR model into an SIRS model, where immunity wanes: recovered agents eventually become susceptible again. This is what lets a disease settle into endemic transmission rather than burning through the population once and disappearing.</p>
+<div id="b49e0c92" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SEIR(ss.SIR):</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SIRS(ss.SIR):</span>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs):</span>
 <span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
 <span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_pars(</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>            dur_exp <span class="op">=</span> ss.lognorm_ex(<span class="fl">0.5</span>),</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>            dur_imm <span class="op">=</span> ss.lognorm_ex(mean<span class="op">=</span>ss.years(<span class="dv">10</span>)), <span class="co"># How long immunity lasts after recovery</span></span>
 <span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        )</span>
 <span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.update_pars(pars, <span class="op">**</span>kwargs)</span>
 <span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Additional states beyond the SIR ones </span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>        <span class="co"># SIR states are added automatically; here we add the time of losing immunity</span></span>
 <span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>            ss.BoolState(<span class="st">'exposed'</span>, label<span class="op">=</span><span class="st">'Exposed'</span>),</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>            ss.FloatArr(<span class="st">'ti_exposed'</span>, label<span class="op">=</span><span class="st">'TIme of exposure'</span>),</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">@property</span></span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> infectious(<span class="va">self</span>):</span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.infected <span class="op">|</span> <span class="va">self</span>.exposed</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_state(<span class="va">self</span>):</span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Make all the updates from the SIR model """</span></span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Perform SIR updates</span></span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_state()</span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Additional updates: progress exposed -&gt; infected</span></span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        infected <span class="op">=</span> <span class="va">self</span>.exposed <span class="op">&amp;</span> (<span class="va">self</span>.ti_infected <span class="op">&lt;=</span> <span class="va">self</span>.ti)</span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.exposed[infected] <span class="op">=</span> <span class="va">False</span></span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.infected[infected] <span class="op">=</span> <span class="va">True</span></span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_die(<span class="va">self</span>, uids):</span>
-<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_die(uids)</span>
-<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.exposed[uids] <span class="op">=</span> <span class="va">False</span></span>
-<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
-<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Carry out state changes associated with infection """</span></span>
-<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
-<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>        ti <span class="op">=</span> <span class="va">self</span>.ti</span>
-<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.susceptible[uids] <span class="op">=</span> <span class="va">False</span></span>
-<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.exposed[uids] <span class="op">=</span> <span class="va">True</span></span>
-<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_exposed[uids] <span class="op">=</span> ti</span>
-<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Calculate and schedule future outcomes</span></span>
-<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> <span class="va">self</span>.pars <span class="co"># Shorten for convenience</span></span>
-<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a>        dur_exp <span class="op">=</span> p.dur_exp.rvs(uids)</span>
-<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_infected[uids] <span class="op">=</span> ti <span class="op">+</span> dur_exp</span>
-<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a>        dur_inf <span class="op">=</span> p.dur_inf.rvs(uids)</span>
-<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a>        will_die <span class="op">=</span> p.p_death.rvs(uids)        </span>
-<span id="cb6-53"><a href="#cb6-53" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_recovered[uids[<span class="op">~</span>will_die]] <span class="op">=</span> ti <span class="op">+</span> dur_inf[<span class="op">~</span>will_die]</span>
-<span id="cb6-54"><a href="#cb6-54" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_dead[uids[will_die]] <span class="op">=</span> ti <span class="op">+</span> dur_inf[will_die]</span>
-<span id="cb6-55"><a href="#cb6-55" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb6-56"><a href="#cb6-56" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb6-57"><a href="#cb6-57" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>):</span>
-<span id="cb6-58"><a href="#cb6-58" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Update the plot with the exposed compartment """</span></span>
-<span id="cb6-59"><a href="#cb6-59" aria-hidden="true" tabindex="-1"></a>        <span class="cf">with</span> ss.options.context(show<span class="op">=</span><span class="va">False</span>): <span class="co"># Don't show yet since we're adding another line</span></span>
-<span id="cb6-60"><a href="#cb6-60" aria-hidden="true" tabindex="-1"></a>            fig <span class="op">=</span> <span class="bu">super</span>().plot()</span>
-<span id="cb6-61"><a href="#cb6-61" aria-hidden="true" tabindex="-1"></a>            ax <span class="op">=</span> plt.gca()</span>
-<span id="cb6-62"><a href="#cb6-62" aria-hidden="true" tabindex="-1"></a>            res <span class="op">=</span> <span class="va">self</span>.results.n_exposed</span>
-<span id="cb6-63"><a href="#cb6-63" aria-hidden="true" tabindex="-1"></a>            ax.plot(res.timevec, res, label<span class="op">=</span>res.label)</span>
-<span id="cb6-64"><a href="#cb6-64" aria-hidden="true" tabindex="-1"></a>            plt.legend()</span>
-<span id="cb6-65"><a href="#cb6-65" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ss.return_fig(fig)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>            ss.FloatArr(<span class="st">'ti_susceptible'</span>, label<span class="op">=</span><span class="st">'Time of becoming susceptible again'</span>),</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_progression(<span class="va">self</span>, uids):</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Schedule recovery and death as usual, then schedule the waning of immunity """</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_progression(uids)</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>        recovering <span class="op">=</span> uids[np.isfinite(<span class="va">self</span>.ti_recovered[uids])] <span class="co"># Agents who are going to die have ti_recovered = NaN</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_susceptible[recovering] <span class="op">=</span> <span class="va">self</span>.ti_recovered[recovering] <span class="op">+</span> <span class="va">self</span>.pars.dur_imm.rvs(recovering)</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step_state(<span class="va">self</span>):</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Do the usual SIR transitions, then return agents whose immunity has waned to susceptible """</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().step_state()</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>        waning <span class="op">=</span> (<span class="va">self</span>.recovered <span class="op">&amp;</span> (<span class="va">self</span>.ti_susceptible <span class="op">&lt;=</span> <span class="va">self</span>.ti)).uids</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.recovered[waning] <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.susceptible[waning] <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The new class includes the following main changes:</p>
 <ol type="1">
-<li>In <code>__init__</code> we added the extra pars and states needed for our model</li>
-<li>We defined <code>infectious</code> to include both infected and exposed people - this means that we can just reuse the existing logic for how the SIR model handles transmission</li>
-<li>We updated <code>update_pre</code> and <code>update_death</code> to include changes to the <code>exposed</code> state</li>
-<li>We rewrote <code>set_prognoses</code> to include the new exposed state.</li>
+<li>In <code>__init__</code> we added the extra parameter (<code>dur_imm</code>) and state (<code>ti_susceptible</code>) that the model needs. We don’t need to redefine the SIR states, since we inherit them.</li>
+<li><a href="../api/diseases.html#starsim.diseases.SIR.set_prognoses" title="0"><code>ss.SIR.set_prognoses()</code></a> does two things: it calls <code>set_infection()</code> to make the agents infectious, then <code>set_progression()</code> to schedule what happens to them next. Waning immunity is part of the second, so that’s the only one we extend - we call <a href="https://docs.python.org/3/library/functions.html#super" title="1"><code>super()</code></a> to do the usual scheduling, then sample a waning time for everyone who is going to recover. Agents who are going to die instead have <code>ti_recovered</code> set to <code>NaN</code>, which is how we filter them out.</li>
+<li><code>step_state()</code> likewise calls <a href="https://docs.python.org/3/library/functions.html#super" title="1"><code>super()</code></a> and adds only the recovered → susceptible transition.</li>
 </ol>
-<p>Here’s how it would look in practice:</p>
-<div id="edda64ba" class="cell" data-execution_count="5">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>seir <span class="op">=</span> SEIR()</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>seir, networks<span class="op">=</span><span class="st">'random'</span>)</span>
+<p>Here’s how it looks in practice:</p>
+<div id="be16e009" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sirs <span class="op">=</span> SIRS(dur_imm<span class="op">=</span>ss.lognorm_ex(mean<span class="op">=</span>ss.years(<span class="dv">5</span>)))</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sirs, networks<span class="op">=</span><span class="st">'random'</span>, dur<span class="op">=</span><span class="dv">100</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>sim.plot()</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>sim.diseases.seir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>sim.diseases.sirs.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim with 10000 agents
-
-  Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
-
-  Running 2010 (10/51) (0.06 s)  ••••———————————————— 22%
-
-  Running 2020 (20/51) (0.12 s)  ••••••••———————————— 41%
-
-  Running 2030 (30/51) (0.17 s)  ••••••••••••———————— 61%
-
-  Running 2040 (40/51) (0.21 s)  ••••••••••••••••———— 80%
-
-  Running 2050 (50/51) (0.25 s)  •••••••••••••••••••• 100%
-
-Figure(896x672)</code></pre>
+<pre><code>Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-6-output-2.png" width="886" height="662" class="figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-6-output-2.png" width="615" height="431" class="figure-img"></p>
 </figure>
 </div>
 </div>
+</div>
+<p>Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes.</p>
+<p>The other classic extension is to add an “exposed” state, for agents who are infected but not yet infectious. That one is built into Starsim as <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>, and it’s made in much the same way as <code>SIRS</code> above - except that it overrides <code>set_infection()</code> rather than <code>set_progression()</code>, so that agents enter <code>exposed</code> at the moment of transmission and <code>infectious</code> only after the latent period <code>dur_exp</code> has passed:</p>
+<div id="383c48c4" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SEIR(), networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>sim.diseases.seir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Figure(672x480)
-None</code></pre>
+<pre><code>Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="t4_diseases_files/figure-html/cell-6-output-4.png" width="615" height="431" class="figure-img"></p>
+<p><img src="t4_diseases_files/figure-html/cell-7-output-2.png" width="615" height="431" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
+<p>Note that an exposed agent doesn’t transmit, because transmission uses <code>infectious</code>, which in <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> is the I compartment alone. But an exposed agent <em>does</em> have the infection, so <code>n_infected</code> and <code>prevalence</code> count both E and I: in <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>, <code>infected</code> is derived as <code>exposed | infectious</code>. See <a href="../user_guide/modules_diseases.html#infected-vs-infectious">Infected vs.&nbsp;infectious</a> for why the two names come apart.</p>
 </section>
 <section id="exercises" class="level2">
 <h2 class="anchored" data-anchor-id="exercises">Exercises</h2>
 <ol type="1">
-<li><strong>Parameter exploration</strong>: Try different values of <code>dur_exp</code> in the SEIR model - how does it affect the epidemic curve?</li>
-<li><strong>SEIRS model</strong>: Adapt the SEIR example above to be SEIRS (where recovered people can become susceptible again)</li>
+<li><strong>Parameter exploration</strong>: Try different values of <code>dur_imm</code> in the SIRS model - how does it affect the epidemic curve?</li>
+<li><strong>SEIRS model</strong>: Apply the same waning immunity to <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> to make an SEIRS model.</li>
 <li><strong>Multi-strain model</strong>: Can you create a model with two strains of the same disease that provide partial cross-immunity?</li>
 </ol>
 
@@ -1409,7 +1356,7 @@ None</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

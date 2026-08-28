@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 753,
+  "count": 873,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -1020,14 +1020,6 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.demographics.Births.init_pre",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.Births.init_pre",
-      "dispname": "-"
-    },
-    {
       "name": "starsim.demographics.Births.standardize_birth_data",
       "domain": "py",
       "role": "function",
@@ -1436,14 +1428,6 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.diseases.Infection.infectious",
-      "domain": "py",
-      "role": "attribute",
-      "priority": "1",
-      "uri": "api/diseases.html#starsim.diseases.Infection.infectious",
-      "dispname": "-"
-    },
-    {
       "name": "starsim.diseases.Infection.init_post",
       "domain": "py",
       "role": "function",
@@ -1473,6 +1457,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.Infection.set_outcomes",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.Infection.set_prognoses",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.set_prognoses",
       "dispname": "-"
     },
     {
@@ -1572,6 +1564,54 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.diseases.SEIR.clear_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.clear_infection",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SEIR.set_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.set_infection",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SEIR.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.set_progression",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SEIR.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SEIR",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SIR.clear_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIR.clear_infection",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.diseases.SIR.plot",
       "domain": "py",
       "role": "function",
@@ -1580,11 +1620,27 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.diseases.SIR.set_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIR.set_infection",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.diseases.SIR.set_prognoses",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.SIR.set_prognoses",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SIR.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIR.set_progression",
       "dispname": "-"
     },
     {
@@ -1684,6 +1740,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.distributions.Dist.check_unitless_pars",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.check_unitless_pars",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.distributions.Dist.clear_run_cache",
       "domain": "py",
       "role": "function",
@@ -1721,6 +1785,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dist.get_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.Dist.harmonize_par_units",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.harmonize_par_units",
       "dispname": "-"
     },
     {
@@ -1801,6 +1873,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dist.ppf",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.Dist.preserve_timepars",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.preserve_timepars",
       "dispname": "-"
     },
     {
@@ -2828,6 +2908,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.modules.Module.alias_state_dict",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/modules.html#starsim.modules.Module.alias_state_dict",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.modules.Module.auto_state_list",
       "domain": "py",
       "role": "attribute",
@@ -2860,6 +2948,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.modules.Module.define_aliases",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/modules.html#starsim.modules.Module.define_aliases",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.modules.Module.define_pars",
       "domain": "py",
       "role": "function",
@@ -2881,6 +2977,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/modules.html#starsim.modules.Module.define_states",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.modules.Module.derived_state_names",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/modules.html#starsim.modules.Module.derived_state_names",
       "dispname": "-"
     },
     {
@@ -2948,11 +3052,11 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.modules.Module.link_rates",
+      "name": "starsim.modules.Module.link_timepars",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/modules.html#starsim.modules.Module.link_rates",
+      "uri": "api/modules.html#starsim.modules.Module.link_timepars",
       "dispname": "-"
     },
     {
@@ -4001,6 +4105,14 @@
       "role": "attribute",
       "priority": "1",
       "uri": "api/people.html#starsim.people.People.n_agents",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.people.People.n_alive",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/people.html#starsim.people.People.n_alive",
       "dispname": "-"
     },
     {
@@ -5308,11 +5420,27 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.time.Rate.set_default_dur",
+      "name": "starsim.time.Rate.rate",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.Rate.rate",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.time.Rate.to",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/time.html#starsim.time.Rate.set_default_dur",
+      "uri": "api/time.html#starsim.time.Rate.to",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.time.Rate.to_dt",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.Rate.to_dt",
       "dispname": "-"
     },
     {
@@ -5340,6 +5468,22 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.time.TimePar.replace",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.TimePar.replace",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.time.TimePar.set_default_dur",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.TimePar.set_default_dur",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.time.TimePar.to",
       "domain": "py",
       "role": "function",
@@ -5361,6 +5505,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/time.html#starsim.time.TimePar.to_base",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.time.TimePar.to_dt",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.TimePar.to_dt",
       "dispname": "-"
     },
     {
@@ -5516,6 +5668,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.time.datedur.replace",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.datedur.replace",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.time.datedur.round_duration",
       "domain": "py",
       "role": "function",
@@ -5593,6 +5753,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/time.html#starsim.time.dur.arange",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.time.dur.to_dt",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.dur.to_dt",
       "dispname": "-"
     },
     {
@@ -5724,6 +5892,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.timeline.Timeline.datevec",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.datevec",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.timeline.Timeline.dt_year",
       "domain": "py",
       "role": "attribute",
@@ -5785,6 +5961,22 @@
       "role": "function",
       "priority": "1",
       "uri": "api/timeline.html#starsim.timeline.Timeline.reconcile_args",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.timeline.Timeline.relvec",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.relvec",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.timeline.Timeline.timevec",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.timevec",
       "dispname": "-"
     },
     {
@@ -5956,6 +6148,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.utils.resolve_data_col",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/utils.html#starsim.utils.resolve_data_col",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.utils.return_fig",
       "domain": "py",
       "role": "function",
@@ -6025,6 +6225,766 @@
       "role": "module",
       "priority": "1",
       "uri": "api/utils.html#starsim.utils",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.ART",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.ART",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.hiv.ART",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.ART",
+      "dispname": "starsim.library.diseases.ART"
+    },
+    {
+      "name": "starsim.library.diseases.CD4_analyzer",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.CD4_analyzer",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.hiv.CD4_analyzer",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.CD4_analyzer",
+      "dispname": "starsim.library.diseases.CD4_analyzer"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera.calc_environmental_prev",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.calc_environmental_prev",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera.calc_environmental_prev",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.calc_environmental_prev",
+      "dispname": "starsim.library.diseases.Cholera.calc_environmental_prev"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera.infect",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.infect",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera.infect",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.infect",
+      "dispname": "starsim.library.diseases.Cholera.infect"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.init_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.init_results",
+      "dispname": "starsim.library.diseases.Cholera.init_results"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.set_progression",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.set_progression",
+      "dispname": "starsim.library.diseases.Cholera.set_progression"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_die",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_die",
+      "dispname": "starsim.library.diseases.Cholera.step_die"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_state",
+      "dispname": "starsim.library.diseases.Cholera.step_state"
+    },
+    {
+      "name": "starsim.library.diseases.Cholera",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.cholera.Cholera",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera",
+      "dispname": "starsim.library.diseases.Cholera"
+    },
+    {
+      "name": "starsim.library.diseases.Ebola.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.set_progression",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.ebola.Ebola.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.set_progression",
+      "dispname": "starsim.library.diseases.Ebola.set_progression"
+    },
+    {
+      "name": "starsim.library.diseases.Ebola.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_die",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.ebola.Ebola.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_die",
+      "dispname": "starsim.library.diseases.Ebola.step_die"
+    },
+    {
+      "name": "starsim.library.diseases.Ebola.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.ebola.Ebola.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_state",
+      "dispname": "starsim.library.diseases.Ebola.step_state"
+    },
+    {
+      "name": "starsim.library.diseases.Ebola",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.ebola.Ebola",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola",
+      "dispname": "starsim.library.diseases.Ebola"
+    },
+    {
+      "name": "starsim.library.diseases.HIV.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.init_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.hiv.HIV.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.init_results",
+      "dispname": "starsim.library.diseases.HIV.init_results"
+    },
+    {
+      "name": "starsim.library.diseases.HIV.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.hiv.HIV.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.step_state",
+      "dispname": "starsim.library.diseases.HIV.step_state"
+    },
+    {
+      "name": "starsim.library.diseases.HIV",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.hiv.HIV",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV",
+      "dispname": "starsim.library.diseases.HIV"
+    },
+    {
+      "name": "starsim.library.diseases.Measles",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Measles",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.diseases.measles.Measles",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Measles",
+      "dispname": "starsim.library.diseases.Measles"
+    },
+    {
+      "name": "starsim.library.diseases",
+      "domain": "py",
+      "role": "module",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.CongenitalDisease",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.CongenitalDisease",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.maternal_infections.CongenitalDisease",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.CongenitalDisease",
+      "dispname": "starsim.library.mnch.CongenitalDisease"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.add_conception_callback",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.add_conception_callback",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.add_conception_callback",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.add_conception_callback",
+      "dispname": "starsim.library.mnch.FetalHealth.add_conception_callback"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.apply_growth_restriction",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.apply_growth_restriction",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.apply_growth_restriction",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.apply_growth_restriction",
+      "dispname": "starsim.library.mnch.FetalHealth.apply_growth_restriction"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.apply_timing_shift",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.apply_timing_shift",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.apply_timing_shift",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.apply_timing_shift",
+      "dispname": "starsim.library.mnch.FetalHealth.apply_timing_shift"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.compute_birth_weight",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.compute_birth_weight",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.compute_birth_weight",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.compute_birth_weight",
+      "dispname": "starsim.library.mnch.FetalHealth.compute_birth_weight"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.init_pre",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.init_pre",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.init_pre",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.init_pre",
+      "dispname": "starsim.library.mnch.FetalHealth.init_pre"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.on_conception",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.on_conception",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.on_conception",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.on_conception",
+      "dispname": "starsim.library.mnch.FetalHealth.on_conception"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.on_delivery",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.on_delivery",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.on_delivery",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.on_delivery",
+      "dispname": "starsim.library.mnch.FetalHealth.on_delivery"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.reverse_growth_restriction",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.reverse_growth_restriction",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.reverse_growth_restriction",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.reverse_growth_restriction",
+      "dispname": "starsim.library.mnch.FetalHealth.reverse_growth_restriction"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth.reverse_timing_shift",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.reverse_timing_shift",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth.reverse_timing_shift",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth.reverse_timing_shift",
+      "dispname": "starsim.library.mnch.FetalHealth.reverse_timing_shift"
+    },
+    {
+      "name": "starsim.library.mnch.FetalHealth",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.FetalHealth",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.FetalHealth",
+      "dispname": "starsim.library.mnch.FetalHealth"
+    },
+    {
+      "name": "starsim.library.mnch.NeonatalSepsis.init_post",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis.init_post",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.neonatal_sepsis.NeonatalSepsis.init_post",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis.init_post",
+      "dispname": "starsim.library.mnch.NeonatalSepsis.init_post"
+    },
+    {
+      "name": "starsim.library.mnch.NeonatalSepsis.set_prognoses",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis.set_prognoses",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.neonatal_sepsis.NeonatalSepsis.set_prognoses",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis.set_prognoses",
+      "dispname": "starsim.library.mnch.NeonatalSepsis.set_prognoses"
+    },
+    {
+      "name": "starsim.library.mnch.NeonatalSepsis.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.neonatal_sepsis.NeonatalSepsis.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis.step",
+      "dispname": "starsim.library.mnch.NeonatalSepsis.step"
+    },
+    {
+      "name": "starsim.library.mnch.NeonatalSepsis",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.neonatal_sepsis.NeonatalSepsis",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis",
+      "dispname": "starsim.library.mnch.NeonatalSepsis"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_infection.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.fetal_infection.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.fetal_infection.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.fetal_infection.step",
+      "dispname": "starsim.library.mnch.fetal_infection.step"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_infection",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.fetal_infection",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.fetal_infection",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.fetal_infection",
+      "dispname": "starsim.library.mnch.fetal_infection"
+    },
+    {
+      "name": "starsim.library.mnch.treat_pregnant",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.treat_pregnant",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.treat_pregnant",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.treat_pregnant",
+      "dispname": "starsim.library.mnch.treat_pregnant"
+    },
+    {
+      "name": "starsim.library.mnch",
+      "domain": "py",
+      "role": "module",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.DiskNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.spatial.DiskNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet.add_pairs",
+      "dispname": "starsim.library.networks.DiskNet.add_pairs"
+    },
+    {
+      "name": "starsim.library.networks.DiskNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.spatial.DiskNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet",
+      "dispname": "starsim.library.networks.DiskNet"
+    },
+    {
+      "name": "starsim.library.networks.ErdosRenyiNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.theoretical.ErdosRenyiNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet.add_pairs",
+      "dispname": "starsim.library.networks.ErdosRenyiNet.add_pairs"
+    },
+    {
+      "name": "starsim.library.networks.ErdosRenyiNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.theoretical.ErdosRenyiNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet",
+      "dispname": "starsim.library.networks.ErdosRenyiNet"
+    },
+    {
+      "name": "starsim.library.networks.HouseholdNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.household.HouseholdNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.add_pairs",
+      "dispname": "starsim.library.networks.HouseholdNet.add_pairs"
+    },
+    {
+      "name": "starsim.library.networks.HouseholdNet.create_new_households",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.create_new_households",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.household.HouseholdNet.create_new_households",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.create_new_households",
+      "dispname": "starsim.library.networks.HouseholdNet.create_new_households"
+    },
+    {
+      "name": "starsim.library.networks.HouseholdNet.load_dhs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.load_dhs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.household.HouseholdNet.load_dhs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.load_dhs",
+      "dispname": "starsim.library.networks.HouseholdNet.load_dhs"
+    },
+    {
+      "name": "starsim.library.networks.HouseholdNet.make_default_data",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.make_default_data",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.household.HouseholdNet.make_default_data",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.make_default_data",
+      "dispname": "starsim.library.networks.HouseholdNet.make_default_data"
+    },
+    {
+      "name": "starsim.library.networks.HouseholdNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.household.HouseholdNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet",
+      "dispname": "starsim.library.networks.HouseholdNet"
+    },
+    {
+      "name": "starsim.library.networks.NullNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.theoretical.NullNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet.step",
+      "dispname": "starsim.library.networks.NullNet.step"
+    },
+    {
+      "name": "starsim.library.networks.NullNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.networks.theoretical.NullNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet",
+      "dispname": "starsim.library.networks.NullNet"
+    },
+    {
+      "name": "starsim.library.networks",
+      "domain": "py",
+      "role": "module",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks",
       "dispname": "-"
     },
     {
@@ -6972,14 +7932,6 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.Births.init_pre",
-      "domain": "py",
-      "role": "function",
-      "priority": "1",
-      "uri": "api/demographics.html#starsim.demographics.Births.init_pre",
-      "dispname": "-"
-    },
-    {
       "name": "starsim.Births.standardize_birth_data",
       "domain": "py",
       "role": "function",
@@ -7380,14 +8332,6 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.Infection.infectious",
-      "domain": "py",
-      "role": "attribute",
-      "priority": "1",
-      "uri": "api/diseases.html#starsim.diseases.Infection.infectious",
-      "dispname": "-"
-    },
-    {
       "name": "starsim.Infection.init_post",
       "domain": "py",
       "role": "function",
@@ -7417,6 +8361,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.Infection.set_outcomes",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Infection.set_prognoses",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.set_prognoses",
       "dispname": "-"
     },
     {
@@ -7516,6 +8468,54 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.SEIR.clear_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.clear_infection",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SEIR.set_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.set_infection",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SEIR.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.set_progression",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SEIR.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SEIR",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SEIR",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SIR.clear_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIR.clear_infection",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.SIR.plot",
       "domain": "py",
       "role": "function",
@@ -7524,11 +8524,27 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.SIR.set_infection",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIR.set_infection",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.SIR.set_prognoses",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.SIR.set_prognoses",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SIR.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIR.set_progression",
       "dispname": "-"
     },
     {
@@ -7620,6 +8636,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Dist.check_unitless_pars",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.check_unitless_pars",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Dist.clear_run_cache",
       "domain": "py",
       "role": "function",
@@ -7657,6 +8681,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dist.get_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Dist.harmonize_par_units",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.harmonize_par_units",
       "dispname": "-"
     },
     {
@@ -7737,6 +8769,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dist.ppf",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Dist.preserve_timepars",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.preserve_timepars",
       "dispname": "-"
     },
     {
@@ -8692,6 +9732,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Module.alias_state_dict",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/modules.html#starsim.modules.Module.alias_state_dict",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Module.auto_state_list",
       "domain": "py",
       "role": "attribute",
@@ -8724,6 +9772,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Module.define_aliases",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/modules.html#starsim.modules.Module.define_aliases",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Module.define_pars",
       "domain": "py",
       "role": "function",
@@ -8745,6 +9801,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/modules.html#starsim.modules.Module.define_states",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Module.derived_state_names",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/modules.html#starsim.modules.Module.derived_state_names",
       "dispname": "-"
     },
     {
@@ -8812,11 +9876,11 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.Module.link_rates",
+      "name": "starsim.Module.link_timepars",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/modules.html#starsim.modules.Module.link_rates",
+      "uri": "api/modules.html#starsim.modules.Module.link_timepars",
       "dispname": "-"
     },
     {
@@ -9793,6 +10857,14 @@
       "role": "attribute",
       "priority": "1",
       "uri": "api/people.html#starsim.people.People.n_agents",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.People.n_alive",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/people.html#starsim.people.People.n_alive",
       "dispname": "-"
     },
     {
@@ -10876,11 +11948,27 @@
       "dispname": "-"
     },
     {
-      "name": "starsim.Rate.set_default_dur",
+      "name": "starsim.Rate.rate",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.Rate.rate",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Rate.to",
       "domain": "py",
       "role": "function",
       "priority": "1",
-      "uri": "api/time.html#starsim.time.Rate.set_default_dur",
+      "uri": "api/time.html#starsim.time.Rate.to",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Rate.to_dt",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.Rate.to_dt",
       "dispname": "-"
     },
     {
@@ -10908,6 +11996,22 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.TimePar.replace",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.TimePar.replace",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.TimePar.set_default_dur",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.TimePar.set_default_dur",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.TimePar.to",
       "domain": "py",
       "role": "function",
@@ -10929,6 +12033,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/time.html#starsim.time.TimePar.to_base",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.TimePar.to_dt",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.TimePar.to_dt",
       "dispname": "-"
     },
     {
@@ -11060,6 +12172,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.datedur.replace",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.datedur.replace",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.datedur.round_duration",
       "domain": "py",
       "role": "function",
@@ -11137,6 +12257,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/time.html#starsim.time.dur.arange",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.dur.to_dt",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.dur.to_dt",
       "dispname": "-"
     },
     {
@@ -11220,6 +12348,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Timeline.datevec",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.datevec",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Timeline.dt_year",
       "domain": "py",
       "role": "attribute",
@@ -11281,6 +12417,22 @@
       "role": "function",
       "priority": "1",
       "uri": "api/timeline.html#starsim.timeline.Timeline.reconcile_args",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Timeline.relvec",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.relvec",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Timeline.timevec",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/timeline.html#starsim.timeline.Timeline.timevec",
       "dispname": "-"
     },
     {
@@ -11458,6 +12610,454 @@
       "priority": "1",
       "uri": "api/utils.html#starsim.utils.warn",
       "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.ART",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.ART",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.hiv.ART",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.ART",
+      "dispname": "starsim.library.diseases.ART"
+    },
+    {
+      "name": "starsim.diseases.CD4_analyzer",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.CD4_analyzer",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.hiv.CD4_analyzer",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.CD4_analyzer",
+      "dispname": "starsim.library.diseases.CD4_analyzer"
+    },
+    {
+      "name": "starsim.diseases.Cholera.calc_environmental_prev",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.calc_environmental_prev",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera.calc_environmental_prev",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.calc_environmental_prev",
+      "dispname": "starsim.library.diseases.Cholera.calc_environmental_prev"
+    },
+    {
+      "name": "starsim.diseases.Cholera.infect",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.infect",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera.infect",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.infect",
+      "dispname": "starsim.library.diseases.Cholera.infect"
+    },
+    {
+      "name": "starsim.diseases.Cholera.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.init_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.init_results",
+      "dispname": "starsim.library.diseases.Cholera.init_results"
+    },
+    {
+      "name": "starsim.diseases.Cholera.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.set_progression",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.set_progression",
+      "dispname": "starsim.library.diseases.Cholera.set_progression"
+    },
+    {
+      "name": "starsim.diseases.Cholera.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_die",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_die",
+      "dispname": "starsim.library.diseases.Cholera.step_die"
+    },
+    {
+      "name": "starsim.diseases.Cholera.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera.step_state",
+      "dispname": "starsim.library.diseases.Cholera.step_state"
+    },
+    {
+      "name": "starsim.diseases.Cholera",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.cholera.Cholera",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Cholera",
+      "dispname": "starsim.library.diseases.Cholera"
+    },
+    {
+      "name": "starsim.diseases.Ebola.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.set_progression",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.ebola.Ebola.set_progression",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.set_progression",
+      "dispname": "starsim.library.diseases.Ebola.set_progression"
+    },
+    {
+      "name": "starsim.diseases.Ebola.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_die",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.ebola.Ebola.step_die",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_die",
+      "dispname": "starsim.library.diseases.Ebola.step_die"
+    },
+    {
+      "name": "starsim.diseases.Ebola.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.ebola.Ebola.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola.step_state",
+      "dispname": "starsim.library.diseases.Ebola.step_state"
+    },
+    {
+      "name": "starsim.diseases.Ebola",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.ebola.Ebola",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Ebola",
+      "dispname": "starsim.library.diseases.Ebola"
+    },
+    {
+      "name": "starsim.diseases.HIV.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.init_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.hiv.HIV.init_results",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.init_results",
+      "dispname": "starsim.library.diseases.HIV.init_results"
+    },
+    {
+      "name": "starsim.diseases.HIV.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.step_state",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.hiv.HIV.step_state",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV.step_state",
+      "dispname": "starsim.library.diseases.HIV.step_state"
+    },
+    {
+      "name": "starsim.diseases.HIV",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.hiv.HIV",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.HIV",
+      "dispname": "starsim.library.diseases.HIV"
+    },
+    {
+      "name": "starsim.diseases.Measles",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Measles",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.measles.Measles",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.diseases.html#starsim.library.diseases.Measles",
+      "dispname": "starsim.library.diseases.Measles"
+    },
+    {
+      "name": "starsim.networks.DiskNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.spatial.DiskNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet.add_pairs",
+      "dispname": "starsim.library.networks.DiskNet.add_pairs"
+    },
+    {
+      "name": "starsim.networks.DiskNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.spatial.DiskNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.DiskNet",
+      "dispname": "starsim.library.networks.DiskNet"
+    },
+    {
+      "name": "starsim.networks.ErdosRenyiNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.theoretical.ErdosRenyiNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet.add_pairs",
+      "dispname": "starsim.library.networks.ErdosRenyiNet.add_pairs"
+    },
+    {
+      "name": "starsim.networks.ErdosRenyiNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.theoretical.ErdosRenyiNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.ErdosRenyiNet",
+      "dispname": "starsim.library.networks.ErdosRenyiNet"
+    },
+    {
+      "name": "starsim.networks.HouseholdNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.household.HouseholdNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.add_pairs",
+      "dispname": "starsim.library.networks.HouseholdNet.add_pairs"
+    },
+    {
+      "name": "starsim.networks.HouseholdNet.create_new_households",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.create_new_households",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.household.HouseholdNet.create_new_households",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.create_new_households",
+      "dispname": "starsim.library.networks.HouseholdNet.create_new_households"
+    },
+    {
+      "name": "starsim.networks.HouseholdNet.load_dhs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.load_dhs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.household.HouseholdNet.load_dhs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.load_dhs",
+      "dispname": "starsim.library.networks.HouseholdNet.load_dhs"
+    },
+    {
+      "name": "starsim.networks.HouseholdNet.make_default_data",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.make_default_data",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.household.HouseholdNet.make_default_data",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet.make_default_data",
+      "dispname": "starsim.library.networks.HouseholdNet.make_default_data"
+    },
+    {
+      "name": "starsim.networks.HouseholdNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.household.HouseholdNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.HouseholdNet",
+      "dispname": "starsim.library.networks.HouseholdNet"
+    },
+    {
+      "name": "starsim.networks.NullNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.theoretical.NullNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet.step",
+      "dispname": "starsim.library.networks.NullNet.step"
+    },
+    {
+      "name": "starsim.networks.NullNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.theoretical.NullNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/library.networks.html#starsim.library.networks.NullNet",
+      "dispname": "starsim.library.networks.NullNet"
     }
   ]
 }

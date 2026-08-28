@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.9.38">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -12,10 +12,13 @@
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
 */
-code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -77,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-6b6957c917596b414ec0b78690761e87.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-de63f62b328812d8e578a4d74e282472.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="site_libs/bootstrap/bootstrap-dark-89e3c27e96d96616de92a086d0ca516a.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="site_libs/bootstrap/bootstrap-d583026f9b0ef0925622aad6f62ce451.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -377,12 +380,6 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
  <span class="menu-text"><strong>What’s new</strong></span></a>
   </div>
 </li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="./api/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><strong>API reference</strong></span></a>
-  </div>
-</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -562,6 +559,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./user_guide/modules_library.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library modules</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./user_guide/modules_adding.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Adding new modules</span></a>
   </div>
@@ -718,11 +721,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <p>Starsim ships with a collection of <strong>example models</strong> — illustrative implementations of diseases, networks, and analyses that aren’t part of the core library but show how Starsim can be used and extended. They come in two forms:</p>
 <ul>
-<li><strong>Library examples</strong>, importable via <code>import starsim.library as ssl</code> (e.g.&nbsp;<code>ssl.diseases.HIV</code>). These are maintained alongside Starsim and can be dropped straight into a simulation.</li>
+<li><strong>Library examples</strong>, importable via <code>import starsim.library as ssl</code> (e.g.&nbsp;<a href="./api/library.diseases.html#starsim.library.diseases.HIV" title="0"><code>ssl.diseases.HIV</code></a>). These are maintained alongside Starsim and can be dropped straight into a simulation.</li>
 <li><strong>Standalone examples</strong>, kept as scripts in the <a href="https://github.com/starsimhub/starsim/tree/main/docs/examples"><code>docs/examples</code></a> folder of the repository. These are meant to be read and adapted rather than imported.</li>
 </ul>
 <p>Here’s a quick example running one of the library disease models:</p>
-<div id="182fe6cc" class="cell" data-execution_count="2">
+<div id="e1a312e7" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
@@ -743,28 +746,28 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <section id="library-disease-models-ssl.diseases" class="level2">
-<h2 class="anchored" data-anchor-id="library-disease-models-ssl.diseases">Library disease models (<code>ssl.diseases</code>)</h2>
+<h2 class="anchored" data-anchor-id="library-disease-models-ssl.diseases">Library disease models (<a href="./api/library.diseases.html#starsim.library.diseases" title="0"><code>ssl.diseases</code></a>)</h2>
 <p>Worked examples of disease models, several of which add states and dynamics beyond the core <a href="./api/diseases.html#starsim.diseases.SIR" title="0"><code>SIR</code></a>/<a href="./api/diseases.html#starsim.diseases.SIS" title="0"><code>SIS</code></a> templates:</p>
 <ul>
-<li><strong><code>ssl.diseases.HIV</code></strong> — HIV natural history, including CD4 dynamics; pairs with the <code>ssl.diseases.ART</code> intervention and the <code>ssl.diseases.CD4_analyzer</code></li>
-<li><strong><code>ssl.diseases.Cholera</code></strong> — an environmentally transmitted disease</li>
-<li><strong><code>ssl.diseases.Ebola</code></strong> — a model with multiple transmission routes</li>
-<li><strong><code>ssl.diseases.Measles</code></strong> — a childhood disease with an SEIR-like structure</li>
+<li><strong><a href="./api/library.diseases.html#starsim.library.diseases.HIV" title="0"><code>ssl.diseases.HIV</code></a></strong> — HIV natural history, including CD4 dynamics; pairs with the <a href="./api/library.diseases.html#starsim.library.diseases.ART" title="0"><code>ssl.diseases.ART</code></a> intervention and the <a href="./api/library.diseases.html#starsim.library.diseases.CD4_analyzer" title="0"><code>ssl.diseases.CD4_analyzer</code></a></li>
+<li><strong><a href="./api/library.diseases.html#starsim.library.diseases.Cholera" title="0"><code>ssl.diseases.Cholera</code></a></strong> — an environmentally transmitted disease</li>
+<li><strong><a href="./api/library.diseases.html#starsim.library.diseases.Ebola" title="0"><code>ssl.diseases.Ebola</code></a></strong> — a model with multiple transmission routes</li>
+<li><strong><a href="./api/library.diseases.html#starsim.library.diseases.Measles" title="0"><code>ssl.diseases.Measles</code></a></strong> — a childhood disease with an SEIR-like structure</li>
 </ul>
 <p>These are used throughout the documentation, for example in the <a href="./tutorials/t4_diseases.html">Diseases</a> and <a href="./tutorials/t5_networks.html">Networks</a> tutorials and the <a href="./user_guide/modules_connectors.html">Connectors</a> user guide.</p>
 </section>
 <section id="library-networks-ssl.networks" class="level2">
-<h2 class="anchored" data-anchor-id="library-networks-ssl.networks">Library networks (<code>ssl.networks</code>)</h2>
+<h2 class="anchored" data-anchor-id="library-networks-ssl.networks">Library networks (<a href="./api/library.networks.html#starsim.library.networks" title="0"><code>ssl.networks</code></a>)</h2>
 <p>Example contact networks demonstrating different connection rules:</p>
 <ul>
-<li><strong><code>ssl.networks.DiskNet</code></strong> — connects agents by spatial proximity on a disk</li>
-<li><strong><code>ssl.networks.HouseholdNet</code></strong> — household-structured contacts</li>
-<li><strong><code>ssl.networks.ErdosRenyiNet</code></strong>, <strong><code>ssl.networks.NullNet</code></strong> — theoretical reference networks</li>
+<li><strong><a href="./api/library.networks.html#starsim.library.networks.DiskNet" title="0"><code>ssl.networks.DiskNet</code></a></strong> — connects agents by spatial proximity on a disk</li>
+<li><strong><a href="./api/library.networks.html#starsim.library.networks.HouseholdNet" title="0"><code>ssl.networks.HouseholdNet</code></a></strong> — household-structured contacts</li>
+<li><strong><a href="./api/library.networks.html#starsim.library.networks.ErdosRenyiNet" title="0"><code>ssl.networks.ErdosRenyiNet</code></a></strong>, <strong><a href="./api/library.networks.html#starsim.library.networks.NullNet" title="0"><code>ssl.networks.NullNet</code></a></strong> — theoretical reference networks</li>
 </ul>
 </section>
 <section id="library-maternal-and-child-health-ssl.mnch" class="level2">
-<h2 class="anchored" data-anchor-id="library-maternal-and-child-health-ssl.mnch">Library maternal and child health (<code>ssl.mnch</code>)</h2>
-<p>Examples relevant to maternal and child health, including <code>ssl.mnch.FetalHealth</code>, <code>ssl.mnch.NeonatalSepsis</code>, and <code>ssl.mnch.CongenitalDisease</code>.</p>
+<h2 class="anchored" data-anchor-id="library-maternal-and-child-health-ssl.mnch">Library maternal and child health (<a href="./api/library.mnch.html#starsim.library.mnch" title="0"><code>ssl.mnch</code></a>)</h2>
+<p>Examples relevant to maternal and child health, including <a href="./api/library.mnch.html#starsim.library.mnch.FetalHealth" title="0"><code>ssl.mnch.FetalHealth</code></a>, <a href="./api/library.mnch.html#starsim.library.mnch.NeonatalSepsis" title="0"><code>ssl.mnch.NeonatalSepsis</code></a>, and <a href="./api/library.mnch.html#starsim.library.mnch.CongenitalDisease" title="0"><code>ssl.mnch.CongenitalDisease</code></a>.</p>
 </section>
 <section id="standalone-examples-docsexamples" class="level2">
 <h2 class="anchored" data-anchor-id="standalone-examples-docsexamples">Standalone examples (<code>docs/examples</code>)</h2>
@@ -1211,7 +1214,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.5.2 (2026-07-14).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
