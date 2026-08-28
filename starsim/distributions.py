@@ -376,7 +376,7 @@ class Dist:
         # Create a normal distribution that's also a timepar
         dur_infection = ss.normal(loc=12, scale=2, unit='years')
         dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
-        dur_infection = ss.normal(loc=ss.years(12), scale=ss.years(2)) # Same as above
+        dur_infection = ss.normal(loc=ss.years(12), scale=2) # Same as above
         dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
         dur_infection.init(force=True).plot_hist() # Show results
 
