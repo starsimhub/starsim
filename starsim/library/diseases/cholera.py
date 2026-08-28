@@ -95,7 +95,7 @@ class Cholera(ss.SEIR):
             ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
 
             # Aliases
-            asymptomatic = lambda self: self.infected & ~self.symptomatic, # Infectious, but shedding much less
+            asymptomatic = lambda self: self.infectious & ~self.symptomatic, # Infectious, but shedding much less
         )
         return
 
@@ -119,11 +119,11 @@ class Cholera(ss.SEIR):
         ti = self.ti
 
         # Progress infectious -> symptomatic
-        symptomatic = (self.infected & (self.ti_symptomatic <= ti)).uids
+        symptomatic = (self.infectious & (self.ti_symptomatic <= ti)).uids
         self.symptomatic[symptomatic] = True
 
         # Recovery ends symptoms too
-        self.symptomatic[~self.infected] = False
+        self.symptomatic[~self.infectious] = False
 
         # Update today's environmental prevalence
         self.calc_environmental_prev()
@@ -155,7 +155,7 @@ class Cholera(ss.SEIR):
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
-        self.ti_symptomatic[symp_uids] = self.ti_infected[symp_uids]
+        self.ti_symptomatic[symp_uids] = self.ti_infectious[symp_uids]
 
         # Determine who dies and when
         dead_uids = p.p_death.filter(symp_uids)
@@ -164,8 +164,8 @@ class Cholera(ss.SEIR):
         asymp_uids = np.setdiff1d(uids, symp_uids)
 
         # Determine when agents recover
-        self.ti_recovered[symp_rev_uids] = self.ti_infected[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
-        self.ti_recovered[asymp_uids] = self.ti_infected[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
+        self.ti_recovered[symp_rev_uids] = self.ti_infectious[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
+        self.ti_recovered[asymp_uids] = self.ti_infectious[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
 
         return
 

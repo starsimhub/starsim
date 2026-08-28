@@ -304,7 +304,12 @@ class Module(Base):
         if attr not in self._state_aliases:
             raise AttributeError(f'{type(self).__name__} object has no attribute "{attr}"') # Note: don't use self or self.name here, since both can recurse into __getattr__
         alias = self._state_aliases[attr]
-        return alias(self) if callable(alias) else getattr(self, alias)
+        if not callable(alias):
+            return getattr(self, alias)
+        out = alias(self)
+        if isinstance(out, ss.Arr) and out.name is None: # An anonymous Arr is a temporary, so writing to it would be silently discarded; a named one is another state, so leave it alone
+            out.raw.flags.writeable = False
+        return out
 
     def __setattr__(self, attr, value):
         """ Don't allow locked attributes to be overwritten """
@@ -541,18 +546,21 @@ class Module(Base):
         Args:
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state, and that it's not already present
-            reset (bool): whether to reset the list of module states and use only the ones provided
+            reset (bool/str/list): if True, remove all existing states and aliases; if a name or list of names, remove only those
             lock (bool): if True, prevent the state attributes from being overwritten after definition
             kwargs (dict): passed to `define_aliases()`
+
+        **Examples**:
+
+            self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+            self.define_states(ss.BoolState('infectious'), reset='infectious') # Replace an inherited state or alias
         """
-        # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
+        # Optionally remove existing states and aliases: all of them (reset=True), or just the named
+        # ones (note: does not remove them from the people object or others if already added); see example in ss.SIR()
         if reset:
-            for state in self.state_list:
-                attr = state.name
-                delattr(self, attr)
-                if attr in self._locked_attrs:
-                    self._locked_attrs.remove(attr)
-            self._auto_states = []
+            names = ([state.name for state in self.state_list] + list(self._state_aliases)) if reset is True else sc.tolist(reset)
+            for name in names:
+                self._remove_state(name)
 
         # If we're not checking, don't lock the attrs
         if not check:
@@ -576,11 +584,11 @@ class Module(Base):
             if check and hasattr(self, attr):
                 present = [s.name for s in self.state_list]
                 new = [s.name for s in args]
-                errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module.\n'
-                errormsg += 'Did you mean to use define_states(reset=True) (skip inherited states) or define_states(check=False) (skip this check)?\n'
+                errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module (as a state or an alias).\n'
+                errormsg += 'Did you mean to use define_states(reset=...) (remove it first, by name or all of them) or define_states(check=False) (skip this check)?\n'
                 errormsg += f'States already in module:\n{present}\n'
+                errormsg += f'Aliases already in module:\n{list(self._state_aliases)}\n'
                 errormsg += f'New states being added:\n{new}\n'
-                errormsg += f'Conflicting states:\n{set(present) & set(new)}\n'
                 raise AttributeError(errormsg)
             setattr(self, attr, state)
             if lock:
@@ -616,16 +624,40 @@ class Module(Base):
         (`sc.save()` and `ss.MultiSim` are both fine, since they use `dill`). Use a
         module-level function, or a property, if plain pickling is required.
 
+        A callable alias also generates an automatic result, in the same way a `BoolState`
+        does: an alias named `infected` produces `n_infected`. A string alias does not,
+        since the state it points to is already counted under its own name.
+
         Args:
             kwargs (dict): mapping of alias name to either the name of a state, or a callable
 
         **Examples**:
 
             self.define_aliases(infectious='infected') # Everyone infected is infectious
-            self.define_aliases(infectious=lambda self: self.exposed | self.infected) # Both E and I transmit
+            self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
             self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
         """
+        for key in kwargs:
+            if key not in self._state_aliases and hasattr(self, key): # An alias would never be consulted, since the state takes precedence
+                errormsg = f'Cannot define alias "{key}" in {self._debug_name} since a state of that name already exists; '
+                errormsg += f'use define_states(reset="{key}") to remove it first.'
+                raise AttributeError(errormsg)
         self._state_aliases = self._state_aliases | kwargs # Copy rather than update in place, since the default is defined on the class
+        return
+
+    def _remove_state(self, name, die=True):
+        """ Remove a single state or alias by name; see `define_states()` """
+        if name in self._state_aliases:
+            self._state_aliases = {k:v for k,v in self._state_aliases.items() if k != name} # Copy rather than modify in place, since the default is defined on the class
+        elif isinstance(self.__dict__.get(name), ss.Arr):
+            delattr(self, name)
+            self._auto_states = [state for state in self._auto_states if state.name != name]
+            if name in self._locked_attrs:
+                self._locked_attrs.remove(name)
+        elif die:
+            errormsg = f'Cannot remove "{name}" from {self._debug_name} since it is not a state or alias; '
+            errormsg += f'states are {sc.strjoin(self.state_dict.keys())} and aliases are {sc.strjoin(self._state_aliases.keys())}.'
+            raise AttributeError(errormsg)
         return
 
     def define_results(self, *args, check=True):
@@ -702,6 +734,8 @@ class Module(Base):
         results = sc.autolist()
         for state in self.auto_state_list:
             results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+        for name in self.derived_state_names: # A derived state has no state object, but is counted the same way
+            results += ss.Result(f'n_{name}', dtype=int, scale=True, label=name.capitalize())
         self.define_results(*results)
         return
 
@@ -765,6 +799,17 @@ class Module(Base):
         return self._auto_states[:]
 
     @property
+    def derived_state_names(self):
+        """
+        Names of the aliases that are defined by a callable (see `define_aliases()`)
+
+        Unlike a string alias, which points at a state that is already counted under its
+        own name, a derived state has no state object of its own, so it generates an
+        automatic result (e.g. `n_infected`) in the same way a `BoolState` does.
+        """
+        return [key for key,alias in self._state_aliases.items() if callable(alias)]
+
+    @property
     def alias_state_dict(self):
         """
         Dictionary of state aliases (see `define_aliases()`)
@@ -816,6 +861,8 @@ class Module(Base):
         """
         for state in self.auto_state_list:
             self.results[f'n_{state.name}'][self.ti] = state.sum()
+        for name in self.derived_state_names:
+            self.results[f'n_{name}'][self.ti] = self[name].sum()
         return
 
     @required()

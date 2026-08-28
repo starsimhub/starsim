@@ -121,17 +121,28 @@ def test_seir():
         sim.run()
         sims.append(sim)
     short, long = sims
-    print(f'  Peak infected: {short.results.seir.n_infected.max():n} (short) vs {long.results.seir.n_infected.max():n} (long)')
-    assert np.argmax(long.results.seir.n_infected) > np.argmax(short.results.seir.n_infected), 'A longer latent period should delay the peak'
+    print(f'  Peak infectious: {short.results.seir.n_infectious.max():n} (short) vs {long.results.seir.n_infectious.max():n} (long)')
+    assert np.argmax(long.results.seir.n_infectious) > np.argmax(short.results.seir.n_infectious), 'A longer latent period should delay the peak'
 
     # Check the compartments and incidence
     sim = short
     seir = sim.diseases.seir
     res = sim.results.seir
-    assert not (seir.exposed & seir.infected).any(), 'Agents should not be in both E and I'
-    assert seir.infectious is seir.infected, 'infectious should be an alias of infected'
+    assert not (seir.exposed & seir.infectious).any(), 'Agents should not be in both E and I'
+    assert (seir.infected == (seir.exposed | seir.infectious)).all(), 'infected should be derived as E plus I'
+    assert np.array_equal(res.n_infected, res.n_exposed + res.n_infectious), 'n_infected should count both E and I'
+    assert np.allclose(res.prevalence, res.n_infected/sim.results.n_alive), 'prevalence should be computed from E plus I'
+    assert res.prevalence[1] > res.n_infectious[1]/sim.results.n_alive[1], 'prevalence should include exposed agents'
     assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
     assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
+
+    # ti_infected is deliberately undefined, since it is ambiguous for an SEIR model
+    with pytest.raises(AttributeError):
+        seir.ti_infected
+
+    # infected is derived, so writing to it would be silently discarded
+    with pytest.raises(ValueError):
+        seir.infected[ss.uids(0)] = False
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
     latent = ss.SEIR(dur_exp=ss.lognorm_ex(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
@@ -147,20 +158,32 @@ def test_aliases():
     sc.heading('Testing state aliases')
 
     # A string alias points at another state, and a subclass can replace it with a callable
-    class PresympSEIR(ss.SEIR):
+    class IsolationSIR(ss.SIR):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self.define_aliases(infectious=lambda self: self.exposed | self.infected) # Presymptomatic transmission
+            self.define_states(
+                ss.BoolState('isolated', label='Isolated'),
+                reset = 'infectious', # Remove the inherited string alias before replacing it
+                infectious = lambda self: self.infected & ~self.isolated, # Isolated agents don't transmit
+            )
+            return
+
+        def set_prognoses(self, uids, sources=None):
+            super().set_prognoses(uids, sources)
+            self.isolated[uids] = True # Isolate everyone, so nobody transmits
             return
 
     sir = ss.SIR()
     assert sir.infectious is sir.infected, 'By default, infectious should be an alias of infected'
 
-    sim = ss.Sim(n_agents=n_agents, diseases=PresympSEIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
+    sim = ss.Sim(n_agents=n_agents, diseases=IsolationSIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
                  dur=ss.days(50), dt=ss.days(1), verbose=0).run()
-    dis = sim.diseases.presympseir
-    assert (dis.infectious == (dis.exposed | dis.infected)).all(), 'The derived alias should combine E and I'
-    assert sim.results.presympseir.cum_infections[-1] > 0, 'Exposed agents should transmit if infectious includes E'
+    dis = sim.diseases.isolationsir
+    res = sim.results.isolationsir
+    assert (dis.infectious == (dis.infected & ~dis.isolated)).all(), 'The derived alias should combine the two states'
+    assert res.cum_infections[-1] == 0, 'Isolated agents should not transmit'
+    assert 'n_infectious' in res, 'A derived alias should generate an automatic result'
+    assert res.n_infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
     # Aliases can also be defined alongside the states they refer to
     class AliasSIR(ss.SIR):
@@ -177,6 +200,30 @@ def test_aliases():
     alias_sir.init_mock()
     assert alias_sir.ti_onset is alias_sir.ti_infected, 'A string alias should resolve to the state it names'
     assert (alias_sir.asymptomatic == (alias_sir.infected & ~alias_sir.symptomatic)).all(), 'A callable alias should be recomputed from its states'
+    with pytest.raises(ValueError):
+        alias_sir.asymptomatic[ss.uids(0)] = True # A callable alias is derived, so it can't be written to
+
+    # A state can replace an alias, and an alias a state, by resetting it by name first
+    class ReplaceSIR(ss.SIR):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(
+                ss.BoolState('infectious', label='Infectious'), # Replaces the inherited alias
+                reset = 'infectious',
+            )
+            return
+
+    rep_sir = ReplaceSIR()
+    rep_sir.init_mock()
+    assert 'infectious' in rep_sir.state_dict, 'A state should be able to replace an alias'
+
+    # An alias that a state would shadow should raise, rather than silently never being consulted
+    with pytest.raises(AttributeError):
+        ss.SIR().define_aliases(infected=lambda self: self.susceptible)
+
+    # Removing something that isn't a state or an alias should raise
+    with pytest.raises(AttributeError):
+        ss.SIR().define_states(reset='not_a_state')
 
     # A missing attribute should still raise an AttributeError
     with pytest.raises(AttributeError):

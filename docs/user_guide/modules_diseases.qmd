@@ -54,11 +54,11 @@ Every `ss.Infection` shares a common set of per-agent states and parameters that
 | Name | Type | Meaning |
 |------|------|---------|
 | `susceptible` | `BoolState` | Whether an agent can be infected (default `True`) |
-| `infected` | `BoolState` | Whether an agent is currently in the infected (infectious) compartment |
+| `infected` | `BoolState` | Whether an agent currently has the infection |
 | `infectious` | alias | Agents that can currently transmit (by default, an alias of `infected`) |
 | `rel_sus` | `FloatArr` | Per-agent **relative susceptibility** (default `1.0`) |
 | `rel_trans` | `FloatArr` | Per-agent **relative transmissibility** (default `1.0`) |
-| `ti_infected` | `FloatArr` | Timestep at which each agent entered the infected compartment |
+| `ti_infected` | `FloatArr` | Timestep at which each agent acquired the infection |
 | `beta` | parameter | Base transmission probability per contact (per network) |
 | `init_prev` | parameter | Initial fraction of the population infected |
 
@@ -122,21 +122,30 @@ self.define_states(
 )
 ```
 
-An alias is only consulted when the attribute isn't otherwise defined, so it's a default that a subclass can replace, either with a state of its own or with another alias. In `ss.SEIR`, `exposed` and `infected` are the literal E and I compartments, so the inherited alias is already correct: exposed agents don't transmit. If you wanted presymptomatic transmission instead, you'd declare that explicitly:
+An alias is only consulted when the attribute isn't otherwise defined, so it's a default that a subclass can replace, either with a state of its own or with another alias. That's what `ss.SEIR` does: for a disease with a latent period the two names come apart, since **E and I are both infected, but only I is infectious**. So `ss.SEIR` makes `exposed` and `infectious` the literal E and I compartments, and derives `infected` from them:
 
 ```python
-self.define_aliases(infectious=lambda self: self.exposed | self.infected)
+self.define_states(
+    ss.BoolState('exposed', label='Exposed'),
+    ss.BoolState('infectious', label='Infectious'),
+    ...
+    reset = ['infected', 'infectious', 'ti_infected'],
+    infected = lambda self: self.exposed | self.infectious, # Derived: E and I are both infected
+)
 ```
 
-A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. See [Aliases](modules_adding.qmd#aliases) for more.
+A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. Unlike a string alias, it generates an automatic result, so `n_infected` still exists and counts E plus I. See [Aliases](modules_adding.qmd#aliases) for more.
 
-Incidence is a separate concept from any compartment. `ss.Infection.set_prognoses()` records each infection as it happens, so `new_infections` doesn't depend on what a model does with `ti_infected` or how many stages it has. Seed infections from `init_prev` are prevalent cases, and are excluded from incidence.
+Incidence is a separate concept from any compartment. `ss.Infection.set_prognoses()` records each infection as it happens, so `new_infections` doesn't depend on what a model does with the `ti_` states or how many stages it has. Seed infections from `init_prev` are prevalent cases, and are excluded from incidence.
 
 The result is that each name means one thing:
 
-- `n_exposed` is the E compartment, and `n_infected` is the I compartment.
-- `ti_exposed` and `ti_infected` are the times of *entering* E and I. In general, `ti_<state>` is the time the agent entered `<state>`.
-- `new_infections` counts infection events (S→E for SEIR, S→I for SIR), and `prevalence` is the fraction of agents currently transmitting.
+- `n_exposed` is the E compartment and `n_infectious` is the I compartment, while `n_infected` and `prevalence` cover both — an agent in the latent period has the infection, and counts towards prevalence.
+- `ti_exposed` is the time of acquisition and `ti_infectious` is the time of becoming infectious. In general, `ti_<state>` is the time the agent entered `<state>`.
+- `ss.SEIR` deliberately does **not** define `ti_infected`, since it is too easily confused with `ti_infectious`; use `ti_exposed` for the time of acquisition. `ti_infectious` exists only where it means something different from `ti_infected`, so SIR and SIS have `ti_infected` alone.
+- `new_infections` counts infection events (S→E for SEIR, S→I for SIR).
+
+If you wanted presymptomatic transmission instead, so that exposed agents transmit too, you would override the states that drive transmission rather than the ones that define infection — for example by giving exposed agents a nonzero `rel_trans`.
 
 ## Implementation patterns
 
@@ -184,9 +193,9 @@ For a richer natural history, `ss.SIR.set_prognoses()` splits into two methods y
 
 | Method | Purpose |
 |--------|---------|
-| `set_infection(uids)` | Make agents infectious. `ss.SEIR` overrides this to put them in `exposed` first, and set `ti_infected` to the end of the latent period. |
-| `set_progression(uids)` | Schedule what happens next: recovery, death, and any other stages. Schedule these relative to `ti_infected`, so that a latent period delays them rather than eating into them. |
+| `set_infection(uids)` | Make agents infectious. `ss.SEIR` overrides this to put them in `exposed` first, and set `ti_infectious` to the end of the latent period. |
+| `set_progression(uids)` | Schedule what happens next: recovery, death, and any other stages. Schedule these relative to the onset of infectiousness (`ti_infected` in `ss.SIR`, `ti_infectious` in `ss.SEIR`), so that a latent period delays them rather than eating into them. |
 
 `ssl.Ebola` and `ssl.Cholera` both override `set_progression()` for their extra states (severe/buried and symptomatic respectively), and inherit everything else from `ss.SEIR`.
 
-If your model adds a compartment, list it in `plot_states` so that `disease.plot()` shows it. This is a class attribute holding the names of the results to plot, so it can be set in one line at the top of the class body — `ss.SEIR` sets `plot_states = ['n_susceptible', 'n_exposed', 'n_infected', 'n_recovered']`. Assign a new list rather than modifying the inherited one, since a class attribute is shared by every instance of the class.
+If your model adds a compartment, list it in `plot_states` so that `disease.plot()` shows it. This is a class attribute holding the names of the results to plot, so it can be set in one line at the top of the class body — `ss.SEIR` sets `plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']`. Assign a new list rather than modifying the inherited one, since a class attribute is shared by every instance of the class.

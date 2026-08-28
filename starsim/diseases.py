@@ -447,7 +447,7 @@ class Infection(Disease):
         super().update_results()
         res = self.results
         ti = self.ti
-        res.prevalence[ti] = res.n_infected[ti] / len(self.sim.people)
+        res.prevalence[ti] = res.n_infected[ti] / self.sim.people.n_alive
         return
 
     def finalize_results(self):
@@ -637,7 +637,7 @@ class NCD(Disease):
         super().update_results()
         ti = self.ti
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(self.sim.people)
+        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
         self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
         return
 
@@ -671,14 +671,15 @@ class SIR(Infection):
         # Example of defining all states, redefining those from ss.Infection, using overwrite=True
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infectious'),
+            ss.BoolState('infected', label='Infected'),
             ss.BoolState('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-            reset = True, # Remove any existing states (from super().define_states())
+            reset = True, # Remove any existing states and aliases (from super().define_states())
+            infectious = 'infected', # Everyone infected is infectious; ss.SEIR replaces this with a state of its own
         )
         return
 
@@ -686,7 +687,7 @@ class SIR(Infection):
         # Progress infectious -> recovered
         sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
-        self.infected[recovered] = False
+        self.clear_infection(recovered)
         self.recovered[recovered] = True
 
         # Trigger deaths
@@ -708,6 +709,11 @@ class SIR(Infection):
         self.ti_infected[uids] = self.ti
         return
 
+    def clear_infection(self, uids):
+        """ Clear the infection states, on recovery or death (`ss.SEIR` overrides this, since its `infected` is derived) """
+        self.infected[uids] = False
+        return
+
     def set_progression(self, uids):
         """ Schedule recovery or death, relative to when each agent becomes infectious """
         p = self.pars
@@ -716,7 +722,9 @@ class SIR(Infection):
         # distribution once per timestep.
         dur_inf = p.dur_inf.rvs(uids)
 
-        # Determine who dies and who recovers and when
+        # Determine who dies and who recovers and when. In ss.SIR agents are infectious as
+        # soon as they are infected, so the infectious period runs from ti_infected;
+        # ss.SEIR overrides this to run it from ti_infectious instead.
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
@@ -727,7 +735,7 @@ class SIR(Infection):
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
-        self.infected[uids] = False
+        self.clear_infection(uids)
         self.recovered[uids] = False
         return
 
@@ -752,9 +760,14 @@ class SEIR(SIR):
     Example SEIR model
 
     This class extends `ss.SIR` with an exposed state: agents who are infected but not
-    yet infectious. `exposed` and `infected` are the literal E and I compartments, so
-    `infected` (and hence `infectious`, `n_infected`, and `prevalence`) means "currently
-    transmitting", and `ti_exposed` and `ti_infected` are the times of entering E and I.
+    yet infectious. `exposed` and `infectious` are the literal E and I compartments, and
+    `infected` is derived from them: an agent is infected from the moment it acquires the
+    infection, whether or not it is yet transmitting. So `n_infected` and `prevalence`
+    count E plus I, while transmission depends on `infectious` alone.
+
+    Correspondingly, `ti_exposed` is the time of acquisition and `ti_infectious` is the
+    time of becoming infectious. `ti_infected` is deliberately not defined, since it is
+    too easily confused with `ti_infectious`.
 
     Args:
         beta (float/`ss.prob`): the infectiousness
@@ -763,7 +776,7 @@ class SEIR(SIR):
         dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infectious for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
-    plot_states = ['n_susceptible', 'n_exposed', 'n_infected', 'n_recovered']
+    plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']
 
     def __init__(self, pars=None, dur_exp=_, **kwargs):
         super().__init__()
@@ -772,10 +785,15 @@ class SEIR(SIR):
         )
         self.update_pars(pars, **kwargs)
 
-        # SIR states are added automatically; here we add the exposed state
+        # SIR states are added automatically; here we split I off from "infected", which
+        # becomes E plus I, and drop ti_infected in favor of ti_exposed and ti_infectious
         self.define_states(
             ss.BoolState('exposed', label='Exposed'),
+            ss.BoolState('infectious', label='Infectious'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
+            reset = ['infected', 'infectious', 'ti_infected'],
+            infected = lambda self: self.exposed | self.infectious, # Derived: E and I are both infected
         )
         return
 
@@ -783,21 +801,35 @@ class SEIR(SIR):
         """ Agents are exposed first, and become infectious after the latent period """
         self.exposed[uids] = True
         self.ti_exposed[uids] = self.ti
-        self.ti_infected[uids] = self.ti + self.pars.dur_exp.rvs(uids)
+        self.ti_infectious[uids] = self.ti + self.pars.dur_exp.rvs(uids)
+        return
+
+    def set_progression(self, uids):
+        """ Schedule recovery or death, relative to the end of the latent period """
+        p = self.pars
+        dur_inf = p.dur_inf.rvs(uids)
+
+        # As ss.SIR, except that the infectious period runs from ti_infectious rather than
+        # from the time of acquisition, so the latent period delays it rather than eating into it
+        will_die = p.p_death.rvs(uids)
+        dead_uids = uids[will_die]
+        rec_uids = uids[~will_die]
+        self.ti_dead[dead_uids] = self.ti_infectious[dead_uids] + dur_inf[will_die]
+        self.ti_recovered[rec_uids] = self.ti_infectious[rec_uids] + dur_inf[~will_die]
+        return
+
+    def clear_infection(self, uids):
+        """ `infected` is derived, so clear the states it is derived from """
+        self.exposed[uids] = False
+        self.infectious[uids] = False
         return
 
     def step_state(self):
         """ Progress exposed -> infectious, then the usual SIR transitions """
-        infectious = (self.exposed & (self.ti_infected <= self.ti)).uids
+        infectious = (self.exposed & (self.ti_infectious <= self.ti)).uids
         self.exposed[infectious] = False
-        self.infected[infectious] = True
+        self.infectious[infectious] = True
         super().step_state()
-        return
-
-    def step_die(self, uids):
-        """ Reset states for dead agents """
-        super().step_die(uids)
-        self.exposed[uids] = False
         return
 
 

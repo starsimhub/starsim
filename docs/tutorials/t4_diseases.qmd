@@ -149,7 +149,7 @@ sim.diseases.sirs.plot()
 
 Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes.
 
-The other classic extension is to add an "exposed" state, for agents who are infected but not yet infectious. That one is built into Starsim as `ss.SEIR`, and it's made in exactly the same way as `SIRS` above - except that it overrides `set_infection()` rather than `set_progression()`, so that agents enter `exposed` at the moment of transmission and `infected` only after the latent period `dur_exp` has passed:
+The other classic extension is to add an "exposed" state, for agents who are infected but not yet infectious. That one is built into Starsim as `ss.SEIR`, and it's made in much the same way as `SIRS` above - except that it overrides `set_infection()` rather than `set_progression()`, so that agents enter `exposed` at the moment of transmission and `infectious` only after the latent period `dur_exp` has passed:
 
 ```{python}
 sim = ss.Sim(diseases=ss.SEIR(), networks='random', verbose=0)
@@ -157,11 +157,7 @@ sim.run()
 sim.diseases.seir.plot()
 ```
 
-Note that an exposed agent doesn't transmit, because transmission uses `infectious`, which by default is an alias of `infected`. If you wanted presymptomatic transmission instead, you'd say so explicitly:
-
-```python
-self.define_aliases(infectious=lambda self: self.exposed | self.infected)
-```
+Note that an exposed agent doesn't transmit, because transmission uses `infectious`, which in `ss.SEIR` is the I compartment alone. But an exposed agent *does* have the infection, so `n_infected` and `prevalence` count both E and I: in `ss.SEIR`, `infected` is derived as `exposed | infectious`. See [Infected vs. infectious](../user_guide/modules_diseases.qmd#infected-vs-infectious) for why the two names come apart.
 
 ## Exercises
 1. **Parameter exploration**: Try different values of `dur_imm` in the SIRS model - how does it affect the epidemic curve?

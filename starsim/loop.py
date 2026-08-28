@@ -201,12 +201,12 @@ class Loop:
 
         This holds only when the module uses the inherited base `Module.update_results`
         (not overridden anywhere below `ss.Module` in the class hierarchy, so no `super()`
-        call or mixin behavior is missed) and has no auto-generated boolean-state results
-        for the base method to count. Such a call would iterate an empty list and change
+        call or mixin behavior is missed) and has no auto-generated boolean-state or
+        derived-state results for the base method to count. Such a call would iterate an empty list and change
         nothing, so omitting it from the plan is result-identical.
         """
         not_overridden = type(mod).update_results is ss.Module.update_results
-        return not_overridden and not len(mod.auto_state_list)
+        return not_overridden and not len(mod.auto_state_list) and not len(mod.derived_state_names)
 
     def collect_abs_tvecs(self):
         """

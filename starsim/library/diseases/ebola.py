@@ -96,7 +96,7 @@ class Ebola(ss.SEIR):
         ti = self.ti
 
         # Progress infectious -> severe
-        severe = (self.infected & (self.ti_severe <= ti)).uids
+        severe = (self.infectious & (self.ti_severe <= ti)).uids
         self.severe[severe] = True
 
         # Progress severe -> recovered
@@ -119,7 +119,7 @@ class Ebola(ss.SEIR):
 
         # Determine who progresses to severe and when
         sev_uids = p.p_sev.filter(uids)
-        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.rvs(sev_uids)
+        self.ti_severe[sev_uids] = self.ti_infectious[sev_uids] + p.dur_symp2sev.rvs(sev_uids)
 
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(sev_uids)
@@ -127,7 +127,7 @@ class Ebola(ss.SEIR):
         rec_sev_uids = np.setdiff1d(sev_uids, dead_uids)
         self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids)
         rec_symp_uids = np.setdiff1d(uids, sev_uids)
-        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids)
+        self.ti_recovered[rec_symp_uids] = self.ti_infectious[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids)
 
         # Determine time of burial - either immediate (safe burials) or after a delay (unsafe)
         safe_buried = p.p_safe_bury.filter(dead_uids)

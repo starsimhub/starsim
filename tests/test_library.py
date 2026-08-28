@@ -83,10 +83,10 @@ def test_compartments():
     """
     Check the SEIR-type library diseases keep consistent compartments
 
-    'exposed' and 'infected' are the literal E and I compartments, and infections are
-    counted when they happen rather than inferred from ti_infected, so seed infections
-    are excluded exactly once. Regression test for negative first-step incidence
-    (issue #1389).
+    'exposed' and 'infectious' are the literal E and I compartments, while 'infected' is
+    derived as E plus I. Infections are counted when they happen rather than inferred from
+    a ti_ state, so seed infections are excluded exactly once. Regression test for negative
+    first-step incidence (issue #1389).
     """
     sc.heading('Testing disease compartments...')
 
@@ -102,17 +102,19 @@ def test_compartments():
         dis = sim.diseases[name]
         res = sim.results[name]
         n_exp = np.array(res.n_exposed)
+        n_infectious = np.array(res.n_infectious)
         n_inf = np.array(res.n_infected)
         new = np.array(res.new_infections)
-        total = n_exp + n_inf + np.array(res.n_susceptible) + np.array(res.n_recovered)
+        total = n_exp + n_infectious + np.array(res.n_susceptible) + np.array(res.n_recovered)
         print(f'  {name}: new_infections[0]={new[0]:n}, min={new.min():n}')
 
         assert new.min() >= 0, f'{name} has negative new_infections: seeds are being double-counted'
         assert new[0] == 0, f'{name} counted its seed infections as new infections'
         assert new.sum() == res.cum_infections[-1], f'{name} cumulative infections do not match the sum'
-        assert not (dis.exposed & dis.infected).any(), f'{name} has agents in both E and I'
+        assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
         assert np.array_equal(total, np.array(sim.results.n_alive)), f'{name} compartments do not sum to the population'
-        assert dis.infectious is dis.infected, f'{name} should transmit from its I compartment'
+        assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
+        assert (dis.infectious & ~dis.infected).sum() == 0, f'{name} should transmit only from agents that are infected'
         assert n_exp.max() > 0, f'{name} never had any exposed agents'
         assert n_inf.max() > 0, f'{name} never had any infectious agents'
 

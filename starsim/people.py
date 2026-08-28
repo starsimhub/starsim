@@ -144,6 +144,17 @@ class People:
     def __len__(self):
         """ Length of people """
         return len(self.auids)
+
+    @property
+    def n_alive(self):
+        """
+        The number of living agents, which is what `results.n_alive` records
+
+        This is not the same as `len(people)`: agents who died on the current timestep are
+        not removed from `auids` until `finish_step()`, so that analyzers can still inspect
+        them. Use this rather than `len(people)` for any per-timestep denominator.
+        """
+        return np.count_nonzero(self.alive)
     
     def __repr__(self):
         return self.brief(output=True)
