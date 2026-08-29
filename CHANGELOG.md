@@ -6,6 +6,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 This release contains two performance improvements:
 - `nb_indexer()` (used for `ss.Arr` UID indexing) is now written as an explicit loop rather than `arr[inds]`, due to a regression in Numba 0.66.
 - `ss.RandomNet.get_edges()` now gathers edge targets from the agent array rather than the (much larger) edge array when every agent has the same number of contacts.
+- *GitHub info*: PR [1423](https://github.com/starsimhub/starsim/pull/1423)
 
 
 ## Version 3.6.0 (2026-08-28)
