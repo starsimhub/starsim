@@ -37,7 +37,7 @@ jobs:
           - {model: STIsim, repo: starsimhub/stisim, dir: stisim}
           - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim}
           - {model: TBsim,  repo: starsimhub/tbsim,  dir: tbsim}
-          - {model: FPsim,  repo: fpsim/fpsim,       dir: fpsim}
+          - {model: FPsim,  repo: starsimhub/fpsim,  dir: fpsim}
 
     steps:
       - name: Checkout Starsim
@@ -62,6 +62,11 @@ jobs:
       - name: Install ${{ matrix.model }} test requirements
         working-directory: ./${{ matrix.dir }}/tests
         run: pip install -r requirements.txt
+
+      - name: Download data on first load
+        if: matrix.model == 'HPVsim'
+        working-directory: ./${{ matrix.dir }}
+        run: hpvsim-download-data
 
       - name: Run ${{ matrix.model }} tests
         working-directory: ./${{ matrix.dir }}/tests
