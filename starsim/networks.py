@@ -691,9 +691,18 @@ class RandomNet(RandomExactNet):
     def get_edges(self, inds, n_contacts):
         """ Find edges by sampling the source stubs with replacement (see `ss.RandomExactNet.get_edges`) """
         source = np.repeat(inds, n_contacts)
-        if len(source):
-            idx = self.dist.rng.integers(0, len(source), len(source)) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
-            target = source[idx]
+        n = len(source)
+        if n:
+            idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
+            nc = np.asarray(n_contacts)
+            nc0 = int(nc.flat[0])
+            # Fast path: if every agent has the same number of stubs, then stub j belongs to agent j//nc0,
+            # so the (identical) targets can be gathered from the much smaller, cache-resident agent array
+            if nc.size == 1 or (nc == nc0).all():
+                np.floor_divide(idx, nc0, out=idx)
+                target = np.take(np.asarray(inds), idx).view(ss.uids)
+            else:
+                target = np.take(np.asarray(source), idx).view(ss.uids) # np.take is slightly faster than source[idx] since it skips the ss.uids subclass machinery
         else:
             target = source
         self.dist.jump() # Reset the RNG manually, as in RandomExactNet.get_edges

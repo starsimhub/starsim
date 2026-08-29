@@ -98,3 +98,8 @@
   cpu_performance: 0.948
   scaled_time: 2.078
   actual_time: 2.191
+3.6.1:
+  date: '2026-08-29'
+  cpu_performance: 0.992
+  scaled_time: 1.692
+  actual_time: 1.706

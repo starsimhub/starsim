@@ -17,7 +17,7 @@ import starsim as ss
 filename = sc.thisdir(__file__, 'benchmark_large.yaml')
 
 # Define the parameters
-default_repeats = 5
+default_repeats = 10
 pars = sc.objdict(
     n_agents = 100_000,   # Number of agents
     dur      = 100,       # Number of years to simulate
