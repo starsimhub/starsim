@@ -34,10 +34,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {model: STIsim, repo: starsimhub/stisim, dir: stisim, reqs: requirements.txt}
-          - {model: FPsim,  repo: fpsim/fpsim,       dir: fpsim,  reqs: requirements_test.txt}
-          - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim, reqs: requirements.txt}
-          - {model: TBsim, repo: starsimhub/tbsim, dir: tbsim, reqs: requirements.txt}
+          - {model: STIsim, repo: starsimhub/stisim, dir: stisim}
+          - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim}
+          - {model: TBsim,  repo: starsimhub/tbsim,  dir: tbsim}
+          - {model: FPsim,  repo: fpsim/fpsim,       dir: fpsim}
 
     steps:
       - name: Checkout Starsim
@@ -61,7 +61,7 @@ jobs:
 
       - name: Install ${{ matrix.model }} test requirements
         working-directory: ./${{ matrix.dir }}/tests
-        run: pip install -r ${{ matrix.reqs }}
+        run: pip install -r requirements.txt
 
       - name: Run ${{ matrix.model }} tests
         working-directory: ./${{ matrix.dir }}/tests
