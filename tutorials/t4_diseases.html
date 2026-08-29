@@ -724,7 +724,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="step-1-modifying-disease-parameters" class="level2">
 <h2 class="anchored" data-anchor-id="step-1-modifying-disease-parameters">Step 1: Modifying disease parameters</h2>
 <p>The easiest way to customize a disease is by changing its parameters. Much like sims or networks, a <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>Disease</code></a> can be customized by passing in a <code>pars</code> dictionary containing parameters. Let’s start with a simple SIR model and see how different parameters affect the simulation:</p>
-<div id="ac1c5f89" class="cell" data-execution_count="2">
+<div id="c90926ab" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>sir <span class="op">=</span> ss.SIR(dur_inf<span class="op">=</span><span class="dv">10</span>, beta<span class="op">=</span><span class="fl">0.2</span>, init_prev<span class="op">=</span><span class="fl">0.4</span>, p_death<span class="op">=</span><span class="fl">0.2</span>)</span>
@@ -736,8 +736,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   Running 2010 (10/51) (0.03 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.05 s)  ••••••••———————————— 41%
   Running 2030 (30/51) (0.07 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.08 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.10 s)  •••••••••••••••••••• 100%
+  Running 2040 (40/51) (0.09 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.11 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -756,7 +756,7 @@ Figure(896x672)</code></pre>
 <section id="step-2-simulating-multiple-diseases" class="level2">
 <h2 class="anchored" data-anchor-id="step-2-simulating-multiple-diseases">Step 2: Simulating multiple diseases</h2>
 <p>You can add multiple diseases to the same simulation, like so. Here we are making use of a “connector”. A connector is a module in Starsim that tells you how two things relate to one another - in this case, how HIV modifies a person’s transmissibility and susceptibility to SIS and vice versa. Unlike dieases, networks, interventions, etc., connectors don’t have any pre-specified location in the sim. Instead, they can be placed wherever they make the most sense (for example, a connector that mediated how two networks behaved might be placed at the beginning or end of the list of networks; for diseases, it might be placed at the beginning or end of the list of diseases).</p>
-<div id="ddaf5f7d" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div id="bb7fd271" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -807,9 +807,9 @@ Figure(896x672)</code></pre>
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.05 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.10 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.15 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.19 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.24 s)  •••••••••••••••••••• 100%
+  Running 2030 (30/51) (0.16 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.21 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.25 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -837,7 +837,7 @@ Figure(768x576)</code></pre>
 <h2 class="anchored" data-anchor-id="step-3-creating-your-own-disease-model">Step 3: Creating your own disease model</h2>
 <p>Now for the fun part - creating your own disease from scratch! Rather than starting from a blank page, the easiest approach is usually to inherit from one of the templates in <code>diseases.py</code> and change only what’s different.</p>
 <p>Let’s turn the SIR model into an SIRS model, where immunity wanes: recovered agents eventually become susceptible again. This is what lets a disease settle into endemic transmission rather than burning through the population once and disappearing.</p>
-<div id="b49e0c92" class="cell" data-execution_count="4">
+<div id="21833453" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -877,7 +877,7 @@ Figure(768x576)</code></pre>
 <li><code>step_state()</code> likewise calls <a href="https://docs.python.org/3/library/functions.html#super" title="1"><code>super()</code></a> and adds only the recovered → susceptible transition.</li>
 </ol>
 <p>Here’s how it looks in practice:</p>
-<div id="be16e009" class="cell" data-execution_count="5">
+<div id="95505270" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sirs <span class="op">=</span> SIRS(dur_imm<span class="op">=</span>ss.lognorm_ex(mean<span class="op">=</span>ss.years(<span class="dv">5</span>)))</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>sirs, networks<span class="op">=</span><span class="st">'random'</span>, dur<span class="op">=</span><span class="dv">100</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -895,7 +895,7 @@ Figure(768x576)</code></pre>
 </div>
 <p>Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes.</p>
 <p>The other classic extension is to add an “exposed” state, for agents who are infected but not yet infectious. That one is built into Starsim as <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>, and it’s made in much the same way as <code>SIRS</code> above - except that it overrides <code>set_infection()</code> rather than <code>set_progression()</code>, so that agents enter <code>exposed</code> at the moment of transmission and <code>infectious</code> only after the latent period <code>dur_exp</code> has passed:</p>
-<div id="383c48c4" class="cell" data-execution_count="6">
+<div id="87121683" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SEIR(), networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>sim.diseases.seir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1356,7 +1356,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

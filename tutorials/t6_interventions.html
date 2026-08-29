@@ -736,7 +736,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="vaccination" class="level2">
 <h2 class="anchored" data-anchor-id="vaccination">Vaccination</h2>
 <p>To create an example, let’s first create the parameters that we want to use for the simulation:</p>
-<div id="2baf629d" class="cell" data-execution_count="2">
+<div id="fc52c146" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -756,7 +756,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Now we’ll create a vaccine product and a vaccination intervention:</p>
-<div id="04ac046a" class="cell" data-execution_count="3">
+<div id="0e3a1342" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the product - a vaccine with 50% efficacy</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>my_vaccine <span class="op">=</span> ss.simple_vx(efficacy<span class="op">=</span><span class="fl">0.5</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -775,19 +775,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 5000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010 (10/51) (0.05 s)  ••••———————————————— 22%
-  Running 2020 (20/51) (0.09 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.13 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.17 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.21 s)  •••••••••••••••••••• 100%
+  Running 2010 (10/51) (0.06 s)  ••••———————————————— 22%
+  Running 2020 (20/51) (0.10 s)  ••••••••———————————— 41%
+  Running 2030 (30/51) (0.14 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.18 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.22 s)  •••••••••••••••••••• 100%
 
 Initializing sim with 5000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.08 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.12 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.16 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.20 s)  •••••••••••••••••••• 100%
+  Running 2030 (30/51) (0.13 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.18 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.22 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="3">
@@ -795,7 +795,7 @@ Initializing sim with 5000 agents
 </div>
 </div>
 <p>If we want to see the impact, we can create a plot:</p>
-<div id="9a0db537" class="cell" data-execution_count="4">
+<div id="18c03495" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>res_base <span class="op">=</span> sim_base.results</span>
@@ -821,7 +821,7 @@ Initializing sim with 5000 agents
 <section id="custom-interventions" class="level2">
 <h2 class="anchored" data-anchor-id="custom-interventions">Custom interventions</h2>
 <p>The most common way of accessing diseases for modification by interventions is via their names (e.g.&nbsp;<code>sir</code>, <code>sis</code>). This means that typically, different interventions need to be defined for different diseases. The example below shows how to define a simple vaccine for SIS which is just a function, rather than a class:</p>
-<div id="67f6beeb" class="cell" data-execution_count="5">
+<div id="6d7e0574" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> simple_sis_vaccine(sim, start<span class="op">=</span><span class="dv">2030</span>, eff<span class="op">=</span><span class="fl">0.9</span>):</span>
@@ -846,9 +846,9 @@ Initializing sim with 5000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.08 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.11 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.15 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.19 s)  •••••••••••••••••••• 100%
+  Running 2030 (30/51) (0.12 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.16 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.20 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -1303,7 +1303,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

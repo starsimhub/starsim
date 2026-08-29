@@ -750,7 +750,7 @@ Note
 <section id="importing-and-using-library-modules" class="level2">
 <h2 class="anchored" data-anchor-id="importing-and-using-library-modules">Importing and using library modules</h2>
 <p>Library classes are available both at the top level and via their submodule; the two are identical objects:</p>
-<div id="765fb872" class="cell" data-execution_count="1">
+<div id="c9388ab3" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
@@ -761,7 +761,7 @@ Note
 </div>
 </div>
 <p>Otherwise they behave exactly like core modules, and can be mixed freely with them:</p>
-<div id="177cf12d" class="cell" data-execution_count="2">
+<div id="deb5ecb0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>outbreak <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, dur<span class="op">=</span>ss.years(<span class="dv">1</span>), dt<span class="op">=</span>ss.days(<span class="dv">1</span>), n_agents<span class="op">=</span><span class="dv">2000</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Measles(beta<span class="op">=</span>ss.perday(<span class="fl">0.3</span>)), networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -771,40 +771,40 @@ Note
   Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
   Running 2000.03 (10/366) (0.03 s)  ———————————————————— 3%
   Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
-  Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
+  Running 2000.08 (30/366) (0.09 s)  •——————————————————— 8%
   Running 2000.11 (40/366) (0.11 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (0.17 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (0.18 s)  ••••———————————————— 22%
-  Running 2000.25 (90/366) (0.20 s)  ••••———————————————— 25%
-  Running 2000.27 (100/366) (0.22 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (0.24 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (0.26 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (0.27 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (0.29 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (0.31 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (0.33 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (0.35 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (0.37 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (0.39 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (0.40 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (0.42 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (0.44 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (0.45 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (0.47 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (0.49 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (0.51 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (0.53 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (0.54 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (0.56 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (0.58 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (0.60 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (0.62 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (0.64 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (0.66 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (0.68 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (0.69 s)  •••••••••••••••••••— 99%
+  Running 2000.14 (50/366) (0.14 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.16 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.18 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.20 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.22 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (0.24 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.26 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.28 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.30 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.31 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.33 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.35 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.38 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.39 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.41 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.43 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.45 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.47 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.49 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.51 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.53 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.55 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.57 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.59 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.61 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.63 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.65 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.67 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.69 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.71 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.73 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.75 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -864,7 +864,7 @@ Figure(768x576)</code></pre>
 </tbody>
 </table>
 <p>All three latent-period models subclass <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>, which owns the S→E→I→R lifecycle. <code>Measles</code> supplies only parameter values. <code>Ebola</code> and <code>Cholera</code> additionally override <code>set_progression()</code> for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. <code>Cholera</code> also extends <code>infect()</code> to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.</p>
-<div id="ba20fa4a" class="cell" data-execution_count="3">
+<div id="896c12ff" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Cholera(beta<span class="op">=</span>ss.perday(<span class="fl">0.5</span>)), networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'cholera'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -872,41 +872,41 @@ Figure(768x576)</code></pre>
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
   Running 2000.03 (10/366) (0.04 s)  ———————————————————— 3%
-  Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
-  Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
-  Running 2000.11 (40/366) (0.11 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (0.18 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (0.20 s)  ••••———————————————— 22%
-  Running 2000.25 (90/366) (0.22 s)  ••••———————————————— 25%
-  Running 2000.27 (100/366) (0.24 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (0.27 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (0.29 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (0.32 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (0.34 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (0.36 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (0.39 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (0.41 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (0.43 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (0.46 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (0.48 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (0.50 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (0.53 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (0.55 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (0.57 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (0.60 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (0.62 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (0.64 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (0.66 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (0.69 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (0.71 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (0.73 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (0.75 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (0.78 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (0.80 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (0.82 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (0.85 s)  •••••••••••••••••••— 99%
+  Running 2000.05 (20/366) (0.07 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.09 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (0.12 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (0.14 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.17 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.19 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.22 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.24 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (0.26 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.29 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.31 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.34 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.36 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.39 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.41 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.44 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.46 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.49 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.51 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.54 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.56 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.59 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.61 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.64 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.66 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.68 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.71 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.73 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.76 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.78 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.81 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.83 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.86 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.88 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.91 s)  •••••••••••••••••••— 99%
 Figure(896x672)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -927,7 +927,7 @@ Figure(896x672)</code></pre>
 </ul>
 <p>Since HIV mortality is CD4-dependent, treatment reduces deaths as well as transmission:</p>
 <p>Unlike the outbreak diseases above, HIV plays out over years, so a yearly timestep and a multi-decade horizon are appropriate:</p>
-<div id="7731e004" class="cell" data-execution_count="4">
+<div id="60d14919" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>endemic <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2030</span>, n_agents<span class="op">=</span><span class="dv">2000</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> <span class="kw">lambda</span>: ssl.HIV(beta<span class="op">=</span>ss.peryear(<span class="fl">0.05</span>), init_prev<span class="op">=</span><span class="fl">0.05</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> <span class="kw">lambda</span>: ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">2</span>))</span>
@@ -943,17 +943,17 @@ Figure(896x672)</code></pre>
 <span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>sim<span class="sc">.</span>label<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>sim<span class="sc">.</span>results<span class="sc">.</span>hiv<span class="sc">.</span>new_deaths<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:n}</span><span class="ss"> deaths, '</span></span>
 <span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f'</span><span class="sc">{</span>sim<span class="sc">.</span>results<span class="sc">.</span>hiv<span class="sc">.</span>prevalence[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:0.1%}</span><span class="ss"> prevalence in 2030'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Initializing sim "No ART" with 2000 agentsInitializing sim "With ART" with 2000 agents
-
+<pre><code>Initializing sim "No ART" with 2000 agents
+Initializing sim "With ART" with 2000 agents
   Running "No ART": 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
   Running "With ART": 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
   Running "No ART": 2010 (10/31) (0.03 s)  •••••••————————————— 35%
-  Running "With ART": 2010 (10/31) (0.03 s)  •••••••————————————— 35%
-  Running "No ART": 2020 (20/31) (0.05 s)  •••••••••••••——————— 68%
-  Running "With ART": 2020 (20/31) (0.06 s)  •••••••••••••——————— 68%
-  Running "No ART": 2030 (30/31) (0.08 s)  •••••••••••••••••••• 100%
+  Running "With ART": 2010 (10/31) (0.04 s)  •••••••————————————— 35%
+  Running "No ART": 2020 (20/31) (0.07 s)  •••••••••••••——————— 68%
+  Running "With ART": 2020 (20/31) (0.08 s)  •••••••••••••——————— 68%
+  Running "No ART": 2030 (30/31) (0.10 s)  •••••••••••••••••••• 100%
 
-  Running "With ART": 2030 (30/31) (0.09 s)  •••••••••••••••••••• 100%
+  Running "With ART": 2030 (30/31) (0.12 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -1018,49 +1018,49 @@ Note
 </tbody>
 </table>
 <p><code>DiskNet</code> is a spatial network: each agent has an <code>x</code>, <code>y</code> position and a heading, moves at speed <code>v</code> each timestep, bounces off the walls of the unit square, and is connected to every agent within radius <code>r</code>. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:</p>
-<div id="7ea6669c" class="cell" data-execution_count="5">
+<div id="9090e980" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIS(beta<span class="op">=</span>ss.perday(<span class="fl">0.2</span>)), networks<span class="op">=</span>ssl.DiskNet(r<span class="op">=</span><span class="fl">0.05</span>), <span class="op">**</span>outbreak)</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
-  Running 2000.03 (10/366) (0.30 s)  ———————————————————— 3%
-  Running 2000.05 (20/366) (0.59 s)  •——————————————————— 6%
-  Running 2000.08 (30/366) (0.87 s)  •——————————————————— 8%
-  Running 2000.11 (40/366) (1.16 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (1.44 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (1.73 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (2.01 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (2.30 s)  ••••———————————————— 22%
-  Running 2000.25 (90/366) (2.59 s)  ••••———————————————— 25%
-  Running 2000.27 (100/366) (2.87 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (3.15 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (3.43 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (3.71 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (4.01 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (4.29 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (4.59 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (4.87 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (5.15 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (5.43 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (5.71 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (6.00 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (6.30 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (6.60 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (6.90 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (7.19 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (7.49 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (7.78 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (8.07 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (8.36 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (8.64 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (8.93 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (9.22 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (9.50 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (9.78 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (10.06 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (10.34 s)  •••••••••••••••••••— 99%
+  Running 2000.03 (10/366) (0.32 s)  ———————————————————— 3%
+  Running 2000.05 (20/366) (0.62 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.93 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (1.24 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (1.55 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (1.86 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (2.17 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (2.48 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (2.80 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (3.11 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (3.41 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (3.72 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (4.02 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (4.33 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (4.64 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (4.95 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (5.26 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (5.57 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (5.88 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (6.19 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (6.50 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (6.82 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (7.12 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (7.42 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (7.74 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (8.06 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (8.36 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (8.68 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (8.99 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (9.30 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (9.61 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (9.92 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (10.23 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (10.54 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (10.84 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (11.15 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1076,7 +1076,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="household-networks">Household networks</h3>
 <p><code>ssl.HouseholdNet</code> is the most substantial library network. It builds households from <a href="https://dhsprogram.com">DHS</a> household survey data, overriding each agent’s age and sex to match a randomly drawn real household. With <code>dynamic=True</code> (the default) households also evolve: one woman is designated head of each household, pregnant non-heads may move out to form new households, and births are added to their mother’s household.</p>
 <p>Real DHS data requires registration, so <code>dhs_data='default'</code> generates synthetic data with the same structure for demos and testing:</p>
-<div id="535f2fb5" class="cell" data-execution_count="6">
+<div id="0cb76eed" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>ssl.HouseholdNet(dhs_data<span class="op">=</span><span class="st">'default'</span>),</span>
@@ -1093,9 +1093,9 @@ Figure(768x576)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
-  Running 2010 (10/31) (0.06 s)  •••••••————————————— 35%
-  Running 2020 (20/31) (0.13 s)  •••••••••••••——————— 68%
-  Running 2030 (30/31) (0.20 s)  •••••••••••••••••••• 100%
+  Running 2010 (10/31) (0.07 s)  •••••••————————————— 35%
+  Running 2020 (20/31) (0.14 s)  •••••••••••••——————— 68%
+  Running 2030 (30/31) (0.21 s)  •••••••••••••••••••• 100%
 
 Households: 991; mean size: 3.3; max size: 11
 Mean age: 48.1 years</code></pre>
@@ -1161,7 +1161,7 @@ Warning
 <section id="congenital-outcomes" class="level3">
 <h3 class="anchored" data-anchor-id="congenital-outcomes">Congenital outcomes</h3>
 <p><code>CongenitalDisease</code> demonstrates the generic congenital framework built into <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a>. When transmission occurs to an unborn agent via <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>ss.PrenatalNet</code></a>, <code>set_congenital()</code> samples an outcome from the <code>birth_outcomes</code> distribution and schedules it around delivery time; <code>step_congenital()</code> then executes it. Lethal outcomes call <code>request_death()</code>, while non-lethal outcomes set a boolean state. Fetal losses (<code>'stillborn'</code>, <code>'miscarriage'</code>) are scheduled one timestep before delivery so that they happen in utero — otherwise <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a>, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:</p>
-<div id="d066b8ee" class="cell" data-execution_count="7">
+<div id="b4b60f47" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>mnch_pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2005</span>, n_agents<span class="op">=</span><span class="dv">2000</span>, dt<span class="op">=</span>ss.weeks(<span class="dv">1</span>))</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    diseases      <span class="op">=</span> ssl.mnch.CongenitalDisease(beta<span class="op">=</span>ss.peryear(<span class="dv">20</span>), init_prev<span class="op">=</span><span class="fl">0.2</span>),</span>
@@ -1177,32 +1177,32 @@ Warning
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
-  Running 2000.19 (10/261) (0.07 s)  ———————————————————— 4%
-  Running 2000.38 (20/261) (0.13 s)  •——————————————————— 8%
-  Running 2000.58 (30/261) (0.20 s)  ••—————————————————— 12%
-  Running 2000.77 (40/261) (0.26 s)  •••————————————————— 16%
-  Running 2000.96 (50/261) (0.32 s)  •••————————————————— 20%
-  Running 2001.15 (60/261) (0.39 s)  ••••———————————————— 23%
-  Running 2001.34 (70/261) (0.45 s)  •••••——————————————— 27%
-  Running 2001.53 (80/261) (0.51 s)  ••••••—————————————— 31%
-  Running 2001.73 (90/261) (0.58 s)  ••••••—————————————— 35%
-  Running 2001.92 (100/261) (0.65 s)  •••••••————————————— 39%
-  Running 2002.11 (110/261) (0.71 s)  ••••••••———————————— 43%
-  Running 2002.3 (120/261) (0.78 s)  •••••••••——————————— 46%
-  Running 2002.49 (130/261) (0.85 s)  ••••••••••—————————— 50%
-  Running 2002.68 (140/261) (0.91 s)  ••••••••••—————————— 54%
-  Running 2002.88 (150/261) (0.97 s)  •••••••••••————————— 58%
-  Running 2003.07 (160/261) (1.04 s)  ••••••••••••———————— 62%
-  Running 2003.26 (170/261) (1.10 s)  •••••••••••••——————— 66%
-  Running 2003.45 (180/261) (1.17 s)  •••••••••••••——————— 69%
-  Running 2003.64 (190/261) (1.23 s)  ••••••••••••••—————— 73%
-  Running 2003.84 (200/261) (1.30 s)  •••••••••••••••————— 77%
-  Running 2004.03 (210/261) (1.36 s)  ••••••••••••••••———— 81%
-  Running 2004.22 (220/261) (1.43 s)  ••••••••••••••••———— 85%
-  Running 2004.41 (230/261) (1.49 s)  •••••••••••••••••——— 89%
-  Running 2004.6 (240/261) (1.55 s)  ••••••••••••••••••—— 92%
-  Running 2004.79 (250/261) (1.62 s)  •••••••••••••••••••— 96%
-  Running 2004.99 (260/261) (1.68 s)  •••••••••••••••••••• 100%
+  Running 2000.19 (10/261) (0.08 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.14 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.21 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.28 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.35 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.42 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.49 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.56 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.63 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.70 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.77 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.84 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.91 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (0.98 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.04 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.12 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.18 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.26 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.32 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.39 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.46 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.53 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.59 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.66 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.73 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.80 s)  •••••••••••••••••••• 100%
 
 Births: 189.0
 Stillbirths: 81.0
@@ -1215,7 +1215,7 @@ Congenital infections: 91</code></pre>
 <section id="neonatal-deaths" class="level3">
 <h3 class="anchored" data-anchor-id="neonatal-deaths">Neonatal deaths</h3>
 <p><code>NeonatalSepsis</code> illustrates that neonatal death detection is <em>passive</em>: any mechanism that kills an agent aged 0–28 days is automatically classified as a neonatal death by the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> module, with no registration or callback needed. Results therefore appear on the pregnancy module, not the disease:</p>
-<div id="9945ba09" class="cell" data-execution_count="8">
+<div id="c58ddc17" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    diseases     <span class="op">=</span> ssl.mnch.NeonatalSepsis(),</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    demographics <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
@@ -1229,32 +1229,32 @@ Congenital infections: 91</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
-  Running 2000.19 (10/261) (0.31 s)  ———————————————————— 4%
-  Running 2000.38 (20/261) (0.36 s)  •——————————————————— 8%
-  Running 2000.58 (30/261) (0.41 s)  ••—————————————————— 12%
-  Running 2000.77 (40/261) (0.47 s)  •••————————————————— 16%
-  Running 2000.96 (50/261) (0.52 s)  •••————————————————— 20%
-  Running 2001.15 (60/261) (0.58 s)  ••••———————————————— 23%
-  Running 2001.34 (70/261) (0.64 s)  •••••——————————————— 27%
-  Running 2001.53 (80/261) (0.70 s)  ••••••—————————————— 31%
-  Running 2001.73 (90/261) (0.75 s)  ••••••—————————————— 35%
-  Running 2001.92 (100/261) (0.81 s)  •••••••————————————— 39%
-  Running 2002.11 (110/261) (0.87 s)  ••••••••———————————— 43%
-  Running 2002.3 (120/261) (0.93 s)  •••••••••——————————— 46%
-  Running 2002.49 (130/261) (0.99 s)  ••••••••••—————————— 50%
-  Running 2002.68 (140/261) (1.04 s)  ••••••••••—————————— 54%
-  Running 2002.88 (150/261) (1.10 s)  •••••••••••————————— 58%
-  Running 2003.07 (160/261) (1.16 s)  ••••••••••••———————— 62%
-  Running 2003.26 (170/261) (1.21 s)  •••••••••••••——————— 66%
-  Running 2003.45 (180/261) (1.27 s)  •••••••••••••——————— 69%
-  Running 2003.64 (190/261) (1.33 s)  ••••••••••••••—————— 73%
-  Running 2003.84 (200/261) (1.39 s)  •••••••••••••••————— 77%
-  Running 2004.03 (210/261) (1.45 s)  ••••••••••••••••———— 81%
-  Running 2004.22 (220/261) (1.51 s)  ••••••••••••••••———— 85%
-  Running 2004.41 (230/261) (1.56 s)  •••••••••••••••••——— 89%
-  Running 2004.6 (240/261) (1.62 s)  ••••••••••••••••••—— 92%
-  Running 2004.79 (250/261) (1.68 s)  •••••••••••••••••••— 96%
-  Running 2004.99 (260/261) (1.74 s)  •••••••••••••••••••• 100%
+  Running 2000.19 (10/261) (0.33 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.39 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.45 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.50 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.57 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.63 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.69 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.76 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.82 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.88 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.95 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (1.01 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (1.07 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (1.13 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.19 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.25 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.31 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.38 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.44 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.50 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.57 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.63 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.69 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.76 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.83 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.89 s)  •••••••••••••••••••• 100%
 
 New infections: 43.0
 Births: 216.0
@@ -1266,7 +1266,7 @@ Neonatal deaths: 32.0</code></pre>
 <h3 class="anchored" data-anchor-id="fetal-health">Fetal health</h3>
 <p><code>FetalHealth</code> is deliberately disease-agnostic: it tracks a baseline fetal weight percentile per pregnancy and exposes two levers that other modules pull — bringing delivery forward (preterm risk) and accumulating growth restriction (low birth weight). At delivery it computes <code>birth_weight</code> and classifies newborns as LBW, VLBW, or SGA.</p>
 <p>The <code>fetal_infection</code> connector pulls those levers when a pregnant woman is infected, and the <code>treat_pregnant</code> intervention partially reverses the damage when she is treated. Note that <code>FetalHealth</code> is passed via <code>custom</code>, since it is not a disease, network, demographic, or intervention:</p>
-<div id="3f894213" class="cell" data-execution_count="9">
+<div id="d5cf24cc" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    diseases      <span class="op">=</span> ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    demographics  <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
@@ -1281,32 +1281,32 @@ Neonatal deaths: 32.0</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
-  Running 2000.19 (10/261) (0.07 s)  ———————————————————— 4%
-  Running 2000.38 (20/261) (0.14 s)  •——————————————————— 8%
-  Running 2000.58 (30/261) (0.22 s)  ••—————————————————— 12%
-  Running 2000.77 (40/261) (0.29 s)  •••————————————————— 16%
-  Running 2000.96 (50/261) (0.36 s)  •••————————————————— 20%
-  Running 2001.15 (60/261) (0.42 s)  ••••———————————————— 23%
-  Running 2001.34 (70/261) (0.49 s)  •••••——————————————— 27%
-  Running 2001.53 (80/261) (0.57 s)  ••••••—————————————— 31%
-  Running 2001.73 (90/261) (0.64 s)  ••••••—————————————— 35%
-  Running 2001.92 (100/261) (0.71 s)  •••••••————————————— 39%
-  Running 2002.11 (110/261) (0.79 s)  ••••••••———————————— 43%
-  Running 2002.3 (120/261) (0.86 s)  •••••••••——————————— 46%
-  Running 2002.49 (130/261) (0.93 s)  ••••••••••—————————— 50%
-  Running 2002.68 (140/261) (1.00 s)  ••••••••••—————————— 54%
-  Running 2002.88 (150/261) (1.07 s)  •••••••••••————————— 58%
-  Running 2003.07 (160/261) (1.14 s)  ••••••••••••———————— 62%
-  Running 2003.26 (170/261) (1.21 s)  •••••••••••••——————— 66%
-  Running 2003.45 (180/261) (1.28 s)  •••••••••••••——————— 69%
-  Running 2003.64 (190/261) (1.35 s)  ••••••••••••••—————— 73%
-  Running 2003.84 (200/261) (1.43 s)  •••••••••••••••————— 77%
-  Running 2004.03 (210/261) (1.50 s)  ••••••••••••••••———— 81%
-  Running 2004.22 (220/261) (1.58 s)  ••••••••••••••••———— 85%
-  Running 2004.41 (230/261) (1.64 s)  •••••••••••••••••——— 89%
-  Running 2004.6 (240/261) (1.71 s)  ••••••••••••••••••—— 92%
-  Running 2004.79 (250/261) (1.79 s)  •••••••••••••••••••— 96%
-  Running 2004.99 (260/261) (1.86 s)  •••••••••••••••••••• 100%
+  Running 2000.19 (10/261) (0.08 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.15 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.23 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.30 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.38 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.46 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.53 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.61 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.69 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.77 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.85 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.93 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (1.01 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (1.08 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.15 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.23 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.30 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.38 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.46 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.53 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.62 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.70 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.76 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.84 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.93 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (2.00 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -1324,11 +1324,11 @@ Figure(896x672)</code></pre>
 <section id="adapting-a-library-module" class="level2">
 <h2 class="anchored" data-anchor-id="adapting-a-library-module">Adapting a library module</h2>
 <p>Because library modules are ordinary Starsim modules, the usual customization routes all apply. The lightest touch is to override parameters:</p>
-<div id="475969f0" class="cell" data-execution_count="10">
+<div id="59b3b374" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>measles <span class="op">=</span> ssl.Measles(beta<span class="op">=</span>ss.perday(<span class="fl">0.4</span>), dur_exp<span class="op">=</span>ss.normal(loc<span class="op">=</span>ss.days(<span class="dv">10</span>)), p_death<span class="op">=</span><span class="fl">0.01</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>For structural changes, subclass. Here we give measles waning immunity by making recovered agents susceptible again after a delay:</p>
-<div id="2ede2b84" class="cell" data-execution_count="11">
+<div id="8e778ab6" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WaningMeasles(ssl.Measles):</span>
 <span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, dur_immune<span class="op">=</span>ss.years(<span class="dv">1</span>), <span class="op">**</span>kwargs):</span>
 <span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(<span class="op">**</span>kwargs)</span>
@@ -1360,41 +1360,41 @@ Figure(896x672)</code></pre>
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
   Running 2000.03 (10/366) (0.02 s)  ———————————————————— 3%
-  Running 2000.05 (20/366) (0.05 s)  •——————————————————— 6%
+  Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
   Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
-  Running 2000.11 (40/366) (0.10 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (0.12 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (0.13 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (0.15 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (0.17 s)  ••••———————————————— 22%
-  Running 2000.25 (90/366) (0.19 s)  ••••———————————————— 25%
-  Running 2000.27 (100/366) (0.21 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (0.23 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (0.25 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (0.27 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (0.29 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (0.31 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (0.32 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (0.34 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (0.36 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (0.38 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (0.40 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (0.42 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (0.44 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (0.46 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (0.48 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (0.49 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (0.51 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (0.53 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (0.55 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (0.57 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (0.59 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (0.61 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (0.62 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (0.64 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (0.66 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (0.68 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (0.70 s)  •••••••••••••••••••— 99%
+  Running 2000.11 (40/366) (0.11 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.17 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.19 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.21 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (0.23 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.25 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.27 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.29 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.31 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.33 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.35 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.37 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.39 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.41 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.75 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.77 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.79 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.81 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.84 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.86 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.87 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.89 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.91 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.93 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.95 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.98 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (1.00 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (1.01 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (1.04 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (1.05 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (1.07 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1851,7 +1851,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

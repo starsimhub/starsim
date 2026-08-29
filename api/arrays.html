@@ -1495,6 +1495,7 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
 <h3 class="anchored" data-anchor-id="starsim.arrays.nb_indexer">nb_indexer</h3>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>arrays.nb_indexer(arr, inds)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Roughly 30% faster than NumPy for large numbers of indices (&gt;10k)</p>
+<p>NB: in some versions of Numba (&gt;0.62), the explicit loop is much faster than array indexing.</p>
 </section>
 <section id="starsim.arrays.nb_true" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.arrays.nb_true">nb_true</h3>
@@ -1945,7 +1946,7 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

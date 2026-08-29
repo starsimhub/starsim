@@ -656,6 +656,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul>
+  <li><a href="#version-3.6.1-2026-08-29" id="toc-version-3.6.1-2026-08-29" class="nav-link" data-scroll-target="#version-3.6.1-2026-08-29">Version 3.6.1 (2026-08-29)</a></li>
   <li><a href="#version-3.6.0-2026-08-28" id="toc-version-3.6.0-2026-08-28" class="nav-link" data-scroll-target="#version-3.6.0-2026-08-28">Version 3.6.0 (2026-08-28)</a>
   <ul>
   <li><a href="#initialization-performance" id="toc-initialization-performance" class="nav-link" data-scroll-target="#initialization-performance">Initialization performance</a></li>
@@ -833,6 +834,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term “Regression”. Changes that may require update to downstream code are flagged with the term “Migration”.</p>
+<section id="version-3.6.1-2026-08-29" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.6.1-2026-08-29">Version 3.6.1 (2026-08-29)</h2>
+<p>This release contains two performance improvements: - <code>nb_indexer()</code> (used for <a href="./api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> UID indexing) is now written as an explicit loop rather than <code>arr[inds]</code>, due to a regression in Numba 0.66. - <a href="./api/networks.html#starsim.networks.RandomNet.get_edges" title="0"><code>ss.RandomNet.get_edges()</code></a> now gathers edge targets from the agent array rather than the (much larger) edge array when every agent has the same number of contacts.</p>
+</section>
 <section id="version-3.6.0-2026-08-28" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.6.0-2026-08-28">Version 3.6.0 (2026-08-28)</h2>
 <p>This release delivers substantial framework-overhead performance improvements, focused on simulation initialization and per-timestep execution. The gains are largest for lightweight/ODE-style simulations (e.g.&nbsp;a bare 10-year daily sim now initializes roughly 35x faster, and runs ~2x faster with <code>people_results=False</code>); simulations with many modules see large initialization speedups from cheaper module timeline copies, and simulations run with common random numbers disabled (<code>ss.options.crn = False</code>) are ~1.2-1.3x faster than with CRN. It also contains several bugfixes, a new <a href="./api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> base class, and a new syntax for defining state aliases.</p>
@@ -2606,7 +2611,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

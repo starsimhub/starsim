@@ -756,7 +756,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="vaccines" class="level2">
 <h2 class="anchored" data-anchor-id="vaccines">Vaccines</h2>
 <p>The simplest product to use is <a href="../api/products.html#starsim.products.simple_vx" title="0"><code>ss.simple_vx</code></a>, a built-in vaccine that reduces an agent’s relative susceptibility (<code>rel_sus</code>). It can be “leaky” (everyone who is vaccinated gets partial protection, the default) or “all-or-nothing” (<code>leaky=False</code>, where a fraction of recipients are fully protected and the rest are not protected at all):</p>
-<div id="253fd9a6" class="cell" data-execution_count="1">
+<div id="76f6fb29" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -786,7 +786,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="diagnostics" class="level2">
 <h2 class="anchored" data-anchor-id="diagnostics">Diagnostics</h2>
 <p>A diagnostic product (<a href="../api/products.html#starsim.products.Dx" title="0"><code>ss.Dx</code></a>) is defined by a dataframe giving the probability of each test result, conditional on an agent’s true disease state. The results are returned in priority order (the <code>hierarchy</code>), with the first listed result taking precedence when an agent could match more than one:</p>
-<div id="a34d80af" class="cell" data-execution_count="2">
+<div id="0b178d11" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -820,7 +820,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="treatments" class="level2">
 <h2 class="anchored" data-anchor-id="treatments">Treatments</h2>
 <p>A treatment product (<a href="../api/products.html#starsim.products.Tx" title="0"><code>ss.Tx</code></a>) moves agents from one disease state to another with a given efficacy. It’s defined by a dataframe with <code>disease</code>, <code>state</code>, <code>post_state</code>, and <code>efficacy</code> columns. Here we clear infection in an SIS model, returning treated agents to susceptible:</p>
-<div id="fab89a2e" class="cell" data-execution_count="3">
+<div id="a08b50a1" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -856,7 +856,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="writing-a-custom-product">Writing a custom product</h2>
 <p>If the built-in products don’t do what you need, you can write your own by subclassing <a href="../api/products.html#starsim.products.Vx" title="0"><code>ss.Vx</code></a>, <a href="../api/products.html#starsim.products.Dx" title="0"><code>ss.Dx</code></a>, <a href="../api/products.html#starsim.products.Tx" title="0"><code>ss.Tx</code></a>, or <a href="../api/products.html#starsim.products.Product" title="0"><code>ss.Product</code></a> directly and implementing <code>administer()</code>. Vaccine products receive <code>(people, uids)</code>; diagnostics and treatments receive <code>(uids)</code> and return their outcomes.</p>
 <p>The example below is a vaccine whose efficacy is higher for younger agents:</p>
-<div id="990cda67" class="cell" data-execution_count="4">
+<div id="6d83c13b" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1342,7 +1342,7 @@ Tip
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

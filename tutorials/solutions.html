@@ -757,7 +757,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h3 class="anchored" data-anchor-id="question-1">Question 1</h3>
 <p><strong>Q: To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?</strong></p>
 <p>A: We would simply change <code>'sir'</code> to <code>'sis'</code>:</p>
-<div id="8e377c8e" class="cell" data-execution_count="2">
+<div id="172d207c" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -786,7 +786,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.05 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.09 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.12 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.13 s)  ••••••••••••———————— 61%
   Running 2040 (40/51) (0.16 s)  ••••••••••••••••———— 80%
   Running 2050 (50/51) (0.20 s)  •••••••••••••••••••• 100%
 
@@ -815,7 +815,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-2">Question 2</h3>
 <p><strong>Q: How do the results change if we increase/decrease <code>beta</code>?</strong></p>
 <p>Increasing <code>beta</code> makes the curves steeper:</p>
-<div id="629578e4" class="cell" data-execution_count="3">
+<div id="1c0c6044" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>pars.diseases.<span class="bu">type</span> <span class="op">=</span> <span class="st">'sir'</span> <span class="co"># Switch back to SIR</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>pars2 <span class="op">=</span> sc.dcp(pars) <span class="co"># copy to new dictionary</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>pars2.diseases.beta <span class="op">=</span> <span class="fl">0.10</span></span>
@@ -827,7 +827,7 @@ Figure(768x576)</code></pre>
   Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.09 s)  ••••••••———————————— 41%
   Running 2030 (30/51) (0.12 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.16 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.15 s)  ••••••••••••••••———— 80%
   Running 2050 (50/51) (0.19 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
@@ -841,7 +841,7 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>Decreasing <code>beta</code> makes the curves shallower:</p>
-<div id="e27ac9db" class="cell" data-execution_count="4">
+<div id="54e4e6dd" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>pars3 <span class="op">=</span> sc.dcp(pars)</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>pars3.diseases.beta <span class="op">=</span> <span class="fl">0.02</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim3 <span class="op">=</span> ss.Sim(pars3).run()</span>
@@ -870,7 +870,7 @@ Figure(672x480)</code></pre>
 <h3 class="anchored" data-anchor-id="question-3">Question 3</h3>
 <p><strong>Q: How do the results change if we reduce the number of agents to 200?</strong></p>
 <p>We get a similar result as before, except less smooth, since random effects are more important with small numbers of agents:</p>
-<div id="2073e046" class="cell" data-execution_count="5">
+<div id="a160d228" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>pars4 <span class="op">=</span> sc.dcp(pars)</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>pars4.n_agents <span class="op">=</span> <span class="dv">200</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>sim4 <span class="op">=</span> ss.Sim(pars4).run()</span>
@@ -882,7 +882,7 @@ Figure(672x480)</code></pre>
   Running 2020 (20/51) (0.03 s)  ••••••••———————————— 41%
   Running 2030 (30/51) (0.05 s)  ••••••••••••———————— 61%
   Running 2040 (40/51) (0.06 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.07 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.08 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -902,7 +902,7 @@ Figure(672x480)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-1">Question 1</h3>
 <p><strong>Q: How would you model an outbreak of an SIR-like disease within a refugee camp of 2,000 people? Suppose you were interested in the cumulative number of people who got infected over 1 year - how would you find this out?</strong></p>
 <p>The answer obviously depends on the disease parameters. However, we can make some simple assumptions and use <code>cum_infections</code> to determine the total number of infections:</p>
-<div id="4cfb4d33" class="cell" data-execution_count="6">
+<div id="551af336" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -931,17 +931,17 @@ Figure(672x480)</code></pre>
 <pre><code>Initializing sim with 2000 agents
   Running 2025.01.01 ( 0/366) (0.00 s)  ———————————————————— 0%
   Running 2025.01.31 (30/366) (0.05 s)  •——————————————————— 8%
-  Running 2025.03.02 (60/366) (0.09 s)  •••————————————————— 17%
-  Running 2025.04.01 (90/366) (0.14 s)  ••••———————————————— 25%
-  Running 2025.05.01 (120/366) (0.18 s)  ••••••—————————————— 33%
-  Running 2025.05.31 (150/366) (0.23 s)  ••••••••———————————— 41%
-  Running 2025.06.30 (180/366) (0.27 s)  •••••••••——————————— 49%
-  Running 2025.07.30 (210/366) (0.31 s)  •••••••••••————————— 58%
-  Running 2025.08.29 (240/366) (0.36 s)  •••••••••••••——————— 66%
-  Running 2025.09.28 (270/366) (0.40 s)  ••••••••••••••—————— 74%
-  Running 2025.10.28 (300/366) (0.45 s)  ••••••••••••••••———— 82%
-  Running 2025.11.27 (330/366) (0.49 s)  ••••••••••••••••••—— 90%
-  Running 2025.12.27 (360/366) (0.54 s)  •••••••••••••••••••— 99%
+  Running 2025.03.02 (60/366) (0.10 s)  •••————————————————— 17%
+  Running 2025.04.01 (90/366) (0.15 s)  ••••———————————————— 25%
+  Running 2025.05.01 (120/366) (0.20 s)  ••••••—————————————— 33%
+  Running 2025.05.31 (150/366) (0.25 s)  ••••••••———————————— 41%
+  Running 2025.06.30 (180/366) (0.30 s)  •••••••••——————————— 49%
+  Running 2025.07.30 (210/366) (0.35 s)  •••••••••••————————— 58%
+  Running 2025.08.29 (240/366) (0.40 s)  •••••••••••••——————— 66%
+  Running 2025.09.28 (270/366) (0.45 s)  ••••••••••••••—————— 74%
+  Running 2025.10.28 (300/366) (0.50 s)  ••••••••••••••••———— 82%
+  Running 2025.11.27 (330/366) (0.55 s)  ••••••••••••••••••—— 90%
+  Running 2025.12.27 (360/366) (0.60 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -960,7 +960,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-2-1">Question 2</h3>
 <p><strong>Q: Whether an epidemic ‘takes off’ depends to a large extent on the basic reproduction number, which in this kind of model depends on <code>beta</code>, <code>n_contacts</code>, and <code>dur_inf</code>. Experiment with different values for each and compare the trajectory of <code>sim.results.sir.n_infected</code>.</strong></p>
 <p>A: All three parameters increase transmission, so increasing any of them makes the epidemic grow faster and larger. The cleanest way to see this is to write a small helper that builds a sim for a given set of parameters, then compare them:</p>
-<div id="db53adf0" class="cell" data-execution_count="7">
+<div id="8b07080e" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1002,7 +1002,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-2">Question 1</h3>
 <p><strong>Q: In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with a total population of 24 million in 2020, how many people will there be in 2040? (You do not need to include any diseases in your model.)</strong></p>
 <p>A: We can build our simple demographic model with these parameters, then run it and plot the results:</p>
-<div id="9a07a511" class="cell" data-execution_count="8">
+<div id="ff86b3fe" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1043,7 +1043,7 @@ Figure(768x576)</code></pre>
 <section id="t4-solutions" class="level2">
 <h2 class="anchored" data-anchor-id="t4-solutions">T4 Solutions</h2>
 <p>These solutions build on the <code>SIRS</code> class from the tutorial, so we define it again here:</p>
-<div id="892abdaf" class="cell" data-execution_count="9">
+<div id="03d3652b" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1072,7 +1072,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-3">Question 1</h3>
 <p><strong>Q: Try different values of <code>dur_imm</code> in the SIRS model — how does it affect the epidemic curve?</strong></p>
 <p>A: The shorter immunity is, the faster the susceptible pool is replenished, so transmission settles at a higher endemic level. With long-lasting immunity the model behaves much more like SIR: a single epidemic, followed by a slow return of susceptibles:</p>
-<div id="cac93440" class="cell" data-execution_count="10">
+<div id="8075ca1a" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sims <span class="op">=</span> []</span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> dur_imm <span class="kw">in</span> [<span class="dv">2</span>, <span class="dv">5</span>, <span class="dv">20</span>]:</span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    sirs <span class="op">=</span> SIRS(dur_imm<span class="op">=</span>ss.lognorm_ex(mean<span class="op">=</span>ss.years(dur_imm)))</span>
@@ -1095,7 +1095,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-2-2">Question 2</h3>
 <p><strong>Q: Apply the same waning immunity to <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> to make an SEIRS model.</strong></p>
 <p>A: The two new methods are identical to the ones in <code>SIRS</code>; only the base class changes. This works because <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a> splits infection and progression the same way <a href="../api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a> does, so overriding <code>set_progression()</code> picks up the latent period for free:</p>
-<div id="79953f67" class="cell" data-execution_count="11">
+<div id="07624fe7" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SEIRS(ss.SEIR):</span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">*</span>args, <span class="op">**</span>kwargs):</span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -1138,7 +1138,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-3-1">Question 3</h3>
 <p><strong>Q: Can you create a model with two strains of the same disease that provide partial cross-immunity?</strong></p>
 <p>A: One clean way to do this is to model the two strains as two separate diseases, and use a <a href="../user_guide/modules_connectors.html">connector</a> to couple them: recovery from one strain reduces susceptibility to the other. Here we reset and re-apply the cross-protection each timestep so it always reflects the current recovered population:</p>
-<div id="f9c0a440" class="cell" data-execution_count="12">
+<div id="ab985aed" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Two independent SIR "strains" (strain 2 is seeded slightly later)</span></span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>strain1 <span class="op">=</span> ss.SIR(name<span class="op">=</span><span class="st">'strain1'</span>, beta<span class="op">=</span><span class="fl">0.1</span>, init_prev<span class="op">=</span><span class="fl">0.01</span>)</span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>strain2 <span class="op">=</span> ss.SIR(name<span class="op">=</span><span class="st">'strain2'</span>, beta<span class="op">=</span><span class="fl">0.1</span>, init_prev<span class="op">=</span><span class="fl">0.0</span>)</span>
@@ -1189,7 +1189,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-4">Question 1</h3>
 <p><strong>Q: Adapt the HIV example to include both MF and MSM transmission.</strong></p>
 <p>A: We add an <a href="../api/networks.html#starsim.networks.MSMNet" title="0"><code>ss.MSMNet</code></a> alongside the <a href="../api/networks.html#starsim.networks.MFNet" title="0"><code>ss.MFNet</code></a>, and specify a <code>beta</code> for each network in the disease’s <code>beta</code> dictionary:</p>
-<div id="f9a19dff" class="cell" data-execution_count="13">
+<div id="39c43734" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1225,7 +1225,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-3-2">Question 3</h3>
 <p><strong>Q: Compare random vs age-structured networks — how do they affect epidemic dynamics?</strong></p>
 <p>A: We can run the same SIR disease on a structureless <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>RandomNet</code></a> and on the age-structured <a href="../api/networks.html#starsim.networks.MFNet" title="0"><code>MFNet</code></a>, and compare the infection trajectories:</p>
-<div id="21a9d52c" class="cell" data-execution_count="14">
+<div id="0b67e288" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>s_rand <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="fl">0.1</span>)), networks<span class="op">=</span>ss.RandomNet(n_contacts<span class="op">=</span><span class="dv">10</span>),</span>
 <span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>                n_agents<span class="op">=</span><span class="dv">5000</span>, verbose<span class="op">=</span><span class="dv">0</span>, label<span class="op">=</span><span class="st">'Random'</span>)</span>
 <span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>s_age  <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="fl">0.1</span>)), networks<span class="op">=</span>ss.MFNet(),</span>
@@ -1252,7 +1252,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="question-1-5">Question 1</h3>
 <p><strong>Q: If we change the disease from SIR to SIS and set coverage to 100%, what minimum efficacy of vaccine is required to eradicate the disease by 2050?</strong></p>
 <p>A: There are many ways we could solve this, including with formal numerical optimization packages. However, since we are only varying a single parameter, we can also just use a simple binay search or grid search. This solution illustrates both approaches.</p>
-<div id="3744a865" class="cell" data-execution_count="15">
+<div id="e872ff98" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -1385,21 +1385,21 @@ Performing automatic search...
 
      step 2 (0.5 s) ++ (orig:1.000 | best:0.9000 | new:0.7000 | diff:-0.2000)
 
-     step 3 (0.8 s) -- (orig:1.000 | best:0.7000 | new:10.30 | diff:9.600)
+     step 3 (0.8 s) -- (orig:1.000 | best:0.7000 | new:0.8000 | diff:0.1000)
 
-     step 4 (1.0 s) -- (orig:1.000 | best:0.7000 | new:0.8000 | diff:0.1000)
+     step 4 (1.1 s) -- (orig:1.000 | best:0.7000 | new:10.30 | diff:9.600)
 
-     step 5 (1.3 s) -- (orig:1.000 | best:0.7000 | new:0.7500 | diff:0.05000)
+     step 5 (1.4 s) ++ (orig:1.000 | best:0.7000 | new:0.5000 | diff:-0.2000)
 
-     step 6 (1.5 s) ++ (orig:1.000 | best:0.7000 | new:0.5000 | diff:-0.2000)
+     step 6 (1.7 s) -- (orig:1.000 | best:0.5000 | new:10.10 | diff:9.600)
 
-     step 7 (1.8 s) -- (orig:1.000 | best:0.5000 | new:10.10 | diff:9.600)
+     step 7 (2.0 s) -- (orig:1.000 | best:0.5000 | new:10.30 | diff:9.800)
 
-     step 8 (2.1 s) -- (orig:1.000 | best:0.5000 | new:10.30 | diff:9.800)
+     step 8 (2.2 s) -- (orig:1.000 | best:0.5000 | new:0.5500 | diff:0.05000)
 
-     step 9 (2.3 s) -- (orig:1.000 | best:0.5000 | new:10.40 | diff:9.900)
+     step 9 (2.5 s) -- (orig:1.000 | best:0.5000 | new:10.40 | diff:9.900)
 
-     step 10 (2.6 s) -- (orig:1.000 | best:0.5000 | new:10.45 | diff:9.950)
+     step 10 (2.8 s) -- (orig:1.000 | best:0.5000 | new:10.45 | diff:9.950)
 
 ===  Maximum iterations reached (10 steps, orig: 1.000 | best: 0.5000 | ratio: 2.0000000000000004) ===
 
@@ -1846,7 +1846,7 @@ Performing automatic search...
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.0 (2026-08-28).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
