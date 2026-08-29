@@ -70,7 +70,7 @@ jobs:
 
       - name: Run ${{ matrix.model }} tests
         working-directory: ./${{ matrix.dir }}/tests
-        run: pytest test_*.py --durations=0 --junitxml=results.xml # Run actual tests
+        run: pytest test_*.py -n auto --durations=0 --junitxml=results.xml # Run actual tests
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: failure()
