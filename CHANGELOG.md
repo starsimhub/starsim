@@ -2,6 +2,12 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.6.1 (2026-08-29)
+This release contains two performance improvements:
+- `nb_indexer()` (used for `ss.Arr` UID indexing) is now written as an explicit loop rather than `arr[inds]`, due to a regression in Numba 0.66.
+- `ss.RandomNet.get_edges()` now gathers edge targets from the agent array rather than the (much larger) edge array when every agent has the same number of contacts.
+
+
 ## Version 3.6.0 (2026-08-28)
 This release delivers substantial framework-overhead performance improvements, focused on simulation initialization and per-timestep execution. The gains are largest for lightweight/ODE-style simulations (e.g. a bare 10-year daily sim now initializes roughly 35x faster, and runs ~2x faster with `people_results=False`); simulations with many modules see large initialization speedups from cheaper module timeline copies, and simulations run with common random numbers disabled (`ss.options.crn = False`) are ~1.2-1.3x faster than with CRN. It also contains several bugfixes, a new `ss.SEIR` base class, and a new syntax for defining state aliases.
 

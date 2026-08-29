@@ -6,9 +6,9 @@
 # Current supported models are:
 #   1. STIsim
 #   2. FPsim
+#   3. HPVsim
 #
 # TBC:
-# - HPVsim (not in the Starsim framework)
 # - TBsim (still in beta)
 # - Typhoidsim (still in beta)
 # - Rotasim (still in beta)
@@ -26,94 +26,49 @@ on:
 
 jobs:
 
-  test_stisim:
-    name: STIsim tests
+  test_downstream:
+    name: ${{ matrix.model }} tests
     timeout-minutes: 10
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 8
       matrix:
-        os: ['ubuntu-latest']
-        python-version: ['3.14']
-    runs-on: ${{ matrix.os }}
-    
+        include:
+          - {model: STIsim, repo: starsimhub/stisim, dir: stisim, reqs: requirements.txt}
+          - {model: FPsim,  repo: fpsim/fpsim,       dir: fpsim,  reqs: requirements_test.txt}
+          - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim, reqs: requirements.txt}
+          - {model: TBsim, repo: starsimhub/tbsim, dir: tbsim, reqs: requirements.txt}
+
     steps:
-      - name: Checkout sources
+      - name: Checkout Starsim
         uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python-version }}
-          architecture: x64
+          python-version: '3.14'
 
       - name: Install Starsim
         run: pip install -e .
 
-      - name: Check out HPVsim
+      - name: Check out ${{ matrix.model }}
         uses: actions/checkout@v7
         with:
-          repository: 'starsimhub/stisim'
-          path: 'stisim'
+          repository: ${{ matrix.repo }}
+          path: ${{ matrix.dir }}
 
-      - name: Install STIsim
-        working-directory: ./stisim
+      - name: Install ${{ matrix.model }}
+        working-directory: ./${{ matrix.dir }}
         run: pip install -e .
 
-      - name: Install STIsim tests
-        working-directory: ./stisim/tests
-        run: pip install -r requirements.txt
+      - name: Install ${{ matrix.model }} test requirements
+        working-directory: ./${{ matrix.dir }}/tests
+        run: pip install -r ${{ matrix.reqs }}
 
-      - name: Run STIsim tests
-        working-directory: ./stisim/tests
-        run: pytest test_*.py --durations=0 --junitxml=stisim-test-results.xml # Run actual tests
+      - name: Run ${{ matrix.model }} tests
+        working-directory: ./${{ matrix.dir }}/tests
+        run: pytest test_*.py --durations=0 --junitxml=results.xml # Run actual tests
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: test_results
-          path: stisim/tests/stisim-test-results.xml
-
-  test_fpsim:
-    name: FPsim tests
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      max-parallel: 8
-      matrix:
-        os: ['ubuntu-latest']
-        python-version: ['3.14']
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          architecture: x64
-
-      - name: Install Starsim
-        run: pip install -e .
-
-      - name: Check out FPsim
-        uses: actions/checkout@v7
-        with:
-          repository: 'fpsim/fpsim'
-          path: 'fpsim'
-
-      - name: Install FPsim
-        working-directory: ./fpsim
-        run: pip install -e .
-
-      - name: Install FPsim tests
-        working-directory: ./fpsim/tests
-        run: pip install -r requirements_test.txt
-
-      - name: Run FPsim tests
-        working-directory: ./fpsim/tests
-        run: pytest test_*.py --durations=0 --junitxml=fpsim-test-results.xml # Run actual tests
-      - name: Upload test results
-        uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: test_results
-          path: fpsim/tests/fpsim-test-results.xml
+          name: test_results-${{ matrix.dir }}
+          path: ${{ matrix.dir }}/tests/results.xml
