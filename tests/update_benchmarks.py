@@ -18,13 +18,16 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    sc.heading('1/3: Regular benchmark (benchmark.yaml)')
+    sc.heading('1/4: Regular benchmark (benchmark.yaml)')
     test_baselines.test_benchmark(do_save=True, repeats=5)
 
-    sc.heading('2/3: Test-suite benchmark (benchmark_tests.yaml)')
+    sc.heading('2/4: Performance regression guard (perf_guard.yaml)')
+    test_baselines.test_performance_guard(do_save=True)
+
+    sc.heading('3/4: Test-suite benchmark (benchmark_tests.yaml)')
     benchmark_tests.benchmark_tests(save=True, compare=False, cpus=1)
 
-    sc.heading('3/3: Large benchmark (benchmark_large.yaml)')
+    sc.heading('4/4: Large benchmark (benchmark_large.yaml)')
     benchmark_large.benchmark_large(save=True, compare=True)
 
     T.toc('Total time to update all benchmarks')

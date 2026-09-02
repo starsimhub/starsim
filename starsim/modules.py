@@ -266,6 +266,8 @@ class Module(Base):
                 return
         ```
     """
+    _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
+
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
         self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
@@ -296,6 +298,18 @@ class Module(Base):
     def __getitem__(self, key):
         """ Allow modules to act like dictionaries """
         return getattr(self, key)
+
+    def __getattr__(self, attr):
+        """ Called only if the attribute isn't found, in which case fall back to the aliases; see define_aliases() """
+        if attr not in self._state_aliases:
+            raise AttributeError(f'{type(self).__name__} object has no attribute "{attr}"') # Note: don't use self or self.name here, since both can recurse into __getattr__
+        alias = self._state_aliases[attr]
+        if not callable(alias):
+            return getattr(self, alias)
+        out = alias(self)
+        if isinstance(out, ss.Arr) and out.name is None: # An anonymous Arr is a temporary, so writing to it would be silently discarded; a named one is another state, so leave it alone
+            out.raw.flags.writeable = False
+        return out
 
     def __setattr__(self, attr, value):
         """ Don't allow locked attributes to be overwritten """
@@ -519,32 +533,34 @@ class Module(Base):
             raise ValueError(errormsg)
         return
 
-    def define_states(self, *args, check=True, reset=False, lock=True):
+    def define_states(self, *args, reset=False, lock=True, overwrite=False, **kwargs):
         """
         Define states of the module with the same attribute name as the state
 
         In addition to registering the state with the module by attribute, it adds
         it to `mod._auto_states`, which is used by `mod.state_list` and `mod.state_dict`.
 
+        Any keyword arguments other than the ones listed below are passed to
+        `define_aliases()`, so states and their aliases can be defined together.
+
         Args:
             args (states): list of states to add
-            check (bool): whether to check that the object being added is a state, and that it's not already present
-            reset (bool): whether to reset the list of module states and use only the ones provided
+            reset (bool/str/list): if True, remove all existing states and aliases; if a name or list of names, remove only those
             lock (bool): if True, prevent the state attributes from being overwritten after definition
-        """
-        # Optionally reset the states (note: does not remove them from the people object or others if already added); see example in ss.SIR()
-        if reset:
-            for state in self.state_list:
-                attr = state.name
-                delattr(self, attr)
-                if attr in self._locked_attrs:
-                    self._locked_attrs.remove(attr)
-            self._auto_states = []
+            overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
+            kwargs (dict): passed to `define_aliases()`
 
-        # If we're not checking, don't lock the attrs
-        if not check:
-            orig_lock_attrs = self._lock_attrs
-            self._lock_attrs = False
+        **Examples**:
+
+            self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+            self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias
+        """
+        # Optionally remove existing states and aliases: all of them (reset=True), or just the named
+        # ones (note: does not remove them from the people object or others if already added); see example in ss.SIR()
+        if reset:
+            names = ([state.name for state in self.state_list] + list(self._state_aliases)) if reset is True else sc.tolist(reset)
+            for name in names:
+                self._remove_state(name)
 
         # Add the new states
         for arg in args:
@@ -554,20 +570,21 @@ class Module(Base):
                 state = ss.BoolState(**arg)
             else:
                 state = arg
+            assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
 
-            if check:
-                assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
-
-            # Add the state to the module
+            # Add the state to the module, replacing any existing state or alias of the same
+            # name if overwrite=True (removing it first, so it isn't listed or counted twice)
             attr = state.name
-            if check and hasattr(self, attr):
+            if overwrite:
+                self._remove_state(attr, die=False)
+            elif hasattr(self, attr):
                 present = [s.name for s in self.state_list]
                 new = [s.name for s in args]
-                errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module.\n'
-                errormsg += 'Did you mean to use define_states(reset=True) (skip inherited states) or define_states(check=False) (skip this check)?\n'
+                errormsg = f'Cannot add "{attr}" to {self._debug_name} since already present in module (as a state or an alias).\n'
+                errormsg += 'Did you mean to use define_states(overwrite=True) (replace it) or define_states(reset=...) (remove it first, by name or all of them)?\n'
                 errormsg += f'States already in module:\n{present}\n'
+                errormsg += f'Aliases already in module:\n{list(self._state_aliases)}\n'
                 errormsg += f'New states being added:\n{new}\n'
-                errormsg += f'Conflicting states:\n{set(present) & set(new)}\n'
                 raise AttributeError(errormsg)
             setattr(self, attr, state)
             if lock:
@@ -577,13 +594,70 @@ class Module(Base):
             if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
 
-        # Reset the lock state
-        if not check:
-            self._lock_attrs = orig_lock_attrs
+        # Handle any aliases
+        if kwargs:
+            self.define_aliases(overwrite=overwrite, **kwargs)
         return
 
-    def define_results(self, *args, check=True):
+    def define_aliases(self, overwrite=False, **kwargs):
+        """
+        Define aliases for states, e.g. `self.define_aliases(infectious='infected')`
+
+        An alias is only used if the attribute isn't otherwise defined, so it acts as a
+        default that a subclass overrides simply by defining a state of the same name.
+        This is how `ss.Infection` treats everyone infected as infectious, while letting
+        a subclass define `infectious` as a state (or another alias) in its own right.
+
+        Each alias is either the name of another state, or a callable taking the module as
+        its only argument. A callable behaves like a property: it is recomputed on each
+        access, so it can be read but not written to.
+
+        Note: a callable alias defined as a lambda can't be saved with plain `pickle`
+        (`sc.save()` and `ss.MultiSim` are both fine, since they use `dill`). Use a
+        module-level function, or a property, if plain pickling is required.
+
+        A callable alias also generates an automatic result, in the same way a `BoolState`
+        does: an alias named `infected` produces `n_infected`. A string alias does not,
+        since the state it points to is already counted under its own name.
+
+        Args:
+            overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
+            kwargs (dict): mapping of alias name to either the name of a state, or a callable
+
+        **Examples**:
+
+            self.define_aliases(infectious='infected') # Everyone infected is infectious
+            self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
+            self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
+        """
+        for key in kwargs:
+            if overwrite:
+                self._remove_state(key, die=False)
+            elif key not in self._state_aliases and hasattr(self, key): # An alias would never be consulted, since the state takes precedence
+                errormsg = f'Cannot define alias "{key}" in {self._debug_name} since a state of that name already exists; '
+                errormsg += f'use overwrite=True to replace it, or define_states(reset="{key}") to remove it first.'
+                raise AttributeError(errormsg)
+        self._state_aliases = self._state_aliases | kwargs # Copy rather than update in place, since the default is defined on the class
+        return
+
+    def _remove_state(self, name, die=True):
+        """ Remove a single state or alias by name; see `define_states()` """
+        if name in self._state_aliases:
+            self._state_aliases = {k:v for k,v in self._state_aliases.items() if k != name} # Copy rather than modify in place, since the default is defined on the class
+        elif isinstance(self.__dict__.get(name), ss.Arr):
+            delattr(self, name)
+            self._auto_states = [state for state in self._auto_states if state.name != name]
+            if name in self._locked_attrs:
+                self._locked_attrs.remove(name)
+        elif die:
+            errormsg = f'Cannot remove "{name}" from {self._debug_name} since it is not a state or alias; '
+            errormsg += f'states are {sc.strjoin(self.state_dict.keys())} and aliases are {sc.strjoin(self._state_aliases.keys())}.'
+            raise AttributeError(errormsg)
+        return
+
+    def define_results(self, *args):
         """ Add results to the module """
+        auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate an n_<name> result
         for arg in args:
             if isinstance(arg, (list, tuple)):
                 result = ss.Result(*arg)
@@ -596,8 +670,8 @@ class Module(Base):
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
-            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in {state.name for state in self.auto_state_list}:
-                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the BoolState "{result.name[2:]}".'
+            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in auto_names:
+                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the state "{result.name[2:]}".'
                 raise ValueError(msg)
             self.results += result
         return
@@ -615,7 +689,7 @@ class Module(Base):
             self.setattribute('sim', sim) # Link back to the sim object
             ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
-            self.link_rates() # Add module dt to the timepars
+            self.link_timepars() # Add module dt to the timepars
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
@@ -624,14 +698,22 @@ class Module(Base):
         return
 
     @required()
-    def link_rates(self, force=False):
-        """ Find all time parameters in the module and link them to the module's dt """
-        rates = sc.search(self, type=ss.Rate, skip=dict(keys=['sim', 'module'])) # Should it be self or self.pars?
+    def link_timepars(self, force=False):
+        """
+        Find all time parameters in the module and link them to the module's `dt`
+
+        This is what lets a timepar resolve itself against the timestep with no
+        argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
+        """
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'])) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
-        for rate in rates.values():
-            if force or rate.default_dur is None:
-                rate.set_default_dur(self.t.dt)
+        dt = self.t.dt
+        for timepar in timepars.values():
+            if timepar is dt: # Avoid a self-reference, which would recurse when serializing
+                continue
+            if force or timepar.default_dur is None:
+                timepar.set_default_dur(dt)
         return
 
     @required()
@@ -648,6 +730,8 @@ class Module(Base):
         results = sc.autolist()
         for state in self.auto_state_list:
             results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+        for name in self.derived_state_names: # A derived state has no state object, but is counted the same way
+            results += ss.Result(f'n_{name}', dtype=int, scale=True, label=name.capitalize())
         self.define_results(*results)
         return
 
@@ -710,6 +794,27 @@ class Module(Base):
         """
         return self._auto_states[:]
 
+    @property
+    def derived_state_names(self):
+        """
+        Names of the aliases that are defined by a callable (see `define_aliases()`)
+
+        Unlike a string alias, which points at a state that is already counted under its
+        own name, a derived state has no state object of its own, so it generates an
+        automatic result (e.g. `n_infected`) in the same way a `BoolState` does.
+        """
+        return [key for key,alias in self._state_aliases.items() if callable(alias)]
+
+    @property
+    def alias_state_dict(self):
+        """
+        Dictionary of state aliases (see `define_aliases()`)
+
+        Returns a dictionary mapping alias names to the state (including derived states) 
+        that they point to. If an alias is a callable, the result is returned.
+        """
+        return {key:self[key] for key in self._state_aliases.keys()}
+
     def match_time_inds(self, inds=None):
         """ Find the nearest matching sim time indices for the current module """
         self_tvec = self.t.yearvec
@@ -726,7 +831,7 @@ class Module(Base):
         if self.finalized:
             errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
             raise RuntimeError(errormsg)
-        if self.dists is not None: # Will be None if no distributions are defined
+        if self.dists is not None and ss.options.crn: # Will be None if no distributions are defined; jumping is a no-op under crn=False (see Dist.jump), so skip the per-dist loop entirely
             self.dists.jump_dt() # Advance random number generators forward for calls on this step
         return
 
@@ -752,6 +857,8 @@ class Module(Base):
         """
         for state in self.auto_state_list:
             self.results[f'n_{state.name}'][self.ti] = state.sum()
+        for name in self.derived_state_names:
+            self.results[f'n_{name}'][self.ti] = self[name].sum()
         return
 
     @required()

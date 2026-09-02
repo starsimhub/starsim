@@ -1,11 +1,9 @@
 """
-Spatial networks
+Spatial networks, in which contacts are determined by agents' positions.
 """
 import numpy as np
 import starsim as ss
 ss_float_ = ss.dtypes.float
-
-__all__ = ['DiskNet']
 
 class DiskNet(ss.Network):
     """
@@ -17,6 +15,24 @@ class DiskNet(ss.Network):
     encountering a wall, agents are reflected.
 
     Edges are formed between two agents if they are within r distance of each other.
+
+    Args:
+        r (float):  radius within which edges are formed
+        v (freq):   speed at which agents move
+
+    Attributes:
+        x (FloatArr):       x position, in [0, 1]
+        y (FloatArr):       y position, in [0, 1]
+        theta (FloatArr):   direction of travel, in radians
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(diseases='sis', networks=ssl.DiskNet(r=0.05))
+        sim.run()
+        ```
     """
     def __init__(self, key_dict=None, pars=None, **kwargs):
         """ Initialize """

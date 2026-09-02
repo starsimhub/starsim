@@ -75,8 +75,6 @@ website:
           text: "**Home**"
         - href: whatsnew.qmd
           text: "**What's new**"
-        - href: api/index.qmd
-          text: "**API reference**"
         - section: "**Tutorials**"
           contents:
             - tutorials/t1_intro.qmd
@@ -108,6 +106,7 @@ website:
             - user_guide/modules_products.qmd
             - user_guide/modules_analyzers.qmd
             - user_guide/modules_connectors.qmd
+            - user_guide/modules_library.qmd
             - user_guide/modules_adding.qmd
           - section: "Workflows"
             contents:
@@ -159,6 +158,11 @@ website:
             - api/run.qmd
             - api/calibration.qmd
             - api/samples.qmd
+        - section: "**Library**"
+          contents:
+            - api/library.diseases.qmd
+            - api/library.mnch.qmd
+            - api/library.networks.qmd
         - section: "**Utilities**"
           contents:
             - api/arrays.qmd
@@ -201,6 +205,40 @@ quartodoc:
         - time
         - timeline
         - utils
+    - title: Library
+      desc: |
+        Example and reference modules that build on core Starsim but are not part of it.
+        Import as `import starsim.library as ssl`. These modules are illustrative rather
+        than validated; see the [user guide](../user_guide/modules_library.qmd) for details.
+      contents:
+        # One page per library subpackage; contents are picked up automatically from each
+        # subpackage's __init__.py, so adding a class to the library does not need any
+        # docs changes. include_imports is required since these are imported, not defined,
+        # in the __init__.py that is being documented.
+        - kind: page
+          path: library.diseases
+          package: starsim.library
+          contents:
+            - kind: auto
+              name: diseases
+              include_imports: true
+              children: embedded
+        - kind: page
+          path: library.mnch
+          package: starsim.library
+          contents:
+            - kind: auto
+              name: mnch
+              include_imports: true
+              children: embedded
+        - kind: page
+          path: library.networks
+          package: starsim.library
+          contents:
+            - kind: auto
+              name: networks
+              include_imports: true
+              children: embedded
 
 format:
   html:
@@ -230,7 +268,7 @@ interlinks:
     matplotlib:
       url: https://matplotlib.org/stable/
     sciris:
-      url: https://docs.sciris.org/en/latest/
+      url: https://docs.sciris.org/
   autolink: true
   aliases:
     numpy: [np]

@@ -396,6 +396,90 @@ def test_nnd():
     return sim
 
 
+@sc.timer()
+def test_count_based_births():
+    """
+    The non-CRN count-based birth draw (ss.options.crn=False) matches the per-agent
+    Bernoulli scan distributionally, and both paths are reproducible for a fixed seed.
+    """
+    sc.heading('Testing count-based (non-CRN) births...')
+
+    def cum_births(crn, seed):
+        ss.options.crn = crn
+        sim = ss.Sim(n_agents=3000, dur=15, dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(30)),
+                     rand_seed=seed, verbose=0).run()
+        return float(sim.results.births.cumulative[-1])
+
+    orig_crn = ss.options.crn
+    try:
+        nseeds = 12
+        per_agent = np.array([cum_births(True, s) for s in range(nseeds)])
+        count_based = np.array([cum_births(False, s) for s in range(nseeds)])
+
+        # Distributional match: mean cumulative births agree within stochastic tolerance
+        rel_diff = abs(per_agent.mean() - count_based.mean()) / per_agent.mean()
+        assert rel_diff < 0.05, f'Count-based births differ from per-agent by {rel_diff*100:.1f}% (mean {count_based.mean():.0f} vs {per_agent.mean():.0f})'
+        assert count_based.std() > 0, 'Count-based births should be stochastic'
+
+        # Both paths are reproducible: identical seed -> identical result
+        assert cum_births(True, 0) == cum_births(True, 0), 'CRN births not reproducible'
+        assert cum_births(False, 0) == cum_births(False, 0), 'Count-based births not reproducible'
+    finally:
+        ss.options.crn = orig_crn
+
+    print(f'  Per-agent mean: {per_agent.mean():.0f}, count-based mean: {count_based.mean():.0f} ({rel_diff*100:.2f}% difference)')
+    return per_agent, count_based
+
+
+@sc.timer()
+def test_birth_data_cols():
+    """ Birth rate data can use either "Year" or "Time" (the UN label) for the year column """
+    sc.heading('Testing birth data column handling...')
+
+    years = [1990, 2000, 2010]
+    vals = [45.0, 42.0, 38.0]
+    expected = pd.Series(vals, index=pd.Index(years, name='year', dtype=float))
+
+    def check(births, msg):
+        """ The standardized birth rates match the input, regardless of column labels """
+        actual = births.pars.birth_rate.loc[years] # Drop the -inf age entries etc.
+        assert np.allclose(actual.values, expected.values), f'{msg}: expected {vals}, got {actual.values}'
+        return
+
+    # Both spellings of the year column work without a metadata override
+    year_df = pd.DataFrame({'Year':years, 'CBR':vals})
+    time_df = pd.DataFrame({'Time':years, 'CBR':vals})
+    check(ss.Births(birth_rate=year_df), 'Year column')
+    check(ss.Births(birth_rate=time_df), 'Time column')
+
+    # An explicit override takes precedence over the synonyms: here "Year" holds junk,
+    # so if the override were ignored, the values would not match
+    both_df = pd.DataFrame({'Year':[0, 0, 0], 'Time':years, 'CBR':vals})
+    check(ss.Births(birth_rate=both_df, metadata=dict(data_cols=dict(year='Time', value='CBR'))), 'Explicit override')
+
+    # A genuinely missing column raises an informative error
+    missing_df = pd.DataFrame({'Date':years, 'CBR':vals})
+    with pytest.raises(ValueError) as excinfo:
+        ss.Births(birth_rate=missing_df)
+    errormsg = str(excinfo.value)
+    for expect in ['Year', 'year', 'Date', 'CBR', 'data_cols']: # Names the column, lists those present, points at the override
+        assert expect in errormsg, f'Expected "{expect}" in error message:\n{errormsg}'
+
+    # The same applies to the value column
+    with pytest.raises(ValueError) as excinfo:
+        ss.Births(birth_rate=pd.DataFrame({'Year':years, 'Rate':vals}))
+    assert 'CBR' in str(excinfo.value)
+
+    # Deaths and pregnancy data likewise accept either spelling
+    death_data = dict(Sex=['Female', 'Male'], AgeGrpStart=[0, 0], mx=[0.05, 0.06])
+    time_deaths = ss.Deaths(death_rate=pd.DataFrame(dict(Time=[1990, 1990], **death_data))) # The default
+    year_deaths = ss.Deaths(death_rate=pd.DataFrame(dict(Year=[1990, 1990], **death_data))) # Via the synonym
+    assert time_deaths.death_rate_data.equals(year_deaths.death_rate_data)
+
+    print('✓ (birth/death data column handling)')
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
 
@@ -408,5 +492,7 @@ if __name__ == '__main__':
     s7 = test_loss_classification()
     s8 = test_background_loss()
     s9 = test_nnd()
+    s10 = test_count_based_births()
+    s11 = test_birth_data_cols()
 
     T.toc()

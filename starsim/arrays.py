@@ -18,15 +18,20 @@ int_nan    = ss.dtypes.int_nan
 numba_indexing = ss.options.numba_indexing
 
 
-
 def np_indexer(arr, inds):
     """ Much faster than Numba for small numbers of indices (<1k) """
     return arr[inds]
 
 @nb.njit(fastmath=True, parallel=False, cache=True)
 def nb_indexer(arr, inds):
-    """ Roughly 30% faster than NumPy for large numbers of indices (>10k) """
-    return arr[inds]
+    """ Roughly 30% faster than NumPy for large numbers of indices (>10k)
+
+    NB: in some versions of Numba (>0.62), the explicit loop is much faster than array indexing.
+    """
+    out = np.empty(inds.size, dtype=arr.dtype)
+    for i in range(inds.size):
+        out[i] = arr[inds[i]]
+    return out
 
 @nb.njit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
 def nb_true(auids, vals, want):

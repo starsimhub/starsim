@@ -56,7 +56,7 @@ Dates are interchangeable with floating point years (although be careful, as des
 d = ss.date('2025.08.02')
 print(d)
 print(d.years)
-print(float(d)) # Alias to d.years
+print(float(d)) # Alias to d.years (unlike a duration, a date has an unambiguous float representation)
 ```
 
 Like many Starsim objects, you can get all the properties of an `ss.date` object with `.disp()`:
@@ -205,6 +205,40 @@ print(ss.week)
 assert ss.weeks(1.0) == ss.weeks(1) == ss.week
 ```
 
+#### Durations and timesteps {#sec-to-dt}
+
+Starsim states such as `ti_infected` or `ti_recovered` store *timestep indices*, not durations: they count timesteps, so their meaning depends on the module's `dt`. A duration therefore has to be resolved against `dt` before it can be used in that arithmetic, and `.to_dt()` is what does it:
+
+```{python}
+dur = ss.years(100)
+print(dur.to_dt(ss.months(1))) # 1200 monthly timesteps
+print(dur.to_dt(ss.months(3))) # 400 quarterly timesteps
+print(dur.to_dt(ss.years(1)))  # 100 annual timesteps
+```
+
+Inside a module you can omit the argument, since every timepar is linked to its module's `dt` during initialization (see [Using rates](#sec-using-rates) below):
+
+```py
+class Trichomoniasis(ss.Infection):
+
+    def set_duration(self, uids):
+        # ✓ Right -- resolve the duration into a number of timesteps first
+        self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist.to_dt()
+
+        # × WRONG -- the unit is silently discarded, so ss.years(100), ss.months(100)
+        # and ss.days(100) all mean "100 timesteps"
+        self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist
+```
+
+Note that `float()` on a duration raises an exception, since there is no single number a duration corresponds to: `ss.years(100)`, `ss.months(100)` and `ss.days(100)` all have a value of `100`, but they are 100 timesteps only if the timestep happens to match the unit, and they are 100, 8.3 and 0.27 years respectively. Use `.to_dt()` for timesteps, `.years` (or `.to('years')`) when you need years, e.g. to compare against an agent's age, and `.value` if you really do want the magnitude in the duration's own units.
+
+This only applies to durations you use directly. If the duration comes from a distribution (the usual case, e.g. `self.pars.dur_inf.rvs(uids)`), the conversion has already been done for you and the draws are already in timesteps:
+
+```py
+dur_inf = self.pars.dur_inf.rvs(uids) # Already in timesteps
+self.ti_recovered[uids] = self.ti + dur_inf
+```
+
 #### Date durations
 
 In most cases, the durations above can be used for arithmetic with dates. But sometimes we need precise date arithmetic that keeps track of each unit separately. For this we can use `ss.datedur`. For example:
@@ -325,7 +359,7 @@ The difference between `ss.prob` and `ss.per` is subtle, but important. `per` wo
 - `ss.per`: rate → probability
 - `ss.prob`: probability →  underlying rate → probability
 
-#### Using rates
+#### Using rates {#sec-using-rates}
 
 Each of these quantities has `.to_prob()` and `.to_events()` methods; in fact, the only difference between `ss.freq` and `ss.per` is that multiplying `ss.freq` by a duration calls `.to_events()`, while multiplying `ss.per` by a duration calls `.to_prob()`.
 
@@ -344,7 +378,9 @@ p_death = (death_rate * rel_death_age * rel_death_ses).to_prob()
 p_death = death_rate.to_prob() * rel_death_age * rel_death_ses
 ```
 
-How does a rate know how to convert itself to a probability? When a sim is initialized, it finds all the timepars, and adds a `default_dur` property to them that's equal to module `dt`. This means that `death_rate.to_prob()` is simply a shortcut for `death_rate * self.dt`, but both are equivalent.
+How does a rate know how to convert itself to a probability? When a sim is initialized, it finds all the timepars in each module and adds a `default_dur` property to them that's equal to that module's `dt`. This means that `death_rate.to_prob()` is simply a shortcut for `death_rate * self.dt`, but both are equivalent. The same linking is what lets `dur.to_dt()` work with no argument (see [Durations and timesteps](#sec-to-dt) above); for a rate, `.to_dt()` is the general form of this conversion, and gives a probability for `ss.per`, a number of events for `ss.freq`, and a probability for `ss.prob`.
+
+Note that a rate cannot be converted to a plain number without saying what timestep to convert it *to*, so `float(death_rate)` raises an exception rather than silently returning the numerator (`ss.peryear(1)`, `ss.permonth(1)` and `ss.perday(1)` would otherwise all give `1.0`, despite differing by a factor of 365). The same applies to single-input NumPy functions such as `np.exp(death_rate)`. Use `.to_dt()`, `.to_prob()`, `.to_events()`, or `.to()` to resolve the units first; if you genuinely want the numerator on its own, use `death_rate.value`.
 
 #### Summary
 Here is a quick summary of when you should use each type of quantity:

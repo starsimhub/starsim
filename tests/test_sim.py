@@ -331,6 +331,27 @@ def test_save():
     return sim
 
 
+@sc.timer()
+def test_save_mixed_dt():
+    """ Test that export works when modules span different time axes (issue #1411) """
+    sc.heading('Testing export with heterogeneous timelines...')
+    fn = 'sim_mixed.json'
+    births = ss.Births(birth_rate=20, dt=ss.years(1)) # An annual module in a sub-annual sim
+    sim = ss.Sim(n_agents=n_agents, dur=3, dt=0.5, diseases='sis', networks='random', demographics=births).run()
+
+    # With heterogeneous timelines, to_df() returns one dataframe per module rather than a single dataframe
+    df = sim.to_df()
+    assert not isinstance(df, sc.dataframe), 'Expected a dict of dataframes for a mixed-timeline sim'
+
+    json = sim.to_json(filename=fn, strkeys=True)
+    json2 = sc.loadjson(fn)
+    assert set(json['results'].keys()) == set(df.keys()), 'Exported results should have one entry per module'
+    assert json == json2, 'Outputs do not match'
+    sc.rmpath(fn)
+
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -346,6 +367,7 @@ if __name__ == '__main__':
     sim7 = test_components(do_plot=do_plot)
     sim8 = test_creation_syntax()
     sim9 = test_save()
+    sim10 = test_save_mixed_dt()
 
     T.toc()
 

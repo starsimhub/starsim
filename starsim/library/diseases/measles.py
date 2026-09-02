@@ -1,16 +1,43 @@
 """
-Define measles model.
+Measles, as an SEIR model.
+
 Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/measles.py
 Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
 
 import starsim as ss
 
-__all__ = ['Measles']
 
+class Measles(ss.SEIR):
+    """
+    Measles, as an SEIR model.
 
-class Measles(ss.SIR):
+    Configures `ss.SEIR` with measles natural-history parameters: exposed agents
+    become infectious after `dur_exp`, then either die (with probability
+    `p_death`) or recover after `dur_inf`. Natural history parameters are from
+    the US CDC.
 
+    Args:
+        beta (prob):        per-contact transmission probability
+        init_prev (Dist):   initial prevalence
+        dur_exp (Dist):     duration from exposure to infectiousness
+        dur_inf (Dist):     duration of infectiousness
+        p_death (Dist):     probability of death among infected agents
+
+    Attributes:
+        exposed (BoolState):    infected but not yet infectious
+        ti_exposed (FloatArr):  timestep of exposure
+
+    Examples:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+
+        sim = ss.Sim(diseases=ssl.Measles(), networks='random')
+        sim.run()
+        sim.plot()
+        ```
+    """
     def __init__(self, pars=None, **kwargs):
         """ Initialize with parameters """
         super().__init__()
@@ -26,62 +53,4 @@ class Measles(ss.SIR):
         )
         self.update_pars(pars, **kwargs)
 
-        # SIR are added automatically, here we add E
-        self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
-        )
-
         return
-
-    def step_state(self):
-        # Progress exposed -> infected
-        ti = self.ti
-        infected = (self.exposed & (self.ti_infected <= ti)).uids
-        self.exposed[infected] = False
-        self.infected[infected] = True
-
-        # Progress infected -> recovered
-        recovered = (self.infected & (self.ti_recovered <= ti)).uids
-        self.infected[recovered] = False
-        self.recovered[recovered] = True
-
-        # Trigger deaths
-        deaths = (self.ti_dead <= ti).uids
-        if len(deaths):
-            self.sim.people.request_death(deaths)
-        return
-
-    def set_prognoses(self, uids, sources=None):
-        """ Set prognoses for those who get infected """
-        super().set_prognoses(uids, sources)
-        ti = self.ti
-
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.ti_exposed[uids] = ti
-
-        p = self.pars
-
-        # Determine when exposed become infected
-        self.ti_infected[uids] = ti + p.dur_exp.rvs(uids)
-
-        # Sample duration of infection, being careful to only sample from the
-        # distribution once per timestep.
-        dur_inf = p.dur_inf.rvs(uids)
-
-        # Determine who dies and who recovers and when
-        will_die = p.p_death.rvs(uids)
-        dead_uids = uids[will_die]
-        rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die]
-        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die]
-
-        return
-
-    def step_die(self, uids):
-        # Reset infected/recovered flags for dead agents
-        for state in ['susceptible', 'exposed', 'infected', 'recovered']:
-            self.state_dict[state][uids] = False
-        return
-

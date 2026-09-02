@@ -124,7 +124,7 @@ t('connectors')
 from .connectors import Connector, seasonality
 
 t('diseases')
-from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SIS
+from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SEIR, SIS
 
 t('loop')
 from .loop import Loop

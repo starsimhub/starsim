@@ -490,7 +490,7 @@ class Sim(ss.Base):
         self.loop.run(self.t.now(), verbose)
         return self
 
-    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True):
+    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, profile=False):
         """
         Run the model -- the main method for running a simulation.
 
@@ -499,6 +499,7 @@ class Sim(ss.Base):
             verbose (float): the level of detail to print (default 0.1, i.e. output once every 10 steps)
             shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
+            profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
         """
         # Initialization steps
         if not self.initialized: self.init() # Automatically initialize if not initialized
@@ -514,7 +515,7 @@ class Sim(ss.Base):
 
         try:
             # Main simulation loop -- just one line!!!
-            self.loop.run(until)
+            self.loop.run(until, profile=profile)
 
             # Check if the simulation is complete
             if self.loop.index == len(self.loop.plan):
@@ -874,7 +875,11 @@ class Sim(ss.Base):
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
             elif key == 'results':
-                d.results = self.to_df().to_dict()
+                df = self.to_df()
+                if isinstance(df, dict):  # For sims with heterogeneous timelines, to_df() returns a dict of dataframes rather than a single dataframe
+                    d.results = {k:v.to_dict() for k,v in df.items()}
+                else:
+                    d.results = df.to_dict()
             else:  # pragma: no cover
                 warnmsg = f'Could not convert "{key}" to JSON; continuing...'
                 ss.warn(warnmsg)

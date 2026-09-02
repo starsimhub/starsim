@@ -8,8 +8,8 @@ import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
 
-# %% Helper functions
 
+# %% Helper functions
 
 class ndict(sc.objdict):
     """
@@ -376,6 +376,41 @@ def standardize_netkey(key):
     return key.lower().removesuffix('net')
 
 
+# Alternative column names accepted for standard data columns, used only if the configured
+# column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
+# rather than "Year"). Keep this list short and explicit; anything else can be handled by
+# supplying `metadata=dict(data_cols=...)` explicitly.
+col_synonyms = dict(
+    year = ['Year', 'Time', 'year', 'time'],
+)
+
+
+def resolve_data_col(data, key, col):
+    """
+    Find the column to use for a given data key, allowing for known synonyms
+
+    The configured column name always takes precedence; synonyms (see `ss.col_synonyms`)
+    are only consulted if it is absent from the data.
+
+    Args:
+        data (dict): the data, as a dict of columns
+        key (str): the standardized key, e.g. "year"
+        col (str): the configured column name, e.g. "Year"
+
+    Returns:
+        The name of the column to use
+    """
+    if col in data:
+        return col
+    for alt in col_synonyms.get(key, []):
+        if alt in data:
+            return alt
+    errormsg = f'''Could not find column "{col}" (used for "{key}") in the data.
+Columns present are: {sc.strjoin(data.keys())}
+Either rename the column, or map it explicitly with e.g. metadata=dict(data_cols=dict({key}='<column name>')).'''
+    raise ValueError(errormsg)
+
+
 def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
     """
     Standardize formats of input data
@@ -391,6 +426,11 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     - `metadata['data_cols']['year']` optionally specifying the column containing year values; otherwise the default year will be used
     - `metadata['data_cols']['age']` optionally specifying the column containing age values; otherwise the default age will be used
     - `metadata['data_cols'][<arbitrary>]` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
+
+    If a configured column is not present in the data, a known synonym is used instead if one is
+    available (see `ss.col_synonyms`); for example, year data labeled "Time" (as in UN World
+    Population Prospects data) is used for a data column configured as "Year". Explicitly configured
+    column names always take precedence over synonyms.
 
     If a `sex` column is part of the index, the metadata can also optionally specify a string mapping to convert
     the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
@@ -427,11 +467,11 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     if 'value' not in metadata['data_cols']:
         errormsg = f'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict. Data columns are:\n{metadata["data_cols"]}'
         raise ValueError(errormsg)
-    values = sc.promotetoarray(data[metadata['data_cols']['value']])
+    values = sc.promotetoarray(data[resolve_data_col(data, 'value', metadata['data_cols']['value'])])
     index = sc.objdict()
     for k, col in metadata['data_cols'].items():
         if k != 'value':
-            index[k] = data[col]
+            index[k] = data[resolve_data_col(data, k, col)]
 
     # Add defaults for year and age
     if 'year' not in index:

@@ -11,9 +11,14 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 
-@dataclass
+@dataclass(slots=True)
 class LoopEntry:
-    """ One executable event in the integration loop """
+    """
+    One executable event in the integration loop
+
+    Note: `slots=True` is used primarily to reduce the memory footprint across the
+    10⁴–10⁵ instances created for a typical plan (no per-instance `__dict__`).
+    """
     time: object
     ti: int
     func_order: int | None
@@ -58,10 +63,12 @@ class Loop:
         self.funcs = None
         self.func_list = []
         self.abs_tvecs = None
+        self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
         self.plan = None
         self.insertions = []
         self.index = 0 # The next function to execute
-        self.cpu_time = [] # Store the CPU time of execution of each function
+        self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
+        self.cpu_time = [] # Store the CPU time of execution of each function (only if profiling)
         self.df = None # User-friendly version of the plan
         self.cpu_df = None # User-friendly time analysis
         self.initialized = False
@@ -165,10 +172,15 @@ class Loop:
         # Update people who died -- calls disease.step_die() internally
         self += sim.people.step_die
 
-        # Update results
-        self += sim.people.update_results
+        # Update results. A module's update_results is skipped only when it is the inherited
+        # base method (not overridden anywhere in the MRO) and the module has no auto-generated
+        # boolean-state results to count -- i.e. the base loop is provably a no-op. Overrides
+        # (including those that call super() or gain behavior via a mixin) are always kept.
+        if sim.pars.get('people_results', True): # People results can be opted out for lightweight sims
+            self += sim.people.update_results
         for mod in sim.modules:
-            self += mod.update_results
+            if not self._null_update_results(mod):
+                self += mod.update_results
 
         # Apply analyzers
         for ana in sim.analyzers():
@@ -182,70 +194,155 @@ class Loop:
 
         return self.funcs
 
+    @staticmethod
+    def _null_update_results(mod):
+        """
+        Return True if a module's `update_results` is a guaranteed no-op and can be skipped
+
+        This holds only when the module uses the inherited base `Module.update_results`
+        (not overridden anywhere below `ss.Module` in the class hierarchy, so no `super()`
+        call or mixin behavior is missed) and has no auto-generated boolean-state or
+        derived-state results for the base method to count. Such a call would iterate an empty list and change
+        nothing, so omitting it from the plan is result-identical.
+        """
+        not_overridden = type(mod).update_results is ss.Module.update_results
+        return not_overridden and not len(mod.auto_state_list) and not len(mod.derived_state_names)
+
     def collect_abs_tvecs(self):
-        """ Collect numerical time arrays for each module """
+        """
+        Collect time arrays for each module
+
+        Two parallel arrays are stored per module: `abs_tvecs` holds the ground-truth
+        time objects (`ss.date`/`ss.dur`, used verbatim as each plan entry's time), and
+        `abs_numvecs` holds the canonical numeric representation (float years). The
+        numeric arrays are what `make_plan()` uses to decide uniformity and to sort,
+        so that date/dur objects are never compared during plan construction.
+        """
         self.abs_tvecs = sc.objdict()
+        self.abs_numvecs = sc.objdict()
 
         # Handle the sim and people first
         sim = self.sim
         for key in ['sim', sim.people.__class__.__name__.lower()]: # To handle subclassing of People -- TODO, make more elegant!
             self.abs_tvecs[key] = sim.t.tvec
+            self.abs_numvecs[key] = sim.t.yearvec
 
         # Handle all other modules
         for mod in sim.modules:
             self.abs_tvecs[mod.name] = mod.t.tvec
+            self.abs_numvecs[mod.name] = mod.t.yearvec
 
         return self.abs_tvecs
 
     def make_plan(self):
-        """ Combine the module ordering and the time vectors into the integration plan """
-        # Assemble the list of dicts
-        raw = []
-        for func_row in self.funcs:
-            for t in self.abs_tvecs[func_row['module']]:
-                module = func_row['module']
-                func_name = func_row['func_name']
-                raw.append(LoopEntry(
-                    time = t,
-                    ti = 0,
-                    func_order = func_row['func_order'],
-                    func = func_row['func'],
-                    label = f'{module}.{func_name}',
-                    module = module,
-                    func_name = func_name,
-                ))
+        """
+        Combine the module ordering and the time vectors into the integration plan
 
-        # Sort it by step_order, a combination of time and function order
-        self.plan = sorted(raw, key=lambda entry: (entry.time, entry.func_order))
-
-        # Calculate the sim time index (ti)
-        start_step = 'sim.start_step'
-        ti = -1
-        for entry in self.plan:
-            if entry.label == start_step:
-                ti += 1
-            entry.ti = ti
+        The plan is the list of `LoopEntry` events in execution order: tick-major, and
+        within each tick ordered by function order. When every module shares the sim's
+        canonical timeline (the common case) this order can be generated directly, with
+        no sort. Otherwise a numeric sort is used. In neither case are date/dur objects
+        compared (which is slow); the canonical numeric time vectors (`abs_numvecs`) are
+        used instead.
+        """
+        if self._timelines_uniform():
+            self.plan = self._make_plan_uniform()
+        else:
+            self.plan = self._make_plan_sorted()
 
         # Replay any user insertions tied to the current loop definition
         for insertion in self.insertions:
             self._insert_into_plan(**insertion)
 
-        # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
-        eps = 1e-9
-        try:
-            diffs = np.diff(np.float64([entry.time for entry in self.plan])) # May be date, so convert to float
-            small_diffs = diffs[(diffs > 0) & (diffs < eps)]
-            if len(small_diffs):
-                warnmsg = f'{len(small_diffs)} integration loop entries have near-identical times, indicating a floating-point issue:\n{small_diffs}\nCheck your time units across the sim and modules!'
-                ss.warn(warnmsg)
-        except Exception as E:
-            warnmsg = f'Unable to calculate time deltas in integration plan; check that all types are compatible (e.g. float or ss.date): {E}'
-            ss.warn(warnmsg)
+        return
 
+    def _timelines_uniform(self):
+        """ Check whether every module shares the sim's canonical timeline (numeric values, length, and unit) """
+        sim_num = self.abs_numvecs['sim']
+        sim_unit = self.abs_tvecs['sim'].unit
+        npts = len(sim_num)
+        for key, num in self.abs_numvecs.items():
+            # Exact numeric equality plus matching unit: only then is the schedule provably identical
+            if len(num) != npts or self.abs_tvecs[key].unit is not sim_unit or not np.array_equal(num, sim_num):
+                return False
+        return True
+
+    def _make_plan_uniform(self):
+        """
+        Fast path: all modules share the sim's timeline, so emit entries directly in
+        execution order (each tick, every function in func order) without sorting.
+
+        Because all entries at a given tick share one time and the times are strictly
+        increasing, this is identical to sorting by (time, func_order); and the tick
+        index equals the sim time index, so no separate ti pass is needed.
+        """
+        tvec = self.abs_tvecs['sim']
+        # Precompute the per-function fields once, rather than rebuilding them per entry
+        specs = [(fr['func_order'], fr['func'], f"{fr['module']}.{fr['func_name']}", fr['module'], fr['func_name']) for fr in self.funcs]
+        plan = []
+        append = plan.append
+        for ti in range(len(tvec)):
+            t = tvec[ti]
+            for func_order, func, label, module, func_name in specs:
+                append(LoopEntry(time=t, ti=ti, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
+        return plan
+
+    def _make_plan_sorted(self):
+        """
+        General path: modules have heterogeneous timelines, so build the full list of
+        entries and sort into execution order. The sort uses `np.lexsort` on the
+        canonical numeric times (and function order), never on date/dur objects.
+        """
+        raw = []
+        times_num = []
+        func_orders = []
+        r_append = raw.append
+        t_append = times_num.append
+        f_append = func_orders.append
+        for func_row in self.funcs:
+            module = func_row['module']
+            func_name = func_row['func_name']
+            func_order = func_row['func_order']
+            func = func_row['func']
+            label = f'{module}.{func_name}'
+            tvec = self.abs_tvecs[module]
+            numvec = self.abs_numvecs[module]
+            for j in range(len(tvec)):
+                r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
+                t_append(numvec[j])
+                f_append(func_order)
+
+        # Sort by (time, func_order), using numeric keys so date/dur objects are never compared
+        times_num = np.asarray(times_num, dtype=float)
+        func_orders = np.asarray(func_orders)
+        order = np.lexsort((func_orders, times_num)) # Last key (times_num) is primary
+        plan = [raw[i] for i in order]
+
+        # Calculate the sim time index (ti) by counting sim.start_step boundaries
+        start_step = 'sim.start_step'
+        ti = -1
+        for entry in plan:
+            if entry.label == start_step:
+                ti += 1
+            entry.ti = ti
+
+        # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
+        self._warn_near_identical(times_num[order])
+        return plan
+
+    @staticmethod
+    def _warn_near_identical(sorted_times):
+        """ Warn if any consecutive plan times are close but not identical (a floating-point issue) """
+        eps = 1e-9
+        diffs = np.diff(sorted_times)
+        small_diffs = diffs[(diffs > 0) & (diffs < eps)]
+        if len(small_diffs):
+            warnmsg = f'{len(small_diffs)} integration loop entries have near-identical times, indicating a floating-point issue:\n{small_diffs}\nCheck your time units across the sim and modules!'
+            ss.warn(warnmsg)
         return
 
     def store_time(self):
-        """ Store the current time in as high resolution as possible """
+        """ Store the current time in as high resolution as possible (only called when profiling) """
         self.cpu_time.append(time.perf_counter())
         return
 
@@ -268,22 +365,32 @@ class Loop:
             raise RuntimeError(errormsg)
         return
 
-    def run(self, until=None, verbose=None):
+    def run(self, until=None, verbose=None, profile=None):
         """
         Actually run the integration loop; usually called by sim.run()
+
+        By default, per-entry CPU timing is *not* recorded and the plan DataFrame is *not*
+        built at the end of the run -- both are pure overhead (~15–25 ms for a bare 10-year
+        sim) that most runs do not use. Pass `profile=True` to record per-entry timing (which
+        `to_df()`/`plot_cpu()` then expose as the `cpu_time` column); otherwise `cpu_time` is
+        `NaN`. The plan metadata (via `to_df()`) is always available on demand regardless.
 
         Args:
             until (str/date): if supplied, stop after this date (used by sim.run_one_step)
             verbose (bool): if True, print each function call as it runs
+            profile (bool): if True, record per-entry CPU timing (default: keep the current setting)
         """
         self._check_initialized()
+        if profile is not None:
+            self.profile = profile
 
         # Convert e.g. '2020-01-01' to an actual date
         if isinstance(until, str):
             until = ss.date(until)
 
         # Loop over every function in the integration loop, e.g. disease.step()
-        self.store_time()
+        if self.profile:
+            self.store_time()
         while self.index < len(self.plan):
             entry = self.plan[self.index]
             if verbose:
@@ -293,11 +400,12 @@ class Loop:
 
             # Tidy up
             self.index += 1 # Increment the count
-            self.store_time()
+            if self.profile:
+                self.store_time()
             if until is not None and self.sim.now > until: # Terminate if asked to
                 break
 
-        self.to_df() # Store results as a dataframe
+        # Note: the plan DataFrame is now built lazily by to_df() when requested, not here
         return
 
     def plan_metadata(self):
@@ -402,7 +510,13 @@ class Loop:
         return
 
     def to_df(self):
-        """ Return a user-friendly version of the plan, omitting object columns """
+        """
+        Return a user-friendly version of the plan, omitting object columns
+
+        The `cpu_time` column is populated only if the run recorded per-entry timing
+        (i.e. `sim.run(profile=True)`); otherwise it is `NaN`. This is built lazily and
+        cached in `self.df`/`self.cpu_df`.
+        """
         # Compute the main dataframe
         if self.plan is not None:
             df = self.plan_metadata()
@@ -488,6 +602,8 @@ class Loop:
         # Assemble data
         if self.cpu_df is None:
             self.to_df()
+        if not len(self.cpu_time): # No per-entry timing was recorded
+            ss.warn('No CPU timing was recorded: run with sim.run(profile=True) (or loop.run(profile=True)) to populate cpu_time.')
         df = self.cpu_df
         ylabels = df.index.values.copy() # Copy to avoid mutating the cached cpu_df when labels are assembled below
         if bytime:
