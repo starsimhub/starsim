@@ -3,6 +3,7 @@ Test the Dists object from distributions.py
 """
 
 # %% Imports and settings
+import pytest
 import numpy as np
 import sciris as sc
 import scipy.stats as sps
@@ -320,6 +321,12 @@ def test_combine_rands(do_plot=False):
     assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
     ks = sps.kstest(c, sps.uniform(0,1).cdf)
     assert ks.pvalue > 0.05, f'Distribution does not seem to be uniform, p={ks.pvalue}<0.05'
+
+    # Signed input would give values in [-0.5, 0.5] rather than [0, 1], so it should be refused
+    # rather than cast, since casting would silently copy the array
+    with pytest.raises(TypeError):
+        ss.utils.combine_rands(a.view(np.int64), b.view(np.int64))
+
     return c
 
 

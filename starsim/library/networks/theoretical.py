@@ -43,7 +43,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
             dur = ss.years(0), # Duration of zero ensures that new random edges are formed on each time step
         )
         self.update_pars(pars, **kwargs)
-        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
+        self.rng_ints = ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64) # Used to draw a random number for each agent as part of creating edges; must be uint64 for ss.utils.combine_rands()
         return
 
     def add_pairs(self):
@@ -52,15 +52,16 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         born_uids = (people.age > 0).uids
 
         # Sample integers
-        ints = self.randint.rvs(born_uids)
+        ints = self.rng_ints.rvs(born_uids)
 
         # All possible edges are upper triangle of complete matrix
         idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
 
-        # Use integers to create random numbers per edge
+        # Use integers to create random numbers per edge: combining one integer per agent is
+        # far cheaper than drawing a random number for each of the O(N^2) possible edges
         i1 = ints[idx1]
         i2 = ints[idx2]
-        r = ss.utils.combine_rands(i1, i2) # TODO: use ss.multi_rand()
+        r = ss.utils.combine_rands(i1, i2) # Uniform on [0, 1] # TODO: use ss.multi_rand()
         edge = r <= self.pars.p
 
         p1 = idx1[edge]

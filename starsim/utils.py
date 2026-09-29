@@ -554,13 +554,22 @@ def combine_rands(a, b):
 
     See ss.multi_random() for the user-facing version.
 
+    Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
+    [0, 1], so they raise an error rather than being cast, since casting would silently copy
+    the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
+
     Args:
-        a (array): array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
         b (array): ditto, same size as a
 
     Returns:
-        A new array of random numbers the same size as a and b
+        A new array of uniformly distributed random numbers in [0, 1], the same size as a and b
     """
+    a_dtype = getattr(a, 'dtype', type(a).__name__)
+    b_dtype = getattr(b, 'dtype', type(b).__name__)
+    if a_dtype != np.uint64 or b_dtype != np.uint64:
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
