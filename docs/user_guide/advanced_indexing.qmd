@@ -90,9 +90,9 @@ Here are examples of correct and incorrect ways to index Starsim arrays:
 ### Correct indexing patterns
 
 ```{python}
-# ✅ Using integer indices (works on active agents)
-age_of_first_active = sim.people.age[0]
-print(f"Age of first active agent: {age_of_first_active}")
+# ✅ Using integer indices (treated as UIDs)
+age_of_uid0 = sim.people.age[0]
+print(f"Age of agent with UID 0: {age_of_uid0}")
 
 # ✅ Using ss.uids() for specific UIDs
 specific_uids = ss.uids([0, 1, 2])

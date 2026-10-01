@@ -140,7 +140,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 ```
 
 ::: {.callout-warning}
-`HouseholdNet` overwrites the age and sex of every agent when it initializes. Use it with caution alongside other modules that depend on or modify age and sex.
+`HouseholdNet` overwrites the age and sex of every agent (other than unborn agents) when it initializes. Use it with caution alongside other modules that depend on or modify age and sex.
 :::
 
 ## Maternal, newborn, and child health
