@@ -33,6 +33,7 @@ Usage::
     print('Total births:', sim.results.pregnancy.births.sum())
 """
 
+import numpy as np
 import starsim as ss
 
 
@@ -95,13 +96,11 @@ class NeonatalSepsis(ss.SIR):
         Non-neonates who get infected (via init_prev at sim start) just recover
         normally via the base SIR logic.
         """
-        super().set_prognoses(uids, sources)
+        super().set_prognoses(uids, sources) # Schedules death for a fraction p_death, and recovery for everyone else
 
-        # Only neonates can die from this disease
+        # Only neonates can die from this disease, so non-neonates recover instead
         age_days = ss.years(self.sim.people.age[uids]).days
-        neonates = uids[age_days <= 28]
-        if len(neonates):
-            will_die = self.pars.p_death.filter(neonates)
-            dur = self.pars.dur_inf.rvs(will_die)
-            self.ti_dead[will_die] = self.ti + dur
+        non_neonates = uids[age_days > 28]
+        self.ti_recovered[non_neonates] = np.fmin(self.ti_recovered[non_neonates], self.ti_dead[non_neonates])
+        self.ti_dead[non_neonates] = np.nan
         return
