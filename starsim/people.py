@@ -108,7 +108,7 @@ class People:
         Allow people['attr'] instead of getattr(people, 'attr')
         If the key is an integer, alias `people.person()` to return a `Person` instance
         """
-        if isinstance(key, int):
+        if isinstance(key, (int, np.integer)):
             return self.person(key)
         elif isinstance(key, str):
             return getattr(self, key)
@@ -121,9 +121,9 @@ class People:
         return setattr(self, key, value)
 
     def __iter__(self):
-        """ Iterate over people """
-        for i in range(len(self)):
-            yield self[i]
+        """ Iterate over (alive) people """
+        for uid in self.auids:
+            yield self.person(uid)
 
     def __setstate__(self, state):
         """
@@ -619,8 +619,7 @@ class People:
         # Define age bins
         if np.iterable(bins):
             width = None # Already defined, don't need
-
-        if np.isscalar(bins):
+        elif np.isscalar(bins):
             width = bins
         else:
             width = 5
@@ -637,7 +636,7 @@ class People:
         if absolute:
             xlabel = 'Number of people'
         else:
-            total = f_vals.sum() + f_vals.sum()
+            total = f_vals.sum() + m_vals.sum()
             f_vals = f_vals / total * 100
             m_vals = m_vals / total * 100
             xlabel = 'Percentage of population'
