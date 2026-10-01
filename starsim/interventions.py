@@ -113,8 +113,8 @@ class RoutineDelivery(Intervention):
 
         # TODO: Refactor to be more agnostic about the types - leverage just doing direct comparisons and don't privilege year units
         yearvec = sim.t.yearvec
-        start_year = self.start_year.years if isinstance(self.start_year, ss.TimePar) else self.start_year
-        end_year = self.end_year.years if isinstance(self.end_year, ss.TimePar) else self.end_year
+        start_year = self.start_year.years if isinstance(self.start_year, (ss.TimePar, ss.date)) else self.start_year
+        end_year = self.end_year.years if isinstance(self.end_year, (ss.TimePar, ss.date)) else self.end_year
 
         if not(any(np.isclose(start_year, yearvec)) and any(np.isclose(end_year, yearvec))):
             errormsg = 'Years must be within simulation start and end dates.'
@@ -129,7 +129,7 @@ class RoutineDelivery(Intervention):
         # self.yearvec is sliced from sim.t.yearvec so it stays length-aligned with self.timepoints.
         self.start_point = sc.findfirst(yearvec, start_year)
         self.end_point   = sc.findfirst(yearvec, end_year) + adj_factor
-        self.years       = sc.inclusiverange(start_year, end_year)
+        if self.years is None: self.years = sc.inclusiverange(start_year, end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
         self.yearvec     = yearvec[self.start_point:self.end_point + 1]
 
@@ -155,14 +155,12 @@ class CampaignDelivery(Intervention):
 
     Args:
         years (float/array): year(s) in which to run the campaign
-        interpolate (bool): if True, interpolate probabilities between campaign years (default True)
         prob (float/array): probability of delivery per campaign year; if array, must match `years`
     """
 
-    def __init__(self, *args, years=None, interpolate=None, prob=None, **kwargs):
+    def __init__(self, *args, years=None, prob=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
-        self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
         self.coverage_dist = ss.bernoulli(p=0)
         return
@@ -174,6 +172,11 @@ class CampaignDelivery(Intervention):
         # whose subtraction yields datedur (which sc.findnearest's np.argmin can't process).
         years_float = np.array([y.years if isinstance(y, ss.TimePar) else float(y) for y in self.years]) # TODO: handle array timepars natively; skip if already an array
         self.timepoints = sc.findnearest(sim.t.yearvec, years_float)
+
+        dt = sim.t.dt_year
+        if np.any((years_float < sim.t.yearvec[0] - dt/2) | (years_float > sim.t.yearvec[-1] + dt/2)):
+            errormsg = f'Campaign years {years_float} must be within simulation start and end dates.'
+            raise ValueError(errormsg)
 
         if len(self.prob) == 1:
             self.prob = np.array([self.prob[0]] * len(self.timepoints))
@@ -262,6 +265,7 @@ class BaseScreening(BaseTest):
         Perform screening by finding who's eligible, finding who accepts, and applying the product.
         """
         sim = self.sim
+        self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         accept_uids = ss.uids()
         if sim.ti in self.timepoints: # TODO: change to self.ti
             accept_uids = self.deliver()
@@ -288,7 +292,7 @@ class BaseTriage(BaseTest):
     def step(self):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         accept_inds = ss.uids()
-        if self.sim.t in self.timepoints: accept_inds = self.deliver() # TODO: not robust for timestep
+        if self.sim.ti in self.timepoints: accept_inds = self.deliver() # TODO: not robust for timestep
         return accept_inds
 
 
@@ -426,8 +430,10 @@ class treat_num(BaseTreatment):
         """
         Add people who are willing to accept treatment to the queue
         """
+        queue = np.array(self.queue, dtype=int)
+        self.queue = queue[np.isin(queue, self.check_eligibility())].tolist() # Remove people who are no longer eligible
         accept_inds = self.get_accept_inds()
-        if len(accept_inds): self.queue += accept_inds.tolist()
+        if len(accept_inds): self.queue += accept_inds[~np.isin(accept_inds, queue)].tolist() # Only add people not already in the queue
         return
 
     def get_candidates(self):
