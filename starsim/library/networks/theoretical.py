@@ -35,9 +35,9 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         sim.run()
         ```
     """
-    def __init__(self, key_dict=None, pars=None, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         """ Initialize """
-        super().__init__(key_dict=key_dict)
+        super().__init__()
         self.define_pars(
             p = 0.1, # Probability of each edge
             dur = 0, # Duration of zero ensures that new random edges are formed on each time step

@@ -33,9 +33,9 @@ class DiskNet(ss.Network):
         sim.run()
         ```
     """
-    def __init__(self, key_dict=None, pars=None, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         """ Initialize """
-        super().__init__(key_dict=key_dict)
+        super().__init__()
         self.define_pars(
             r = 0.1, # Radius
             v = ss.freq(0.05, unit=ss.day), # Velocity
