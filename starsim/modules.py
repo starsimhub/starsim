@@ -276,7 +276,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Timeline(**kwargs, name=self.name)
+        self.t = ss.Timeline(**kwargs, name=self.name, init=False) # Initialized in init_pre(), so the sim's dt is used if not supplied
 
         # Properties to be added by init_pre()
         self.sim = None
@@ -411,8 +411,11 @@ class Module(Base):
         # Set values for name and label
         cls_name = self.__class__.__name__
         cls_lower = cls_name.lower()
+        old_name = getattr(self, 'name', None)
         self.name = self._reconcile('name', name, cls_lower)
         default_label = self.name if self.name != cls_lower else cls_name
+        if label is None and getattr(self, 'label', None) in [old_name, cls_name]: # The existing label is a default, so update it to match the new name
+            label = default_label
         self.label = self._reconcile('label', label, default_label)
         return
 
@@ -424,9 +427,9 @@ class Module(Base):
         Args:
             name (str): A string with the name of the module class in lower case, e.g. 'sir'
         """
-        for subcls in ss.all_subclasses(cls):
-            if subcls.__name__.lower() == name:
-                return subcls(*args, **kwargs)
+        subcls = ss.find_modules(flat=True).get(name)
+        if subcls is not None and issubclass(subcls, cls):
+            return subcls(*args, **kwargs)
         else:
             raise KeyError(f'Module "{name}" did not match any known Starsim modules')
 
