@@ -372,8 +372,8 @@ class treat_pregnant(ss.Intervention):
         ssl.mnch.treat_pregnant(disease='sir', start_year=2025, p_treat=ss.bernoulli(p=0.5))
     """
 
-    def __init__(self, disease='sir', start_year=None, end_year=None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, disease='sir', start_year=None, end_year=None, pars=None, **kwargs):
+        super().__init__()
         self.disease_name = disease
         self.start_year = start_year
         self.end_year   = end_year
@@ -382,6 +382,7 @@ class treat_pregnant(ss.Intervention):
             tx_growth_reversal = 0.7,
             tx_timing_reversal = 0.7,
         )
+        self.update_pars(pars, **kwargs)
         self.define_states(
             ss.FloatArr('ti_treated', label='Time of treatment'),
         )
@@ -419,10 +420,11 @@ class treat_pregnant(ss.Intervention):
             # Cure infection
             disease.infected[treated]  = False
             disease.recovered[treated] = True
+            disease.ti_dead[treated]   = np.nan # Cancel any scheduled death from the disease
             self.ti_treated[treated]   = self.ti
 
             # Partially reverse fetal damage from the infection
-            fh.reverse_growth_restriction(treated, self.pars.tx_growth_reversal)
+            fh.reverse_growth_restriction(treated, fh.growth_restriction[treated] * self.pars.tx_growth_reversal)
             fh.reverse_timing_shift(treated, self.pars.tx_timing_reversal)
         return
 
@@ -440,7 +442,7 @@ class fetal_infection(ss.Connector):
     1. At conception, if the mother is already infected (via a conception callback
        registered with FetalHealth).
     2. During pregnancy, when a new infection occurs (detected in `step()`
-       by checking `ti_infected == self.ti`).
+       by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
 
     Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease in `diseases`.
 
@@ -457,7 +459,7 @@ class fetal_infection(ss.Connector):
 
             def _apply_damage(self, uids):
                 # Custom damage logic, e.g. stage-dependent penalties
-                fh = self.sim.custom['fetal_health']
+                fh = self.fh
                 disease = self.sim.diseases.my_disease
                 severe = disease.severe[uids]
                 mild_uids   = uids[~severe]
@@ -467,13 +469,19 @@ class fetal_infection(ss.Connector):
                 ...
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
         self.define_pars(
             timing_shift   = ss.lognorm_ex(mean=3.0, std=1.0),
             growth_penalty = 0.15,
         )
+        self.update_pars(pars, **kwargs)
         return
+
+    @property
+    def fh(self):
+        """ Shortcut to the FetalHealth module """
+        return self.sim.custom['fetal_health']
 
     def init_pre(self, sim):
         super().init_pre(sim)
@@ -486,8 +494,7 @@ class fetal_infection(ss.Connector):
 
         # Register a callback so we can apply damage at conception for
         # women who are already infected when they become pregnant
-        fh = sim.custom['fetal_health']
-        fh.add_conception_callback(self._on_conception)
+        self.fh.add_conception_callback(self._on_conception)
         return
 
     def _on_conception(self, uids):
@@ -495,6 +502,7 @@ class fetal_infection(ss.Connector):
         infected = self.sim.diseases.sir.infected[uids]
         infected_uids = uids[infected]
         if len(infected_uids):
+            self.fh.n_exposures[infected_uids] += 1
             self._apply_damage(infected_uids)
         return
 
@@ -506,7 +514,7 @@ class fetal_infection(ss.Connector):
         disease (e.g. stage-dependent growth penalties, trimester-dependent
         timing shifts).
         """
-        fh = self.sim.custom['fetal_health']
+        fh = self.fh
         shifts = self.pars.timing_shift.rvs(uids)
         fh.apply_timing_shift(uids, shifts)
         fh.apply_growth_restriction(uids, self.pars.growth_penalty)
@@ -519,10 +527,11 @@ class fetal_infection(ss.Connector):
         if not preg.pregnant.any():
             return
 
-        # Find pregnant women newly infected this timestep
+        # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception)
         pregnant_uids  = preg.pregnant.uids
-        newly_infected = sim.diseases.sir.ti_infected == self.ti
+        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_pregnant < self.ti)
         affected = pregnant_uids[newly_infected[pregnant_uids]]
         if len(affected):
+            self.fh.n_exposures[affected] += 1
             self._apply_damage(affected)
         return
