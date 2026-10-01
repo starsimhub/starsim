@@ -2,6 +2,39 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.6.2 (2026-09-30)
+This release contains many LLM-assisted bugfixes, mostly for corner cases (e.g. modules with their own `dt`).
+
+### Changes that may affect results
+- *Regression*: `ss.Deaths` treated death rates given per month/week/day as per year.
+- *Regression*: `ss.SIR` recovery/death and `ss.Pregnancy` losses were mistimed when the module had its own `dt`; CBR, CMR, and burn-in fetus ages also used the sim's `dt` instead of the module's.
+- *Regression*: `ss.Pregnancy` burn-in started one step late and its events were counted at `ti=0`; fetal deaths caused by maternal death are now classified by gestational age.
+- *Regression*: `ss.NCD` agents with a zero-length prognosis never died.
+- *Regression*: `ss.randint` UID draws now use 64-bit uniforms (previously correlated for wide ranges, e.g. `ssl.ErdosRenyiNet`) and floor correctly for negative `low`; CRN uniforms are never exactly 0; zero-scale distributions (e.g. `ss.normal(std=0)`) return the constant instead of NaN; `ss.years(ss.poisson(x))` now scales with `dt`.
+- *Regression*: rate/probability conversions now use `np.expm1()`/`np.log1p()` instead of `1 - np.exp()`/`np.log(1 - x)`, which is more accurate for small probabilities and fixes results differing between x86 and ARM machines (issue [1426](https://github.com/starsimhub/starsim/issues/1426)).
+- *Regression*: `ss.prob.to_prob()` with no argument now uses the module's `dt`, and adding/subtracting rates with different units now gives the right value.
+- *Regression*: modules given time arguments via `super().__init__(**kwargs)` now inherit the sim's `dt`.
+- *Regression*: `ss.PostnatalNet` edges ended one step early; `ss.MSMNet` redrew participation every step, paired deterministically, and had unitless `duration`/`acts`.
+- *Regression*: `ssl.ErdosRenyiNet` and `ssl.DiskNet` could connect dead agents; `ssl.DiskNet` agents could leave the unit square; `ssl.HouseholdNet` re-aged unborn agents.
+- *Regression*: `ss.routine_triage`/`ss.campaign_triage` never delivered; `ss.treat_num` queued duplicate and ineligible agents; screening outcomes persisted between rounds.
+- *Regression*: `ssl.Cholera` environmental transmission was effectively off, and agents could be infected twice; `ssl.Ebola` bodies stopped transmitting after one timestep, rather than at burial (deaths are now recorded at burial).
+- *Regression*: fixed `ssl.mnch` `fetal_infection` never applying damage during pregnancy, `NeonatalSepsis` killing non-neonates, and `treat_pregnant` not cancelling deaths or applying `tx_growth_reversal` as a fraction.
+- *Regression*: `sim.summarize()` now uses the final value for `cumulative` results (e.g. `births_cumulative`).
+- *Regression*: `ss.options.set('defaults')` no longer switches to 64-bit precision, and `STARSIM_PRECISION` is now respected.
+- *Regression*: `ss.Normal` calibration likelihoods computed the default variance incorrectly and misapplied per-timepoint `sigma2`; `step_containing()` picked the next step rather than the containing one.
+- *Regression*: `MultiSim(debug=True)` now runs all `n_runs`; functions added via `sim.loop.insert()` now run on the right sim after the sim is copied.
+
+### Other bugfixes
+- Campaign years outside the sim now raise an error, rather than running at the first/last timestep; `DateArray.to_date(inplace=True)` on a float array now raises an error rather than doing nothing; the unused `interpolate` argument of `ss.CampaignDelivery` and `col_names` argument of `Result.resample()` have been removed.
+- Fixed crashes: comparing an `Arr` with a NumPy array; `Arr.astype()`; `ss.Births` with `crn=False` and dataframe rates; short sims with `ss.Pregnancy` burn-in; saving an uninitialized sim; `demographics=True` with `birth_rate`/`death_rate`; `ss.RandomSafeNet(dur=<number>)`; `ss.rand_raw` under CRN; multi-disease `ss.Dx`/`ss.Tx` dataframes; `ss.RoutineDelivery` with date-based sims or non-annual `years`; `ssl.HIV` with a custom name; nested `ss.options.context()`; `Module.create()`; `Results.annualize()`/`append()`; `Result.resample(col_names=...)`; several calibration paths (`die=False`, float-year `combine_reps`, `Binomial` `p` column, interrupted calibrations).
+- Fixed plotting: `MultiSim.plot()` deleting `auto_plot=False` results and ignoring `fig`/`alpha`; `sim.plot('new_deaths')` with several matching keys; `People.plot_ages()` percentages and `bins`; `Result.plot(fig=...)`; `Loop.plot()`/`plot_cpu()`; date-axis ticks with Sciris 3.4.
+- `ss.MFNet(rel_part_rates=...)` now scales participation (previously it had no effect).
+- `ss.Pregnancy(dur_pregnancy=...)` now accepts a number, duration, or any distribution, not only an `ss.choice`.
+- `for p in sim.people` now iterates over active agents only; `timeline.relvec` is now numeric; `ss.StaticNet` passes extra arguments to networkx generators; `Network.plot()` passes kwargs to `nx.draw_networkx()`; `ss.SIR(name=...)` sets the label; `ss.Samples` no longer adds an `Unnamed: 0` column.
+- Fixed diagnostics (`sim.set_diagnostics()`) never recording random variates; `sim.init_dists()` no longer changes dist seeds when called again; and other small fixes to time, distribution, and debugging utilities.
+- Fixed several docstring examples.
+
+
 ## Version 3.6.1 (2026-08-29)
 This release contains two performance improvements:
 - `nb_indexer()` (used for `ss.Arr` UID indexing) is now written as an explicit loop rather than `arr[inds]`, due to a regression in Numba 0.66.
