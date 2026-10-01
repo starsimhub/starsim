@@ -2,6 +2,7 @@
 Parent class for the integration loop.
 """
 import time
+import functools as ft
 from dataclasses import dataclass
 from typing import Callable
 import numpy as np
@@ -341,9 +342,9 @@ class Loop:
             ss.warn(warnmsg)
         return
 
-    def store_time(self):
-        """ Store the current time in as high resolution as possible (only called when profiling) """
-        self.cpu_time.append(time.perf_counter())
+    def store_time(self, start):
+        """ Store the time elapsed since start in as high resolution as possible (only called when profiling) """
+        self.cpu_time.append(time.perf_counter() - start)
         return
 
     def run_one_step(self):
@@ -389,19 +390,20 @@ class Loop:
             until = ss.date(until)
 
         # Loop over every function in the integration loop, e.g. disease.step()
-        if self.profile:
-            self.store_time()
         while self.index < len(self.plan):
             entry = self.plan[self.index]
             if verbose:
-                print(f'Running t={entry.time:n}, step={self.index}, {entry.label}()')
+                now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting
+                print(f'Running t={now}, step={self.index}, {entry.label}()')
 
+            if self.profile:
+                start = time.perf_counter()
             entry.func() # Execute the function -- this is where all of Starsim happens!!
 
             # Tidy up
             self.index += 1 # Increment the count
             if self.profile:
-                self.store_time()
+                self.store_time(start)
             if until is not None and self.sim.now > until: # Terminate if asked to
                 break
 
@@ -428,7 +430,7 @@ class Loop:
 
         # Perform the insertion in reverse order
         name = func.__name__
-        sim_func = lambda: func(self.sim) # Construct a partial function
+        sim_func = ft.partial(func, self.sim) # Construct a partial function (not a lambda, so the sim is updated when deepcopied)
         for m in sorted(matches, reverse=True):
             current = self.plan[m]
             row = LoopEntry(
@@ -523,7 +525,7 @@ class Loop:
         else:
             errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
             raise RuntimeError(errormsg)
-        times = np.diff(self.cpu_time)
+        times = np.array(self.cpu_time)
         if len(times) == len(df):
             df['cpu_time'] = times
         else:
@@ -567,8 +569,9 @@ class Loop:
             df = df[~df.func_name.isin(filter_out)]
         if max_len:
             df = df[:max_len]
-        yticks = df.func_order.unique()
-        ylabels = df.label.unique()
+        ticks = df[['func_order', 'label']].dropna().drop_duplicates() # Inserted functions have no func_order, so skip them
+        yticks = ticks.func_order
+        ylabels = ticks.label
         x = df.time
         y = df.func_order
 
@@ -607,10 +610,9 @@ class Loop:
         df = self.cpu_df
         ylabels = df.index.values.copy() # Copy to avoid mutating the cached cpu_df when labels are assembled below
         if bytime:
-            y = np.arange(len(ylabels))
+            y = np.arange(len(ylabels))[::-1] # Reverse order so plots from top to bottom
         else:
-            y = df.func_order.values
-        y = y[::-1] # Reverse order so plots from top to bottom
+            y = -df.func_order.values # Negative so plots from top to bottom
 
         x = df.cpu_time.values
         pcts = df.percent.values
