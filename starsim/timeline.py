@@ -87,7 +87,7 @@ class Timeline:
         self._timevec = None # Backing store for the lazy timevec property (human-friendly representation)
         self._datevec = None # Backing store for the lazy datevec property (date objects)
         self._relvec  = None # Backing store for the lazy relvec property (relative time in sim units)
-        self._rel_date0 = None # Reference date0 for relvec, captured at init (None => use self.datevec[0])
+        self._rel_start = None # Reference start for relvec, captured at init (None => use this timeline's own start)
         self._rel_dur_class = None # Duration class for relvec, captured at init
         self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.initialized = False # Call self.init(sim) to initialize the object
@@ -148,16 +148,17 @@ class Timeline:
     def relvec(self):
         """ Relative time in the sim's time units (derived lazily) """
         if self._relvec is None and self.yearvec is not None:
-            date0 = self._rel_date0
-            if date0 is None: # Standalone timeline: measure relative to our own start
-                date0 = self.datevec[0]
+            start = self._rel_start # The sim start date, or start year if the sim is duration-based
+            if start is None: # Standalone timeline: measure relative to our own start
+                start = self.tvec[0] if isinstance(self.start, ss.date) else self.yearvec[0]
             dur_class = self._rel_dur_class or self.default_type
-            if isinstance(date0, ss.date): # Convert this Timeline's datevec to durations relative to the sim start date
-                dur_vec = self.datevec - date0
+            if isinstance(self.start, ss.date) and isinstance(start, ss.date): # Date-based: use the exact number of days since the sim start date
+                dur_vec = ss.days(self.tvec.days_since(start))
             else: # Otherwise, use years
-                dur_vec = ss.years(self.yearvec - self.yearvec[0])
+                year0 = start.years if isinstance(start, ss.date) else start
+                dur_vec = ss.years(self.yearvec - year0)
             dur_vec = dur_class(dur_vec) # Convert to the intended class
-            self._relvec = dur_vec.to_array() # Only keep the numeric array
+            self._relvec = np.round(dur_vec.to_array(), decimals=6) # Only keep the numeric array, rounded since yearvec is only precise to 9 decimals, e.g. 2.000000004 months
         return self._relvec
 
     @relvec.setter
@@ -283,12 +284,6 @@ class Timeline:
             kw_val = kwargs.get(key)
             par_val = pars.get(key)
 
-            # Special handling for dt: don't inherit dt if the units are different
-            if key == 'dt':
-                if isinstance(parent, Timeline):
-                    if parent.unit != self.unit:
-                        parent_val = 1.0
-
             if force is False: # Only update missing (None) values
                 val = sc.ifelse(current_val, kw_val, par_val, parent_val)
             elif force is None: # Prioritize current value
@@ -304,7 +299,9 @@ class Timeline:
                 stale = True
 
         if stale and reset and self.initialized:
-            self.init()
+            self.dur = None # Recalculated from the new start and stop
+            self._timevec = self._datevec = self._relvec = None # Clear the lazy vectors
+            self.init(force=True)
         return
 
     def reconcile_args(self, sim=None):
@@ -562,27 +559,25 @@ class Timeline:
         for attr in ['_timevec', '_datevec', '_relvec']:
             src = getattr(source, attr)
             setattr(self, attr, src.copy() if src is not None else None)
-        self._rel_date0 = source._rel_date0
+        self._rel_start = source._rel_start
         self._rel_dur_class = source._rel_dur_class
         return
 
     def _capture_relvec_context(self, sim):
-        """ Capture the reference start date (date0) and duration class used by the lazy relvec property """
+        """ Capture the reference start (date or year) and duration class used by the lazy relvec property """
         
         def first_date(t):
-            """ Return the first element of a timeline's datevec, without materializing the whole datevec """
-            if t._datevec is not None: # Already built: just index it
-                return t._datevec[0]
+            """ Return the first date of a timeline, or the first year if it is duration-based (since dates are rounded) """
             if isinstance(t.start, ss.date): # Date-based: the first tvec element is the first date
                 return t.tvec[0]
-            return ss.date.from_array(np.asarray(t.yearvec[:1]), allow_zero=True)[0] # Duration-based: convert only the first year
+            return t.yearvec[0] # Duration-based: use the exact first year
 
         try:
             ref_t = sim.t # The sim's timeline (may be self, for the sim's own timeline)
-            date0 = first_date(ref_t)
+            start = first_date(ref_t)
             rel_dt = ref_t.dt
         except Exception:
-            date0 = None # Standalone timeline: the relvec property will fall back to self.datevec[0]
+            start = None # Standalone timeline: the relvec property will fall back to its own start
             rel_dt = self.dt
 
         # Get the class for dt, which we use as the unit for the relative durations
@@ -593,6 +588,6 @@ class Timeline:
         else:
             dur_class = self.default_type
 
-        self._rel_date0 = date0
+        self._rel_start = start
         self._rel_dur_class = dur_class
         return

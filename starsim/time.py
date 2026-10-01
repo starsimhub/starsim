@@ -68,7 +68,7 @@ class DateArray(np.ndarray):
             if unit is None:
                 if isinstance(arr[0], (ss.date, ss.dur)):
                     unit = type(arr[0]) # Get the unit from the input
-                elif isinstance(arr[0], (np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
+                elif isinstance(arr[0], (str, np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
                     arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
                     unit = ss.date
                 else:
@@ -236,6 +236,22 @@ class DateArray(np.ndarray):
     def to_array(self, *args, **kwargs):
         """ Force conversion to an array """
         return np.array(self, *args, **kwargs)
+
+    def days_since(self, start):
+        """
+        Exact (elapsed) number of days between each date and start, as an array of floats
+
+        Unlike `dates - start`, which gives calendar differences (e.g. `ss.datedur(months=1)`), this counts days exactly.
+
+        **Example**:
+
+            dates = ss.DateArray(['2000-01-01', '2000-02-01', '2000-03-01'])
+            dates.days_since('2000-01-01') # Returns array([ 0., 31., 60.])
+        """
+        if not self.is_date:
+            errormsg = f'days_since() requires an array of dates, not {self.unit}'
+            raise TypeError(errormsg)
+        return np.asarray((pd.DatetimeIndex(self) - ss.date(start))/pd.Timedelta(days=1))
 
 
 class date(pd.Timestamp):
@@ -589,7 +605,7 @@ class date(pd.Timestamp):
 
         # Convert this first
         if isinstance(step, ss.dur) and not isinstance(step, ss.datedur):
-            if step.value == int(step.value): # e.g. ss.days(2) not ss.days(2.5)
+            if step.value == int(step.value) or isinstance(step, (ss.days, ss.weeks)): # e.g. ss.days(2), or fixed-length units like ss.days(0.25), but not ss.years(0.1)
                 step = ss.datedur(step) # TODO: check if this does exact rather than to-years-and-back unit conversion
             else:
                 step = step.years # Don't try to convert e.g. ss.years(0.1) to a datedur, you get rounding errors
@@ -611,6 +627,7 @@ class date(pd.Timestamp):
 
             tvec = []
             t = start
+            atol = min(atol, step.years/2) # For sub-daily steps, it's only close if it's within half a step
 
             compare = (lambda t: t < stop or within_day(t.years, stop.years)) if inclusive else (lambda t: t < stop)
             while compare(t):
