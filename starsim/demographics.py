@@ -123,7 +123,7 @@ class Births(Demographics):
             # agent -- O(1) draws instead of O(n_alive) (see issue #404). Statistically equivalent
             # to the per-agent Bernoulli scan for the small per-step probabilities typical of birth
             # rates, but not CRN-safe across scenarios (which is inherent to ss.options.crn=False).
-            birth_uids = self._get_births_count(float(scaled_birth_prob))
+            birth_uids = self._get_births_count(float(np.squeeze(scaled_birth_prob)))
         return birth_uids
 
     def _get_births_count(self, prob):
@@ -168,7 +168,7 @@ class Births(Demographics):
 
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
-        births_per_year = self.n_births_this_step/self.sim.t.dt_year
+        births_per_year = self.n_births_this_step/self.t.dt_year
         denom = self.sim.people.alive.sum()
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
@@ -256,7 +256,7 @@ class Deaths(Demographics):
         if sc.isnumber(drd):
             death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a prob with unit=ss.years(1) by ss.prob.array_to_prob
         elif isinstance(drd, ss.Rate):
-            if drd.unit == 1: # drd is already in years so don't need to translate
+            if drd.unit == ss.years(1): # drd is already in years so don't need to translate
                 death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
             else:
                 # Convert from prob per drd.unit to prob per year, ss.prob.array_to_prob will convert to prob per timestep later
@@ -319,7 +319,7 @@ class Deaths(Demographics):
     def finalize(self):
         super().finalize()
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        units = self.pars.rate_units*self.sim.t.dt_year
+        units = self.pars.rate_units*self.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
         deaths = sc.safedivide(self.results.new, n_alive, default=0)
@@ -393,7 +393,7 @@ class Pregnancy(Demographics):
         min_age (float): minimum age for pregnancy (default 15)
         max_age (float): maximum age for pregnancy (default 50)
         rate_units (float): units for fertility rates (default assumes per 1000)
-        dur_pregnancy (float/dur): duration of pregnancy (default: drawn from choice distribution, 32-42 weeks)
+        dur_pregnancy (float/dur/Dist): duration of pregnancy; a number is interpreted as weeks (default: drawn from choice distribution, 32-42 weeks)
         dur_breastfeed (float/dur): duration of breastfeeding (default: drawn from lognormal distribution, 9±6 months)
 
         rr_ptb (float): base relative risk of pre-term birth (default normal with mean 1, std 0.1)
@@ -417,6 +417,11 @@ class Pregnancy(Demographics):
         default_pars = PregnancyPars()
         self.define_pars(**default_pars)
         self.update_pars(pars, **kwargs)
+
+        # A number or duration sets the choice's a to a scalar; use a fixed duration instead
+        dp = self.pars.dur_pregnancy
+        if isinstance(dp, ss.choice) and np.ndim(dp.pars.a) == 0:
+            self.pars.dur_pregnancy = ss.constant(dp.pars.a)
 
         # Distributions: binary outcomes
         self._p_conceive = ss.bernoulli(p=0)  # Placeholder, see make_p_conceive
@@ -462,6 +467,7 @@ class Pregnancy(Demographics):
         )
         self.choose_slots = None  # Distribution for choosing slots; set in self.init()
         self.fertility_rate_data = None  # Processed data; set in self.init_pre() if fertility rate data is in pars
+        self.mean_dur_pregnancy = None  # Mean pregnancy duration in years; set in self.init_post()
 
         self.derived_results = None  # Updated in init_results
 
@@ -563,9 +569,8 @@ class Pregnancy(Demographics):
             # Get the time of birth for pregnancies conceived now and pull out the birth rates for that year.
             # We adjust the birth rates to account for the fact that some women are already pregnant, which
             # is why we make a copy.
-            birth_year = self.t.year + self.pars.dur_pregnancy.pars.a.years
-            birth_year_inds = sc.findnearest(frd.index, birth_year)
-            nearest_year = frd.index[birth_year_inds][0]  # 0 because the corner case of spanning 2 years can be ignored
+            birth_year = self.t.year + self.mean_dur_pregnancy
+            nearest_year = frd.index[sc.findnearest(frd.index, birth_year)]
             new_rate = self.fertility_rate_data.loc[nearest_year].values.copy()  # Initialize array with new rates
 
             # Assign agents to age bins
@@ -636,15 +641,23 @@ class Pregnancy(Demographics):
         super().init_post()
         self.updates_pre()
 
+        # Sample pregnancy durations (in timesteps); reset so these draws don't affect the RNG state
+        n_draws = 1000
+        dist = self.pars.dur_pregnancy
+        durs = dist.rvs(n_draws, reset=True)
+
+        # Mean pregnancy duration in years, used to pick the fertility data year (exact for a choice distribution)
+        self.mean_dur_pregnancy = (dist.pars.a.years * dist.pars.p).sum() if isinstance(dist, ss.choice) else durs.mean()*self.t.dt_year
+
         # Burn-in
         if self.ti == 0 and self.pars.burnin:  # TODO: refactor
-            dist = self.pars.dur_pregnancy
-            max_time = dist.rvs(1000).max() # Calculate the maximum duration of pregnancy
-            dtis = np.arange(np.ceil(-max_time), 0, 1).astype(int) # e.g. -9, -8 ... -1
+            max_time = durs.max() # Calculate the maximum duration of pregnancy
+            dtis = np.arange(np.floor(-max_time), 0, 1).astype(int) # e.g. -10, -9 ... -1
             for dti in dtis:
                 self.t.ti = dti
                 self.step()
             self.t.ti = 0
+            self._counts.update({k: 0 for k in self._counts}) # Don't count burn-in events as occurring at ti=0
 
         return
 
@@ -861,7 +874,8 @@ class Pregnancy(Demographics):
         """
         maternal_deaths = (self.ti_dead <= self.ti).uids
         self.sim.people.request_death(maternal_deaths)
-        self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
+        if 0 <= self.ti < self.t.npts:  # Skip during burn-in (ti < 0)
+            self.results['maternal_deaths'][self.ti] = len(maternal_deaths)
         return
 
     def select_conceivers(self, uids=None):
@@ -943,7 +957,7 @@ class Pregnancy(Demographics):
             self._set_embryo_states(conceive_uids_with_repeats, new_uids, new_slots)
 
         if self.ti < 0:
-            people.age[new_uids] += -self.ti * self.sim.t.dt_year  # Age to ti=0
+            people.age[new_uids] += -self.ti * self.t.dt_year  # Age to ti=0
 
         return conceive_uids_with_repeats, new_uids
 
@@ -1032,7 +1046,7 @@ class Pregnancy(Demographics):
 
     def finish_step(self):
         super().finish_step()
-        death_uids = ss.uids(self.sim.people.ti_dead <= self.ti)
+        death_uids = ss.uids(self.sim.people.ti_dead <= self.sim.ti) # People.ti_dead is in sim timesteps
         if len(death_uids) == 0:
             return
         self.process_maternal_deaths(death_uids)
@@ -1050,8 +1064,7 @@ class Pregnancy(Demographics):
             unborn_uids = self.find_unborn_children(mother_death_uids)
             _, unborn_death_uids = self.pars.p_survive_maternal_death.filter(unborn_uids, both=True)
             if len(unborn_death_uids):
-                self.sim.people.request_death(unborn_death_uids)
-            self.step_die(mother_death_uids)
+                self.sim.people.request_death(unborn_death_uids) # Mother's states are wiped in process_prenatal_deaths(), after gestational age is used to classify the loss
         return
 
     def process_prenatal_deaths(self, death_uids):
@@ -1146,7 +1159,7 @@ class Pregnancy(Demographics):
 
     def finalize(self):
         super().finalize()
-        units = self.pars.rate_units*self.sim.t.dt_year
+        units = self.pars.rate_units*self.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.n_alive[inds]
         births = sc.safedivide(self.results.births, n_alive, default=0)
