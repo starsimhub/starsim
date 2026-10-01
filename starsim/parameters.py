@@ -65,7 +65,7 @@ class Pars(sc.objdict):
                 elif isinstance(old, ss.ndict): # Update module containers -- main use case
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module): # Update modules -- rare
-                    self._update_module(key, old, new)
+                    self._update_module(old, new)
                 elif isinstance(old, ss.TimePar):
                     self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
@@ -95,10 +95,10 @@ class Pars(sc.objdict):
                 raise TypeError(errormsg)
         return
 
-    def _update_module(self, key, old, new):
+    def _update_module(self, old, new):
         """ Update a Module object in the parameters, e.g. sim.pars.diseases.sir """
         if isinstance(new, dict):
-            old[key].pars.update(new) # e.g. pars = {'dur_inf': 6}
+            old.pars.update(new) # e.g. pars = {'dur_inf': 6}
         else:
             errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
             raise TypeError(errormsg)
@@ -373,13 +373,9 @@ class SimPars(Pars):
         """ Validate demographics-related input parameters"""
         # Allow shortcut for default demographics
         demog = self.demographics
+        use_default = demog in [True, 1] # ...turn it on with True or 1
         if demog in [True, False, 1, 0]: # Allow turning it on or off
-            self.demographics = sc.autolist()
-            if demog: # ...turn it on with True or 1
-                if self.birth_rate is None:
-                    self.demographics += ss.Births()
-                if self.death_rate is None:
-                    self.demographics += ss.Deaths()
+            self.demographics = ss.ndict()
 
         # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         valid = isinstance(self.demographics, ss.ndict) and not len(self.demographics)
@@ -389,12 +385,16 @@ class SimPars(Pars):
                 raise ValueError(errormsg)
             births = ss.Births(birth_rate=self.birth_rate)
             self.demographics += births
+        elif use_default:
+            self.demographics += ss.Births()
         if self.death_rate is not None:
             if not valid:
                 errormsg = 'You can only specify death_rate together with (optionally) birth_rate, not other demographics modules; add ss.Deaths() manually'
                 raise ValueError(errormsg)
             background_deaths = ss.Deaths(death_rate=self.death_rate)
             self.demographics += background_deaths
+        elif use_default:
+            self.demographics += ss.Deaths()
 
         # Decide whether to use aging based on if demographics modules are present
         if self.use_aging is None:
