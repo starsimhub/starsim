@@ -8,7 +8,7 @@ import numba as nb
 import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as plt
-ss_int_ = ss.dtypes.int
+ss_int = ss.dtypes.int
 
 
 
@@ -58,13 +58,13 @@ def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
         z = (z ^ (z >> _U30)) * _MIX1
         z = (z ^ (z >> _U27)) * _MIX2
         z = z ^ (z >> _U31)
-        out[i] = (z >> shift) * scale
+        out[i] = max(z >> shift, 0.5) * scale # Map 0 to half a step, so the output is strictly in (0, 1) (e.g. ss.normal() never gives -inf)
     return
 
 
 def hash_uniforms(seed, ind, slots, dtype=None):
     """
-    Generate one uniform random number in [0, 1) per slot via a counter-based (splitmix64)
+    Generate one uniform random number in (0, 1) per slot via a counter-based (splitmix64)
     hash keyed by (seed, ind); not for the user.
 
     This is the engine behind Starsim's common random numbers (CRN). Because each output
@@ -164,18 +164,19 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim))
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
-            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+            # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
+            dists = sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':Dists}, flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
-            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module'}, flatten=True)
+            dists += sc.search(sim, type=Dist,skip={'ids':list(skip_ids), 'keys':'module', 'subclasses':Dists}, flatten=True)
         else:
             dists = sc.search(obj, type=Dist, flatten=True)
         self.dists = dists
 
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
-                dist.init(trace=trace, seed=base_seed, sim=sim, force=force)
+                dist.init(trace=trace, seed=self.base_seed, sim=sim, force=force)
 
         # Confirm the seeds are unique
         self.check_seeds()
@@ -363,6 +364,7 @@ class Dist:
     scaling = None # See "scale_types" above
     unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognorm_ex(); None means no check
     unitless_pars = None # Parameters that cannot have time units, e.g. ('c',), the shape parameter, for ss.weibull(); None means no check
+    hash_dtype = None # The dtype of the CRN uniforms passed to ppf(); None for ss.dtypes.float
 
     def __init__(self, dist=None, distname=None, name=None, unit=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
@@ -376,6 +378,7 @@ class Dist:
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
         self.unit = ss.time.get_timepar_class(unit) # The timepar class -- can be None
         self.seed = seed # Usually determined once added to the container
+        self.user_seed = seed # Stored separately so re-initializing doesn't add the offset twice
         self.offset = offset
         self.module = module
         self.sim = sim
@@ -537,11 +540,12 @@ class Dist:
         """
         Restore state, allowing the same numbers to be resampled
 
-        Use 0 for original state, -1 for most recent state.
+        Use 0 for original state, -1 for most recent state. Note: with `ss.options.crn=False`,
+        the state is only stored for `rvs(reset=True)`, so -1 may refer to an earlier state.
 
         Examples:
             ```python
-            dist = ss.random(seed=5).init()
+            dist = ss.random(seed=5, strict=False)
             r1 = dist(5)
             r2 = dist(5)
             dist.reset(-1)
@@ -694,7 +698,7 @@ class Dist:
             self.offset = str2int(unique_name) # Key step: hash the path to the distribution
         else:
             self.offset = self.offset or 0
-        self.seed = self.offset + (seed or self.seed or 0)
+        self.seed = self.offset + (seed or self.user_seed or 0)
         return
 
     def process_dist(self):
@@ -806,7 +810,7 @@ class Dist:
         if self.unit is not None and not ss.distributions.scale_types.check_postdraw(self):
             msg = f'You have supplied a distribution-level timepar {self.unit}, but {self} can only be scaled pre-draw. '
             if len(self._pars) == 1:
-                self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions)
+                self.pars[0] = self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions); store in pars so it persists
                 self.unit = None
                 if ss.options.warn_convert:
                     msg += f'Since ss.{self.__class__.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
@@ -939,8 +943,7 @@ class Dist:
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
         size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
-        if not getattr(self, '_callable_keys', None): # Inspect isn't that fast, so only do this once
-            keys = list(inspect.signature(func).parameters.keys()) # Get the input arguments  of the function
+        if not getattr(self, '_callable_keys', None):
             module = self.module
             mapping = {
                 'sim': self.sim,
@@ -952,11 +955,13 @@ class Dist:
             if isinstance(module, ss.Module): # If it's an actual module, we can add a couple more
                 mapping['pars'] = module.pars
                 mapping['states'] = module.state_dict
-            self._callable_keys = keys
+            self._callable_keys = {} # Stored per parameter, since each function can have a different signature
             self._callable_args = mapping
         else:
-            keys = self._callable_keys
             mapping = self._callable_args
+        keys = self._callable_keys.get(parkey)
+        if keys is None: # Inspect isn't that fast, so only do this once per parameter
+            keys = self._callable_keys[parkey] = list(inspect.signature(func).parameters.keys()) # Get the input arguments of the function
 
         # We have to update this every time
         for key in ['uids', 'size']:
@@ -1030,6 +1035,11 @@ class Dist:
 
     def ppf(self, rands):
         """ Return default random numbers for array parameters; not for the user """
+        scale = self.dist.kwds.get('scale')
+        if scale is not None and np.any(scale == 0): # SciPy gives NaN (and a warning) for scale=0, but NumPy (and the limit) gives loc
+            with np.errstate(invalid='ignore'):
+                rvs = self.dist.ppf(rands)
+            return np.where(scale == 0, self.dist.kwds.get('loc', 0), rvs)
         rvs = self.dist.ppf(rands)
         return rvs
 
@@ -1080,7 +1090,7 @@ class Dist:
             # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
             # Generates exactly len(uids) numbers (no slot_scale blowup) while preserving CRN.
             # (choice/histogram set _use_ppf=False and keep the native path below.)
-            rands = hash_uniforms(self.seed, self.ind, self._slots.astype(np.uint64))
+            rands = hash_uniforms(self.seed, self.ind, self._slots.astype(np.uint64), dtype=self.hash_dtype)
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         elif self._use_ppf:
             rands = self.rand(size)
@@ -1116,7 +1126,7 @@ class Dist:
             rvs = self.randround(rvs)
 
         # Tidy up
-        if self.sim and self.sim.diagnostics and self.sim.diagnostics.rvs:
+        if self.sim and self.sim.diagnostics and self.sim.diagnostics.rvs is not None: # Need not None since dict is empty at first
             self.sim.diagnostics.store_rvs(self, rvs)
         self.called += 1
         if reset:
@@ -1128,7 +1138,7 @@ class Dist:
         if self.debug:
             tistr   = f'on ti={self.module.ti} ' if self.module else ''
             sizestr = f'with size={self._size}, '
-            slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
+            slotstr = f'Σ(slots)={np.asarray(self._slots).sum()}, ' if self._slots is not None else '<no slots>, '
             rvstr   = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
             pre_state = str(self.history[-1]['state']['state'])[-5:]
             post_state = str(self.state_int)[-5:]
@@ -1140,7 +1150,7 @@ class Dist:
 
     def randround(self, rvs):
         """ Round the values up or down to an integer stochastically; usually called via `dist.rvs(round=True)` """
-        rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int_) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
+        rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
         return rvs
 
     def to_json(self):
@@ -1192,8 +1202,7 @@ class Dist:
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
         plt.figure(**sc.mergedicts(fig_kw))
-        rvs = self.rvs(n)
-        self.reset(-1) # As if nothing ever happened
+        rvs = self.rvs(n, reset=True) # As if nothing ever happened
         plt.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         plt.title(str(self))
         plt.xlabel('Value')
@@ -1316,6 +1325,13 @@ class lognorm_im(Dist):
         self.update_dist_pars(spars)
         return spars
 
+    def ppf(self, rands):
+        rvs = Dist.ppf(self, rands)
+        s = self.dist.kwds['s']
+        if np.any(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
+            rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
+        return rvs
+
 
 class lognorm_ex(Dist):
     """
@@ -1368,6 +1384,9 @@ class lognorm_ex(Dist):
         self.convert_ex_to_im()
         spars = lognorm_im.sync_pars(self, call=False) # Borrow sync_pars from lognorm_im
         return spars
+
+    def ppf(self, rands):
+        return lognorm_im.ppf(self, rands) # Borrow ppf from lognorm_im
 
 
 class expon(Dist):
@@ -1460,22 +1479,23 @@ class beta_mean(Dist):
     unitless_pars = ('mean', 'var')
     def __init__(self, mean=0.5, var=0.05, force=False, **kwargs):  # Does not accept dtype
         # Validation
-        max_var = mean*(1-mean)
+        eps = 1e-6 # With force=True, clip to strictly inside the valid range, since the bounds themselves are invalid
         if not (0 < mean < 1):
             if force:
                 if ss.options.warn_convert:
                     warnmsg = f'Clipping the mean from {mean:n} to 0 < mean < 1.'
                     ss.warn(warnmsg)
-                mean = np.clip(mean, 0, 1)
+                mean = np.clip(mean, eps, 1-eps)
             else:
                 errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean:n}'
                 raise ValueError(errormsg)
+        max_var = mean*(1-mean)
         if not (0 < var < max_var):
             if force:
                 if ss.options.warn_convert:
                     warnmsg = f'Clipping the variance from {var} to 0 < var < {max_var:n}.'
                     ss.warn(warnmsg)
-                var = np.clip(var, 0, max_var)
+                var = np.clip(var, eps*max_var, (1-eps)*max_var)
             else:
                 errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
                 raise ValueError(errormsg)
@@ -1515,7 +1535,7 @@ class randint(Dist):
     unit_pars = ('low', 'high')
     valid_pars = ['low', 'high', 'dtype']
 
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=None, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
         if len(args):
             if len(args) == 1:
@@ -1525,6 +1545,8 @@ class randint(Dist):
             else:
                 errormsg = f'ss.randint() takes one or two arguments, not {len(args)}'
                 raise ValueError(errormsg)
+        if dtype is None:
+            dtype = ss.dtypes.rand_int # Not a default argument, so it follows ss.options.precision
         if low is None:
             low = 0
         if high is None:
@@ -1541,10 +1563,16 @@ class randint(Dist):
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('randint parameters must be nondimensional')
 
+    @property
+    def hash_dtype(self):
+        """ Use float64 uniforms for wide ranges, since float32 only gives 2^24 distinct values """
+        p = self._pars
+        return np.float64 if np.any(p.high - p.low > 2**24) else None
+
     def ppf(self, rands):
         p = self._pars
-        rvs = rands * (p.high - p.low) + p.low  # Map [0,1) to [low, high), matching np.random.integers (exclusive high)
-        rvs = np.minimum(rvs, p.high - 1).astype(p.dtype)  # Clamp guards against rands rounding up to high
+        rvs = (rands * (p.high - p.low)).astype(p.dtype) + p.low  # Map [0,1) to [low, high), matching np.random.integers (exclusive high); convert before adding low so it floors rather than truncates
+        rvs = np.minimum(rvs, p.high - 1)  # Clamp guards against rands rounding up to high
         return rvs
 
 class rand_raw(Dist):
@@ -1554,6 +1582,11 @@ class rand_raw(Dist):
     """
     valid_pars = []
     scaling = scale_types.false
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._use_ppf = False # There is no ppf, so draw natively (with a slot gather for CRN)
+        return
 
     def make_rvs(self):
         return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
@@ -1826,7 +1859,7 @@ class multi_random(sc.prettyobj):
     Args:
         names (str/list): name(s) for each internal random distribution
         *args: additional names (shorthand)
-        crn (bool): whether to use common random numbers; if None (default), follow `ss.options.crn`
+        crn (bool): whether to use common random numbers; if None (default), follow `ss.options.crn` (note: only `crn=False` can override it, since `crn=True` has no effect if `ss.options.crn=False`)
         **kwargs: passed to each `ss.random()` instance
 
     Usage:
