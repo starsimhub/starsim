@@ -194,6 +194,9 @@ class DateArray(np.ndarray):
                 return self.to_float(inplace=inplace)
 
         if inplace:
+            if self.dtype != object:
+                errormsg = f'Cannot convert a DateArray of dtype {self.dtype} to dates in place, since dates require dtype object; use inplace=False instead'
+                raise TypeError(errormsg)
             self[:] = vals
             return
         else:
@@ -1269,7 +1272,7 @@ class datedur(dur):
             elif isinstance(arg, pd.Timedelta):
                 self.value = self.round_duration(days=arg.days)
             elif isinstance(arg, drd.relativedelta):
-                self.value = pd.DateOffset(years=arg.years, months=arg.months, days=arg.days)
+                self.value = pd.DateOffset(years=arg.years, months=arg.months, days=arg.days, hours=arg.hours, minutes=arg.minutes, seconds=arg.seconds)
             else:
                 errormsg = f'Unsupported input {args}.\nExpecting number, ss.dur, ss.datedur, pd.DateOffset, or dateutil.relativedelta'
                 raise TypeError(errormsg)
@@ -1505,14 +1508,12 @@ class datedur(dur):
             # return self.years/other.years
             self_array = self.to_array()
             other_array = other.to_array()
-            unit = np.argmax((self_array != 0) | (other_array != 0))
+            unit = np.nonzero((self_array != 0) | (other_array != 0))[0].max() # Finest nonzero unit, e.g. days
             a = 0
             b = 0
             for i, v in enumerate(self.factor_vals):
-                if i < unit:
-                    continue
-                a += self_array[i] / v
-                b += other_array[i] / v
+                a += self_array[i] * self.factor_vals[unit] / v
+                b += other_array[i] * self.factor_vals[unit] / v
             return a/b
         elif isinstance(other, dur):
             return self.years/other.years
@@ -1705,7 +1706,7 @@ class Rate(TimePar):
     def __add__(self, other):
         if isinstance(other, Rate):
             if self.timepar_subtype == other.timepar_subtype:
-                return self.__class__(self.value+other*self.unit, self.unit)
+                return self.__class__(self.value+self._convert_rate(other), self.unit)
             else:
                 errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, prob+prob); you added {self} + {other}'
                 raise TypeError(errormsg)
@@ -1722,7 +1723,7 @@ class Rate(TimePar):
 
     def __sub__(self, other):
         if self.__class__ == other.__class__: # TODO: make more flexible, e.g. ss.perday(1) - ss.peryear(1) could work in theory
-            return self.__class__(self.value-other*self.unit, self.unit)
+            return self.__class__(self.value-self._convert_rate(other), self.unit)
         elif not isinstance(other, Rate):
             if sc.isnumber(other) or isinstance(other, np.ndarray):
                 raise TypeError(f'Only rates can be subtracted from rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
@@ -1735,13 +1736,13 @@ class Rate(TimePar):
         if self.unit is None:
             try:
                 assert other.unit == None
-                self.value == other.value
+                assert self.value == other.value
                 return True
             except:
                 return False
         else:
             try:
-                assert self.value == other.value/other.unit*self.unit
+                assert self.value == self._convert_rate(other)
                 return True
             except:
                 return False
@@ -1806,7 +1807,7 @@ class Rate(TimePar):
                 factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
                 if sc.isnumber(factor) and factor == 1:
                     return self._base_prob # Avoid expensive calculation and precision issues
-                return 1 - np.exp(-self.rate*factor) # Main use case
+                return -np.expm1(-self.rate*factor) # Main use case
         elif sc.isnumber(dur) or isinstance(dur, np.ndarray):
             rate = self.rate*dur*scale # Scale the rate rather than the value
             rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
@@ -1932,7 +1933,7 @@ class prob(Rate):
             elif sc.isnumber(v) and v == 1: # Don't handle arrays, just raise the warning in the next step if it comes to it
                 self._rate = np.inf
             else:
-                self._rate = -np.log(1 - v) # Will raise a NumPy warning if it's an array with 1.0 values
+                self._rate = -np.log1p(-v) # Will raise a NumPy warning if it's an array with 1.0 values
             self._value = v # Store the raw value as well
         return
 
@@ -1945,7 +1946,7 @@ class prob(Rate):
         self._rate = rate
 
         # Set the value
-        self._value = 1.0 - np.exp(-self._rate) if np.isfinite(self._rate) else 1.0
+        self._value = -np.expm1(-self._rate) if np.isfinite(self._rate) else 1.0
         return
 
     @property
@@ -1963,6 +1964,8 @@ class prob(Rate):
         rate, exactly as `to_prob()` does.
         """
         if self.unit is None:
+            if other.unit is None: # Both unitless, e.g. ss.prob(0.1) + ss.prob(0.2), so nothing to convert
+                return other.value
             errormsg = f'Cannot convert {other!r} to a unitless probability, since the conversion depends on the time unit. '
             errormsg += 'Use e.g. ss.probperyear() rather than ss.prob(), or supply a unit, e.g. ss.prob(value, unit=ss.years(1)).'
             raise TypeError(errormsg)
@@ -1987,6 +1990,9 @@ class prob(Rate):
             p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
             ```
         """
+        if dur is None and self.unit is not None:
+            dur = self.default_dur # May also be None; unitless probabilities are not converted
+
         if dur is None:
             if scale == 1.0:
                 return self.value
@@ -2007,7 +2013,7 @@ class prob(Rate):
                 factor = (dur/self.unit)*scale # Main calculation step: cancel units and scale
                 if sc.isnumber(factor) and factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
-                return 1 - np.exp(-self._rate*factor) # Main use case
+                return -np.expm1(-self._rate*factor) # Main use case
         elif sc.isnumber(dur):
             rate = self._rate*dur*scale # Scale the rate rather than the value
             out = self.__class__(rate=rate, unit=self.unit) # Placeholder
@@ -2031,14 +2037,14 @@ class prob(Rate):
         elif isinstance(arr[0], prob):
             factor = np.array([dur / a.unit for a in arr])
             scaled_vals = np.array([a.value * v for a in arr])
-            rate = - np.log(1 - scaled_vals)
-            return 1-np.exp(-rate*factor)
+            rate = -np.log1p(-scaled_vals)
+            return -np.expm1(-rate*factor)
 
         else: # Assume arr is an array of values, that would be the values of a prob with unit=ss.years(1)
             factor = dur / ss.years(1)
             scaled_vals = arr * v
-            rate = - np.log(1 - scaled_vals)
-            return 1 - np.exp(-rate * factor)
+            rate = -np.log1p(-scaled_vals)
+            return -np.expm1(-rate*factor)
 
     def __truediv__(self, other):
         try:
@@ -2116,7 +2122,7 @@ class per(Rate):
     @property
     def _base_prob(self):
         """ Used by to_prob() """
-        return 1.0 - np.exp(-self.rate)
+        return -np.expm1(-self.rate)
 
     def __mul__(self, other):
         return self.to_prob(other)
@@ -2154,7 +2160,7 @@ class freq(Rate):
     @property
     def _base_prob(self):
         """ Used by to_prob() """
-        return 1.0 - np.exp(-self.rate)
+        return -np.expm1(-self.rate)
 
     def __mul__(self, other):
         return self.to_events(other)
@@ -2182,10 +2188,8 @@ class years(dur):
         to_convert = (str, pd.Timestamp)
         if isinstance(value, to_convert): # A single date or date string
             value = sc.datetoyear(value)
-        elif np.iterable(value):
-            for i,val in enumerate(value):
-                if isinstance(val, to_convert):
-                    value[i] = sc.datetoyear(val)
+        elif np.iterable(value) and any(isinstance(val, to_convert) for val in value): # Create a new array rather than modifying the input
+            value = np.array([sc.datetoyear(val) if isinstance(val, to_convert) else val for val in value])
         super().__init__(value=value, base=base)
         return
 
@@ -2379,7 +2383,7 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
     def __init__(self, unit):
         super().__init__()
-        self._convert_dates = unit == 'ss.date'
+        self._convert_dates = isinstance(unit, type) and issubclass(unit, ss.date)
 
         if self._convert_dates:
             self._date_locator = matplotlib.dates.AutoDateLocator(minticks=3) # Store an AutoDateLocator instance to calculate the tick locations
@@ -2443,12 +2447,9 @@ class FloatYearFormatter(sc.ScirisDateFormatter):
     def format_ticks(self, values, *args, **kwargs):
         values = np.asarray(values)
         valid = values >= 1  # Year 0 doesn't exist in Python's datetime
-        if valid.all():
-            return super().format_ticks(values, min_year=-np.inf, max_year=np.inf)
-        else:
-            safe_values = np.where(valid, values, 1)  # Replace invalid years to avoid crash
-            labels = super().format_ticks(safe_values, min_year=-np.inf, max_year=np.inf)
-            return ['' if not v else l for v, l in zip(valid, labels)]
+        safe_values = np.where(valid, values, 1)  # Replace invalid years to avoid crash
+        labels = super().format_ticks(matplotlib.dates.date2num([ss.date(v) for v in safe_values])) # Convert to matplotlib dates, as for format_data_short()
+        return ['' if not v else l for v, l in zip(valid, labels)]
 
 
 class DateConverter(matplotlib.units.ConversionInterface):
