@@ -40,6 +40,12 @@ def test_seed():
 
     print(f'Dists dist0 and dist1 were assigned seeds {dist0.seed} and {dist1.seed}, respectively')
     assert dist0.seed != dist1.seed
+
+    # Re-initializing the sim's dists should not change their names or seeds
+    sim = ss.Sim(n_agents=100, diseases='sis', networks='random', demographics=True).init()
+    seeds = {k:d.seed for k,d in sim.dists.dists.items()}
+    sim.init_dists()
+    assert seeds == {k:d.seed for k,d in sim.dists.dists.items()} # Previously found the dists again via sim.dists
     return dist0, dist1
 
 

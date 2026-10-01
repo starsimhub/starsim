@@ -285,6 +285,12 @@ def test_pregnancy_short_sim():
     )
     sim.run()  # Should not raise ValueError in finalize()
 
+    # Check that a number or a non-choice distribution works for dur_pregnancy, including with fertility data
+    asfr = pd.read_csv(datadir/'nigeria_asfr.csv')
+    for dur_preg in [39, ss.normal(ss.weeks(39), ss.weeks(1))]:
+        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.month, verbose=0).run().demographics.pregnancy
+        assert 0.7 < preg.mean_dur_pregnancy < 0.8, 'Mean pregnancy should be roughly 39 weeks' # 39 weeks = 0.75 years
+
     sc.printgreen('✓ Short sim pregnancy finalize test passed')
     return sim
 

@@ -26,6 +26,11 @@ def test_timeline_lengths():
     assert len(ss.Timeline(ss.date('2020-01-01'), ss.date('2030-06-01'), ss.days(1))) == 3805
     assert len(ss.Timeline(ss.date(2020), ss.date(2030.5), ss.years(0.1))) == 106
 
+    # Sub-daily steps are exact, even in a leap year
+    t2 = ss.Timeline(ss.date('2000-01-01'), ss.date('2000-01-10'), ss.days(0.25)).init()
+    assert len(t2) == 37
+    assert np.allclose(t2.tvec.days_since('2000-01-01'), np.arange(37)*0.25)
+
     return t
 
 
@@ -79,6 +84,7 @@ def test_timeline():
     assert isinstance(s1.t.start, ss.years)
     assert isinstance(t1.start, ss.date)
     assert s1.t.tvec[-1] == ss.years(2002)
+    assert np.array_equal(s1.t.relvec[:3], [0, 0.1, 0.2]) # Numbers in the sim's units, not ss.datedur objects
     assert t1.tvec[-1] == ss.date('2001-06-30')
 
     print('Testing weeks vs. days')

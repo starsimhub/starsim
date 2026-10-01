@@ -72,8 +72,8 @@ def test_classes():
     assert np.isclose(tp0*ss.years(1), tpval), 'Multiplication by the base denominator should not change the value'
     assert np.isclose(tp0*ss.years(0.5), tpval/2, rtol=0.1) # These should be close, but not match exactly
     assert np.isclose(tp0*ss.years(2), tpval*2, rtol=0.1)
-    assert tp0*ss.years(0.5) == 1 - np.exp(np.log(1-0.1) * ss.years(0.5)/ss.years(1)) # These should be close, but not match exactly
-    assert tp0*ss.years(2) == 1 - np.exp(np.log(1-0.1) * ss.years(2)/ss.years(1)) # These should be close, but not match exactly
+    assert tp0*ss.years(0.5) == -np.expm1(np.log1p(-0.1) * ss.years(0.5)/ss.years(1)) # These should be close, but not match exactly
+    assert tp0*ss.years(2) == -np.expm1(np.log1p(-0.1) * ss.years(2)/ss.years(1)) # These should be close, but not match exactly
 
     return d3, d4, r3, r4, tp0
 
@@ -99,10 +99,11 @@ def test_syntax():
     assert float(ss.date(1500))==1500
     assert np.isclose(float(ss.date(1500.1)), 1500.1) # Not exactly equal, but very close
     assert np.all((ss.years(1)*np.arange(5)) == (np.arange(5)*ss.years(1)))
-    assert np.isclose(ss.datedur(weeks=1)/ss.datedur(days=1), 7) # TODO: would be nice if this were exact, but maybe impossible
+    assert ss.datedur(weeks=1)/ss.datedur(days=1) == 7
     assert np.isclose((ss.datedur(weeks=1) - ss.datedur(days=1)).years, 6/365)
     assert np.isclose((ss.date(2050)-ss.date(2020)).years, ss.years(30).years, rtol=1/365) # Not exact due to leap years
     assert np.isclose((ss.freqperweek(1)+ss.freqperday(1)).value, ss.freqperweek(8).value) # CKTODO: would be nice if this were exact
+    assert np.isclose((ss.peryear(1)+ss.permonth(1)).value, 13) # Rates add directly, not via probabilities
 
     assert ss.date('2020-01-01') + ss.datedur(weeks=52) == ss.date('2020-12-30') # Should give us 30th December 2020
     assert ss.date('2020-01-01') + 52*ss.datedur(weeks=1) == ss.date('2020-12-30')# Should give us 30th December 2020
@@ -141,7 +142,7 @@ def test_syntax():
 
     # Probabilities
     p = ss.prob(0.1, ss.datedur(years=1))
-    f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
+    f = lambda factor: -np.expm1(np.log1p(-p.value)/factor)
     assert p*ss.datedur(years=2) == f(0.5)
     assert p * ss.years(0.5) == f(2)
     assert p * ss.datedur(months=1) == f(12)
@@ -152,7 +153,7 @@ def test_syntax():
     assert p * ss.datedur(months=1) == f(12)
 
     p = ss.per(0.1, ss.datedur(years=1))
-    f = lambda factor: 1 - np.exp(-p.value/factor)
+    f = lambda factor: -np.expm1(-p.value/factor)
     assert p*ss.datedur(years=2) == f(0.5)
     assert p * ss.years(0.5) == f(2)
     assert p * ss.datedur(months=1) == f(12)
@@ -227,6 +228,12 @@ def test_datearray_operations():
     expected_dates_from_date = ss.DateArray([ss.date('2019-01-01'), ss.date('2018-01-01')])
     assert np.array_equal(ss.date('2020-01-01') - b, expected_dates_from_date)
     assert np.array_equal(ss.date('2020-01-01') - c, expected_dates_from_date)
+
+    # Exact elapsed days, rather than calendar differences
+    assert np.array_equal(a.days_since('2020-01-01'), [0, 366])
+    assert np.array_equal(ss.DateArray(['2020-01-01', '2021-01-01']), a) # Strings are read as dates
+    with pytest.raises(TypeError):
+        b.days_since('2020-01-01')
 
     return
 
