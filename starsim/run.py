@@ -189,14 +189,12 @@ class MultiSim:
 
         # Handle which sims to use -- same as init_sims()
         if self.sims is None:
-            sims = [self.base_sim]  # Wrap in list so it's iterable in the debug loop
-            run_target = self.base_sim # But pass the single sim to multi_run() so n_runs is honored (rather than a 1-element list, which it would run as-is)
+            run_target = self.base_sim # Pass the single sim to multi_run() so n_runs is honored (rather than a 1-element list, which it would run as-is)
         else:
-            sims = self.sims
             run_target = self.sims
 
             # Handle missing labels
-            for s, sim in enumerate(sims):
+            for s, sim in enumerate(self.sims):
                 if sim.label is None:
                     sim.label = f'Sim {s}'
 
@@ -206,12 +204,8 @@ class MultiSim:
         inplace = kwargs.pop('inplace', True)
         debug = kwargs.pop('debug', False)
         if debug:
-            kwargs.pop('n_runs', None)
-            kwargs.pop('iterpars', None)
-            kwargs.pop('parallel', None)
-            run_sims = [single_run(sim, **kwargs) for sim in sims]
-        else: # The next line does all the work!
-            run_sims = multi_run(run_target, **kwargs) # Output sims are copies due to the pickling during parallelization
+            kwargs['parallel'] = False # Run in serial
+        run_sims = multi_run(run_target, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
 
         # Handle output
         if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
@@ -346,7 +340,8 @@ class MultiSim:
 
         # Compute and store final results
         reduced_sim.summarize()
-        self.orig_base_sim = self.base_sim
+        if not self._has_orig_sim(): # Don't overwrite the original if reducing again
+            self.orig_base_sim = self.base_sim
         self.base_sim = reduced_sim
         self.results = ss.Results('MultiSim').merge(rflat) # Create the dictionary and merge it
         self.summary = reduced_sim.summary
@@ -431,10 +426,9 @@ class MultiSim:
         """
         # Has not been reduced yet, plot individual sim
         if self.which is None:
-            fig = None
             res_keys = None
             kw = ss.plot_args(kwargs)
-            alpha = kw.plot.get('alpha', 0.7 if len(self) < 5 else 0.5) # Set default alpha
+            alpha = kwargs.pop('alpha', 0.7 if len(self) < 5 else 0.5) # Set default alpha
             if key is None: # Set keys
                 for sim in self.sims:
                     sim_keys = set(sim.results.flatten(only_auto=True).keys()) # Check if keys match for auto-plotting results
@@ -538,6 +532,8 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     if reseed:
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
+        if ind and sim.initialized:
+            ss.warn(f'Sim "{sim.label}" is already initialized, so changing its seed has no effect; pass an uninitialized sim instead')
 
     # Handle additional arguments
     for key, val in sim_args.items():
