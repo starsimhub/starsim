@@ -306,7 +306,7 @@ class Samples:
         zipdata = {} # Store all the data to be written as files inside the zipfile
         summary_rows = []
         for df, row in outputs:
-            zipdata[cls._seedfile(row["seed"])] = df.to_csv()
+            zipdata[cls._seedfile(row["seed"])] = df.to_csv(index='timevec' not in df.columns) # Don't write a RangeIndex if timevec is a column
             summary_rows.append(row)
 
         # Write the identifier metadata
@@ -336,7 +336,7 @@ class Samples:
                     zf.writestr(key, val)
         else:
             if fname is None:
-                fname = "-".join(str(row[x]) for x in identifiers[1:]) + ".zip"
+                fname = ("-".join(str(row[x]) for x in identifiers[1:]) or "samples") + ".zip"
             fname = sc.savezip(filename=fname, folder=folder, data=zipdata, tobytes=False, verbose=verbose)
 
         return cls(fname, memory_buffer=False)
