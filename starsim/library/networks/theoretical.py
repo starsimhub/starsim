@@ -2,8 +2,8 @@
 Theoretical networks, useful for comparison against analytic results and for debugging.
 """
 import numpy as np
+import sciris as sc
 import starsim as ss
-ss_float_ = ss.dtypes.float
 
 class ErdosRenyiNet(ss.DynamicNetwork):
     """
@@ -40,9 +40,10 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             p = 0.1, # Probability of each edge
-            dur = ss.years(0), # Duration of zero ensures that new random edges are formed on each time step
+            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
         )
         self.update_pars(pars, **kwargs)
+        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years (the default isn't ss.years(0) so a Dist is allowed)
         self.rng_ints = ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64) # Used to draw a random number for each agent as part of creating edges; must be uint64 for ss.utils.combine_rands()
         return
 
@@ -64,9 +65,9 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         r = ss.utils.combine_rands(i1, i2) # Uniform on [0, 1] # TODO: use ss.multi_rand()
         edge = r <= self.pars.p
 
-        p1 = idx1[edge]
-        p2 = idx2[edge]
-        beta = np.ones(len(p1), dtype=ss_float_)
+        p1 = born_uids[idx1[edge]]
+        p2 = born_uids[idx2[edge]]
+        beta = np.ones(len(p1), dtype=ss.dtypes.float)
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
