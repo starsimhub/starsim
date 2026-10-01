@@ -67,12 +67,13 @@ class Dx(Product):
 
         for disease in self.diseases:
             for state in self.health_states:
+                df_filter = (self.df.state == state) & (self.df.disease == disease)
+                if not df_filter.any(): continue # Skip disease-state combinations not in the dataframe
                 this_state = getattr(self.sim.diseases[disease], state)
                 true_uids = this_state.uids # Find people for which this state is true
                 these_uids = true_uids.intersect(uids) # Find intersection of people in this state and the supplied UIDs
 
                 # Filter the dataframe to extract test results for people in this state
-                df_filter = (self.df.state == state) & (self.df.disease == disease)
                 thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
                 probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
                 self.result_dist.pars['p'] = probs  # Overwrite distribution probabilities
@@ -115,12 +116,13 @@ class Tx(Product):
             disease = self.sim.diseases[disease_name]
 
             for state in self.health_states:
+                df_filter = (self.df.state == state) & (self.df.disease == disease_name)  # Filter by state
+                if not df_filter.any(): continue # Skip disease-state combinations not in the dataframe
                 pre_tx_state = getattr(disease, state)
                 true_uids = pre_tx_state.uids # People in this state
                 these_uids = true_uids.intersect(uids)
 
                 if len(these_uids):
-                    df_filter = (self.df.state == state) & (self.df.disease == disease_name)  # Filter by state
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
