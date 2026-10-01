@@ -33,6 +33,7 @@ This release contains many LLM-assisted bugfixes, mostly for corner cases (e.g. 
 - `for p in sim.people` now iterates over active agents only; `timeline.relvec` is now numeric; `ss.StaticNet` passes extra arguments to networkx generators; `Network.plot()` passes kwargs to `nx.draw_networkx()`; `ss.SIR(name=...)` sets the label; `ss.Samples` no longer adds an `Unnamed: 0` column.
 - Fixed diagnostics (`sim.set_diagnostics()`) never recording random variates; `sim.init_dists()` no longer changes dist seeds when called again; and other small fixes to time, distribution, and debugging utilities.
 - Fixed several docstring examples.
+- *Migration*: `ss.Network` now takes `pars` as its first argument, like other modules, plus an optional `edges` dict or dataframe; standard module arguments (`name`, `label`, `dt`, etc.) are passed to `update_pars()` and other keyword arguments are still treated as edges. `ss.Network('name')` no longer works; use `ss.Network(name='name')`.
 
 
 ## Version 3.6.1 (2026-08-29)

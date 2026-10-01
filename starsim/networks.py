@@ -1,6 +1,7 @@
 """
 Networks that connect people within a population
 """
+import inspect
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -61,13 +62,14 @@ class Network(Route):
     the connection.
 
     Args:
+        pars (dict): parameters, for subclasses that define them
+        edges (dict/dataframe): the edges of the network, as an alternative to passing them as keyword arguments
         p1 (array): an array of length N, the number of connections in the network, with the indices of people on one side of the connection.
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
         beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
-        label (str): the name of the network (optional)
-        kwargs (dict): other keys copied directly into the network
+        kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as edges
 
-    Note that all arguments (except for label) must be arrays of the same length,
+    Note that all edge arguments must be arrays of the same length,
     although not all have to be supplied at the time of creation (they must all
     be the same at the time of initialization, though, or else validation will fail).
 
@@ -81,17 +83,17 @@ class Network(Route):
         p2 = np.random.randint(n_people, size=n)
         beta = np.ones(n)
         network = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
-        network = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
+        network = ss.Network(edges=dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
 
         # Convert one network to another with extra columns
         index = np.arange(n)
         self_conn = p1 == p2
-        network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
+        network2 = ss.Network(edges=network.edges, index=index, self_conn=self_conn, label=network.label)
         ```
     """
-    def __init__(self, name=None, label=None, **kwargs):
+    def __init__(self, pars=None, edges=None, **kwargs):
         # Initialize as a module
-        super().__init__(name=name, label=label)
+        super().__init__()
 
         # Each relationship is characterized by these default set of keys
         self.meta = sc.objdict(
@@ -104,9 +106,13 @@ class Network(Route):
         self.edges = sc.objdict()
         self.participant = ss.BoolArr('participant')
 
-        # Set data, if provided
-        for key, value in kwargs.items():
+        # Standard module arguments are parameters; the rest are edges
+        standard_args = ss.modules.module_args + ss.Timeline.time_args
+        edges = dict(edges) if edges is not None else {} # dict() also handles dataframes
+        edges.update({k:kwargs.pop(k) for k in list(kwargs) if k not in standard_args})
+        for key, value in edges.items():
             self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
+        self.update_pars(pars, **kwargs)
         return
 
     @property
@@ -349,9 +355,10 @@ class Network(Route):
             max_edges (int): the maximum number of edges to show
             random (bool): if true, select edges randomly; otherwise, show the first N
             alpha (float): the alpha value of the edges
-            kwargs (dict): passed to nx.draw_networkx()
+            kwargs (dict): figure and style arguments (e.g. `figsize`, `font`) are passed to `ss.plot_args()`, the rest to `nx.draw_networkx()`
         """
-        kw = ss.plot_args(kwargs)
+        figkeys = ss.utils.plotting_kw.fig + ss.utils.plotting_kw.style
+        kw = ss.plot_args({k:kwargs.pop(k) for k in list(kwargs) if k in figkeys})
         with ss.style(**kw.style):
             fig,ax = plt.subplots(**kw.fig)
             G = self.to_graph(max_edges=max_edges, random=random)
@@ -429,8 +436,8 @@ class Network(Route):
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, pars=None, edges=None, **kwargs):
+        super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.dur = ss_float # Add duration to the meta keys for dynamic networks
         return
 
@@ -454,8 +461,8 @@ class DynamicNetwork(Network):
 
 class SexualNetwork(DynamicNetwork):
     """ Base class for all sexual networks """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, pars=None, edges=None, **kwargs):
+        super().__init__(pars=pars, edges=edges, **kwargs)
         self.meta.acts = ss_int # Add acts to the meta keys for sexual networks
         self.debut = ss.FloatArr('debut', default=0)
         return
@@ -513,6 +520,7 @@ class StaticNet(Network):
         super().__init__()
         self.graph = graph
         self.define_pars(seed=True, p=None, n_contacts=10)
+        self.graph_kwargs = {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
@@ -532,8 +540,10 @@ class StaticNet(Network):
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
+            args = inspect.signature(self.graph).parameters
+            kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
             try:
-                self.graph = self.graph(n=self.n_agents, **self.pars)
+                self.graph = self.graph(n=self.n_agents, **kw, **self.graph_kwargs)
             except TypeError as e:
                 ss.warn(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.StaticNet() instead.")
                 raise e
@@ -738,6 +748,7 @@ class RandomSafeNet(DynamicNetwork):
             beta = 1.0,
         )
         self.update_pars(pars, **kwargs)
+        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years, as for ss.RandomExactNet (the default isn't ss.years(0) so a Dist is allowed)
         self.dist = ss.random(name='RandomSafeNet')
         return
 
@@ -833,7 +844,7 @@ class MFNet(SexualNetwork):
         debut (`ss.Dist`): Age of debut can vary by using callable parameter values
         acts (`ss.Dist`): Number of acts per year
         participation (`ss.Dist`): Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-        rel_part_rates (float): Relative participation in the network
+        rel_part_rates (float): Relative participation in the network, i.e. a multiplier (from 0 to 1) on the probability of participating
     """
     def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, rel_part_rates=_, **kwargs):
         super().__init__()
@@ -848,6 +859,7 @@ class MFNet(SexualNetwork):
 
         # Finish initialization
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
+        self.rel_part = ss.bernoulli(p=1.0) # Set p later, in case rel_part_rates is modified
         return
 
     def init_post(self):
@@ -866,7 +878,11 @@ class MFNet(SexualNetwork):
         people = self.sim.people
         if upper_age is None: uids = people.auids
         else: uids = (people.age < upper_age).uids
-        self.participant[uids] = self.pars.participation.rvs(uids)
+        participant = self.pars.participation.rvs(uids)
+        if self.pars.rel_part_rates != 1: # Scale the probability of participating
+            self.rel_part.set(p=self.pars.rel_part_rates)
+            participant &= self.rel_part.rvs(uids)
+        self.participant[uids] = participant
         return
 
     def set_debut(self, upper_age=None):
@@ -935,12 +951,13 @@ class MSMNet(SexualNetwork):
     def __init__(self, pars=None, duration=_, debut=_, acts=_, participation=_, **kwargs):
         super().__init__()
         self.define_pars(
-            duration = ss.lognorm_ex(mean=2, std=1),
+            duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)),
             debut = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_ex(mean=80, std=20),
+            acts = ss.lognorm_ex(mean=ss.freqperyear(80), std=ss.freqperyear(20)),
             participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
+        self.dist = ss.random(name='MSMNet') # For shuffling available males before pairing
         return
 
     def init_post(self):
@@ -965,6 +982,7 @@ class MSMNet(SexualNetwork):
     def add_pairs(self):
         """ Pair all unpartnered MSM """
         available_m = self.available(self.sim.people, 'male')
+        available_m = available_m[np.argsort(self.dist.rvs(available_m))] # Shuffle so pairing is random
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -984,7 +1002,7 @@ class MSMNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states()
+        self.set_network_states(upper_age=self.t.dt.years)
         self.add_pairs()
         return
 
@@ -1035,10 +1053,7 @@ class PostnatalNet(DynamicNetwork):
     """
 
     def __init__(self, pars=None, dur=None, **kwargs):
-        """
-
-        """
-        super().__init__(**kwargs)
+        super().__init__()
         self.define_pars(dur=dur)
         self.update_pars(pars, **kwargs)
         return
@@ -1050,11 +1065,11 @@ class PostnatalNet(DynamicNetwork):
 
         if n:
             if isinstance(p.dur, ss.Dist):
-                dur = p.dur.rvs(mother_uids)
+                dur = p.dur.rvs(mother_uids) + 1 # +1 since edges are added by Pregnancy before end_pairs() decrements them in the same step
             elif p.dur is None:
                 dur = np.full(n,fill_value=np.inf)
             else:
-                dur = np.full(n, p.dur/self.t.dt)
+                dur = np.full(n, p.dur/self.t.dt + 1)
             self.append(p1=mother_uids, p2=infant_uids, beta=np.ones(n), dur=dur)
         return n
 
@@ -1073,15 +1088,16 @@ class BreastfeedingNet(PostnatalNet):
         assert self.pars.dur is None, 'BreastfeedingNet does not accept a `dur` parameter as breastfeeding duration is determined by the Pregnancy module'
         return
 
-    def init_post(self, *args, **kwargs):
-        # Connect the pregnancy module to this network
+    def init_pre(self, sim):
+        # Connect the pregnancy module to this network; do this here rather than in init_post() since deliveries during the pregnancy burn-in call add_pairs()
+        super().init_pre(sim)
         for mod in self.sim.modules:
             if isinstance(mod, ss.Pregnancy):
                 self.pregnancy = mod
                 break
         else:
             raise RuntimeError('BreastfeedingNet requires a Pregnancy module in the simulation to track breastfeeding status')
-        super().init_post(*args, **kwargs)
+        return
 
     def add_pairs(self, mother_uids=None, newborn_uids=None):
         """
@@ -1269,7 +1285,7 @@ class MixingPool(Route):
         mp_pars = dict(
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
-            beta = ss.Rate(0.2),
+            beta = 0.2,
             n_contacts = ss.poisson(lam=4),
         )
 
