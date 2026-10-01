@@ -681,7 +681,7 @@ def shrink(obj=None, attrs=None, verbose=False):
                 setattr(obj, attr, shrunk)
             elif verbose:
                 ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
-    return shrunk
+        return obj
 
 
 #%% Plotting helper functions
@@ -786,7 +786,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         flat = results[key].flatten() # e.g. sim.results['sis']
         key = None # We've already used the key, so reset it
     else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = results if flattened else results.flatten()
+        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
 
     # Configuration
     flat_orig = flat # Copy reference before we modify in place
@@ -798,7 +798,10 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
 
     if key is not None:
         if isinstance(key, str):
-            flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
+                flat = {normkey(key):flat[normkey(key)]}
+            else:
+                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
             if len(flat) != 1:
                 errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
                 raise sc.KeyNotFoundError(errormsg)
