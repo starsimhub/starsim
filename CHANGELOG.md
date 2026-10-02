@@ -3,7 +3,7 @@
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
 ## Version 3.6.2 (2026-09-30)
-This release contains many LLM-assisted bugfixes, mostly for corner cases (e.g. modules with their own `dt`).
+This release contains many LLM-assisted bugfixes. Most changes should have relatively little impact on users, although results may differ slightly for some results in some projects.
 
 ### Changes that may affect results
 - *Regression*: `ss.Deaths` treated death rates given per month/week/day as per year.
