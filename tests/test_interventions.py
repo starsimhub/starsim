@@ -181,6 +181,12 @@ def test_products(do_plot=False):
     assert dxres.n_dx[post_dx].sum() > 0, 'Expected people diagnosed after intervention start'
     assert sisres.new_infections[pre_vx].mean() > sisres.new_infections[post_vx].mean(), 'Expected vaccine to reduce prevalence'
 
+    # Check the treatment queue
+    tx_data = sc.dataframe(columns=['disease', 'state', 'post_state', 'efficacy'], data=[['sis', 'infected', 'susceptible', 0.8]])
+    treatment = ss.treat_num(product=ss.Tx(df=tx_data), eligibility=lambda sim: sim.diseases.sis.infected.uids, max_capacity=50)
+    queue = ss.Sim(make_delivery_pars(), interventions=treatment).run().interventions.treat_num.queue
+    assert len(queue) == len(set(queue)), 'Expected no one to be queued for treatment twice'
+
     if do_plot:
         sim.plot()
 
@@ -368,7 +374,11 @@ def test_campaign_delivery_prob_length_mismatch():
         years   = [2005, 2010, 2015],
     )
     with pytest.raises(ValueError):
-        ss.Sim(pars, interventions=screening).init()
+        ss.Sim(pars, interventions=screening).init() # Incorrect number of years
+
+    screening = ss.campaign_screening(product=make_dx(), prob=0.5, years=2030)
+    with pytest.raises(ValueError):
+        ss.Sim(pars, interventions=screening).init() # Campaign year is after the sim ends
 
     return screening
 

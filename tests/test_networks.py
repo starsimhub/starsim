@@ -431,6 +431,10 @@ def test_other():
     sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=msm, copy_inputs=False)
     sim.run()
 
+    print('Testing MF network relative participation')
+    mf = ss.Sim(n_agents=1000, networks=ss.MFNet(rel_part_rates=0.5), verbose=0).init().networks.mfnet
+    assert 0.35 < mf.participant.mean() < 0.55 # Default participation is 0.9, so expect ~0.45
+
     print('Testing other network methods')
     msm.validate()
     inds1 = msm.get_inds([0])

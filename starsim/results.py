@@ -167,7 +167,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit=None, summarize_by=None, col_names='vlh', die=False, use_years=False, sep='_'):
+    def resample(self, new_unit=None, summarize_by=None, die=False, use_years=False, sep='_'):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -176,7 +176,6 @@ class Result(ss.BaseArr):
         Args:
             new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
-            col_names (str): whether to rename the columns with the name of the result
             die (bool): whether to raise an error if the summarization method cannot be determined
             use_years (bool): whether to use years as the unit of time
 
@@ -212,7 +211,7 @@ class Result(ss.BaseArr):
 
         # Convert to a Pandas dataframe then summarize. Note that we use a dataframe
         # rather than a series so that we can have multiple columns (low/high/value)
-        df = self.to_df(col_names=col_names, set_date_index=True, sep=sep)
+        df = self.to_df(set_date_index=True, sep=sep)
         if summarize_by == 'sum':
             df = df.resample(new_unit).sum()
         elif summarize_by == 'mean':
@@ -378,7 +377,7 @@ class Result(ss.BaseArr):
             else:
                 fig = plt.figure(**fig_kw)
         if ax is None:
-            ax = plt.subplot(111)
+            ax = fig.add_subplot(111)
 
         if self.timevec is None:
             errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
@@ -452,9 +451,9 @@ class Results(ss.ndict):
     def append(self, arg, key=None):
         """ This is activated by adding as well, e.g. results += result """
         if isinstance(arg, (list, tuple)):
-            result = ss.Result(self._module, *arg)
+            result = ss.Result(*arg, module=self._module)
         elif isinstance(arg, dict):
-            result = ss.Result(self._module, **arg)
+            result = ss.Result(module=self._module, **arg)
         else:
             result = arg
 
@@ -505,13 +504,18 @@ class Results(ss.ndict):
     def annualize(self):
         """ Annualize all results, returning a new Results object """
         new = Results(self._module, strict=False)
+        timevec = None
         for key, res in self.items():
             if isinstance(res, Results):
                 new[key] = res.annualize()
             elif isinstance(res, Result):
                 new[key] = res.annualize()
+                if timevec is None:
+                    timevec = new[key].timevec # Store the annualized timevec
             else:
                 new[key] = res
+        if timevec is not None:
+            new.timevec = timevec # Replace the original timevec with the annualized one
         return new
 
     def to_df(self, sep='_', descend=False, **kwargs):

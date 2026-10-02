@@ -605,7 +605,7 @@ class NCD(Disease):
 
     def step_state(self):
         ti = self.ti
-        deaths = (self.ti_dead == ti).uids
+        deaths = (self.ti_dead <= ti).uids # <= since a prognosis that rounds to 0 is only caught on the next step
         self.sim.people.request_death(deaths)
         if self.infection_log:
             self.infection_log.add_data(deaths, died=True)
@@ -638,7 +638,6 @@ class NCD(Disease):
         ti = self.ti
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
-        self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
         return
 
 
@@ -686,12 +685,12 @@ class SIR(Infection):
     def step_state(self):
         # Progress infectious -> recovered
         sim = self.sim
-        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
         self.clear_infection(recovered)
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = (self.ti_dead <= sim.ti).uids
+        deaths = (self.ti_dead <= self.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
         return

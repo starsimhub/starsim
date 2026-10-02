@@ -453,7 +453,7 @@ class Sim(ss.Base):
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
-            errormsg = 'Simulation already complete (call sim.init() to re-run)'
+            errormsg = 'Simulation already complete'
             raise AlreadyRunError(errormsg)
 
         # Print out progress if needed
@@ -510,7 +510,7 @@ class Sim(ss.Base):
 
         # Check for AlreadyRun errors
         if self.complete:
-            errormsg = 'Simulation is already complete (call sim.init() to re-run)'
+            errormsg = 'Simulation is already complete'
             raise AlreadyRunError(errormsg)
 
         try:
@@ -604,7 +604,7 @@ class Sim(ss.Base):
 
         # Convert "how" from a string to a dict
         if how == 'default':
-            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', 'timevec':'last', '':'mean'}
+            how = {'cumulative':'last', 'n_':'mean', 'new_':'mean', 'cum_':'last', 'timevec':'last', '':'mean'}
         elif isinstance(how, str):
             how = {'':how} # Match everything
 
@@ -729,7 +729,7 @@ class Sim(ss.Base):
         missing = []
         if check:
             if verbose:
-                sc.pp(self._call_required)
+                sc.pp({mod.name:mod._call_required for mod in self.modules})
 
             for mod in self.modules:
                 modmissing = mod.check_method_calls()
@@ -1052,10 +1052,10 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         if summary:
             sc.heading('Results:')
             print(sim.summary)
-            if plot:
-                sim.plot()
-                if show:
-                    plt.show()
+        if plot:
+            sim.plot()
+            if show:
+                plt.show()
     return sim
 
 
@@ -1153,14 +1153,14 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 small_change = 1.96 # 95% CI, roughly speaking
 
             numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
-            if numeric and old > 0:
+            if numeric:
                 this_diff = new - old
-                this_ratio = new / old
+                this_ratio = new / old if old else np.nan
                 if multi:
                     abs_ratio = abs(this_diff)/sem
                     this_zscore = abs_ratio
                 else:
-                    abs_ratio = max(this_ratio, 1.0/this_ratio)
+                    abs_ratio = max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
                     this_zscore = np.nan
 
                 # Set the character to use
@@ -1230,9 +1230,9 @@ def check_sims_match(*args, full=False):
 
     Examples:
         ```python
-        s1 = ss.Sim(diseases='sir', networks='random')
-        s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
-        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
+        s1 = ss.Sim(diseases='sir', networks='random').run()
+        s2 = ss.Sim(pars=dict(diseases='sir', networks='random')).run()
+        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()).run()
         assert ss.check_sims_match(s1, s2, s3)
         ```
     """

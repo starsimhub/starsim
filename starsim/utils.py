@@ -554,13 +554,22 @@ def combine_rands(a, b):
 
     See ss.multi_random() for the user-facing version.
 
+    Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
+    [0, 1], so they raise an error rather than being cast, since casting would silently copy
+    the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
+
     Args:
-        a (array): array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
         b (array): ditto, same size as a
 
     Returns:
-        A new array of random numbers the same size as a and b
+        A new array of uniformly distributed random numbers in [0, 1], the same size as a and b
     """
+    a_dtype = getattr(a, 'dtype', type(a).__name__)
+    b_dtype = getattr(b, 'dtype', type(b).__name__)
+    if a_dtype != np.uint64 or b_dtype != np.uint64:
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
@@ -672,7 +681,7 @@ def shrink(obj=None, attrs=None, verbose=False):
                 setattr(obj, attr, shrunk)
             elif verbose:
                 ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
-    return shrunk
+        return obj
 
 
 #%% Plotting helper functions
@@ -777,7 +786,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         flat = results[key].flatten() # e.g. sim.results['sis']
         key = None # We've already used the key, so reset it
     else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = results if flattened else results.flatten()
+        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
 
     # Configuration
     flat_orig = flat # Copy reference before we modify in place
@@ -789,7 +798,10 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
 
     if key is not None:
         if isinstance(key, str):
-            flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
+            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
+                flat = {normkey(key):flat[normkey(key)]}
+            else:
+                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
             if len(flat) != 1:
                 errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
                 raise sc.KeyNotFoundError(errormsg)

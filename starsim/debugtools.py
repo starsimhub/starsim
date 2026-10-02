@@ -339,7 +339,7 @@ class Diagnostics(sc.quickobj):
         entry = sc.objdict()
         for state_key, state in self.sim.people.states.items():
             if self.detailed:
-                entry[state_key] = state.values
+                entry[state_key] = state.values.copy() # Copy, since values may be the live array
             else:
                 entry[state_key] = self.compute_stats(state)
 
@@ -394,13 +394,15 @@ def check_version(expected, die=False, warn=True):
     version = ss.__version__
     compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
     relation = ['older', '', 'newer'][compare+1] # Picks the right string
-    if relation: # Versions mismatch, print warning or raise error
-        string = f'Starsim is {relation} than expected ({version} vs. {expected})'
-        if compare not in valid:
-            if die:
-                raise ValueError(string)
-            elif warn:
-                ss.warn(string)
+    if compare not in valid: # Version check failed, print warning or raise error
+        if relation:
+            string = f'Starsim is {relation} than expected ({version} vs. {expected})'
+        else: # Only possible for !=
+            string = f'Starsim version {version} is not allowed'
+        if die:
+            raise ValueError(string)
+        elif warn:
+            ss.warn(string)
     return compare
 
 
@@ -487,7 +489,7 @@ def mock_module(dur=10, **kwargs):
     """ Create a minimal mock "Module" object; kwargs are passed to `ss.mock_time()` """
     mod = sc.objdict(
         name = 'mock_module',
-        t = mock_time(**kwargs),
+        t = mock_time(dur=dur, **kwargs),
         dt = kwargs.get('dt', ss.years(1.0)),
     )
     return mod

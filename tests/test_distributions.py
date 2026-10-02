@@ -219,6 +219,9 @@ def test_callable(n=n):
         meandiff = np.abs(sim.people.age[uids] - draws).mean()
         assert meandiff < scale*3, 'Outputs should match ages'
 
+    d3 = ss.normal(name='callable2', loc=custom_loc, scale=lambda uids: np.zeros(len(uids))).init(sim=sim)
+    assert np.allclose(d3.rvs(uids), sim.people.age[uids]), 'Functions with different signatures, and scale=0, should work'
+
     return d1
 
 

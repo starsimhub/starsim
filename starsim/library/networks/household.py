@@ -124,7 +124,8 @@ class HouseholdNet(ss.Network):
         super().init_post(add_pairs)
         ppl = self.sim.people
         # DHS age data is in integer years; add a random fractional age for realism
-        ppl.age[:] = ppl.age + self.rng_fractional_age.rvs(ppl.auids)
+        uids = (ppl.age >= 0).uids # Skip unborn agents
+        ppl.age[uids] = ppl.age[uids] + self.rng_fractional_age.rvs(uids)
 
         # Women already pregnant at initialization were captured by the DHS survey in
         # their current household, so treat that as their post-move-out-decision state:
@@ -167,7 +168,8 @@ class HouseholdNet(ss.Network):
         (the random draws differ).
         """
         ppl = self.sim.people
-        pop_size = len(ppl)
+        all_uids = (ppl.age >= 0).uids # Exclude unborn agents (e.g. from ss.Pregnancy(burnin=True)); they join their mother's household at birth
+        pop_size = len(all_uids)
         sizes, ages_flat, sexes_flat, offsets, has_sex = self._parse_dhs()
         n_dhs = len(sizes)
 
@@ -186,7 +188,6 @@ class HouseholdNet(ss.Network):
         self.n_households = n_hh
 
         # Assign contiguous agent blocks to households
-        all_uids = ss.uids(np.arange(pop_size))
         hh_ids = np.repeat(np.arange(n_hh), hsize)
         self.household_ids[all_uids] = hh_ids
 
@@ -210,7 +211,7 @@ class HouseholdNet(ss.Network):
         p1 = np.concatenate(p1_list) if p1_list else np.empty(0, dtype=ss.dtypes.int)
         p2 = np.concatenate(p2_list) if p2_list else np.empty(0, dtype=ss.dtypes.int)
         beta = np.ones(len(p1), dtype=ss.dtypes.float)
-        self.append(p1=p1, p2=p2, beta=beta)
+        self.append(p1=all_uids[p1], p2=all_uids[p2], beta=beta)
 
         if self.dynamic:
             # Assign one random eligible female (age 15-50) as head of each household: give every

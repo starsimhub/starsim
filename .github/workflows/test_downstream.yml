@@ -34,10 +34,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {model: STIsim, repo: starsimhub/stisim, dir: stisim}
-          - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim}
-          - {model: TBsim,  repo: starsimhub/tbsim,  dir: tbsim}
-          - {model: FPsim,  repo: starsimhub/fpsim,  dir: fpsim}
+          - {model: STIsim, repo: starsimhub/stisim, dir: stisim, install: pip install -e . -r tests/requirements.txt}
+          - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim, install: 'pip install -e ".[hiv]" -r tests/requirements.txt && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need
+          - {model: TBsim,  repo: starsimhub/tbsim,  dir: tbsim,  install: pip install -e . -r tests/requirements.txt}
+          - {model: FPsim,  repo: starsimhub/fpsim,  dir: fpsim,  install: pip install -e . -r tests/requirements.txt}
 
     steps:
       - name: Checkout Starsim
@@ -57,16 +57,7 @@ jobs:
 
       - name: Install ${{ matrix.model }}
         working-directory: ./${{ matrix.dir }}
-        run: pip install -e .
-
-      - name: Install ${{ matrix.model }} test requirements
-        working-directory: ./${{ matrix.dir }}/tests
-        run: pip install -r requirements.txt
-
-      - name: Download data on first load
-        if: matrix.model == 'HPVsim'
-        working-directory: ./${{ matrix.dir }}
-        run: hpvsim-download-data
+        run: ${{ matrix.install }}
 
       - name: Run ${{ matrix.model }} tests
         working-directory: ./${{ matrix.dir }}/tests

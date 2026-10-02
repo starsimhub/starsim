@@ -187,13 +187,14 @@ class Arr(BaseArr):
     will only use the ages of active agents. Thus, `sim.people.age.mean()`
     is equal to `sim.people.age.values.mean()`, not `sim.people.age.raw.mean()`.
 
-    If indexing by an int or slice, `Arr.values` is used. If indexing by an
-    `ss.uids` object, `Arr.raw` is used. `Arr` objects can't be directly
-    indexed by a list or array of ints, as this would be ambiguous about whether
-    `values` or `raw` is intended. For example, if there are 1000 people in a
-    simulation and 100 of them have died, `sim.people.age[999]` will return
-    an `IndexError` (since `sim.people.age[899]` is the last active agent),
-    whereas `sim.people.age[ss.uids(999)]` is valid.
+    If indexing by an int, integer array, or `ss.uids` object, `Arr.raw` is used
+    (i.e. the ints are treated as UIDs). If indexing by a full slice (`[:]`) or a
+    boolean array, `Arr.values` is used. `Arr` objects can't be directly indexed
+    by a list, as this would be ambiguous about whether `values` or `raw` is
+    intended. For example, if there are 1000 people in a simulation and
+    100 of them have died, `sim.people.age[999]` and `sim.people.age[ss.uids(999)]`
+    both return the age of the agent with UID 999, whereas `sim.people.age.values[899]`
+    returns the age of the last active agent.
 
     Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
     (e.g. in `module.define_states()`, whether or not they are BoolStates.
@@ -231,7 +232,8 @@ class Arr(BaseArr):
         self.label = label or name
         self.default = default
         if nan is not None: self.nan = nan
-        if dtype is not None: self.dtype = dtype
+        if dtype is None: dtype = np.asarray(default).dtype if np.isscalar(default) else ss_float # Infer from the default value
+        self.dtype = dtype
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
         self.people = people # Used solely for accessing people.auids
 
@@ -354,6 +356,7 @@ class Arr(BaseArr):
             other_raw = other.years
         elif isinstance(other, np.ndarray): # It's a NumPy array, we have to check the size
             both_raw = self_raw.size == other.size # It's raw if it's the same size, values otherwise
+            other_raw = other
         else:
             self._type_error(other)
 
@@ -663,7 +666,13 @@ class Arr(BaseArr):
         if isinstance(obj, BaseArr):
             return obj
         elif isinstance(obj, np.ndarray):
-            return self.asnew(obj, copy=copy)
+            if obj.dtype == self.dtype:
+                return self.asnew(obj, copy=copy)
+            cls, nan = self._math_result_type(obj.dtype) # The dtype has changed, e.g. np.float64(30) < age gives a BoolArr
+            new = self.asnew(obj, cls=cls, copy=copy)
+            new.nan = nan
+            new.nan_eq = (nan == nan)
+            return new
         else:
             self._type_error(obj)
         return obj
@@ -713,18 +722,22 @@ class Arr(BaseArr):
         return new
 
     def astype(self, cls, copy=False):
-        """ Convert the Arr type """
+        """ Convert the Arr type, e.g. `arr.astype(ss.IntArr)`; other types (e.g. `int`) return a NumPy array """
+        if not (isinstance(cls, type) and issubclass(cls, Arr)):
+            return self.values.astype(cls)
+
         # Create the new object
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
 
         # Reset Arr properties
-        new.dtype = cls.dtype # Set to correct dtype
-        new.nan = cls.nan
+        tmp = cls() # dtype and nan are only defined on instances
+        new.dtype = tmp.dtype # Set to correct dtype
+        new.nan = tmp.nan
         new.nan_eq = (new.nan == new.nan)
 
         # Optionally copy the array values (slow), and update the dtype
-        new.raw = np.array(new.raw, dtype=new.dtype, copy=copy)
+        new.raw = new.raw.astype(new.dtype, copy=copy)
         return new
 
     def true(self):
@@ -787,7 +800,7 @@ class BoolArr(Arr):
         ```python
         # Create a standalone BoolArr
         infected = ss.BoolArr('infected', mock=5)
-        infected[[0, 2, 4]] = True
+        infected[ss.uids([0, 2, 4])] = True
         infected.count()  # Returns 3
         infected.uids     # Returns ss.uids([0, 2, 4])
         ```
@@ -970,7 +983,7 @@ class uids(np.ndarray):
             return cls._ensure_int(np.array(list(arr)))
         elif arr is None: # Shortcut to return empty
             return np.empty(0, dtype=ss_int).view(cls)
-        elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
+        elif isinstance(arr, (int, np.integer)): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
         return cls._ensure_int(np.asarray(arr)) # Handle everything else
 
