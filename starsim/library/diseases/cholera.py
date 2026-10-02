@@ -142,8 +142,8 @@ class Cholera(ss.SEIR):
         n_asymptomatic = self.asymptomatic.sum()
         old_prev = self.results.env_prev[ti-1]
 
-        new_bacteria = (p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)).to_events(self.t.dt)
-        old_bacteria = old_prev * (1 - p.decay_rate.to_prob(self.t.dt))
+        new_bacteria = (p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)).to_events()
+        old_bacteria = old_prev * (1 - p.decay_rate.to_prob())
 
         r.env_prev[ti] = new_bacteria + old_bacteria
         r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)

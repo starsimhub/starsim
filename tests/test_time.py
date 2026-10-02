@@ -375,6 +375,15 @@ def test_link_timepars():
     sis.link_timepars()
     assert sis.pars.dur_test.to_dt() == 100*12
 
+    # Timepars derived by arithmetic stay linked
+    shed = ss.freqperyear(12).set_default_dur(sis.t.dt)
+    assert (shed*10).to_events() == 10
+    assert np.isclose((sis.pars.beta*0.5).to_prob(), sis.pars.beta.to_prob(scale=0.5))
+    assert (ss.peryear(1) + sis.pars.waning).default_dur == sis.t.dt # Linked from either side
+    assert (2*sis.pars.dur_test).to_dt() == 200*12
+    with pytest.raises(ValueError): # An unlinked rate gives an informative error
+        ss.freqperyear(12).to_events()
+
     return
 
 

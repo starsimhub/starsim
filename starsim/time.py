@@ -801,7 +801,7 @@ class TimePar:
     def __iter__(self):
         """ Iteration over array TimePars; raises TypeError for scalars so np.iterable() returns False """
         if self.is_array:
-            return (self.__class__(v) for v in self.value)
+            return (self._new(v) for v in self.value)
         else:
             errormsg = f'{type(self)} is a scalar'
             raise TypeError(errormsg)
@@ -809,7 +809,7 @@ class TimePar:
     def __getitem__(self, index):
         """ For indexing and slicing, e.g. TimePar[inds] """
         if self.is_array:
-            return self.__class__(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
+            return self._new(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
         else:
             errormsg = f'{type(self)} is a scalar'
             raise TypeError(errormsg)
@@ -952,6 +952,12 @@ Examples:
         """ Set the default duration, e.g. `module.dt`, so `.to_dt()` and `.to_prob()` can be used with no input """
         self.default_dur = dur
         return self
+
+    def _new(self, *args, other=None, **kwargs):
+        """ Create a new timepar of the same class, keeping the link to the timestep, so e.g. `(rate*2).to_prob()` works """
+        out = self.__class__(*args, **kwargs)
+        out.default_dur = self.default_dur if self.default_dur is not None else getattr(other, 'default_dur', None)
+        return out
 
     def _get_dt(self, dt=None):
         """ Return the timestep to resolve against, either supplied explicitly or set by the module """
@@ -1112,7 +1118,7 @@ class dur(TimePar):
 
     def __add__(self, other):
         if isinstance(other, dur):
-            return self.__class__(self.value + self.to_base(other))
+            return self._new(self.value + self.to_base(other), other=other)
         elif isinstance(other, date): # If adding to a date, convert to years
             if self.is_array:
                 return DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
@@ -1121,14 +1127,14 @@ class dur(TimePar):
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
-            return self.__class__(self.value + other)
+            return self._new(self.value + other)
 
     def __radd__(self, other):
         return self.__add__(other)
 
     def __sub__(self, other):
         if isinstance(other, dur):
-            return self.__class__(self.value - self.to_base(other))
+            return self._new(self.value - self.to_base(other), other=other)
         elif isinstance(other, date) :
             raise TypeError('Cannot subtract a date from a duration')
         elif isinstance(other, DateArray):
@@ -1137,7 +1143,7 @@ class dur(TimePar):
             else:
                 return DateArray(np.vectorize(self.__sub__)(other))
         else:
-            out = self.__class__(self.value - other)
+            out = self._new(self.value - other)
             if sc.isnumber(out) and out < 0:
                 warnmsg = f'Subtracting {self} and {other} yields {out}. Durations are rarely negative; are you sure this is intentional?'
                 ss.warn(warnmsg)
@@ -1153,7 +1159,7 @@ class dur(TimePar):
             raise Exception('Cannot multiply a duration by a duration')
         elif isinstance(other, date):
             raise Exception('Cannot multiply a duration by a date')
-        return self.__class__(self.value*other)
+        return self._new(self.value*other)
 
     def __rmul__(self, other):
         return self.__mul__(other)
@@ -1167,7 +1173,7 @@ class dur(TimePar):
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
         else:
-            return self.__class__(self.value / other)
+            return self._new(self.value / other)
 
     def __rtruediv__(self, other):
         # If a dur is divided by a dur then we will call __truediv__
@@ -1218,7 +1224,7 @@ class dur(TimePar):
         return a != b if impl else NotImplemented
 
     def __abs__(self):
-        return self.__class__(abs(self.value))
+        return self._new(abs(self.value))
 
     @classmethod
     def arange(cls, start, stop, step=1.0, inclusive=True): # TODO: this creates an array of objects, so is less performant than DateArray
@@ -1512,7 +1518,7 @@ class datedur(dur):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, dur):
             raise Exception('Cannot multiply a duration by a duration')
-        return self.__class__(self.scale(self.value, other))
+        return self._new(self.scale(self.value, other))
 
     def __truediv__(self, other):
         if isinstance(other, datedur):
@@ -1536,19 +1542,19 @@ class datedur(dur):
             return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
-        return self.__class__(self.scale(self.value, 1/other))
+        return self._new(self.scale(self.value, 1/other))
 
     def __add__(self, other):
         if isinstance(other, date):
             return other + self.value
         elif isinstance(other, datedur):
-            return self.__class__(**self._as_args(self.to_array() + self._as_array(other.value)))
+            return self._new(**self._as_args(self.to_array() + self._as_array(other.value)), other=other)
         elif isinstance(other, pd.DateOffset):
-            return self.__class__(**self._as_args(self.to_array() + self._as_array(other)))
+            return self._new(**self._as_args(self.to_array() + self._as_array(other)))
         elif isinstance(other, dur):
             kwargs = {k: v for k, v in zip(self.factor_keys, self.to_array())}
             kwargs['years'] += other.years
-            return self.__class__(**kwargs)
+            return self._new(**kwargs, other=other)
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
         else:
@@ -1723,7 +1729,7 @@ class Rate(TimePar):
     def __add__(self, other):
         if isinstance(other, Rate):
             if self.timepar_subtype == other.timepar_subtype:
-                return self.__class__(self.value+self._convert_rate(other), self.unit)
+                return self._new(self.value+self._convert_rate(other), self.unit, other=other)
             else:
                 errormsg = f'Can only add rates with the same subtype (e.g., Rate+Rate, prob+prob); you added {self} + {other}'
                 raise TypeError(errormsg)
@@ -1740,7 +1746,7 @@ class Rate(TimePar):
 
     def __sub__(self, other):
         if self.__class__ == other.__class__: # TODO: make more flexible, e.g. ss.perday(1) - ss.peryear(1) could work in theory
-            return self.__class__(self.value-self._convert_rate(other), self.unit)
+            return self._new(self.value-self._convert_rate(other), self.unit, other=other)
         elif not isinstance(other, Rate):
             if sc.isnumber(other) or isinstance(other, np.ndarray):
                 raise TypeError(f'Only rates can be subtracted from rates, not {other}. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
@@ -1775,7 +1781,7 @@ class Rate(TimePar):
         elif isinstance(other, dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
-            return self.__class__(self.value/other, self.unit)
+            return self._new(self.value/other, self.unit)
 
     def __rtruediv__(self, other):
         """ This is for <other>/<rate>, e.g. if a float is divided by a rate """
@@ -1828,7 +1834,7 @@ class Rate(TimePar):
         elif sc.isnumber(dur) or isinstance(dur, np.ndarray):
             rate = self.rate*dur*scale # Scale the rate rather than the value
             rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
-            out = self.__class__(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
+            out = self._new(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
             return out
         else:
             errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
@@ -1843,8 +1849,10 @@ class Rate(TimePar):
             return self.value*(dur/self.unit)
         elif dur is None and self.unit is None:
             return self.value
+        elif dur is None:
+            self._get_dt() # Raises an informative error, since there is no timestep to convert to
         else: # Handle float, array, etc.
-            return self.__class__(self.value*dur, self.unit)
+            return self._new(self.value*dur, self.unit)
 
 
 class prob(Rate):
@@ -2033,7 +2041,7 @@ class prob(Rate):
                 return -np.expm1(-self._rate*factor) # Main use case
         elif sc.isnumber(dur):
             rate = self._rate*dur*scale # Scale the rate rather than the value
-            out = self.__class__(rate=rate, unit=self.unit) # Placeholder
+            out = self._new(rate=rate, unit=self.unit) # Placeholder
             return out
         else:
             errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.dur or scalar'
