@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -690,7 +690,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.library.networks.DiskNet" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.library.networks.DiskNet">DiskNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>library.networks.DiskNet(key_dict<span class="op">=</span><span class="va">None</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>library.networks.DiskNet(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Disk graph in which edges are made between agents located within a user-defined radius.</p>
 <p>Interactions take place within a square with edge length of 1. Agents are initialized to have a random position and orientation within this square. On each time step, agents advance v*dt in the direction they are pointed. When encountering a wall, agents are reflected.</p>
 <p>Edges are formed between two agents if they are within r distance of each other.</p>
@@ -708,7 +708,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>r</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>radius within which edges are formed</td>
 <td><em>required</em></td>
 </tr>
@@ -783,7 +783,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.library.networks.ErdosRenyiNet" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.library.networks.ErdosRenyiNet">ErdosRenyiNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>library.networks.ErdosRenyiNet(key_dict<span class="op">=</span><span class="va">None</span>, pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>library.networks.ErdosRenyiNet(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>In the Erdos-Renyi network, every possible edge has a probability, p, of being created on each time step.</p>
 <p>The degree of each node will have a binomial distribution, considering each of the N-1 possible edges connection this node to the others will be created with probability p.</p>
 <p>Please be careful with the <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> parameter. When set to 0, new edges will be created on each time step. If positive, edges will persist for <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> years. Note that the existence of edges from previous time steps will not prevent or otherwise alter the creation of new edges on each time step, edges will accumulate over time.</p>
@@ -802,7 +802,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>p</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>probability that each possible edge is created per timestep</td>
 <td><em>required</em></td>
 </tr>
@@ -874,25 +874,25 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>dhs_data</td>
-<td><code>DataFrame</code> / <a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><code>DataFrame</code> / <a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>A pandas or Sciris dataframe with columns <code>hh_id</code> and <code>ages</code>. Optionally also <code>sexes</code>. The <code>ages</code> column should contain comma-separated age strings (e.g.&nbsp;<code>"72, 17, 30"</code>). If <code>sexes</code> is included, it should contain comma-separated values using DHS convention (1 = male, 2 = female) with the same number of entries as <code>ages</code>. Pass <code>'default'</code> to use synthetic data (see <code>make_default_data()</code>), e.g.&nbsp;for demos and testing.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>dynamic</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
-<td>If <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> (default), households evolve over time: one female is assigned as head of each household, pregnant non-head females may move out to form new households, and births are added to the mother’s household. Requires the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module. If <a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a>, the network is static and <code>step()</code> is a no-op.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
+<td>If <a href="https://docs.python.org/3/builtins/constants.html#True" title="1"><code>True</code></a> (default), households evolve over time: one female is assigned as head of each household, pregnant non-head females may move out to form new households, and births are added to the mother’s household. Requires the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>Pregnancy</code></a> module. If <a href="https://docs.python.org/3/builtins/constants.html#False" title="1"><code>False</code></a>, the network is static and <code>step()</code> is a no-op.</td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 <tr class="odd">
 <td>prob_move_out</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>Probability a non-head female moves out to start her own household, evaluated once at the start of each pregnancy. Default 0.7. Only used when <code>dynamic=True</code>.</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>update_freq</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>How often (in timesteps) to update the network. Default 1. Only used when <code>dynamic=True</code>.</td>
 <td><code>_</code></td>
 </tr>
@@ -988,7 +988,7 @@ sim.plot()</code></pre>
 <tbody>
 <tr class="odd">
 <td>path</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> / <code>Path</code></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a> / <code>Path</code></td>
 <td>Path to a DHS Household Recode Stata file (e.g.&nbsp;<code>XXHR7xFL.DTA</code>).</td>
 <td><em>required</em></td>
 </tr>
@@ -1051,13 +1051,13 @@ sim.plot()</code></pre>
 <tbody>
 <tr class="odd">
 <td>n</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>number of synthetic households to generate</td>
 <td><code>1000</code></td>
 </tr>
 <tr class="even">
 <td>seed</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>random seed for reproducibility</td>
 <td><code>1</code></td>
 </tr>
@@ -1116,9 +1116,9 @@ sim.plot()</code></pre>
 <tbody>
 <tr class="odd">
 <td>n_people</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>number of agents in the network; defaults to the sim’s <code>n_agents</code></td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1584,7 +1584,7 @@ sim.plot()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

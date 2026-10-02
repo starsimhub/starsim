@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -819,7 +819,7 @@ window.Quarto = {
 <tr class="even">
 <td><code>set_prognoses()</code></td>
 <td>Set outcomes for newly infected people</td>
-<td>For fully custom acquisition logic; call <a href="https://docs.python.org/3/library/functions.html#super" title="1"><code>super()</code></a></td>
+<td>For fully custom acquisition logic; call <a href="https://docs.python.org/3/builtins/functions.html#super" title="1"><code>super()</code></a></td>
 </tr>
 <tr class="odd">
 <td><code>step_state()</code></td>
@@ -854,7 +854,7 @@ window.Quarto = {
 <tr class="odd">
 <td><code>susceptible</code></td>
 <td><a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>BoolState</code></a></td>
-<td>Whether an agent can be infected (default <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a>)</td>
+<td>Whether an agent can be infected (default <a href="https://docs.python.org/3/builtins/constants.html#True" title="1"><code>True</code></a>)</td>
 </tr>
 <tr class="even">
 <td><code>infected</code></td>
@@ -911,7 +911,7 @@ window.Quarto = {
 <li>A <a href="../user_guide/modules_connectors.html">connector</a> between two diseases might increase <code>rel_sus</code> to one disease for agents infected with another (co-infection).</li>
 </ul>
 <p>Because they’re ordinary per-agent arrays, you can also set them directly. Here we fully protect everyone under 20 by setting their <code>rel_sus</code> to 0, and see that they avoid infection (aside from the handful seeded as infected at the start via <code>init_prev</code>):</p>
-<div id="91f16cfb" class="cell" data-execution_count="1">
+<div id="4c762e4f" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -993,7 +993,7 @@ Warning
 <section id="pattern-1-extending-existing-diseases" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</h3>
 <p>When you need to modify an existing disease model, inherit from it and override specific methods:</p>
-<div id="b2dc4ab7" class="cell" data-execution_count="2">
+<div id="ee7648b0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1013,7 +1013,7 @@ Warning
 <section id="pattern-2-extending-an-seir-model" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-2-extending-an-seir-model">Pattern 2: Extending an SEIR model</h3>
 <p>For a disease with a latent period, start from <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>. A simple model needs only new parameter defaults:</p>
-<div id="dc8a3ee7" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div id="99957b24" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SEIR):</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -1032,7 +1032,7 @@ Warning
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_diseases_files/figure-html/cell-4-output-2.png" width="615" height="455" class="figure-img"></p>
+<p><img src="modules_diseases_files/figure-html/cell-4-output-2.png" width="615" height="435" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1496,7 +1496,7 @@ Warning
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

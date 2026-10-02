@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -861,33 +861,33 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>conform</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a href="https://docs.python.org/3/library/functions.html#callable">callable</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a> | <a href="https://docs.python.org/3/builtins/functions.html#callable">callable</a></td>
 <td>specify how to handle timepoints that don’t align exactly between the expected and the actual/predicted/simulated data so they “conform” to a common time grid. Whether the data represents a ‘prevalent’ or an ‘incident’ quantity impacts how this alignment is performed. If ‘prevalent’, it means data in expected &amp; actual dataframes represent the current state of the system, stocks like the number of currently infected individuals. In this case, the data in ‘simulated’ or ‘actual’ will be interpolated to match the timepoints in ‘expected’, allowing for pointwise comparisons between the expected and actual data. If ‘incident’, it means data in expected &amp; actual dataframes represent the accumulation of system states over a period of time, flows like the incidence of new infections. In this case, teh data in ‘simulated’ or ‘actual’ will be interpolated at the start (‘t’) and the end (‘t1’) of the period of interest in ‘expected’. The difference between these two interpolated values will be used for comparison. Finally, ‘step_containing’ is a special case for prevalent data where the actual data is interpolated using a “zero order hold” method. This means that the value of the actual (simulated) data is matched to the timepoint in the expected data that contains the timepoint of the actual data.</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>weight</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.</td>
 <td><code>1</code></td>
 </tr>
 <tr class="even">
 <td>include_fn</td>
-<td><a href="https://docs.python.org/3/library/functions.html#callable">callable</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#callable">callable</a></td>
 <td>A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>n_boot</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>Experimental! Bootstrap sum sim results over seeds before comparing against expected results. Not appropriate for all component types.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>combine_reps</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>How to combine multiple repetitions of the same pars. Options are None, ‘mean’, ‘sum’, or other such operation. Default is None, which evaluates replicates independently instead of first combining before likelihood evaluation.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>kwargs</td>
@@ -1065,7 +1065,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>sampler</td>
 <td><code>BaseSampler</code></td>
 <td>the sampler used by optuna, like optuna.samplers.TPESampler</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>die (bool)</td>
@@ -1174,13 +1174,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>calib_pars</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>if supplied, overwrite stored calib_pars</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>if supplied, overwrite stored run_args (n_trials, n_workers, etc.)</td>
 <td><code>{}</code></td>
 </tr>
@@ -1226,7 +1226,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>kwargs</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>passed to MultiSim.plot()</td>
 <td><code>{}</code></td>
 </tr>
@@ -1409,7 +1409,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>kwargs</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>contains any eval_kwargs that were specified when instantiating the Calibration</td>
 <td><code>{}</code></td>
 </tr>
@@ -1429,7 +1429,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>nll</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>negative Euclidean distance between expected and predicted values.</td>
 </tr>
 </tbody>
@@ -2002,7 +2002,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

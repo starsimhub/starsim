@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -893,7 +893,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.networks.DynamicNetwork" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.DynamicNetwork">DynamicNetwork</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>networks.DynamicNetwork(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>networks.DynamicNetwork(pars<span class="op">=</span><span class="va">None</span>, edges<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A network where partnerships update dynamically</p>
 <section id="methods-1" class="level4">
 <h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
@@ -977,8 +977,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>rel_part_rates</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
-<td>Relative participation in the network</td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
+<td>Relative participation in the network, i.e.&nbsp;a multiplier (from 0 to 1) on the probability of participating</td>
 <td><code>_</code></td>
 </tr>
 </tbody>
@@ -1118,7 +1118,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.networks.MaternalNet" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.MaternalNet">MaternalNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>networks.MaternalNet(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>networks.MaternalNet(pars<span class="op">=</span><span class="va">None</span>, edges<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Alias for <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>PrenatalNet</code></a>, kept for backwards compatibility</p>
 </section>
 <section id="starsim.networks.MixingPool" class="level3">
@@ -1147,7 +1147,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>diseases</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>the diseases that transmit via this mixing pool</td>
 <td><code>_</code></td>
 </tr>
@@ -1165,7 +1165,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>beta</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)</td>
 <td><code>_</code></td>
 </tr>
@@ -1186,7 +1186,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>mp_pars <span class="op">=</span> <span class="bu">dict</span>(</span>
 <span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> <span class="kw">lambda</span> sim: sim.people.male, <span class="co"># only males are infectious</span></span>
 <span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    dst <span class="op">=</span> <span class="va">None</span>, <span class="co"># all agents are susceptible</span></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> ss.Rate(<span class="fl">0.2</span>),</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    beta <span class="op">=</span> <span class="fl">0.2</span>,</span>
 <span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    n_contacts <span class="op">=</span> ss.poisson(lam<span class="op">=</span><span class="dv">4</span>),</span>
 <span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
@@ -1253,19 +1253,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>rel_sus</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>Relative susceptibility</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>rel_trans</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>Relative infectiousness</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>disease_beta</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>The beta value for the disease</td>
 <td><em>required</em></td>
 </tr>
@@ -1318,7 +1318,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>diseases</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>the diseases that transmit via these mixing pools</td>
 <td><code>_</code></td>
 </tr>
@@ -1336,7 +1336,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>beta</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>overall transmission via these mixing pools</td>
 <td><code>_</code></td>
 </tr>
@@ -1414,7 +1414,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.networks.Network" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.Network">Network</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>networks.Network(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>networks.Network(pars<span class="op">=</span><span class="va">None</span>, edges<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A class holding a single network of contact edges (connections) between people as well as methods for updating these. Networks mediate disease transmission between agents in <a href="../api/people.html#starsim.people.People" title="0"><code>ss.People</code></a>; see <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a> for how transmission uses network edges, and <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a>, <a href="../api/networks.html#starsim.networks.MFNet" title="0"><code>ss.MFNet</code></a>, <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>ss.PrenatalNet</code></a> for built-in network types.</p>
 <p>The input is typically arrays including: person 1 of the connection, person 2 of the connection, the weight of the connection, the duration and start/end times of the connection.</p>
 <section id="parameters-5" class="level4 doc-section doc-section-parameters">
@@ -1429,6 +1429,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 </thead>
 <tbody>
+<tr class="odd">
+<td>pars</td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
+<td>parameters, for subclasses that define them</td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+<tr class="even">
+<td>edges</td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a> / <code>dataframe</code></td>
+<td>the edges of the network, as an alternative to passing them as keyword arguments</td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
 <tr class="odd">
 <td>p1</td>
 <td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
@@ -1448,20 +1460,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>label</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
-<td>the name of the network (optional)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
-</tr>
-<tr class="odd">
 <td>kwargs</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>other keys copied directly into the network</td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
+<td>standard module arguments (e.g.&nbsp;<code>name</code>, <code>label</code>, <code>dt</code>) are passed to <code>update_pars()</code>; other keys are copied directly into the network as edges</td>
 <td><code>{}</code></td>
 </tr>
 </tbody>
 </table>
-<p>Note that all arguments (except for label) must be arrays of the same length, although not all have to be supplied at the time of creation (they must all be the same at the time of initialization, though, or else validation will fail).</p>
+<p>Note that all edge arguments must be arrays of the same length, although not all have to be supplied at the time of creation (they must all be the same at the time of initialization, though, or else validation will fail).</p>
 </section>
 <section id="examples-2" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-2">Examples</h4>
@@ -1473,12 +1479,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>p2 <span class="op">=</span> np.random.randint(n_people, size<span class="op">=</span>n)</span>
 <span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> np.ones(n)</span>
 <span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.Network(p1<span class="op">=</span>p1, p2<span class="op">=</span>p2, beta<span class="op">=</span>beta, label<span class="op">=</span><span class="st">'rand'</span>)</span>
-<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.Network(<span class="bu">dict</span>(p1<span class="op">=</span>p1, p2<span class="op">=</span>p2, beta<span class="op">=</span>beta), label<span class="op">=</span><span class="st">'rand'</span>) <span class="co"># Alternate method</span></span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a>network <span class="op">=</span> ss.Network(edges<span class="op">=</span><span class="bu">dict</span>(p1<span class="op">=</span>p1, p2<span class="op">=</span>p2, beta<span class="op">=</span>beta), label<span class="op">=</span><span class="st">'rand'</span>) <span class="co"># Alternate method</span></span>
 <span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert one network to another with extra columns</span></span>
 <span id="cb30-12"><a href="#cb30-12" aria-hidden="true" tabindex="-1"></a>index <span class="op">=</span> np.arange(n)</span>
 <span id="cb30-13"><a href="#cb30-13" aria-hidden="true" tabindex="-1"></a>self_conn <span class="op">=</span> p1 <span class="op">==</span> p2</span>
-<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a>network2 <span class="op">=</span> ss.Network(<span class="op">**</span>network, index<span class="op">=</span>index, self_conn<span class="op">=</span>self_conn, label<span class="op">=</span>network.label)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a>network2 <span class="op">=</span> ss.Network(edges<span class="op">=</span>network.edges, index<span class="op">=</span>index, self_conn<span class="op">=</span>self_conn, label<span class="op">=</span>network.label)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 <section id="attributes" class="level4">
 <h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
@@ -1628,9 +1634,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>edges</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1661,9 +1667,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>as_array</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>if true, return as sorted array (otherwise, return as unsorted set)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#True" title="1"><code>True</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1712,15 +1718,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>inds</td>
-<td>(<a href="https://docs.python.org/3/library/functions.html#int">int</a>, <a href="https://docs.python.org/3/library/array.html#module-array">array</a>, <a href="https://docs.python.org/3/library/functions.html#slice">slice</a>)</td>
+<td>(<a href="https://docs.python.org/3/builtins/functions.html#int">int</a>, <a href="https://docs.python.org/3/library/array.html#module-array">array</a>, <a href="https://docs.python.org/3/builtins/functions.html#slice">slice</a>)</td>
 <td>the indices to find</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>remove</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>whether to remove the indices</td>
-<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1764,26 +1770,26 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>max_edges</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>the maximum number of edges to show</td>
 <td><code>500</code></td>
 </tr>
 <tr class="even">
 <td>random</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>if true, select edges randomly; otherwise, show the first N</td>
-<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 <tr class="odd">
 <td>alpha</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>the alpha value of the edges</td>
 <td><code>0.2</code></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
-<td>passed to nx.draw_networkx()</td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
+<td>figure and style arguments (e.g.&nbsp;<code>figsize</code>, <code>font</code>) are passed to <a href="../api/utils.html#starsim.utils.plot_args" title="0"><code>ss.plot_args()</code></a>, the rest to <code>nx.draw_networkx()</code></td>
 <td><code>{}</code></td>
 </tr>
 </tbody>
@@ -1808,7 +1814,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>inds</td>
-<td>(<a href="https://docs.python.org/3/library/functions.html#int">int</a>, <a href="https://docs.python.org/3/library/array.html#module-array">array</a>, <a href="https://docs.python.org/3/library/functions.html#slice">slice</a>)</td>
+<td>(<a href="https://docs.python.org/3/builtins/functions.html#int">int</a>, <a href="https://docs.python.org/3/library/array.html#module-array">array</a>, <a href="https://docs.python.org/3/builtins/functions.html#slice">slice</a>)</td>
 <td>the indices to be removed</td>
 <td><em>required</em></td>
 </tr>
@@ -1864,15 +1870,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>max_edges</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>the maximum number of edges to show</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>random</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>if true, select edges randomly; otherwise, show the first N</td>
-<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1923,19 +1929,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>pars</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>passed to <a href="../api/networks.html#starsim.networks.DynamicNetwork" title="0"><code>ss.DynamicNetwork</code></a></td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>dur</td>
 <td><code>ss</code>.<a href="../api/time.html#starsim.time.dur">dur</a> / <code>ss</code>.<a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
 <td>edge duration (postpartum period); if None, edges persist until agents die</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>**kwargs</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>merged with <code>pars</code></td>
 <td><code>{}</code></td>
 </tr>
@@ -1945,7 +1951,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.networks.PrenatalNet" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.PrenatalNet">PrenatalNet</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>networks.PrenatalNet(name<span class="op">=</span><span class="va">None</span>, label<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb54"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>networks.PrenatalNet(pars<span class="op">=</span><span class="va">None</span>, edges<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Prenatal transmission network</p>
 <p>Although edges change over time, the edges are managed via ss.Pregnancy as pregnancies start and finish. The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.</p>
 </section>
@@ -1979,7 +1985,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>beta</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>the default beta value for each edge</td>
 <td><code>_</code></td>
 </tr>
@@ -2033,13 +2039,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>inds</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#list">list</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>person indices</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>n_contacts</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#list">list</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>the same length as <code>inds</code> with the number of bidirectional contacts to assign to each person</td>
 <td><em>required</em></td>
 </tr>
@@ -2118,7 +2124,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>n_edges</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>the average number of (bi-directional) edges between agents</td>
 <td><code>_</code></td>
 </tr>
@@ -2130,7 +2136,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>beta</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>the default beta value for each edge</td>
 <td><code>_</code></td>
 </tr>
@@ -2221,7 +2227,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.networks.SexualNetwork" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.networks.SexualNetwork">SexualNetwork</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb67"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb67"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>networks.SexualNetwork(pars<span class="op">=</span><span class="va">None</span>, edges<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Base class for all sexual networks</p>
 <section id="methods-11" class="level4">
 <h4 class="anchored" data-anchor-id="methods-11">Methods</h4>
@@ -2743,7 +2749,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

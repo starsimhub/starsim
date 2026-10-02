@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -732,27 +732,27 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>birth_rate</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="../api/time.html#starsim.time.rate">rate</a> / <code>dataframe</code></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <a href="../api/time.html#starsim.time.rate">rate</a> / <code>dataframe</code></td>
 <td>value for birth rate, or birth rate data</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>rel_birth</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>constant used to scale all birth rates</td>
 <td><code>_</code></td>
 </tr>
 <tr class="odd">
 <td>rate_units</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>units for birth rates (default assumes per 1000)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>metadata</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>dict with data column mappings for birth rate data (if birth_rate is a dataframe)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -837,13 +837,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>pars</td>
 <td></td>
 <td>dict with arguments including: rel_death: constant used to scale all death rates death_rate: float, dict, or pandas dataframe/series containing mortality data rate_units: units for death rates (see in-line comment on par dict below)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>metadata</td>
 <td></td>
 <td>data about the data contained within the data input. “data_cols” is is a dictionary mapping standard keys, like “year” to the corresponding column name in data. Similar for “sex_keys”.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -936,13 +936,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>fertility_rate</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <code>dataframe</code></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <code>dataframe</code></td>
 <td>value or dataframe with age-specific fertility rates</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>rel_fertility</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>constant used to scale all fertility rates</td>
 <td><code>_</code></td>
 </tr>
@@ -954,37 +954,37 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>min_age</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>minimum age for pregnancy (default 15)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="odd">
 <td>max_age</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>maximum age for pregnancy (default 50)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>rate_units</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>units for fertility rates (default assumes per 1000)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="odd">
 <td>dur_pregnancy</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="../api/time.html#starsim.time.dur">dur</a></td>
-<td>duration of pregnancy (default: drawn from choice distribution, 32-42 weeks)</td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <a href="../api/time.html#starsim.time.dur">dur</a> / <a href="../api/distributions.html#starsim.distributions.Dist">Dist</a></td>
+<td>duration of pregnancy; a number is interpreted as weeks (default: drawn from choice distribution, 32-42 weeks)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>dur_breastfeed</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="../api/time.html#starsim.time.dur">dur</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <a href="../api/time.html#starsim.time.dur">dur</a></td>
 <td>duration of breastfeeding (default: drawn from lognormal distribution, 9±6 months)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="odd">
 <td>rr_ptb</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>base relative risk of pre-term birth (default normal with mean 1, std 0.1)</td>
 <td><code>_</code></td>
 </tr>
@@ -996,37 +996,37 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>p_maternal_death</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>probability of maternal death during pregnancy (default 0.0)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>p_survive_maternal_death</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>probability that an unborn agent will survive death of the mother (default 0)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="odd">
 <td>sex_ratio</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>probability of female births (default 0.5)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>burnin</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>whether to seed pregnancies from before simulation start (default true)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="odd">
 <td>slot_scale</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>scale factor for assigning slots to newborn agents (default 100)</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>min_slots</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>minimum number of slots for newborn agents (default 100)</td>
 <td><code>_</code></td>
 </tr>
@@ -1044,15 +1044,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>trimesters</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#list">list</a></td>
 <td>list of durations defining the end of each trimester</td>
 <td><code>_</code></td>
 </tr>
 <tr class="even">
 <td>metadata</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#dict">dict</a></td>
 <td>data column mappings for fertility rate data if a dataframe is supplied</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1251,7 +1251,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>filter_uids</td>
 <td></td>
 <td>UIDs to compute probabilities for (default: all fecund women). Result is indexed to match these UIDs, or all fecund UIDs if None.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1782,7 +1782,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -761,7 +761,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Store a state of the agents (e.g.&nbsp;age, infection status, etc.) as an array.</p>
 <p>In practice, <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> objects can be used interchangeably with NumPy arrays. They have two main data interfaces: <code>Arr.raw</code> contains the “raw”, underlying NumPy array of the data. <a href="../api/arrays.html#starsim.arrays.Arr.values" title="0"><code>Arr.values</code></a> contains the “active” values, which usually corresponds to agents who are alive.</p>
 <p>By default, operations are performed on active agents only (specified by <a href="../api/arrays.html#starsim.arrays.Arr.auids" title="0"><code>Arr.auids</code></a>, which is a pointer to <code>sim.people.auids</code>). For example, <code>sim.people.age.mean()</code> will only use the ages of active agents. Thus, <code>sim.people.age.mean()</code> is equal to <code>sim.people.age.values.mean()</code>, not <code>sim.people.age.raw.mean()</code>.</p>
-<p>If indexing by an int or slice, <a href="../api/arrays.html#starsim.arrays.Arr.values" title="0"><code>Arr.values</code></a> is used. If indexing by an <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a> object, <code>Arr.raw</code> is used. <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> objects can’t be directly indexed by a list or array of ints, as this would be ambiguous about whether <code>values</code> or <code>raw</code> is intended. For example, if there are 1000 people in a simulation and 100 of them have died, <code>sim.people.age[999]</code> will return an <a href="https://docs.python.org/3/library/exceptions.html#IndexError" title="1"><code>IndexError</code></a> (since <code>sim.people.age[899]</code> is the last active agent), whereas <code>sim.people.age[ss.uids(999)]</code> is valid.</p>
+<p>If indexing by an int, integer array, or <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>ss.uids</code></a> object, <code>Arr.raw</code> is used (i.e.&nbsp;the ints are treated as UIDs). If indexing by a full slice (<code>[:]</code>) or a boolean array, <a href="../api/arrays.html#starsim.arrays.Arr.values" title="0"><code>Arr.values</code></a> is used. <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> objects can’t be directly indexed by a list, as this would be ambiguous about whether <code>values</code> or <code>raw</code> is intended. For example, if there are 1000 people in a simulation and 100 of them have died, <code>sim.people.age[999]</code> and <code>sim.people.age[ss.uids(999)]</code> both return the age of the agent with UID 999, whereas <code>sim.people.age.values[899]</code> returns the age of the last active agent.</p>
 <p>Note on terminology: the term “states” is often used to refer to <em>all</em> <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>ss.Arr</code></a> objects, (e.g.&nbsp;in <code>module.define_states()</code>, whether or not they are BoolStates.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -777,57 +777,57 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>name</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>The name for the state (also used as the dictionary key, so should not have spaces etc.)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>dtype</td>
 <td>class</td>
 <td>The dtype to use for this instance (if None, infer from value)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>default</td>
-<td><a href="https://docs.python.org/3/library/functions.html#any">any</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#any">any</a></td>
 <td>Specify default value for new agents. This can be: * A scalar with the same dtype (or castable to the same dtype) as the Arr; * A callable, with a single argument for the number of values to produce; * A <a href="../api/distributions.html#starsim.distributions.Dist"><span><code>ss.Dist</code></span></a> instance.</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>nan</td>
-<td><a href="https://docs.python.org/3/library/functions.html#any">any</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#any">any</a></td>
 <td>the value to use to represent NaN (not a number); also used as the default value if not supplied</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>label</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>The human-readable name for the state</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>raw</td>
 <td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>If provided, initialize the array with these raw values</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>skip_init</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>Whether to skip initialization with the People object (used for uid and slot states)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#False" title="1"><code>False</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#False" title="1"><code>False</code></a></td>
 </tr>
 <tr class="even">
 <td>people</td>
 <td><a href="../api/people.html#starsim.people.People" title="0"><code>ss.People</code></a></td>
 <td>Optionally specify an initialized People object, used to construct temporary Arr instances</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>mock</td>
-<td><a href="https://docs.python.org/3/library/functions.html#int">int</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#int">int</a></td>
 <td>if provided, create a mock People object (of length <code>mock</code>, unless <code>raw</code> is provided) to initialize the array (for debugging purposes)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -892,7 +892,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td><a href="#starsim.arrays.Arr.astype">astype</a></td>
-<td>Convert the Arr type</td>
+<td>Convert the Arr type, e.g.&nbsp;<code>arr.astype(ss.IntArr)</code>; other types (e.g.&nbsp;<a href="https://docs.python.org/3/builtins/functions.html#int" title="1"><code>int</code></a>) return a NumPy array</td>
 </tr>
 <tr class="odd">
 <td><a href="#starsim.arrays.Arr.convert">convert</a></td>
@@ -948,7 +948,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="starsim.arrays.Arr.astype" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.Arr.astype">astype</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>arrays.Arr.astype(cls, copy<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Convert the Arr type</p>
+<p>Convert the Arr type, e.g.&nbsp;<code>arr.astype(ss.IntArr)</code>; other types (e.g.&nbsp;<a href="https://docs.python.org/3/builtins/functions.html#int" title="1"><code>int</code></a>) return a NumPy array</p>
 </section>
 <section id="starsim.arrays.Arr.convert" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.arrays.Arr.convert">convert</h5>
@@ -974,9 +974,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>copy</td>
-<td><a href="https://docs.python.org/3/library/functions.html#bool">bool</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#bool">bool</a></td>
 <td>whether to copy the data; passed through to asnew()</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1013,13 +1013,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>new_uids</td>
 <td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>Numpy array of UIDs for the new agents being added</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>new_vals</td>
 <td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>If provided, assign these state values to the new UIDs</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 </tbody>
 </table>
@@ -1172,13 +1172,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>values</td>
 <td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>replacement data; if None, copies existing values</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>cls</td>
-<td><a href="https://docs.python.org/3/library/functions.html#type">type</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#type">type</a></td>
 <td>class to use for the new instance; defaults to the current class</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>kwargs</td>
@@ -1220,7 +1220,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-1">Examples</h4>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a standalone BoolArr</span></span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>infected <span class="op">=</span> ss.BoolArr(<span class="st">'infected'</span>, mock<span class="op">=</span><span class="dv">5</span>)</span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>infected[[<span class="dv">0</span>, <span class="dv">2</span>, <span class="dv">4</span>]] <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>infected[ss.uids([<span class="dv">0</span>, <span class="dv">2</span>, <span class="dv">4</span>])] <span class="op">=</span> <span class="va">True</span></span>
 <span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>infected.count()  <span class="co"># Returns 3</span></span>
 <span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>infected.uids     <span class="co"># Returns ss.uids([0, 2, 4])</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
@@ -1946,7 +1946,7 @@ ss.uids.concatenate()          # returns empty ss.uids()</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

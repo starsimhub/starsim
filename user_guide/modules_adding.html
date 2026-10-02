@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -815,7 +815,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>An alias is only consulted when the attribute isn’t otherwise defined, so a base class can use one to supply a default that a subclass replaces just by defining a state (or another alias) of the same name. This is how <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a> treats everyone infected as infectious, while letting a subclass say otherwise; see <a href="../user_guide/modules_diseases.html#infected-vs-infectious">Infected vs.&nbsp;infectious</a>.</p>
 <p>A callable alias behaves like a property: it’s recomputed on each access, and writing to it raises an error rather than silently discarding the write. It doesn’t appear in <code>state_list</code>/<code>state_dict</code>, but it <em>does</em> generate an <code>n_&lt;name&gt;</code> result, since unlike a string alias it’s a derived quantity that isn’t counted anywhere else. Note that a callable alias written as a lambda can’t be saved with plain <a href="https://docs.python.org/3/library/pickle.html#module-pickle" title="1"><code>pickle</code></a> (<a href="https://docs.sciris.org/api/sc_fileio.html#sciris.sc_fileio.save" title="0"><code>sc.save()</code></a> and <a href="../api/run.html#starsim.run.MultiSim" title="0"><code>ss.MultiSim</code></a> are fine); use a module-level function, or a property, if that matters to you.</p>
-<p>To replace an inherited state or alias rather than add to it, pass <code>overwrite=True</code>. To remove one without replacing it, name it in <code>reset</code>, which takes a name or list of names (or <a href="https://docs.python.org/3/library/constants.html#True" title="1"><code>True</code></a> for all of them); the name is then undefined, so accessing it raises an <a href="https://docs.python.org/3/library/exceptions.html#AttributeError" title="1"><code>AttributeError</code></a>:</p>
+<p>To replace an inherited state or alias rather than add to it, pass <code>overwrite=True</code>. To remove one without replacing it, name it in <code>reset</code>, which takes a name or list of names (or <a href="https://docs.python.org/3/builtins/constants.html#True" title="1"><code>True</code></a> for all of them); the name is then undefined, so accessing it raises an <a href="https://docs.python.org/3/builtins/exceptions.html#AttributeError" title="1"><code>AttributeError</code></a>:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="va">self</span>.define_states(</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    ss.BoolState(<span class="st">'infectious'</span>, label<span class="op">=</span><span class="st">'Infectious'</span>), <span class="co"># Replaces the inherited `infectious` alias</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    reset <span class="op">=</span> <span class="st">'ti_infected'</span>, <span class="co"># Removes the inherited state without replacing it</span></span>
@@ -858,7 +858,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="a-complete-example" class="level2">
 <h2 class="anchored" data-anchor-id="a-complete-example">A complete example</h2>
 <p>Here’s a self-contained custom intervention that vaccinates a fraction of susceptible agents each year, conferring partial protection. It illustrates parameters (including a time parameter and a distribution), a state, use of <code>self.sim</code> and <code>self.t.dt</code> inside <code>step()</code>, and the automatically generated <code>n_vaccinated</code> result:</p>
-<div id="03e15128" class="cell" data-execution_count="1">
+<div id="66a59390" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -911,7 +911,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Because we defined <code>vaccinated</code> as a <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>ss.BoolState</code></a>, the count is automatically available as a result, so we can plot the vaccination rollout without any extra code:</p>
-<div id="5c7769ca" class="cell" data-execution_count="2">
+<div id="202641e0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> s2.results.simplevaccination</span>
@@ -923,7 +923,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_adding_files/figure-html/cell-3-output-1.png" width="583" height="432" class="figure-img"></p>
+<p><img src="modules_adding_files/figure-html/cell-3-output-1.png" width="596" height="432" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -933,7 +933,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="modules-from-functions">Modules from functions</h2>
 <p>For quick, one-off logic you don’t need a full class. Any module type can be created from a plain function that takes the sim as its only argument: the function becomes the module’s <code>step()</code> and is called once per timestep. This is the mechanism behind “function-based” interventions and analyzers.</p>
 <p>The easiest way is to pass the function directly — Starsim converts it to the right module type automatically, using the function’s name as the module name:</p>
-<div id="996362df" class="cell" data-execution_count="3">
+<div id="ff6a2d52" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1406,7 +1406,7 @@ knockdown</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

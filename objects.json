@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 873,
+  "count": 877,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -2393,6 +2393,14 @@
       "role": "class",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.rand_raw",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.randint.hash_dtype",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.randint.hash_dtype",
       "dispname": "-"
     },
     {
@@ -5300,6 +5308,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.time.DateArray.days_since",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.DateArray.days_since",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.time.DateArray.is_",
       "domain": "py",
       "role": "function",
@@ -6746,6 +6762,22 @@
       "priority": "1",
       "uri": "api/library.mnch.html#starsim.library.mnch.NeonatalSepsis",
       "dispname": "starsim.library.mnch.NeonatalSepsis"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_infection.fh",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.fetal_infection.fh",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.library.mnch.fetal_health.fetal_infection.fh",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/library.mnch.html#starsim.library.mnch.fetal_infection.fh",
+      "dispname": "starsim.library.mnch.fetal_infection.fh"
     },
     {
       "name": "starsim.library.mnch.fetal_infection.step",
@@ -9257,6 +9289,14 @@
       "role": "class",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.rand_raw",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.randint.hash_dtype",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.randint.hash_dtype",
       "dispname": "-"
     },
     {
@@ -11881,6 +11921,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/sim.html#starsim.sim.diff_sims",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.DateArray.days_since",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/time.html#starsim.time.DateArray.days_since",
       "dispname": "-"
     },
     {

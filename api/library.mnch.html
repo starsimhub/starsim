@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -640,6 +640,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.library.mnch.fetal_infection" id="toc-starsim.library.mnch.fetal_infection" class="nav-link" data-scroll-target="#starsim.library.mnch.fetal_infection">fetal_infection</a>
   <ul class="collapse">
   <li><a href="#parameters-7" id="toc-parameters-7" class="nav-link" data-scroll-target="#parameters-7">Parameters</a></li>
+  <li><a href="#attributes-1" id="toc-attributes-1" class="nav-link" data-scroll-target="#attributes-1">Attributes</a></li>
   <li><a href="#methods-2" id="toc-methods-2" class="nav-link" data-scroll-target="#methods-2">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.library.mnch.fetal_infection.step" id="toc-starsim.library.mnch.fetal_infection.step" class="nav-link" data-scroll-target="#starsim.library.mnch.fetal_infection.step">step</a></li>
@@ -648,7 +649,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.library.mnch.treat_pregnant" id="toc-starsim.library.mnch.treat_pregnant" class="nav-link" data-scroll-target="#starsim.library.mnch.treat_pregnant">treat_pregnant</a>
   <ul class="collapse">
   <li><a href="#parameters-8" id="toc-parameters-8" class="nav-link" data-scroll-target="#parameters-8">Parameters</a></li>
-  <li><a href="#attributes-1" id="toc-attributes-1" class="nav-link" data-scroll-target="#attributes-1">Attributes</a></li>
+  <li><a href="#attributes-2" id="toc-attributes-2" class="nav-link" data-scroll-target="#attributes-2">Attributes</a></li>
   </ul></li>
   </ul></li>
   </ul></li>
@@ -718,7 +719,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>birth_outcome_keys</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#list">list</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#list">list</a></td>
 <td>outcome names — each needs a <code>ti_&lt;key&gt;</code> state</td>
 <td><em>required</em></td>
 </tr>
@@ -803,25 +804,25 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>interp_fn</td>
-<td><a href="https://docs.python.org/3/library/functions.html#callable">callable</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#callable">callable</a></td>
 <td>interpolation function with signature (x, xp, fp) -&gt; array (default np.interp)</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>sga_ratio</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>fraction of GA-appropriate weight below which SGA is declared</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>lbw_threshold</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>birth weight in grams below which LBW is declared</td>
 <td><em>required</em></td>
 </tr>
 <tr class="odd">
 <td>vlbw_threshold</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>birth weight in grams below which VLBW is declared</td>
 <td><em>required</em></td>
 </tr>
@@ -929,7 +930,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>penalty</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>fractional weight reduction; negative = growth boost</td>
 <td><em>required</em></td>
 </tr>
@@ -962,7 +963,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>shift_weeks</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>shift in weeks; positive = earlier delivery</td>
 <td><em>required</em></td>
 </tr>
@@ -1035,7 +1036,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>amount</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>amount to reverse</td>
 <td><em>required</em></td>
 </tr>
@@ -1067,7 +1068,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>fraction</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a> / <a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>fraction to recover (0-1)</td>
 <td><em>required</em></td>
 </tr>
@@ -1096,7 +1097,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>beta</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>transmission rate — set to 0 since infection is only at birth</td>
 <td><em>required</em></td>
 </tr>
@@ -1166,10 +1167,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.library.mnch.fetal_infection" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.library.mnch.fetal_infection">fetal_infection</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>library.mnch.fetal_infection(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>library.mnch.fetal_infection(pars<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Connect a disease to fetal health outcomes during pregnancy.</p>
 <p>Monitors for infections in pregnant women and applies fetal damage: - <strong>Timing shift</strong>: brings delivery forward (increases preterm birth risk). Drawn from a lognormal distribution per affected pregnancy. - <strong>Growth restriction</strong>: reduces birth weight by a fixed fractional penalty.</p>
-<p>Damage is applied at two points: 1. At conception, if the mother is already infected (via a conception callback registered with FetalHealth). 2. During pregnancy, when a new infection occurs (detected in <code>step()</code> by checking <code>ti_infected == self.ti</code>).</p>
+<p>Damage is applied at two points: 1. At conception, if the mother is already infected (via a conception callback registered with FetalHealth). 2. During pregnancy, when a new infection occurs (detected in <code>step()</code> by checking <code>ti_infected == self.ti - 1</code>, since transmission happens after connectors).</p>
 <p>Requires <a href="../api/library.mnch.html#starsim.library.mnch.FetalHealth" title="0"><code>ssl.mnch.FetalHealth()</code></a> in <code>custom</code> and an SIR disease in <a href="../api/diseases.html#starsim.diseases" title="0"><code>diseases</code></a>.</p>
 <section id="parameters-7" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h4>
@@ -1191,7 +1192,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="even">
 <td>growth_penalty</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>fractional birth weight reduction per infection (default: 0.15 = 15%)</td>
 <td><em>required</em></td>
 </tr>
@@ -1205,7 +1206,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
     def _apply_damage(self, uids):
         # Custom damage logic, e.g. stage-dependent penalties
-        fh = self.sim.custom['fetal_health']
+        fh = self.fh
         disease = self.sim.diseases.my_disease
         severe = disease.severe[uids]
         mild_uids   = uids[~severe]
@@ -1213,6 +1214,23 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
         fh.apply_growth_restriction(mild_uids, 0.05)
         fh.apply_growth_restriction(severe_uids, 0.25)
         ...</code></pre>
+</section>
+<section id="attributes-1" class="level4">
+<h4 class="anchored" data-anchor-id="attributes-1">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.library.mnch.fetal_infection.fh">fh</a></td>
+<td>Shortcut to the FetalHealth module</td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="methods-2" class="level4">
 <h4 class="anchored" data-anchor-id="methods-2">Methods</h4>
@@ -1243,8 +1261,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    disease<span class="op">=</span><span class="st">'sir'</span>,</span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    start_year<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    end_year<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    pars<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Treat infected pregnant women and partially reverse fetal damage.</p>
 <p>Each timestep, identifies pregnant women infected with the target disease, treats a fraction of them (curing infection), and reverses a portion of the accumulated fetal damage (growth restriction and timing shift).</p>
 <p>Treatment only applies between <code>start_year</code> and <code>end_year</code>. If not specified, defaults to the full simulation period.</p>
@@ -1262,21 +1281,21 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tbody>
 <tr class="odd">
 <td>disease</td>
-<td><a href="https://docs.python.org/3/library/stdtypes.html#str">str</a></td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#str">str</a></td>
 <td>name of the target disease (default: ‘sir’)</td>
 <td><code>'sir'</code></td>
 </tr>
 <tr class="even">
 <td>start_year</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>first year treatment is available (default: sim start)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="odd">
 <td>end_year</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>last year treatment is available (default: sim end)</td>
-<td><a href="https://docs.python.org/3/library/constants.html#None" title="1"><code>None</code></a></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
 <tr class="even">
 <td>p_treat</td>
@@ -1286,21 +1305,21 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td>tx_growth_reversal</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>par: fraction of growth restriction to reverse (0-1)</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>tx_timing_reversal</td>
-<td><a href="https://docs.python.org/3/library/functions.html#float">float</a></td>
+<td><a href="https://docs.python.org/3/builtins/functions.html#float">float</a></td>
 <td>par: fraction of timing shift to reverse (0-1)</td>
 <td><em>required</em></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="attributes-1" class="level4 doc-section doc-section-attributes">
-<h4 class="doc-section doc-section-attributes anchored" data-anchor-id="attributes-1">Attributes</h4>
+<section id="attributes-2" class="level4 doc-section doc-section-attributes">
+<h4 class="doc-section doc-section-attributes anchored" data-anchor-id="attributes-2">Attributes</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1759,7 +1778,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

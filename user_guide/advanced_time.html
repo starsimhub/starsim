@@ -85,9 +85,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f82da039d528b6d641c3350d1714121e.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f79c51ff5e30854ac28238745b8bb7a4.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -764,7 +764,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="dates" class="level2">
 <h2 class="anchored" data-anchor-id="dates">Dates</h2>
 <p>Starsim defines a custom date object, <a href="../api/time.html#starsim.time.date" title="0"><code>ss.date</code></a>, which is based on <a href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timestamp.html#pd.Timestamp" title="1"><code>pd.Timestamp</code></a>. It is quite flexible in terms of input:</p>
-<div id="bdf735ed" class="cell" data-execution_count="1">
+<div id="fb801bd8" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> datetime <span class="im">as</span> dt</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
@@ -784,7 +784,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Dates are interchangeable with floating point years (although be careful, as despite our best efforts, some rounding errors can still occur):</p>
-<div id="73b09757" class="cell" data-execution_count="2">
+<div id="dbf3598f" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.date(<span class="st">'2025.08.02'</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.years)</span>
@@ -796,32 +796,21 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Like many Starsim objects, you can get all the properties of an <a href="../api/time.html#starsim.time.date" title="0"><code>ss.date</code></a> object with <code>.disp()</code>:</p>
-<div id="b5f3493c" class="cell" data-execution_count="3">
+<div id="c12a9d6d" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>d.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>&lt;starsim.time.date at 0x7fcee2cb15d0&gt;
+<pre><code>&lt;starsim.time.date at 0x7fdfe76704d0&gt;
 [&lt;class 'starsim.time.date'&gt;, &lt;class 'pandas.Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.timestamps._Timestamp'&gt;, &lt;class 'pandas._libs.tslibs.base.ABCTimestamp'&gt;, &lt;class 'datetime.datetime'&gt;, &lt;class 'datetime.date'&gt;]
 ————————————————————————————————————————————————————————————————————————
 Methods:
-  _from_dt64()            from_year()             to_json()               
-  _from_value_and_reso()  fromordinal()           to_julian_date()        
-  _rebuild()              fromtimestamp()         to_numpy()              
-  _reset_class()          isocalendar()           to_pandas()             
-  _round()                isoformat()             to_period()             
-  _timestamp_add()        isoweekday()            to_pydatetime()         
-  arange()                month_name()            to_year()               
-  as_unit()               normalize()             today()                 
-  astimezone()            now()                   toordinal()             
-  ceil()                  replace()               tz_convert()            
-  combine()               round()                 tz_localize()           
-  ctime()                 strftime()              tzname()                
-  date()                  strptime()              utcfromtimestamp()      
-  day_name()              subdaily()              utcnow()                
-  disp()                  time()                  utcoffset()             
-  dst()                   timestamp()             utctimetuple()          
-  floor()                 timetuple()             weekday()               
-  from_array()            timetz()                from_json()             
-  to_datetime64()         
+  _from_dt64()            from_array()            strptime()              
+  _from_value_and_reso()  from_json()             subdaily()              
+  _rebuild()              from_year()             to_json()               
+  _reset_class()          fromordinal()           to_pandas()             
+  _timestamp_add()        fromtimestamp()         to_year()               
+  arange()                now()                   today()                 
+  combine()               replace()               utcfromtimestamp()      
+  disp()                  round()                 utcnow()                
 ————————————————————————————————————————————————————————————————————————
 Properties:
   tz                      tzinfo                  years                   
@@ -837,22 +826,31 @@ Properties:
   _module_source: 'pandas._libs.tslibs.timestamps'
      _nanosecond: 0
       _repr_base: '2025-08-02 00:00:00'
+          _round: &lt;bound method Timestamp._round of &lt;2025.08.02&gt;&gt;
       _time_repr: '00:00:00'
           _value: 1754092800000000
            _year: 2025
+         as_unit: &lt;bound method _Timestamp.as_unit of &lt;2025.08.02&gt;&gt;
             asm8: numpy.datetime64('2025-08-02T00:00:00.000000')
+      astimezone: &lt;bound method Timestamp.tz_convert of &lt;2025.08.02&gt;&gt;
+            ceil: &lt;bound method Timestamp.ceil of &lt;2025.08.02&gt;&gt;
+           ctime: &lt;bound method Timestamp.ctime of &lt;2025.08.02&gt;&gt;
+            date: &lt;bound method Timestamp.date of &lt;2025.08.02&gt;&gt;
              day: 2
+        day_name: &lt;bound method _Timestamp.day_name of &lt;2025.08.02&gt;&gt;
      day_of_week: 5
      day_of_year: 214
        dayofweek: 5
        dayofyear: 214
    days_in_month: 31
      daysinmonth: 31
+             dst: &lt;bound method Timestamp.dst of &lt;2025.08.02&gt;&gt;
+           floor: &lt;bound method Timestamp.floor of &lt;2025.08.02&gt;&gt;
             fold: 0
  fromisocalendar: &lt;built-in method fromisocalendar of type object at
-                  0x559a5b5cedd [...]
+                  0x5599adc0ac4 [...]
    fromisoformat: &lt;built-in method fromisoformat of type object at
-                  0x559a5b5cedd0&gt;
+                  0x5599adc0ac40&gt;
             hour: 0
     is_leap_year: False
     is_month_end: False
@@ -861,18 +859,44 @@ Properties:
 is_quarter_start: False
      is_year_end: False
    is_year_start: False
+     isocalendar: &lt;bound method Timestamp.isocalendar of &lt;2025.08.02&gt;&gt;
+       isoformat: &lt;bound method _Timestamp.isoformat of &lt;2025.08.02&gt;&gt;
+      isoweekday: &lt;bound method Timestamp.isoweekday of &lt;2025.08.02&gt;&gt;
              max: Timestamp('294247-01-10 04:00:54.775807')
      microsecond: 0
              min: Timestamp('-290308-12-21 19:59:05.224193')
           minute: 0
            month: 8
+      month_name: &lt;bound method _Timestamp.month_name of &lt;2025.08.02&gt;&gt;
       nanosecond: 0
+       normalize: &lt;bound method _Timestamp.normalize of &lt;2025.08.02&gt;&gt;
          quarter: 3
       resolution: Timedelta('0 days 00:00:00.000001')
           second: 0
+        strftime: &lt;bound method Timestamp.strftime of &lt;2025.08.02&gt;&gt;
+            time: &lt;bound method Timestamp.time of &lt;2025.08.02&gt;&gt;
+       timestamp: &lt;bound method _Timestamp.timestamp of &lt;2025.08.02&gt;&gt;
+       timetuple: &lt;bound method Timestamp.timetuple of &lt;2025.08.02&gt;&gt;
+          timetz: &lt;bound method Timestamp.timetz of &lt;2025.08.02&gt;&gt;
+   to_datetime64: &lt;bound method _Timestamp.to_datetime64 of
+                  &lt;2025.08.02&gt;&gt;
+  to_julian_date: &lt;bound method Timestamp.to_julian_date of
+                  &lt;2025.08.02&gt;&gt;
+        to_numpy: &lt;bound method _Timestamp.to_numpy of &lt;2025.08.02&gt;&gt;
+       to_period: &lt;bound method _Timestamp.to_period of &lt;2025.08.02&gt;&gt;
+   to_pydatetime: &lt;bound method _Timestamp.to_pydatetime of
+                  &lt;2025.08.02&gt;&gt;
+       toordinal: &lt;bound method Timestamp.toordinal of &lt;2025.08.02&gt;&gt;
+      tz_convert: &lt;bound method Timestamp.tz_convert of &lt;2025.08.02&gt;&gt;
+     tz_localize: &lt;bound method Timestamp.tz_localize of &lt;2025.08.02&gt;&gt;
+          tzname: &lt;bound method Timestamp.tzname of &lt;2025.08.02&gt;&gt;
             unit: 'us'
+       utcoffset: &lt;bound method Timestamp.utcoffset of &lt;2025.08.02&gt;&gt;
+    utctimetuple: &lt;bound method Timestamp.utctimetuple of
+                  &lt;2025.08.02&gt;&gt;
            value: 1754092800000000000
             week: 31
+         weekday: &lt;bound method Timestamp.weekday of &lt;2025.08.02&gt;&gt;
       weekofyear: 31
             year: 2025
 ————————————————————————————————————————————————————————————————————————
@@ -880,7 +904,7 @@ is_quarter_start: False
 </div>
 </div>
 <p>You can do some kinds of arithmetic on date, mostly addition or subtraction:</p>
-<div id="cd168c9c" class="cell" data-execution_count="4">
+<div id="38963f57" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.date(<span class="st">'2015.8.10'</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d <span class="op">+</span> ss.years(<span class="dv">10</span>))</span>
@@ -892,7 +916,7 @@ is_quarter_start: False
 </div>
 </div>
 <p>There is also an <a href="../api/time.html#starsim.time.DateArray" title="0"><code>ss.DateArray()</code></a> object, which you are unlikely to need to work with directly, but which is used to handle timelines (more on those later):</p>
-<div id="31648b70" class="cell" data-execution_count="5">
+<div id="1dfeaa1b" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>datearr <span class="op">=</span> ss.date.from_array(np.arange(<span class="dv">1990</span>, <span class="dv">2020</span>))</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'From an array:</span><span class="ch">\n</span><span class="st">'</span>, datearr)</span>
@@ -918,7 +942,7 @@ Using arange:
 <h2 class="anchored" data-anchor-id="timeline">Timeline</h2>
 <p>Since different modules are allowed to have their own start, stop, and timestep, we need to coordinate their events with each other and with the sim. The class that does this is called <a href="../api/timeline.html#starsim.timeline.Timeline" title="0"><code>ss.Timeline</code></a>. You will rarely (if ever) need to invoke it directly, but it’s important to understand how it works.</p>
 <p>It’s so important, it’s stored as <code>.t</code> in the sim and each module, e.g.&nbsp;<code>sim.t</code>. Let’s start with a simple example:</p>
-<div id="68a88f02" class="cell" data-execution_count="6">
+<div id="ed51ec74" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(verbose<span class="op">=</span><span class="va">False</span>).run() <span class="co"># Can use an empty sim</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sim.t)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -926,7 +950,7 @@ Using arange:
 </div>
 </div>
 <p>The <a href="../api/timeline.html#starsim.timeline.Timeline" title="0"><code>ss.Timeline</code></a> object has several different ways of representing (the same) time; each is useful for a different purpose. We can see each of these with the <code>.to_dict()</code> method:</p>
-<div id="c4978040" class="cell" data-execution_count="7">
+<div id="7173ff44" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> ss.Timeline(start<span class="op">=</span><span class="dv">2020</span>, stop<span class="op">=</span><span class="dv">2022</span>, dt<span class="op">=</span>ss.month)</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(t.to_dict())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -938,11 +962,9 @@ DateArray([years(2020), years(2020.08), years(2020.17), years(2020.25),
            years(2021.33), years(2021.42), years(2021.5), years(2021.58),
            years(2021.67), years(2021.75), years(2021.83), years(2021.92),
            years(2022)], dtype=object)
-————————————————————————————————————————
 #1. 'tivec':
 array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
        17, 18, 19, 20, 21, 22, 23, 24])
-————————————————————————————————————————
 #2. 'timevec':
 DateArray([&lt;2020.01.01&gt;, &lt;2020.01.31&gt;, &lt;2020.03.02&gt;, &lt;2020.04.02&gt;,
            &lt;2020.05.02&gt;, &lt;2020.06.02&gt;, &lt;2020.07.02&gt;, &lt;2020.08.01&gt;,
@@ -951,7 +973,6 @@ DateArray([&lt;2020.01.01&gt;, &lt;2020.01.31&gt;, &lt;2020.03.02&gt;, &lt;2020.
            &lt;2021.05.03&gt;, &lt;2021.06.02&gt;, &lt;2021.07.02&gt;, &lt;2021.08.02&gt;,
            &lt;2021.09.01&gt;, &lt;2021.10.02&gt;, &lt;2021.11.01&gt;, &lt;2021.12.02&gt;,
            &lt;2022.01.01&gt;], dtype=object)
-————————————————————————————————————————
 #3. 'yearvec':
 array([2020.        , 2020.08333333, 2020.16666667, 2020.25      ,
        2020.33333333, 2020.41666667, 2020.5       , 2020.58333333,
@@ -960,7 +981,6 @@ array([2020.        , 2020.08333333, 2020.16666667, 2020.25      ,
        2021.33333333, 2021.41666667, 2021.5       , 2021.58333333,
        2021.66666667, 2021.75      , 2021.83333333, 2021.91666667,
        2022.        ])
-————————————————————————————————————————
 #4. 'datevec':
 DateArray([&lt;2020.01.01&gt;, &lt;2020.01.31&gt;, &lt;2020.03.02&gt;, &lt;2020.04.02&gt;,
            &lt;2020.05.02&gt;, &lt;2020.06.02&gt;, &lt;2020.07.02&gt;, &lt;2020.08.01&gt;,
@@ -969,22 +989,9 @@ DateArray([&lt;2020.01.01&gt;, &lt;2020.01.31&gt;, &lt;2020.03.02&gt;, &lt;2020.
            &lt;2021.05.03&gt;, &lt;2021.06.02&gt;, &lt;2021.07.02&gt;, &lt;2021.08.02&gt;,
            &lt;2021.09.01&gt;, &lt;2021.10.02&gt;, &lt;2021.11.01&gt;, &lt;2021.12.02&gt;,
            &lt;2022.01.01&gt;], dtype=object)
-————————————————————————————————————————
 #5. 'relvec':
-array([datedur(0), datedur(days=30), datedur(months=2, days=1),
-       datedur(months=3, days=1), datedur(months=4, days=1),
-       datedur(months=5, days=1), datedur(months=6, days=1),
-       datedur(months=7), datedur(months=8), datedur(months=9),
-       datedur(months=10), datedur(months=11, days=1), datedur(years=1),
-       datedur(years=1, days=30), datedur(years=1, months=2, days=2),
-       datedur(years=1, months=3, days=1),
-       datedur(years=1, months=4, days=2),
-       datedur(years=1, months=5, days=1),
-       datedur(years=1, months=6, days=1),
-       datedur(years=1, months=7, days=1), datedur(years=1, months=8),
-       datedur(years=1, months=9, days=1), datedur(years=1, months=10),
-       datedur(years=1, months=11, days=1), datedur(years=2)],
-      dtype=object)</code></pre>
+array([ 0.,  1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11., 12.,
+       13., 14., 15., 16., 17., 18., 19., 20., 21., 22., 23., 24.])</code></pre>
 </div>
 </div>
 <p>We have four different vectors that represent the time:</p>
@@ -995,7 +1002,7 @@ array([datedur(0), datedur(days=30), datedur(months=2, days=1),
 <li><code>tivec</code>: timesteps.</li>
 </ul>
 <p>The other two, <code>tvec</code> and <code>timevec</code>, match one of these four, but which one they match depends on what the user’s inputs are. For example, if we use a duration-based timeline, we get different results:</p>
-<div id="abe96419" class="cell" data-execution_count="8">
+<div id="ea540429" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> ss.Timeline(start<span class="op">=</span>ss.days(<span class="dv">0</span>), stop<span class="op">=</span>ss.days(<span class="dv">10</span>), dt<span class="op">=</span>ss.day)</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(t.to_dict())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -1016,17 +1023,14 @@ DateArray([datedur(0), datedur(, +23:59:60), datedur(days=1, +23:59:60),
            datedur(days=6, +23:59:60), datedur(weeks=1, +23:59:60),
            datedur(weeks=1, days=1, +23:59:60),
            datedur(weeks=1, days=2, +23:59:60)], dtype=object)
-#5. 'relvec':
-array([0.        , 0.99999999, 1.99999998, 2.99999997, 3.99999996,
-       4.99999995, 5.99999994, 6.99999993, 7.99999992, 8.99999991,
-       9.9999999 ])</code></pre>
+#5. 'relvec':  array([ 0.,  1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10.])</code></pre>
 </div>
 </div>
 <p><code>tvec</code> is what the <a href="../api/timeline.html#starsim.timeline.Timeline" title="0"><code>ss.Timeline</code></a> object uses internally as “canonical” simulation time. <code>timevec</code> is the “most-human-friendly” representation of the time, and is what is e.g.&nbsp;stored in results to help with plotting.</p>
 <section id="time-points-vs.-timesteps-and-dur-vs.-stop" class="level3">
 <h3 class="anchored" data-anchor-id="time-points-vs.-timesteps-and-dur-vs.-stop">Time points vs.&nbsp;timesteps, and <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a> vs.&nbsp;<code>stop</code></h3>
 <p>The time vectors include <strong>both</strong> the start and the stop endpoints. This means the number of time <em>points</em> (<code>npts</code>, the length of the time vectors) is one more than the number of <em>steps</em> taken: the state is recorded at the start, then after each step. For example, running from <code>0</code> to <code>1</code> with <code>dt=1</code> takes a single step but produces two time points:</p>
-<div id="87f1a871" class="cell" data-execution_count="9">
+<div id="a5157781" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> ss.Timeline(start<span class="op">=</span><span class="dv">0</span>, stop<span class="op">=</span><span class="dv">1</span>, dt<span class="op">=</span><span class="fl">1.0</span>)</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>t.init()</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Time points:'</span>, t.timevec)</span>
@@ -1077,7 +1081,7 @@ npts: 2 (= 1 step + 1)</code></pre>
 <h3 class="anchored" data-anchor-id="durations">Durations</h3>
 <p>Durations are relatively straightforward. The base class for durations is <a href="../api/time.html#starsim.time.dur" title="0"><code>ss.dur()</code></a>, but in almost all cases you’ll want to use <code>ss.days()</code>, <code>ss.weeks()</code>, <code>ss.months()</code>, or <code>ss.years()</code> instead. (In fact, if you type <code>ss.dur(3, 'years')</code>, it will return <code>ss.years(3)</code>.)</p>
 <p>Durations operate more or less how you would expect, with the left hand operator taking precedence:</p>
-<div id="3e969d36" class="cell" data-execution_count="10">
+<div id="3e98bc1f" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>d1 <span class="op">=</span> ss.years(<span class="dv">2</span>)</span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>d2 <span class="op">=</span> ss.days(<span class="dv">3</span>)</span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d1 <span class="op">+</span> d2)</span>
@@ -1088,7 +1092,7 @@ days(733)</code></pre>
 </div>
 </div>
 <p>You can also easily convert durations:</p>
-<div id="df652320" class="cell" data-execution_count="11">
+<div id="a67d7b74" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>d1 <span class="op">=</span> ss.years(<span class="dv">10</span>)</span>
 <span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d1.days) <span class="co"># Represent as days, but keep as years internally</span></span>
 <span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>d2 <span class="op">=</span> d1.to(<span class="st">'days'</span>)</span>
@@ -1100,7 +1104,7 @@ days(3650)</code></pre>
 </div>
 <p>Note: in almost all cases, you can use either with or without the ‘s’, i.e.&nbsp;<code>ss.years(1).to('day')</code> or <code>ss.years(1).to('days')</code> both work.</p>
 <p>Also, there are shortcut classes for unit values:</p>
-<div id="2d9fcff8" class="cell" data-execution_count="12">
+<div id="4e3effe6" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.weeks(<span class="dv">1</span>))</span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.week)</span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> ss.weeks(<span class="fl">1.0</span>) <span class="op">==</span> ss.weeks(<span class="dv">1</span>) <span class="op">==</span> ss.week</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1112,7 +1116,7 @@ week</code></pre>
 <section id="sec-to-dt" class="level4">
 <h4 class="anchored" data-anchor-id="sec-to-dt">Durations and timesteps</h4>
 <p>Starsim states such as <code>ti_infected</code> or <code>ti_recovered</code> store <em>timestep indices</em>, not durations: they count timesteps, so their meaning depends on the module’s <code>dt</code>. A duration therefore has to be resolved against <code>dt</code> before it can be used in that arithmetic, and <code>.to_dt()</code> is what does it:</p>
-<div id="f61fd6d0" class="cell" data-execution_count="13">
+<div id="5ef97dee" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>dur <span class="op">=</span> ss.years(<span class="dv">100</span>)</span>
 <span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dur.to_dt(ss.months(<span class="dv">1</span>))) <span class="co"># 1200 monthly timesteps</span></span>
 <span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dur.to_dt(ss.months(<span class="dv">3</span>))) <span class="co"># 400 quarterly timesteps</span></span>
@@ -1133,7 +1137,7 @@ week</code></pre>
 <span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># × WRONG -- the unit is silently discarded, so ss.years(100), ss.months(100)</span></span>
 <span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a>        <span class="co"># and ss.days(100) all mean "100 timesteps"</span></span>
 <span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.ti_clearance[uids] <span class="op">=</span> <span class="va">self</span>.ti_infected[uids] <span class="op">+</span> <span class="va">self</span>.pars.dur_persist</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Note that <a href="https://docs.python.org/3/library/functions.html#float" title="1"><code>float()</code></a> on a duration raises an exception, since there is no single number a duration corresponds to: <code>ss.years(100)</code>, <code>ss.months(100)</code> and <code>ss.days(100)</code> all have a value of <code>100</code>, but they are 100 timesteps only if the timestep happens to match the unit, and they are 100, 8.3 and 0.27 years respectively. Use <code>.to_dt()</code> for timesteps, <code>.years</code> (or <code>.to('years')</code>) when you need years, e.g.&nbsp;to compare against an agent’s age, and <code>.value</code> if you really do want the magnitude in the duration’s own units.</p>
+<p>Note that <a href="https://docs.python.org/3/builtins/functions.html#float" title="1"><code>float()</code></a> on a duration raises an exception, since there is no single number a duration corresponds to: <code>ss.years(100)</code>, <code>ss.months(100)</code> and <code>ss.days(100)</code> all have a value of <code>100</code>, but they are 100 timesteps only if the timestep happens to match the unit, and they are 100, 8.3 and 0.27 years respectively. Use <code>.to_dt()</code> for timesteps, <code>.years</code> (or <code>.to('years')</code>) when you need years, e.g.&nbsp;to compare against an agent’s age, and <code>.value</code> if you really do want the magnitude in the duration’s own units.</p>
 <p>This only applies to durations you use directly. If the duration comes from a distribution (the usual case, e.g.&nbsp;<code>self.pars.dur_inf.rvs(uids)</code>), the conversion has already been done for you and the draws are already in timesteps:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode py code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>dur_inf <span class="op">=</span> <span class="va">self</span>.pars.dur_inf.rvs(uids) <span class="co"># Already in timesteps</span></span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="va">self</span>.ti_recovered[uids] <span class="op">=</span> <span class="va">self</span>.ti <span class="op">+</span> dur_inf</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1141,7 +1145,7 @@ week</code></pre>
 <section id="date-durations" class="level4">
 <h4 class="anchored" data-anchor-id="date-durations">Date durations</h4>
 <p>In most cases, the durations above can be used for arithmetic with dates. But sometimes we need precise date arithmetic that keeps track of each unit separately. For this we can use <a href="../api/time.html#starsim.time.datedur" title="0"><code>ss.datedur</code></a>. For example:</p>
-<div id="a23f08bb" class="cell" data-execution_count="14">
+<div id="d2511b8e" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> ss.date(<span class="st">'2025.1.1'</span>)</span>
 <span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>years <span class="op">=</span> ss.years(<span class="fl">0.5</span>)</span>
 <span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>datedur <span class="op">=</span> ss.datedur(months<span class="op">=</span><span class="dv">6</span>)</span>
@@ -1154,7 +1158,7 @@ week</code></pre>
 </div>
 </div>
 <p>Why is this happening? Because 2025.5 is closer to July 2nd than July 1st. There are fewer days from the start of the year to July 1st than there are days from July 1st to the end of the year:</p>
-<div id="5f717c18" class="cell" data-execution_count="15">
+<div id="e8b44cc1" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.date(<span class="st">'2025.7.1'</span>) <span class="op">-</span> ss.date(<span class="st">'2025.1.1'</span>))</span>
 <span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ss.date(<span class="st">'2025.12.31'</span>) <span class="op">-</span> ss.date(<span class="st">'2025.7.1'</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -1171,7 +1175,7 @@ datedur(months=5, days=30)</code></pre>
 <section id="frequencies" class="level4">
 <h4 class="anchored" data-anchor-id="frequencies">Frequencies</h4>
 <p>We define a “frequency”, or <a href="../api/time.html#starsim.time.freq" title="0"><code>ss.freq</code></a>, as the “number of events happening in a given amount of time”. Frequencies are the simplest type of rate to understand, since arithmetic operators work the same as they would for a float, with the caveat that the numerator and denominator of a frequency are stored separately:</p>
-<div id="6aa6b38b" class="cell" data-execution_count="16">
+<div id="74d731e3" class="cell" data-execution_count="16">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Construct directly</span></span>
 <span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>f1 <span class="op">=</span> ss.freqperday(<span class="fl">0.5</span>)</span>
 <span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1707,7 +1711,7 @@ freqperday(5)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.1 (2026-08-29).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
