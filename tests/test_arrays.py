@@ -258,6 +258,41 @@ def test_arr_type_conversion():
 
 
 @sc.timer()
+def test_arr_2d():
+    sc.heading('Testing 2D Arr objects')
+    nv = 3
+
+    # Standalone tests
+    imm = ss.FloatArr('imm', default=0, shape=nv, mock=5)
+    two = ss.uids([0, 1])
+    imm[two, 2] = 0.8
+    assert imm[two].shape == (2, nv) # Indexing by UIDs returns one row per agent
+    assert np.array_equal((imm.col(2) > 0.5).uids, two) # Columns are 1D arrays
+    assert np.array_equal((imm > 0.5).count(axis=0), [0, 0, 2]) # Count per column
+    with pytest.raises(ValueError):
+        (imm > 0.5).uids # UIDs are not defined for 2D arrays
+
+    # Test in a sim with births and deaths
+    class VarSIS(ss.SIS):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.FloatArr('sus_imm', default=0.5, shape=nv))
+
+        def step(self):
+            out = super().step()
+            self.sus_imm[self.infected.uids, 1] += 0.1
+            return out
+
+    sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, dur=10).run()
+    imm = sim.diseases.varsis.sus_imm
+    assert imm.raw.shape == (sim.people.uid.len_tot, nv) # Grows along the first axis
+    assert imm.values.shape == (len(sim.people), nv) # Values are active agents only
+    assert imm[:, 1].mean() > imm[:, 0].mean() == 0.5 # Only column 1 changes
+    assert 'n_sus_imm' not in sim.results.varsis # No automatic results
+    return sim
+
+
+@sc.timer()
 def test_uids_operators():
     sc.heading('Testing uids + and += operators')
 
@@ -484,6 +519,7 @@ if __name__ == '__main__':
     sims  = test_arrs()
     arrs  = test_arr_inplace()
     vals  = test_arr_type_conversion()
+    arr2d = test_arr_2d()
     uids  = test_uids_operators()
     cat   = test_uids_concatenate()
     wrap  = test_uids_array_wrap()
