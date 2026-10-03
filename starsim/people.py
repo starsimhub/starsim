@@ -528,11 +528,13 @@ class People:
         return
 
     def to_df(self):
-        """ Export to dataframe; 2D states have one column per value, e.g. `sus_imm_0` """
+        """ Export to dataframe; 2D states have one column per value, e.g. `sus_imm_0` (or `sus_imm_wild` if the columns are named) """
         cols = dict(uid=self.uid, slot=self.slot)
         for key,state in self.states.items():
             if state.ndim > 1:
-                cols.update({f'{key}_{i}':col for i,col in enumerate(state.values.reshape(len(state), -1).T)})
+                vals = state.values.reshape(len(state), int(np.prod(state.item_shape))).T
+                names = state.columns if state.columns is not None else range(len(vals))
+                cols.update({f'{key}_{name}':col for name,col in zip(names, vals)})
             else:
                 cols[key] = state
         df = sc.dataframe(**cols)

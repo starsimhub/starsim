@@ -415,13 +415,14 @@ class Sim(ss.Base):
         The factor to scale results by: a number, or an array with one value per timestep if `pars.rescale=True`
 
         Args:
-            module (`ss.Module`): if provided, interpolate the scale onto the module's timevec (if different from the sim's)
+            module (`ss.Module`): if provided, map the scale onto the module's timevec (if different from the sim's)
         """
         if not self.pars.rescale:
             return self.pars.pop_scale
         scale = self.results.pop_scale.values
-        if module is not None and len(module.t) != len(scale):
-            scale = np.interp(module.t.yearvec, self.t.yearvec, scale)
+        if module is not None and not np.array_equal(module.t.yearvec, self.t.yearvec):
+            inds = np.searchsorted(self.t.yearvec, module.t.yearvec + 1e-9, side='right') - 1 # Use the most recent sim timestep, since the scale only changes on sim timesteps; 1e-9 avoids floating-point error
+            scale = scale[np.maximum(inds, 0)]
         return scale
 
     def init_rescale(self):

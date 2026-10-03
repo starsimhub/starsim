@@ -1009,6 +1009,12 @@ class SIS(Infection):
         self.update_immunity()
         return
 
+    def make_naive(self, uids, skip_states=None):
+        """ As `ss.Disease.make_naive()`, but also resets `rel_sus` by default, since SIS sets it from its own immunity """
+        if skip_states is None:
+            skip_states = ['rel_trans']
+        return super().make_naive(uids, skip_states=skip_states)
+
     def update_immunity(self):
         """ Apply exponential waning to immunity and update relative susceptibility. """
         waning = self.pars.waning.to_prob() # Exponential waning (NB: the exponential conversion is calculated automatically by the timepar)

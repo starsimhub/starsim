@@ -147,7 +147,7 @@ class Result(ss.BaseArr):
         col = self.columns[i]
         label = sc.ifelse(self.label, self.name)
         res = Result(name=f'{self.name}_{col}', label=f'{label} ({col})', dtype=self.dtype, scale=self.scale,
-                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, summarize_by=self.summarize_by)
+                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, summarize_by=self.summarize_by or self.summary_method()) # Infer the summary method from the parent's name, not the column's
         res.values = self.values[:, i] # Set after creation, since init_values() would copy
         res.low = self.low[:, i] if self.low is not None else None
         res.high = self.high[:, i] if self.high is not None else None
