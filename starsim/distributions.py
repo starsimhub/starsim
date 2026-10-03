@@ -34,6 +34,7 @@ _INV53  = np.float64(1.0 / 9007199254740992.0) # 2^-53, to map a 53-bit int to [
 _INV24  = np.float64(1.0 / 16777216.0)         # 2^-24, to map a 24-bit int to [0, 1) (float32 mantissa)
 _U30, _U27, _U31, _U11 = np.uint64(30), np.uint64(27), np.uint64(31), np.uint64(11)
 _U40 = np.uint64(40) # 64 - 24: keep the top 24 bits for a float32-representable uniform
+_ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniforms, so they're independent of the draw itself
 
 @nb.njit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
           nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
@@ -83,6 +84,14 @@ def hash_uniforms(seed, ind, slots, dtype=None):
     if dtype is None:
         dtype = ss.dtypes.float
     dtype = np.dtype(dtype)
+
+    # The kernel needs uint64 slots; slots are usually int64 (and non-negative), so reinterpret them rather than copy
+    slots = np.asarray(slots)
+    if slots.dtype == np.int64: # Usual case
+        slots = slots.view(np.uint64)
+    else: # Handle empty slots
+        slots = slots.astype(np.uint64)
+
     out = np.empty(slots.shape[0], dtype=dtype)
     if dtype.itemsize <= 4: # float32: keep the top 24 bits
         _hash_uniforms_fill(seed, ind, slots, out, _U40, _INV24)
@@ -332,6 +341,7 @@ class Dist:
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
         unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
+        round (bool/str): if True (or 'stochastic'), randomly round each value up or down to an integer; if 'nearest', round to the nearest integer (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
         strict (bool): if True, require initialization and invalidate after each call to rvs()
@@ -355,6 +365,9 @@ class Dist:
         dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
         dur_infection.init(force=True).plot_hist() # Show results
 
+        # Create a duration that is rounded to the nearest whole number of days
+        dur_latent = ss.lognorm_ex(mean=ss.days(4.5), std=ss.days(1.5), round='nearest')
+
         # Create a distribution manually
         dist = ss.Dist(dist=sps.norm, loc=3).init(force=True)
         dist.rvs(10) # Return 10 normally distributed random numbers
@@ -366,7 +379,7 @@ class Dist:
     unitless_pars = None # Parameters that cannot have time units, e.g. ('c',), the shape parameter, for ss.weibull(); None means no check
     hash_dtype = None # The dtype of the CRN uniforms passed to ppf(); None for ss.dtypes.float
 
-    def __init__(self, dist=None, distname=None, name=None, unit=None, seed=None, offset=None,
+    def __init__(self, dist=None, distname=None, name=None, unit=None, round=False, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -377,6 +390,7 @@ class Dist:
         self.name = name
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
         self.unit = ss.time.get_timepar_class(unit) # The timepar class -- can be None
+        self.round = self.validate_round(round) # Whether and how to round the values
         self.seed = seed # Usually determined once added to the container
         self.user_seed = seed # Stored separately so re-initializing doesn't add the offset twice
         self.offset = offset
@@ -1043,13 +1057,16 @@ class Dist:
         rvs = self.dist.ppf(rands)
         return rvs
 
-    def rvs(self, n=1, round=False, reset=False):
+    def rvs(self, n=1, round=None, reset=False):
         """
         Get random variates -- use this!
 
+        If the distribution is a duration, the values are rounded to a whole number
+        of timesteps (e.g. whole days if `dt=ss.days(1)`).
+
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
-            round (bool): if True, randomly round up or down based on how close the value is
+            round (bool/str): if True (or 'stochastic'), randomly round up or down based on how close the value is; if 'nearest', round to the nearest integer; if None, use the value set when the distribution was created
             reset (bool): whether to automatically reset the random number distribution state after being called
         """
         # Check for readiness
@@ -1090,7 +1107,7 @@ class Dist:
             # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
             # Generates exactly len(uids) numbers (no slot_scale blowup) while preserving CRN.
             # (choice/histogram set _use_ppf=False and keep the native path below.)
-            rands = hash_uniforms(self.seed, self.ind, self._slots.astype(np.uint64), dtype=self.hash_dtype)
+            rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype)
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         elif self._use_ppf:
             rands = self.rand(size)
@@ -1122,8 +1139,10 @@ class Dist:
                 raise ValueError(errormsg)
 
         # Round if needed
+        if round is None:
+            round = self.round
         if round:
-            rvs = self.randround(rvs)
+            rvs = self.round_rvs(rvs, round)
 
         # Tidy up
         if self.sim and self.sim.diagnostics and self.sim.diagnostics.rvs is not None: # Need not None since dict is empty at first
@@ -1148,9 +1167,34 @@ class Dist:
 
         return rvs
 
-    def randround(self, rvs):
-        """ Round the values up or down to an integer stochastically; usually called via `dist.rvs(round=True)` """
-        rvs = np.array(np.floor(rvs+self.rand(rvs.shape)), dtype=ss_int) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
+    @staticmethod
+    def validate_round(round):
+        """ Check that the rounding option is valid; not for the user """
+        if round not in [None, False, True, 'stochastic', 'nearest']:
+            errormsg = f'Invalid rounding option "{round}": must be True/"stochastic", "nearest", or False'
+            raise ValueError(errormsg)
+        return round
+
+    def round_rvs(self, rvs, round):
+        """ Round the values (in timesteps, for durations); usually called via `dist.rvs(round=True)` """
+        if round == 'nearest':
+            return np.round(rvs).astype(ss_int)
+        self.validate_round(round)
+        return self.randround(rvs, slots=self._slots)
+
+    def randround(self, rvs, slots=None):
+        """
+        Round the values up or down to an integer stochastically; usually called via `dist.rvs(round=True)`
+
+        Args:
+            rvs (array): the values to round
+            slots (array): if provided, use one CRN uniform per slot (distinct from the draw itself) rather than the next numbers from the RNG
+        """
+        if slots is not None:
+            rands = hash_uniforms(self.seed, self.ind + _ROUND_IND, slots)
+        else:
+            rands = self.rand(rvs.shape)
+        rvs = np.array(np.floor(rvs+rands), dtype=ss_int) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
         return rvs
 
     def to_json(self):
@@ -1215,7 +1259,7 @@ class Dist:
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
              'poisson', 'nbinom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
-             'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
+             'randint', 'rand_raw', 'bernoulli', 'choose_n', 'choice', 'histogram']
 
 
 
@@ -1704,6 +1748,79 @@ class bernoulli(Dist):
     def split(self, uids=None):
         """ Alias to filter(uids, both=True) """
         return self.filter(uids=uids, both=True)
+
+
+class choose_n(Dist):
+    """
+    Choose exactly n agents (without replacement) from a set of candidate UIDs
+
+    Like `ss.bernoulli`, use the filter() method, which returns the chosen UIDs.
+    One random number is drawn per candidate (based on its slot), and the n
+    candidates with the smallest numbers are chosen. This means that if the
+    candidates change slightly (e.g. between two scenarios), most of the same
+    agents are still chosen (unlike e.g. `ss.choice(replace=False)`).
+
+    If weights are supplied, candidates are chosen with probability proportional
+    to their weight, via the Efraimidis–Spirakis key `(1-u)**(1/w)`. This is computed
+    as `-log(1-u)/w`, so the n smallest are chosen as before, and equal weights
+    give the same agents as no weights. Candidates with zero weight are never
+    chosen, so fewer than n UIDs are returned if fewer than n candidates have
+    nonzero weight.
+
+    Args:
+        n (int/func): the number of agents to choose (or a function returning it); if more than the number of candidates, all are chosen
+        weights (array/func): if supplied, the relative weight of each candidate (or a function returning them), matching the UIDs passed to filter()
+        die (bool): if True, raise an exception if fewer than n agents can be chosen (default: False)
+
+    Examples:
+        ```python
+        # Seed exactly 20 infections
+        sir = ss.SIR(init_prev=ss.choose_n(20))
+
+        # Choose 5 agents, weighted by age
+        chooser = ss.choose_n(5, weights=lambda self, sim, uids: sim.people.age[uids])
+        ```
+    """
+    valid_pars = ['n', 'weights']
+    scaling = scale_types.false
+    unitless_pars = ('n', 'weights')
+
+    def __init__(self, n=1, weights=None, die=False, **kwargs):
+        super().__init__(distname='choose_n', n=n, weights=weights, **kwargs)
+        self.die = die
+        return
+
+    def make_rvs(self):
+        return self.rand(self._size)
+
+    def ppf(self, rands):
+        return rands
+
+    def filter(self, uids=None):
+        """ Return the chosen UIDs (sorted), i.e. min(n, len(uids)) of them """
+        if uids is None:
+            uids = self.sim.people.auids # All active UIDs
+        elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
+            uids = uids.uids
+
+        keys = self.rvs(uids) # One random number per candidate; also evaluates the parameters
+        n = min(int(self._pars.n), len(keys))
+        weights = self._pars.weights
+        if weights is not None:
+            weights = np.asarray(weights)
+            if np.any(weights < 0):
+                errormsg = f'Weights for {self} must be non-negative'
+                raise ValueError(errormsg)
+            with np.errstate(divide='ignore'): # Zero weights give infinite keys, so are never chosen
+                keys = -np.log1p(-keys)/weights
+            n = min(n, np.count_nonzero(keys < np.inf))
+        if self.die and n < int(self._pars.n):
+            errormsg = f'{self} could only choose {n} of the {int(self._pars.n)} requested agents'
+            raise ValueError(errormsg)
+        if n <= 0:
+            return ss.uids()
+        inds = np.argpartition(keys, n-1)[:n] # Indices of the n smallest keys
+        return ss.uids(np.sort(uids[inds]))
 
 
 class choice(Dist):
