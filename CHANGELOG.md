@@ -2,6 +2,33 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.7.0 (2026-10-02)
+This release adds features needed to port Covasim to Starsim (Covasim v4), and which are also useful for other disease models: 2D results and agent arrays (e.g. by variant), CRN-safe choice of exactly *N* agents, dynamic rescaling, Covasim's "hybrid" network (household, school, workplace, and community networks), and more MultiSim methods.
+
+### New features
+- 2D results: `res = ss.Result(..., groups=['wild', 'alpha'])` has shape `(npts, ngroups)`. `res.alpha` returns a 1D result for that group; scaling, `to_df()`, `sim.summarize()`, `resample()`/`annualize()`, `MultiSim.reduce()` and plotting all handle one column/line per group.
+- 2D agent arrays: `ss.FloatArr('sus_imm', shape=n_variants)` (and the same for `BoolArr`/`IntArr`) grow with the population like other states.
+- `ss.choose_n(n, weights=None)` chooses exactly `n` agents without replacement, and is CRN-safe: if the candidates change slightly, most of the same agents are chosen. It can be used for exact-count seeding, e.g. `ss.SIR(init_prev=ss.choose_n(20))`.
+- Distributions accept a `round` option at creation, e.g. `ss.lognorm_ex(ss.days(5), ss.days(2), round='nearest')`; `round=True` (or `'stochastic'`) rounds stochastically as before, and `round='nearest'` rounds deterministically (also accepted by `dist.rvs()`).
+- Dynamic rescaling, as in Covasim: with `ss.Sim(rescale=True)`, the population scale factor starts at 1 and increases to `pop_scale` as agents stop being naive, making some of them naive again via the new `disease.make_naive()`; the per-timestep scale is in `sim.results.pop_scale`, and `sim.current_scale` gives the current value. Controlled by the new sim parameters `rescale`, `rescale_threshold` and `rescale_factor`.
+- `ss.Infection.infect()` is split into `infect_route()`, which computes transmission along one network, and `finalize_infections()`, which removes duplicate infections, so multi-strain diseases can call `infect_route()` once per strain.
+- New networks: `ss.ClusterNet` (fully connected clusters, e.g. households) and `ss.HybridNet` (Covasim's household, school, work and community networks, which become four networks `h`, `s`, `w` and `c` when added to a sim). `ss.RandomNet` and `ss.RandomExactNet` have new `dynamic` (set `False` for a static network) and `age_range` parameters.
+- New network methods: `net.remove_edges()` (indices or a boolean mask), `net['p1']` to get an edge column, and `net.eligible()`; `net.from_df()` also accepts a dict of arrays, and returns the network.
+- New MultiSim methods: `combine()` (merge the sims into one larger sim), `ss.MultiSim.merge()` and `split()`, and `compare()`/`plot_compare()`.
+- The infection log (`ss.infection_log`) now records the network of each infection, and extra data per infection (e.g. `log.add_entries(uids, sources, t, variant=variants)`); it stores entries as arrays, so it is much faster.
+
+### Changes that may affect results
+- *Regression*: stochastic rounding (`dist.rvs(round=True)`) is now CRN-safe, so results that use it (e.g. `ss.NCD`) will differ.
+- *Regression*: results inside nested `ss.Results` are now scaled by `pop_scale` (previously only top-level results were).
+- *Regression*: cumulative infections are now summed after scaling, which may give differences at the level of floating-point precision.
+
+### Changes that may require migration
+- *Migration*: comparing `sim.t` (an `ss.Timeline`) to a number, or using it as an index, now raises an error; use `sim.ti` instead (e.g. `if sim.ti == 10`). Setting `self.t` on a module also gives a clearer error.
+- *Migration*: module names must be unique across all module types. Two modules with the same default name (e.g. two `ss.RandomNet()`s) are now renamed with a warning (`randomnet`, `randomnet_1`) rather than raising an error; explicitly set names that clash still raise an error.
+- *Migration*: `ss.InfectionLog` is no longer a NetworkX graph; use `log.to_df()`, or `log.to_graph()` for a graph.
+- *Migration*: `init_prev` values greater than 1 now raise an error (previously they infected everyone); use `ss.choose_n(n)` to seed a fixed number of infections.
+
+
 ## Version 3.6.2 (2026-09-30)
 This release contains many LLM-assisted bugfixes. Most changes should have relatively little impact on users, although results may differ slightly for some results in some projects.
 
