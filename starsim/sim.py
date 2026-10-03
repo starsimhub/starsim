@@ -244,7 +244,7 @@ class Sim(ss.Base):
         if getattr(module, 'has_product', False) and not any(module.product is p for p in self.products()):
             ss.SimPars.validate_name(module.product, 'products', names)
             modules.append(module.product)
-        self[key].append(module)
+        getattr(self, key).append(module) # Not self[key], since subclasses may override __getitem__
         self.pars[key][module.name] = module.pars
 
         # Initialize the module(s), as in sim.init()
