@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks. It supports co-transmission of multiple diseases and detailed modeling of intervention strategies.
 
-For a compact index of the whole public API (signatures, summaries, and default parameters), see `docs/llms.txt` (or `docs/llms-full.txt`, which adds an example for each entry), also published at https://docs.starsim.org/llms.txt. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
+For a compact index of the whole public API (signatures, summaries, and default parameters), see https://docs.starsim.org/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 
 ## Core architecture
 
@@ -46,7 +46,7 @@ cd docs && ./render
 # Build and publish to GitHub Pages
 cd docs && ./publish
 
-# Regenerate the API index (api.json, llms.txt, llms-full.txt) after changing the public API; tests/test_api.py fails if it is out of date
+# Generate the API index locally (api.json, llms.txt, llms-full.txt); these are gitignored, and are built automatically with the docs
 cd docs && python make_api.py
 ```
 
