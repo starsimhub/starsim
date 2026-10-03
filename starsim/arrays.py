@@ -69,10 +69,21 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         else:
             return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
 
+    def __setattr__(self, attr, value):
+        """ Set the values of a named column, e.g. arr.alpha = 0; also needed so arr.alpha += 1 doesn't store the column as an attribute """
+        if self.columns is not None and attr in self.columns:
+            self.col(attr)[:] = value
+        else:
+            object.__setattr__(self, attr, value)
+        return
+
     def validate_columns(self):
-        """ Check that column names are strings that don't clash with attributes, e.g. "low" """
+        """ Check that column names are unique strings that don't clash with attributes, e.g. "low" """
         if self.columns is not None:
             self.columns = list(self.columns)
+            if len(set(self.columns)) != len(self.columns):
+                errormsg = f'Column names for "{self.name}" must be unique: {self.columns}'
+                raise ValueError(errormsg)
             for col in self.columns:
                 if not isinstance(col, str) or col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col):
                     errormsg = f'Invalid column name "{col}" for "{self.name}": column names must be strings that are not attributes'
@@ -282,9 +293,9 @@ class Arr(BaseArr):
         self.people = people # Used solely for accessing people.auids
 
         # Handle 2D (or higher) arrays; item_shape is the shape of each agent's values, e.g. (3,) for columns=3
-        self.columns = None
+        colnames = None # Set at the end, since column names are treated as attributes
         if isinstance(columns, (list, tuple)) and all(isinstance(col, str) for col in columns): # Named columns, e.g. columns=['wildtype', 'mutant']
-            self.columns = columns
+            colnames = columns
             columns = len(columns)
         self.item_shape = () if columns is None else tuple(np.atleast_1d(columns))
         self.ndim = 1 + len(self.item_shape)
@@ -328,6 +339,7 @@ class Arr(BaseArr):
             if raw is None:
                 self.init_vals()
 
+        self.columns = colnames
         self.validate_columns() # Do this last, so column names can be checked against all attributes
         return
 
@@ -358,7 +370,11 @@ class Arr(BaseArr):
         if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int): # Catch immediately for speed
             return key
         elif isinstance(key, tuple):
-            return (self._convert_key(key[0]),) + tuple(self._col_index(k) for k in key[1:])
+            rows = self._convert_key(key[0])
+            cols = tuple(self._col_index(k) for k in key[1:])
+            if isinstance(key[0], slice) and any(np.ndim(c) for c in cols): # E.g. arr[:, [0,2]]: select the columns for every row, rather than pairing the rows and columns
+                rows = rows[:, None]
+            return (rows,) + cols
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
         elif isinstance(key, slice):
