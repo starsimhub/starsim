@@ -6,6 +6,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ### New features
 - `ss.RandomNet(uniform_targets=True)` (and `ss.HybridNet(uniform_targets=True)`) chooses the target of each edge uniformly from the eligible agents, as in Covasim v3, rather than in proportion to their number of contacts. This gives less variable numbers of contacts (e.g. a variance of 15 rather than 30 with `n_contacts=ss.poisson(20)`).
+- `sim.add_module()` adds a module (e.g. an intervention) to a sim that has already been initialized or partly run.
+- `sim.people.dead` now covers every agent ever created (indexed by UID), so `people.dead.sum()` is the number of deaths and `people.dead.uids` are the agents who died. Dead agents are still removed from all other arrays. Previously, it was always `False` after each timestep.
 
 ### Performance
 - Network transmission, `ss.find_contacts()`, and removing dead agents from networks now use Numba for speed (about 3x faster for contact tracing-heavy Covasim sims). Random numbers for transmission are now only drawn for edges that can transmit. `Network.find_contacts()` is a further 1.3–4x faster, since it no longer creates a set; `ss.find_contacts()` has a new `as_array` argument to do the same.
@@ -13,6 +15,14 @@ All notable changes to the codebase are documented in this file. Changes that ma
 ### Changes that may affect results
 - *Regression*: with `ss.options.crn = False`, transmission results differ stochastically, since fewer random numbers are drawn. Results with CRN (the default) are unchanged.
 - *Regression*: `ss.RandomSafeNet` now avoids ties by using `float64`, fixing a bug which gave agent 0 too many contacts.
+
+### Changes that may require migration
+- *Migration*: sim and module parameters are now locked when the sim is initialized, so setting a parameter that doesn't exist (e.g. a typo such as `sim.pars['rand_sed'] = 2`) raises an error instead of silently doing nothing. To add a new parameter after initialization, use `pars.update(my_par=..., create=True)`.
+
+### Bugfixes
+- `dist.shrink()` now removes the SciPy distribution and the random number generator, so modules with many distributions no longer fail the size check in `sim.shrink()`.
+- `ss.Results()` can be created without a module, so results can be merged like dicts, e.g. `sc.mergedicts(sim.results, other)`.
+- `network.validate()` no longer fails for a network with no edges, and `sim.current_scale` no longer fails if called during initialization with `rescale=True`.
 
 
 ## Version 3.7.0 (2026-10-02)
