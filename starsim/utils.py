@@ -4,6 +4,7 @@ Numerical utilities and other helper functions
 import re
 import warnings
 import numpy as np
+import numba as nb
 import pandas as pd
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -233,28 +234,45 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-def find_contacts(p1, p2, inds):
-    """
-    Variation on Network.find_contacts() that avoids sorting.
+@nb.jit(cache=True)
+def _mark_partners(p1, p2, is_ind, is_partner):
+    """ Mark the partners of the agents flagged in is_ind, in both directions of each edge; used by find_contacts() """
+    for i in range(len(p1)):
+        if is_ind[p1[i]]:
+            is_partner[p2[i]] = True
+        if is_ind[p2[i]]:
+            is_partner[p1[i]] = True
+    return
 
-    A set is returned here rather than a sorted array so that custom tracing interventions can efficiently
-    add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be
-    an int64 array since this is what's returned by true() etc. functions by default.
+
+def find_contacts(p1, p2, inds, as_array=False):
+    """
+    Find the partners of the specified agents in an edge list; see also `Network.find_contacts()`.
+
+    By default, a set is returned so that custom tracing interventions can efficiently add extra
+    people; with `as_array=True`, a sorted array of unique UIDs is returned instead, which is faster.
+
+    Args:
+        p1 (array): the first agent of each edge
+        p2 (array): the second agent of each edge
+        inds (array): the agents whose partners to find
+        as_array (bool): if True, return a sorted array rather than a set
     """
     p1 = np.asarray(p1)
     p2 = np.asarray(p2)
+    inds = np.asarray(inds, dtype=np.int64)
 
-    # Make a lookup table of which people are in inds (much faster than np.isin() or a set)
+    # Make lookup tables of which people are in inds, and which are their partners (much faster than np.isin() or a set)
     n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(inds, initial=-1)) + 1
     is_ind = np.zeros(n, dtype=bool)
     is_ind[inds] = True
+    is_partner = np.zeros(n, dtype=bool)
+    _mark_partners(p1, p2, is_ind, is_partner)
 
-    # Find the partners in each direction
-    partners_of_p1 = p2[is_ind[p1]]
-    partners_of_p2 = p1[is_ind[p2]]
-    pairing_partners = set(partners_of_p1.tolist())
-    pairing_partners.update(partners_of_p2.tolist())
-    return pairing_partners
+    partners = np.flatnonzero(is_partner).astype(ss.dtypes.int, copy=False)
+    if not as_array:
+        partners = set(partners.tolist())
+    return partners
 
 
 # %% Data cleaning and processing

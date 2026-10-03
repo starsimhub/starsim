@@ -445,38 +445,25 @@ class Network(Route):
 
         For some purposes (e.g. contact tracing) it's necessary to find all the edges
         associated with a subset of the people in this network. Since edges are bidirectional
-        it's necessary to check both p1 and p2 for the target indices. The return type is a Set
-        so that there is no duplication of indices (otherwise if the Network has explicit
-        symmetric interactions, they could appear multiple times). This is also for performance so
-        that the calling code doesn't need to perform its own unique() operation. Note that
-        this cannot be used for cases where multiple connections count differently than a single
-        infection, e.g. exposure risk.
+        it's necessary to check both p1 and p2 for the target indices. Each contact is only
+        returned once (otherwise if the Network has explicit symmetric interactions, they could
+        appear multiple times), so the calling code doesn't need to perform its own unique()
+        operation. Note that this cannot be used for cases where multiple connections count
+        differently than a single infection, e.g. exposure risk.
 
         Args:
             inds (array): indices of people whose edges to return
             as_array (bool): if true, return as sorted array (otherwise, return as unsorted set)
 
         Returns:
-            contact_inds (array): a set of indices for pairing partners
+            contact_inds (array/set): the indices of the pairing partners
 
         Example: If there were a network with
         - p1 = [1,2,3,4]
         - p2 = [2,3,1,4]
         Then find_edges([1,3]) would return {1,2,3}
         """
-
-        # Check types
-        if not isinstance(inds, np.ndarray):
-            inds = sc.promotetoarray(inds)
-        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from utils.true(), which returns int64
-            inds = np.array(inds, dtype=np.int64)
-
-        # Find the edges
-        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, inds)
-        if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss_int)
-            contact_inds.sort()
-
+        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
         return contact_inds
 
     def add_pairs(self):
@@ -872,6 +859,7 @@ class RandomSafeNet(DynamicNetwork):
         self.update_pars(pars, **kwargs)
         if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years, as for ss.RandomExactNet (the default isn't ss.years(0) so a Dist is allowed)
         self.dist = ss.random(name='RandomSafeNet')
+        self.dist.hash_dtype = np.float64 # Since float32 only gives 2^24 distinct values, which would mean many ties (e.g. 25% of edges with a million agents)
         return
 
     def rep_rand(self, uids, sort=True):

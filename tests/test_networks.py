@@ -468,6 +468,11 @@ def test_edge_ops():
     net = ss.Network(name='mynet').from_df(df) # Create from a dataframe
     assert net.name == 'mynet' and len(net) == 4
     assert np.array_equal(net['p1'], df.p1) # Access edge columns like a dict
+
+    # Find contacts (both directions, including the agents themselves if they're each other's contacts), as an array or a set
+    net2 = ss.Network(p1=[1,2,3,4], p2=[2,3,1,4])
+    assert np.array_equal(net2.find_contacts([1,3]), [1,2,3])
+    assert ss.find_contacts(net2.p1, net2.p2, [1,3]) == {1,2,3}
     assert net.beta.sum() == 4 # Beta defaults to 1
 
     net.from_df(dict(p1=[0, 1], p2=[1, 2], beta=[1, 2])) # Replace the edges with a dict of arrays
