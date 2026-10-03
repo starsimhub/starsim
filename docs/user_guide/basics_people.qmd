@@ -110,6 +110,47 @@ When states or arrays are added by modules, they are stored as dictionaries unde
 
 Note that the Starsim `Arr` class can be used like a Numpy array, with all the standard arithmetic operations like sums, mean, counting, etc.
 
+## Multi-column states
+Sometimes each agent needs more than one value for the same quantity, such as immunity to each of several variants. Rather than defining one state per variant, you can give an array `columns`, which makes a 2D array with one row per agent and one column per value. Like any other state, it grows as agents are born:
+
+```{python}
+class Immunity(ss.Module):
+    """ Track susceptibility to two variants, with susceptibility to the mutant decreasing over time """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.define_states(
+            ss.FloatArr('sus_imm', columns=['wild', 'mutant'], default=1.0),
+        )
+
+    def step(self):
+        self.sus_imm.mutant *= 0.9 # Update the "mutant" column for all agents
+        return
+
+imm_sim = ss.Sim(n_agents=1000, modules=Immunity(), demographics=True, dur=5, verbose=False).run()
+imm = imm_sim.people.immunity.sus_imm
+print('Number of agents:', len(imm_sim.people))
+print('Shape of values:', imm.values.shape)
+```
+
+Named columns can be accessed as attributes (`imm.mutant`), as keys (`imm['mutant']`), or via `imm.col('mutant')`; each of these returns a regular 1D array, and assigning to it (e.g. `imm.mutant = 0` or `imm.mutant += 0.1`) modifies the 2D array. When indexing, the first index selects agents as usual, and the second selects columns by name or by position:
+
+```{python}
+uids = ss.uids([0, 1, 2])
+print('All columns for 3 agents:\n', imm[uids])
+print('Mutant column for 3 agents:', imm[uids, 'mutant'])
+print('Mean mutant susceptibility:', imm.mutant.mean())
+
+imm[uids, 'wild'] = 0 # Make these agents immune to the wild type
+print('Agents immune to the wild type:', (imm.col('wild') < 0.5).uids)
+```
+
+Since a 2D array has more than one value per agent, it can't be converted to UIDs directly; use a single column instead, as above. Some other things to note:
+
+* Use e.g. `columns=3` for unnamed columns (accessed by position only), or a tuple such as `columns=(2,3)` for more dimensions.
+* Column names must be unique, and can't be the same as an array attribute or method (e.g. `'raw'` or `'mean'`).
+* `arr[:, [0,2]]` returns columns 0 and 2 for every active agent.
+* `people.to_df()` exports one dataframe column per value, e.g. `immunity.sus_imm_wild` and `immunity.sus_imm_mutant` (or `_0`, `_1`, etc. for unnamed columns).
+
 ## Debugging and analyzing
 
 There are several ways to explore the People object. One way is by exporting to a dataframe:

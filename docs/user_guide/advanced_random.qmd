@@ -140,6 +140,7 @@ This advanced CRN functionality is built into every distribution in Starsim! You
 2. Create each distribution one time per module. The `__init__` method is a great place to do this. Do not create a new distribution on every step.
 3. When sampling from a distribution, pass `uids` or a boolean mask with length equal to the number of agents in the simulation. This ensures that each agent gets the right random number.
 4. If the parameters of your distribution change every step, set the parameter values to a callable function that performs the calculation.
+5. To choose an exact number of agents (e.g. to seed exactly 20 infections), use `ss.choose_n()` rather than `ss.choice()` or NumPy: it is CRN-safe, so if the candidates change slightly, most of the same agents are still chosen (see the [Distributions guide](advanced_distributions.qmd)).
 
 Preferred and avoided usage examples:
 ```python
