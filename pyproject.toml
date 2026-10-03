@@ -31,7 +31,7 @@ classifiers = [
 
 dependencies = [
     "numpy>=2.0.0",
-    "pandas>=2.0.0",
+    "pandas>=2.1.0",
     "sciris>=3.2.8",
     "numba>=0.57.0",
     "scipy",
