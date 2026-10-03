@@ -37,8 +37,8 @@ class infection_log(Analyzer):
         sim.analyzers[0].plot()
         ```
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.logs = sc.objdict()
         return
 
