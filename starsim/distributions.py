@@ -1234,7 +1234,7 @@ class Dist:
 
     def shrink(self, max_arr_size=100):
         """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
-        to_shrink = ['slots', '_slots', 'module', 'sim', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
+        to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
         ss.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
         shrunk = ss.shrink()

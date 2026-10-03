@@ -226,6 +226,8 @@ class Network(Route):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
+        if not len(self.edges): # No edges have been added yet
+            return
         n = len(self.edges.p1)
         for key, dtype in self.meta.items():
             if dtype:
