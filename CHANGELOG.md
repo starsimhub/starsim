@@ -16,6 +16,7 @@ This release adds features needed to port Covasim to Starsim (Covasim v4), and w
 - New network methods: `net.remove_edges()` (indices or a boolean mask), `net['p1']` to get an edge column, and `net.eligible()`; `net.from_df()` also accepts a dict of arrays, and returns the network.
 - New MultiSim methods: `combine()` (merge the sims into one larger sim), `ss.MultiSim.merge()` and `split()`, and `compare()`/`plot_compare()`.
 - The infection log (`ss.infection_log`) now records the network of each infection, and extra data per infection (e.g. `log.add_entries(uids, sources, t, variant=variants)`); it stores entries as arrays, so it is much faster.
+- The docs now publish a machine-readable index of the whole API, including default module parameters, for LLMs and other tools: <https://docs.starsim.org/llms.txt> (also `llms-full.txt`, with examples, and `api.json`). This replaces the root `llms.txt`, which was a copy of `CLAUDE.md`.
 
 ### Changes that may affect results
 - *Regression*: stochastic rounding (`dist.rvs(round=True)`) is now CRN-safe, so results that use it (e.g. `ss.NCD`) will differ.
