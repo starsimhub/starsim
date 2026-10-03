@@ -38,6 +38,15 @@ def update_version(pkg=ss):
     return
 
 
+@sc.timer('Build API index')
+def build_api_index():
+    """ Regenerate the machine-readable API index (api.json, llms.txt, llms-full.txt) """
+    import make_api
+    sc.heading('Building machine-readable API index...')
+    make_api.write()
+    return
+
+
 @sc.timer('Build API docs')
 def build_api_docs():
     sc.heading('Building API documentation...')
@@ -317,6 +326,7 @@ if __name__ == '__main__':
         customize_aliases()
         build_interlinks()
         build_objects_inv()
+        build_api_index()
 
     elif 'post' in sys.argv:
         clean_outputs()

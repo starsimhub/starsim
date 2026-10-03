@@ -8,9 +8,13 @@ project:
   resources:
     - objects.json
     - objects.inv
+    - llms.txt
+    - llms-full.txt
+    - api.json
 
 website:
   title: "Starsim"
+  site-url: https://docs.starsim.org
   image: /assets/starsim-logo.png
   favicon: /assets/favicon.ico
   google-analytics: "G-SVDSQH04EM"
