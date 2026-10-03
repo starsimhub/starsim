@@ -1796,20 +1796,36 @@ class choose_n(Dist):
     def ppf(self, rands):
         return rands
 
-    def filter(self, uids=None):
-        """ Return the chosen UIDs (sorted), i.e. min(n, len(uids)) of them """
+    def rvs(self, n=1, round=None, reset=False):
+        """ Return a boolean array of whether each agent is chosen (n can be UIDs or a size), so ss.choose_n() can be used in place of ss.bernoulli() """
+        chosen = np.zeros(n if np.isscalar(n) else len(n), dtype=bool)
+        chosen[self._choose(n)] = True
+        return chosen
+
+    def filter(self, uids=None, both=False):
+        """ Return the chosen UIDs (sorted), i.e. min(n, len(uids)) of them; if both=True, also return the UIDs not chosen (as ss.bernoulli.filter()) """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
         elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
             uids = uids.uids
+        chosen = ss.uids(np.sort(uids[self._choose(uids)]))
+        if both:
+            return chosen, ss.uids(uids).remove(chosen)
+        return chosen
 
-        keys = self.rvs(uids) # One random number per candidate; also evaluates the parameters
+    def split(self, uids=None):
+        """ Alias to filter(uids, both=True) """
+        return self.filter(uids=uids, both=True)
+
+    def _choose(self, n):
+        """ Return the indices of the chosen agents (n can be UIDs or a size); see filter() """
+        keys = super().rvs(n) # One random number per candidate; also evaluates the parameters
         if not len(keys): # No candidates: rvs() returns early without evaluating the parameters, so don't use them
             if self.die:
                 errormsg = f'{self} could not choose any agents since there are no candidates'
                 raise ValueError(errormsg)
-            return ss.uids()
-        n = min(int(self._pars.n), len(keys))
+            return np.array([], dtype=ss_int)
+        n_choose = min(int(self._pars.n), len(keys))
         weights = self._pars.weights
         if weights is not None:
             weights = np.asarray(weights)
@@ -1818,14 +1834,14 @@ class choose_n(Dist):
                 raise ValueError(errormsg)
             with np.errstate(divide='ignore'): # Zero weights give infinite keys, so are never chosen
                 keys = -np.log1p(-keys)/weights
-            n = min(n, np.count_nonzero(keys < np.inf))
-        if self.die and n < int(self._pars.n):
-            errormsg = f'{self} could only choose {n} of the {int(self._pars.n)} requested agents'
+            n_choose = min(n_choose, np.count_nonzero(keys < np.inf))
+        if self.die and n_choose < int(self._pars.n):
+            errormsg = f'{self} could only choose {n_choose} of the {int(self._pars.n)} requested agents'
             raise ValueError(errormsg)
-        if n <= 0:
-            return ss.uids()
-        inds = np.argpartition(keys, n-1)[:n] # Indices of the n smallest keys
-        return ss.uids(np.sort(uids[inds]))
+        if n_choose <= 0:
+            return np.array([], dtype=ss_int)
+        inds = np.argpartition(keys, n_choose-1)[:n_choose] # Indices of the n smallest keys
+        return inds
 
 
 class choice(Dist):
