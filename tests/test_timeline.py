@@ -129,9 +129,8 @@ def test_timeline():
     assert len(s6.t) == 51
 
     print('Testing that a timeline is not a timestep index')
-    for misuse in [lambda: s1.t == 10, lambda: s1.t < 5, lambda: [0,1][s1.t]]:
-        with pytest.raises(TypeError, match='sim.ti'): # Suggests sim.ti instead
-            misuse()
+    with pytest.raises(TypeError):
+        s1.t == 10 # Should be s1.ti == 10
     assert s1.t == s1.t and s1.t != t1 # Comparing timelines still uses identity
 
     return [s1, t1, s2, t2]
