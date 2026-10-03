@@ -918,8 +918,8 @@ class Module(Base):
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(timevec, v)
-                if isinstance(v, ss.Result) and v.groups is not None: # One line per group for 2D results
-                    ax.legend(v.groups)
+                if isinstance(v, ss.Result) and v.columns is not None: # One line per column for 2D results
+                    ax.legend(v.columns)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return ss.return_fig(fig)
