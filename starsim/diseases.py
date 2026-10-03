@@ -6,8 +6,6 @@ import numba as nb
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import networkx as nx
-from operator import itemgetter
 import matplotlib.pyplot as plt
 
 ss_int = ss.dtypes.int
@@ -38,7 +36,7 @@ class Disease(ss.Module):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
-            self.infection_log = InfectionLog()
+            self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
         return
 
     def step_state(self):
@@ -68,6 +66,26 @@ class Disease(ss.Module):
         to implement this.
         """
         pass
+
+    def make_naive(self, uids, skip_states=None):
+        """
+        Reset agents to the state of never having had the disease; used for dynamic rescaling (see `ss.Sim.rescale()`)
+
+        By default, this resets every state of the disease to its default value, except
+        `rel_sus` and `rel_trans`, which are often modified by other modules (e.g. vaccines).
+        Override this method if the disease needs something different.
+
+        Args:
+            uids (`ss.uids`): the agents to make naive
+            skip_states (list): names of states not to reset (default `['rel_sus', 'rel_trans']`)
+        """
+        if skip_states is None:
+            skip_states = ['rel_sus', 'rel_trans']
+        skip_states = sc.tolist(skip_states)
+        for state in self.state_list:
+            if state.name not in skip_states:
+                state.set(uids)
+        return
 
     def step(self):
         """
@@ -139,6 +157,16 @@ class Infection(Disease):
     def init_pre(self, sim):
         super().init_pre(sim)
         self.validate_beta()
+        self.validate_init_prev()
+        return
+
+    def validate_init_prev(self):
+        """ Check that init_prev is a probability, not a count (which should use `ss.choose_n()`) """
+        init_prev = self.pars.init_prev
+        p = init_prev.pars.p if isinstance(init_prev, ss.bernoulli) else init_prev
+        if sc.isnumber(p) and p > 1:
+            errormsg = f'init_prev={p} is not a valid probability; to infect exactly {p} agents, use init_prev=ss.choose_n({p})'
+            raise ValueError(errormsg)
         return
 
     def init_post(self):
@@ -198,7 +226,11 @@ class Infection(Disease):
         # Check that it matches the network
         netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
         if set(betamap.keys()) != set(netkeys):
-            errormsg = f'Network keys ({netkeys}) and beta keys ({betamap.keys()}) do not match'
+            missing = sorted(set(netkeys) - set(betamap.keys()))
+            extra = sorted(set(betamap.keys()) - set(netkeys))
+            errormsg = f'Network keys ({netkeys}) and beta keys ({list(betamap.keys())}) do not match for disease "{self.name}"'
+            if missing: errormsg += f'; missing beta for network(s) {missing}'
+            if extra:   errormsg += f'; no network(s) found matching {extra}'
             raise ValueError(errormsg)
 
         return betamap
@@ -221,6 +253,8 @@ class Infection(Disease):
         # Set prognoses
         if len(new_cases):
             self.set_outcomes(new_cases, sources)
+            if self.infection_log:
+                self.infection_log.add_data(new_cases, network=networks)
 
         return new_cases, sources, networks
 
@@ -253,10 +287,14 @@ class Infection(Disease):
         return target_arr.view(ss.uids), source_arr.view(ss.uids) # view (no copy): kernel output is uniquely owned int64; concatenate() compacts later
 
     def infect(self):
-        """ Determine who gets infected on this timestep via transmission on the network """
-        new_cases = []
-        sources = []
-        networks = []
+        """
+        Determine who gets infected on this timestep via transmission on the network
+
+        Computes the effective transmissibility and susceptibility, calls `infect_route()`
+        for each network (or other route), and then removes duplicate infections with
+        `finalize_infections()`. A multi-strain disease can override this method to loop
+        over strains, calling `infect_route()` with per-strain values.
+        """
         betamap = self.validate_beta()
 
         # Compute effective transmissibility and susceptibility directly on the raw
@@ -266,40 +304,80 @@ class Infection(Disease):
         rel_trans = self.rel_trans.asnew(self.infectious.raw * self.rel_trans.raw, copy=False)
         rel_sus   = self.rel_sus.asnew(self.susceptible.raw * self.rel_sus.raw, copy=False)
 
+        new_cases = []
+        sources = []
+        networks = []
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
-            nk = ss.standardize_netkey(nkey)
+            betas = betamap[ss.standardize_netkey(nkey)]
+            target_uids, source_uids, network_ids = self.infect_route(i, route, betas, rel_trans, rel_sus)
+            new_cases.append(target_uids)
+            sources.append(source_uids)
+            networks.append(network_ids)
 
-            # Main use case: networks
-            if isinstance(route, ss.Network):
-                if len(route): # Skip networks with no edges
-                    edges = route.edges
-                    p1_to_p2 = [edges.p1, edges.p2, betamap[nk][0]]  # p1→p2 direction, beta 0
-                    p2_to_p1 = [edges.p2, edges.p1, betamap[nk][1]]  # p2→p1 direction, beta 1
-                    for src, trg, beta in [p1_to_p2, p2_to_p1]:
-                        if beta: # Skip networks with no transmission
-                            disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-                            beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-                            randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-                            args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
-                            target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
-                            new_cases.append(target_uids)
-                            sources.append(source_uids)
-                            networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
+        return self.finalize_infections(new_cases, sources, networks)
 
-            # Handle everything else: mixing pools, environmental transmission, etc.
-            elif isinstance(route, ss.Route):
-                # Mixing pools are unidirectional, only use the first beta value
-                disease_beta = betamap[nk][0].to_prob(self.t.dt) if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
-                target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
-                new_cases.append(target_uids)
-                sources.append(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan))
-                networks.append(np.full(len(target_uids), dtype=ss_int, fill_value=i))
-            else:
-                errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
-                raise TypeError(errormsg)
+    def infect_route(self, i, route, betas, rel_trans, rel_sus):
+        """
+        Compute the transmission along a single network (or other route)
 
-        # Finalize
-        if len(new_cases) and len(sources):
+        Args:
+            i (int): the index of the route in `sim.networks`, stored as the network ID of each infection
+            route (`ss.Route`): the network or other route (e.g. a mixing pool)
+            betas (list): the pair of betas for the route (p1→p2 and p2→p1); routes other than networks only use the first
+            rel_trans (`ss.FloatArr`): the effective transmissibility of each agent (0 if not infectious)
+            rel_sus (`ss.FloatArr`): the effective susceptibility of each agent (0 if not susceptible)
+
+        Returns:
+            A tuple of the target UIDs, the source UIDs, and the network IDs of the new infections (possibly with duplicates)
+        """
+        new_cases = []
+        sources = []
+
+        # Main use case: networks
+        if isinstance(route, ss.Network):
+            if len(route): # Skip networks with no edges
+                edges = route.edges
+                p1_to_p2 = [edges.p1, edges.p2, betas[0]]  # p1→p2 direction, beta 0
+                p2_to_p1 = [edges.p2, edges.p1, betas[1]]  # p2→p1 direction, beta 1
+                for src, trg, beta in [p1_to_p2, p2_to_p1]:
+                    if beta: # Skip networks with no transmission
+                        disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
+                        beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+                        randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
+                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+                        target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
+                        new_cases.append(target_uids)
+                        sources.append(source_uids)
+
+        # Handle everything else: mixing pools, environmental transmission, etc.
+        elif isinstance(route, ss.Route):
+            # Mixing pools are unidirectional, only use the first beta value
+            disease_beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.Rate) else betas[0]
+            target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
+            new_cases.append(target_uids)
+            sources.append(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan))
+        else:
+            errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.Route and define a compute_transmission() method'
+            raise TypeError(errormsg)
+
+        new_cases = ss.uids.concatenate(new_cases)
+        sources = ss.uids.concatenate(sources)
+        networks = np.full(len(new_cases), dtype=ss_int, fill_value=i)
+        return new_cases, sources, networks
+
+    def finalize_infections(self, new_cases, sources, networks):
+        """
+        Combine the infections from each route, keeping only the first infection of each agent
+
+        Args:
+            new_cases (list): the target UIDs from each call to `infect_route()`
+            sources (list): the corresponding source UIDs
+            networks (list): the corresponding network IDs
+
+        Returns:
+            A tuple of the unique target UIDs, and their source UIDs and network IDs
+        """
+        if len(new_cases):
             new_cases = ss.uids.concatenate(new_cases)
             new_cases, inds = new_cases.unique(return_index=True)
             sources = ss.uids.concatenate(sources)[inds]
@@ -308,7 +386,6 @@ class Infection(Disease):
             new_cases = ss.uids()
             sources = ss.uids()
             networks = np.empty(0, dtype=ss_int)
-
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):
@@ -452,56 +529,98 @@ class Infection(Disease):
 
     def finalize_results(self):
         """ Compute cumulative infections from the new-infections timeseries. """
+        super().finalize_results() # Called first to scale the results
         res = self.results
-        res.cum_infections[:] = np.cumsum(res.new_infections[:])
-        super().finalize_results() # Called after to scale the results
+        res.cum_infections[:] = np.cumsum(res.new_infections[:]) # Computed after scaling, since the scale can vary over time (see ss.Sim.rescale())
         return
 
 
-class InfectionLog(nx.MultiDiGraph):
+class InfectionLog:
     """
     Record infections
 
     The infection log records transmission events and optionally other data
-    associated with each transmission. Basic functionality is to track
-    transmission with
+    associated with each transmission. Entries are stored as one chunk of arrays
+    per call, so logging is cheap; they are combined when the log is read. Basic
+    functionality is to track transmission with
+
+    >>> Disease.infection_log.add_entries(targets, sources, t)
+
+    or, for a single infection,
 
     >>> Disease.infection_log.append(source, target, t)
 
-    Seed infections can be recorded with a source of `None`, although all infections
-    should have a target and a time. Other data can be captured in the log, either at
-    the time of creation, or later on. For example
+    Seed infections can be recorded with a source of `None` (or NaN), although all
+    infections should have a target and a time. Other data can be captured in the
+    log, either at the time of creation, or later on. For example
 
-    >>> Disease.infection_log.append(source, target, t, network='msm')
+    >>> Disease.infection_log.add_entries(targets, sources, t, variant=variants)
 
-    could be used by a module to track the network in which transmission took place.
+    records extra data for each infection (`ss.Infection` records the network this way).
     Modules can optionally add per-infection outcomes later as well, for example
 
-    >>> Disease.infection_log.add_data(source, t_dead=2024.25)
+    >>> Disease.infection_log.add_data(uids, t_dead=2024.25)
 
     This would be equivalent to having specified the data at the original time the log
     entry was created - however, it is more useful for tracking events that may or may
     not occur after the infection and could be modified by interventions (e.g., tracking
     diagnosis, treatment, notification etc.)
 
-    A table of outcomes can be returned using `InfectionLog.line_list()`
+    A table of outcomes can be returned using `InfectionLog.to_df()`, and a NetworkX
+    graph with `InfectionLog.to_graph()`.
+
+    Args:
+        disease (str): the name of the disease being logged
+        networks (list): the names of the networks, used to convert the network IDs recorded by `ss.Infection` to names in `to_df()`
     """
+    def __init__(self, disease=None, networks=None):
+        self.disease = disease
+        self.networks = sc.tolist(networks)
+        self.chunks = [] # One dict of arrays (t, source, target, and any extra data) per call to add_entries()
+        self.updates = [] # Data added with add_data(), applied when the log is read
+        self.n = 0 # Number of entries
+        return
+
+    def __len__(self):
+        return self.n
+
     def __bool__(self):
         """ Ensure that zero-length infection logs are still truthy """
         return True
 
-    def disp(self):
-        return sc.pr(self)
+    def __repr__(self):
+        """ Brief summary of the log, without building the dataframe """
+        string = f'InfectionLog(disease={self.disease!r}, n={self.n}'
+        if self.n:
+            string += f', t={self.chunks[0]["t"][0]}–{self.chunks[-1]["t"][0]}'
+        string += ')'
+        return string
 
-    def add_entries(self, uids, sources=None, time=np.nan):
-        if sources is None:
-            for target in uids:
-                self.append(np.nan, target, time)
-        else:
-            if not np.iterable(sources): # It's a scalar value, convert to an array
-                sources = np.full(uids.shape, sources)
-            for target, source in zip(uids, sources):
-                self.append(source, target, time)
+    def disp(self, **kwargs):
+        """ Full display of the infection log """
+        return sc.pr(self, **kwargs)
+
+    def add_entries(self, uids, sources=None, time=np.nan, **kwargs):
+        """
+        Record new infections
+
+        Args:
+            uids (array): the UIDs of the infected agents (targets)
+            sources (array/int): the UIDs of the infecting agents; None or NaN for seed infections
+            time (any): the time of infection (all entries in the chunk share it)
+            kwargs (dict): extra data to store, either a scalar or one value per UID
+        """
+        n = len(uids)
+        if n:
+            sources = np.nan if sources is None else sources
+            chunk = dict(t=np.full(n, time, dtype=object), source=sources, target=uids, **kwargs)
+            self.chunks.append({k:np.broadcast_to(v, n) if np.ndim(v) == 0 else np.asarray(v) for k,v in chunk.items()})
+            self.n += n
+        return
+
+    def append(self, source, target, t, **kwargs):
+        """ Record a single infection """
+        self.add_entries([target], [source], t, **kwargs)
         return
 
     def add_data(self, uids, **kwargs):
@@ -509,19 +628,15 @@ class InfectionLog(nx.MultiDiGraph):
         Record extra infection data
 
         This method can be used to add data to an existing transmission event.
-        The most recent transmission event will be used
+        The most recent transmission event for each agent will be used.
 
         Args:
             uids (array): The UIDs of the target nodes (the agents that were infected)
-            kwargs (dict): Remaining arguments are stored as edge data
+            kwargs (dict): Remaining arguments are stored as data for each entry, either a scalar or one value per UID
         """
-        for uid in sc.toarray(uids):
-            source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
-            self[source][target][key].update(**kwargs)
-        return
-
-    def append(self, source, target, t, **kwargs):
-        self.add_edge(source, target, key=t, **kwargs)
+        uids = sc.toarray(uids)
+        if len(uids):
+            self.updates.append((self.n, uids, kwargs)) # Store the number of entries so far, so only earlier entries are updated
         return
 
     def to_df(self):
@@ -533,16 +648,28 @@ class InfectionLog(nx.MultiDiGraph):
         that are defined for some edges and not others (and which are missing for
         a particular entry)
         """
-        if len(self) == 0:
+        if self.n == 0:
             return sc.dataframe(columns=['t', 'source', 'target'])
 
-        entries = []
-        for source, target, t, data in self.edges(keys=True, data=True):
-            d = data.copy()
-            d.update(source=source, target=target, t=t)
-            entries.append(d)
-        df = sc.dataframe.from_records(entries)
-        df = df.sort_values(['t', 'source', 'target'])
+        df = pd.concat([pd.DataFrame(chunk) for chunk in self.chunks], ignore_index=True)
+
+        # Apply data added later: for each UID, update its most recent entry at the time of the call
+        for n, uids, kwargs in self.updates:
+            targets = df.target.values[:n]
+            inds = np.flatnonzero(np.isin(targets, uids))
+            last = pd.Series(inds, index=targets[inds]).groupby(level=0).last() # Most recent entry for each UID
+            for k,v in kwargs.items():
+                if k not in df.columns:
+                    df[k] = None # Object dtype, so any value can be stored
+                if np.ndim(v):
+                    v = pd.Series(v, index=uids)[last.index].values # Match per-UID values to the entries
+                df.loc[last.values, k] = v
+
+        # Convert network IDs to names
+        if self.networks and 'network' in df.columns:
+            df['network'] = df['network'].map(dict(enumerate(self.networks)))
+
+        df = df.sort_values(['t', 'source', 'target'], kind='stable')
         df = df.reset_index(drop=True)
 
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
@@ -551,8 +678,16 @@ class InfectionLog(nx.MultiDiGraph):
         df = df.fillna(pd.NA)
         df['source'] = df['source'].astype("Int64")
         df['target'] = df['target'].astype("Int64")
+        return sc.dataframe(df)
 
-        return df
+    def to_graph(self):
+        """ Return the log as a NetworkX `MultiDiGraph`, with sources and targets as nodes and the time as the edge key """
+        import networkx as nx # Lazy import since slow
+        graph = nx.MultiDiGraph()
+        for row in self.to_df().to_dict('records'):
+            source, target, t = row.pop('source'), row.pop('target'), row.pop('t')
+            graph.add_edge(np.nan if pd.isna(source) else source, target, key=t, **row)
+        return graph
 
 
 class NCD(Disease):

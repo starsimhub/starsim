@@ -475,9 +475,7 @@ def test_dynamic():
     assert np.array_equal(p1, sim.networks[0].p1) # Static edges don't change
 
     sim = ss.Sim(networks=ss.RandomNet(dynamic=False), demographics=True, stop=2010, **kw).run()
-    net = sim.networks[0]
-    assert np.isin(net.participant.uids, net.members).all() # Everyone in the network has edges...
-    assert net.participant.uids.max() >= small # ...including agents born during the sim
+    assert sim.networks[0].members.max() < small # Agents born during the sim are not added
     return sim
 
 

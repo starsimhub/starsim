@@ -7,7 +7,6 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
-import networkx as nx # Also used by InfectionLog, so we can't lazily import it, and only 100 ms
 
 # This has a significant impact on runtime, surprisingly
 ss_float = ss.dtypes.float
@@ -348,6 +347,7 @@ class Network(Route):
             nx.draw(G)
             ```
         """
+        import networkx as nx # Lazy import since slow
         keys = [('p1', int), ('p2', int), ('beta', float)]
         data = [np.array(self.edges[k], dtype=dtype) for k,dtype in keys]
         if max_edges:
@@ -421,6 +421,7 @@ class Network(Route):
             alpha (float): the alpha value of the edges
             kwargs (dict): figure and style arguments (e.g. `figsize`, `font`) are passed to `ss.plot_args()`, the rest to `nx.draw_networkx()`
         """
+        import networkx as nx # Lazy import since slow
         figkeys = ss.utils.plotting_kw.fig + ss.utils.plotting_kw.style
         kw = ss.plot_args({k:kwargs.pop(k) for k in list(kwargs) if k in figkeys})
         with ss.style(**kw.style):
@@ -590,6 +591,7 @@ class StaticNet(Network):
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
         if self.graph is None:
+            import networkx as nx # Lazy import since slow
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
         n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
         if self.pars.p is None: # Convert from n_contacts to probability
