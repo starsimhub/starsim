@@ -110,6 +110,53 @@ res.plot()
 
 Note that across multiple runs the results are stored in a flattened structure keyed by `module_result` (e.g. `sir_new_infections`), so you access them with `msim.results['sir_new_infections']` rather than the nested `msim.results.sir...` form used for a single sim.
 
+## Results with multiple columns
+
+Sometimes a result naturally has several values per timestep, such as new infections by variant or by age group. Rather than defining one result per group, you can pass `columns` to `ss.Result`, which makes a 2D result of shape `(npts, ncols)`:
+
+```{python}
+import numpy as np
+
+class InfectionsByAge(ss.Analyzer):
+    """ Count new infections among children and adults """
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('new_infections', columns=['children', 'adults'], label='New infections'),
+        )
+
+    def step(self):
+        new = self.sim.diseases.sis.ti_infected == self.ti
+        children = self.sim.people.age < 15
+        self.results.new_infections[self.ti] = [np.count_nonzero(new & children), np.count_nonzero(new & ~children)]
+
+sim = ss.Sim(n_agents=2000, start=2000, stop=2010, dt=ss.weeks(1), diseases='sis', networks='random', analyzers=InfectionsByAge(), verbose=0).run()
+res = sim.results.infectionsbyage.new_infections
+print('Shape:', res.shape)
+```
+
+Each column is available as a 1D result, via `res.adults` or `res.col('adults')`, or all at once via `res.by_column()`. These share data with the 2D result, so modifying one modifies the other:
+
+```{python}
+print(res.adults)
+print('Label:', res.adults.label)
+print('Columns:', list(res.by_column().keys()))
+```
+
+Most operations handle each column separately: results are scaled by `pop_scale`, `to_df()` and `sim.to_df()` give one dataframe column per result column, `sim.summarize()` summarizes each column, and `MultiSim.reduce()` computes bounds for each column. Likewise, `resample()` and `annualize()` resample along time only, inferring how to aggregate from the name of the parent result (e.g. `new_` results are summed):
+
+```{python}
+annual = res.annualize()
+print('Annual shape:', annual.shape)
+annual.to_df().head()
+```
+
+Plotting a 2D result shows one line per column:
+
+```{python}
+res.plot()
+```
+
 ## Adding your own results
 
 Any module can define custom results. For one-off analyses, the simplest approach is an [Analyzer](modules_analyzers.qmd); to bake results into a module you're writing, define them with `self.define_results()` (see [Adding new modules](modules_adding.qmd)). Either way, your results are stored in `sim.results` alongside the built-in ones and are exported by `to_df()` automatically.

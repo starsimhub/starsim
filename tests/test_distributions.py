@@ -574,6 +574,56 @@ def test_dtype_consistency():
     return
 
 
+@sc.timer()
+def test_choose_n():
+    """ Test choosing exactly n agents, with and without weights """
+    sc.heading('Testing ss.choose_n')
+    uids = ss.uids(np.arange(1000))
+    choose = lambda n, weights=None, die=False: ss.choose_n(n, weights=weights, die=die, strict=False).init(slots=uids).filter(uids) # Helper function
+
+    # Unweighted
+    chosen = choose(20)
+    assert len(chosen) == 20 and np.all(np.diff(chosen) > 0) # Exactly n, without replacement, and sorted
+    assert len(choose(2000)) == 1000 # Can't choose more than all of them
+    with pytest.raises(ValueError):
+        choose(2000, die=True) # Unless asked to raise an exception
+
+    # Weighted
+    assert np.array_equal(choose(20, np.ones(1000)), chosen) # Equal weights are the same as no weights
+    assert np.array_equal(choose(20, uids < 10), uids[:10]) # Zero weights are never chosen
+    with pytest.raises(ValueError):
+        choose(20, uids < 10, die=True)
+    heavy = choose(200, np.where(uids < 500, 9, 1))
+    assert (heavy < 500).mean() > 0.8 # Higher weights are chosen more often (expected 0.9)
+
+    # In a sim: exact seeding, including with a callable
+    sir = ss.SIR(init_prev=ss.choose_n(lambda sim: sim.pars.n_agents//100))
+    sim = ss.Sim(n_agents=500, diseases=sir, networks='random', dur=1, verbose=0).init()
+    assert sim.diseases.sir.infected.sum() == 5 # Exactly 1% are seeded
+    with pytest.raises(ValueError, match='choose_n'):
+        ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init() # A count rather than a probability
+    return chosen
+
+
+@sc.timer()
+def test_round():
+    """ Test rounding of distributions """
+    sc.heading('Testing rounding')
+    uids = ss.uids(np.arange(10))
+
+    # Options at creation and when called
+    d = ss.normal(5.3, 2, round='nearest', strict=False)
+    assert d.rvs(10).dtype == ss.dtypes.int # Rounded at creation
+    assert d.rvs(10, round=False).dtype != ss.dtypes.int # Not rounded if overridden
+    d = ss.constant(2.3, round=True, strict=False).init(slots=np.arange(10_000))
+    assert np.isclose(d.rvs(ss.uids(np.arange(10_000))).mean(), 2.3, atol=0.03) # Stochastic rounding is unbiased
+
+    # Durations are rounded to whole timesteps
+    steps = ss.lognorm_ex(ss.days(4.5), ss.days(1.5), round='nearest').mock(dt=ss.days(0.5)).rvs(uids)
+    assert steps.dtype == ss.dtypes.int and steps.mean() > 6 # Integer timesteps of half a day
+    return steps
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -597,5 +647,7 @@ if __name__ == '__main__':
     o13 = test_timepar_callable()
     o14 = test_hist_plotting()
     o15 = test_dtype_consistency()
+    o16 = test_choose_n()
+    o17 = test_round()
 
     T.toc()

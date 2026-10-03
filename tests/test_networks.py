@@ -446,6 +446,66 @@ def test_other():
     return msm
 
 
+@sc.timer()
+def test_edge_ops():
+    sc.heading('Testing network edge operations')
+    df = sc.dataframe(p1=[0, 1, 2, 3], p2=[1, 2, 3, 4])
+    net = ss.Network(name='mynet').from_df(df) # Create from a dataframe
+    assert net.name == 'mynet' and len(net) == 4
+    assert np.array_equal(net['p1'], df.p1) # Access edge columns like a dict
+    assert net.beta.sum() == 4 # Beta defaults to 1
+
+    net.from_df(dict(p1=[0, 1], p2=[1, 2], beta=[1, 2])) # Replace the edges with a dict of arrays
+    assert net['beta'][1] == 2
+
+    net.remove_edges(net.p1 == 0) # Remove edges by mask
+    assert len(net) == 1 and net.p1[0] == 1
+    net.remove_edges([0]) # ...or by index
+    assert len(net) == 0
+    return net
+
+
+@sc.timer()
+def test_dynamic():
+    sc.heading('Testing static (dynamic=False) networks')
+    kw = dict(n_agents=small, diseases='sis', verbose=0)
+    sim = ss.Sim(networks=ss.RandomNet(dynamic=False), **kw).init()
+    p1 = sim.networks[0].p1.copy()
+    sim.run()
+    assert np.array_equal(p1, sim.networks[0].p1) # Static edges don't change
+
+    sim = ss.Sim(networks=ss.RandomNet(dynamic=False), demographics=True, stop=2010, **kw).run()
+    assert sim.networks[0].members.max() < small # Agents born during the sim are not added
+    return sim
+
+
+@sc.timer()
+def test_cluster():
+    sc.heading('Testing cluster networks')
+    net = ss.ClusterNet(cluster_size=ss.poisson(5), age_range=[18, 65])
+    sim = ss.Sim(n_agents=medium, networks=net, copy_inputs=False).init()
+    ages = sim.people.age
+    clusters = net.cluster[net.p1]
+    assert np.array_equal(clusters, net.cluster[net.p2]) # Edges are only within clusters
+    assert np.all(ages[net.members] >= 18) and np.all(ages[net.members] < 65) # Only within the age range
+    sizes = np.bincount(net.cluster.notnanvals.astype(int))
+    assert len(net) == (sizes*(sizes-1)/2).sum() # Clusters are fully connected
+    return net
+
+
+@sc.timer()
+def test_hybrid():
+    sc.heading('Testing hybrid networks')
+    sis = ss.SIS(beta=dict(h=0.1, s=0.05, w=0.05, c=0.02)) # Per-network beta
+    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ss.HybridNet(contacts=dict(c=10)), verbose=0)
+    sim.run()
+    nets = sim.networks
+    assert list(nets.keys()) == ['h', 's', 'w', 'c'] # Expanded into four networks
+    assert np.all(sim.people.age[nets.s.members] < 22) # Schools are age-restricted
+    assert nets.h.edges.beta[0] == 3.0 # Default v3 per-network beta
+    assert nets.c.pars.n_contacts.pars.lam == 10 # Partial update of contacts
+    return sim
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -468,5 +528,9 @@ if __name__ == '__main__':
     ehh  = test_dynamic_household()
     ehh2 = test_household_coarse_pregnancy_dt()
     oth  = test_other()
+    ops  = test_edge_ops()
+    dyn  = test_dynamic()
+    clus = test_cluster()
+    hyb  = test_hybrid()
 
     T.toc()

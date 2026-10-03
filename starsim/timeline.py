@@ -190,6 +190,15 @@ class Timeline:
         """ Length is the number of timepoints """
         return self.npts
 
+    def __eq__(self, other):
+        """ Raise an error if compared to a number (e.g. `sim.t == 10` instead of `sim.ti == 10`), since otherwise it would silently be False """
+        if sc.isnumber(other):
+            errormsg = 'sim.t is a Timeline, not a timestep index; did you mean sim.ti instead?'
+            raise TypeError(errormsg)
+        return NotImplemented # Otherwise, use identity
+
+    __hash__ = object.__hash__ # Defining __eq__ removes the default hash, so restore it
+
     @property
     def ready(self):
         """ Check if all parameters are in place to be initialized """

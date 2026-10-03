@@ -1,6 +1,7 @@
 """
 Numerical utilities and other helper functions
 """
+import re
 import warnings
 import numpy as np
 import pandas as pd
@@ -372,8 +373,15 @@ def apply_age_range(age_string, arr):
 
 
 def standardize_netkey(key):
-    """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
-    return key.lower().removesuffix('net')
+    """ 
+    Standardize network key names
+    
+    Networks can be upper or lowercase, have a suffix 'net' or not, and may include
+    a number added to make the name unique; this function standardizes them. For
+    example, 'RandomNet', 'randomnet', and 'randomnet_1' would all be standardized
+    to 'random'.
+    """
+    return re.sub(r'net(_\d+)?$', r'\1', key.lower())
 
 
 # Alternative column names accepted for standard data columns, used only if the configured

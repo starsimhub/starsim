@@ -25,13 +25,25 @@ class Result(ss.BaseArr):
         low (array): values for the lower bound
         high (array): values for the upper bound
         summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+        columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
+
+    For a 2D result, `res.alpha` or `res['alpha']` returns a 1D result for that column (which
+    shares data with the 2D result), and `res[ti]` returns the row for that timestep.
+
+    Examples:
+        ```python
+        res = ss.Result('new_infections', columns=['wild', 'alpha'], shape=10)
+        res[3] = [20, 5] # Set the values for timestep 3
+        res['alpha'][4] = 8 # Set one value for timestep 4
+        res['alpha'].label # Returns 'new_infections (alpha)'
+        ```
     """
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, columns=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -45,6 +57,8 @@ class Result(ss.BaseArr):
         self._shape = shape
         self.values = values
         self.summarize_by = summarize_by
+        self.columns = columns
+        self.validate_columns()
         self.init_values()
         return
 
@@ -78,8 +92,10 @@ class Result(ss.BaseArr):
         return sc.pr(self)
 
     def __getitem__(self, key):
-        """ Allow e.g. result['low'] """
+        """ Allow e.g. result['low'], or result['alpha'] for a column of a 2D result """
         if isinstance(key, str):
+            if self.columns is not None and key in self.columns:
+                return self.col(key)
             return getattr(self, key)
         else:
             return super().__getitem__(key)
@@ -113,12 +129,48 @@ class Result(ss.BaseArr):
                 dtype = self.values.dtype
                 shape = self.values.shape
             elif shape is not None: # Or if a shape is provided, initialize
+                if self.columns is not None and sc.isnumber(shape): # For 2D results, add the columns axis
+                    shape = (shape, len(self.columns))
                 self.values = np.zeros(shape=shape, dtype=dtype)
             else:
                 self.values = None
             self.dtype = dtype
             self._shape = shape
+            if self.columns is not None and self.values is not None and self.values.shape[1:] != (len(self.columns),):
+                errormsg = f'Result "{self.name}" has {len(self.columns)} columns, but values of shape {self.values.shape}'
+                raise ValueError(errormsg)
         return self.values
+
+    def col(self, col):
+        """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result """
+        i = self._col_index(col)
+        col = self.columns[i]
+        label = sc.ifelse(self.label, self.name)
+        res = Result(name=f'{self.name}_{col}', label=f'{label} ({col})', dtype=self.dtype, scale=self.scale,
+                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, summarize_by=self.summarize_by or self.summary_method()) # Infer the summary method from the parent's name, not the column's
+        res.values = self.values[:, i] # Set after creation, since init_values() would copy
+        res.low = self.low[:, i] if self.low is not None else None
+        res.high = self.high[:, i] if self.high is not None else None
+        return res
+
+    def by_column(self):
+        """ Return a dict of 1D results, one per column, for a 2D result """
+        return sc.objdict({col:self.col(col) for col in self.columns})
+
+    def stack(self, results):
+        """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling) """
+        def stack_key(key):
+            return None if results[0][key] is None else np.column_stack([res[key] for res in results])
+        values = stack_key('values')
+        return self.asnew(values=values, low=stack_key('low'), high=stack_key('high'), timevec=results[0].timevec, _shape=values.shape)
+
+    def apply_scale(self, scale):
+        """ Multiply the values by the population scale: a number, or an array with one entry per timestep """
+        scale = np.asarray(scale)
+        if scale.ndim == 1 and self.values.ndim == 2: # Scale each row of a 2D result
+            scale = scale[:, None]
+        self.values = self.values*scale
+        return self
 
     def update(self, *args, **kwargs):
         """ Update parameters, and initialize values if needed """
@@ -186,6 +238,11 @@ class Result(ss.BaseArr):
         if self.timevec is None:
             raise ValueError('Cannot resample: timevec is not set')
 
+        # For 2D results, resample each column separately
+        if self.columns is not None:
+            results = [res.resample(new_unit=new_unit, summarize_by=summarize_by, die=die, use_years=use_years, sep=sep) for res in self.by_column().values()]
+            return self.stack(results)
+
         # Validate new_unit
         if new_unit is None:
             valid_units = ['year', 'month', 'week', 'day'] + ['1YE', '1m', '1w'] # Starsim and pandas units
@@ -238,6 +295,10 @@ class Result(ss.BaseArr):
         Returns:
             Result: a new Result with annual timevec and values
         """
+        # For 2D results, annualize each column separately
+        if self.columns is not None:
+            return self.stack([res.annualize() for res in self.by_column().values()])
+
         method = self.summarize_by if self.summarize_by else self.summary_method()
 
         # Group by integer year
@@ -290,7 +351,14 @@ class Result(ss.BaseArr):
             set_name (bool): whether to set the name of the series to the name of the result
             resample (str): if provided, resample the data to this frequency
             kwargs: passed to the resample method
+
+        For a 2D result, return a dataframe with one column per result column, e.g. `new_infections_alpha`.
         """
+        # For 2D results, make one dataframe column per result column
+        if self.columns is not None:
+            series = [res.to_series(set_name=True, resample=resample, sep=sep, **kwargs) for res in self.by_column().values()]
+            return pd.concat(series, axis=1)
+
         # Return a resampled version if requested
         if resample is not None:
             resampled = self.resample(new_unit=resample, sep=sep, **kwargs)
@@ -319,8 +387,21 @@ class Result(ss.BaseArr):
             bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
             resample (str): if provided, resample the data to this frequency
             kwargs: passed to the resample method if resample=True
+
+        For a 2D result, there is one set of dataframe columns per result column, e.g. `alpha` and `alpha_low`
+        (or `new_infections_alpha` and `new_infections_alpha_low` if `col_names='new_infections'`).
         """
         data = dict()
+
+        # For 2D results, make one set of dataframe columns per result column
+        if self.columns is not None:
+            dfs = []
+            for col,res in self.by_column().items():
+                gcol = col if col_names == 'vlh' else f'{sc.ifelse(col_names, self.name)}{sep}{col}'
+                dfs.append(res.to_df(sep=sep, col_names=gcol, bounds=bounds, resample=resample, set_date_index=set_date_index, **kwargs))
+            df = pd.concat(dfs, axis=1)
+            df = df.loc[:, ~df.columns.duplicated()] # Remove duplicate timevec columns
+            return df
 
         # Return a resampled version if requested
         if resample is not None:
@@ -365,7 +446,7 @@ class Result(ss.BaseArr):
         return df
 
     def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, **kwargs):
-        """ Plot a single result; kwargs are interpreted as plot_kw """
+        """ Plot a single result (with one line per column for a 2D result); kwargs are interpreted as plot_kw """
         # Prepare inputs
         fig_kw = sc.mergedicts(fig_kw)
         plot_kw = sc.mergedicts(dict(lw=3, alpha=0.8), plot_kw, kwargs)
@@ -383,12 +464,15 @@ class Result(ss.BaseArr):
             errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
             raise ValueError(errormsg)
 
-        # Plot bounds
-        if self.low is not None and self.high is not None:
-            ax.fill_between(self.timevec, self.low, self.high, **fill_kw)
-
-        # Plot results
-        ax.plot(self.timevec, self.values, **plot_kw)
+        # Plot bounds and results, with one line per column for 2D results
+        lines = self.by_column().items() if self.columns is not None else [(None, self)]
+        for col,res in lines:
+            if res.low is not None and res.high is not None:
+                ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
+            col_kw = dict(label=col) if col is not None else None
+            ax.plot(res.timevec, res.values, **sc.mergedicts(col_kw, plot_kw))
+        if self.columns is not None:
+            ax.legend()
         ax.set_title(self.full_label)
         ax.set_xlabel('Time')
         sc.commaticks(ax)
@@ -485,9 +569,21 @@ class Results(ss.ndict):
         lengths = [len(res) for res in self.flatten().values()]
         return len(set(lengths)) == 1
 
-    def flatten(self, sep='_', only_results=True, only_auto=False, keep_case=False, **kwargs):
-        """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
+    def flatten(self, sep='_', only_results=True, only_auto=False, keep_case=False, columns=False, **kwargs):
+        """
+        Turn from a nested dictionary into a flat dictionary, keeping only results by default
+
+        If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_new_infections_alpha`.
+        """
         out = sc.flattendict(self, sep=sep)
+        if columns:
+            split = {}
+            for k,v in out.items():
+                if isinstance(v, Result) and v.columns is not None:
+                    split.update({f'{k}{sep}{col}':res for col,res in v.by_column().items()})
+                else:
+                    split[k] = v
+            out = split
         if not keep_case:
             out = sc.objdict({k.lower():v for k,v in out.items()})
         if 'resample' in kwargs and kwargs['resample'] is not None:
@@ -542,7 +638,7 @@ class Results(ss.ndict):
                 df = None
         else:
             if self.equal_len or 'resample' in kwargs:  # If we're resampling, all results will end up the same length
-                flat = self.flatten(sep=sep, only_results=True, **kwargs)
+                flat = self.flatten(sep=sep, only_results=True, columns=True, **kwargs)
                 if 'resample' in kwargs and kwargs['resample'] is not None:
                     timevec = flat[0].timevec
                 else:

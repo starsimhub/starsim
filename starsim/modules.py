@@ -275,6 +275,7 @@ class Module(Base):
 
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
+        self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.t = ss.Timeline(**kwargs, name=self.name, init=False) # Initialized in init_pre(), so the sim's dt is used if not supplied
 
@@ -316,6 +317,9 @@ class Module(Base):
         if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
             if value is getattr(self, attr, None): # Allow assigning the same object back - this happens automatically with some in-place operators (e.g., +=)
                 return
+            if attr == 't': # Common in Covasim v3 analyzers, e.g. self.t = []
+                errormsg = f'"t" is reserved for the module\'s Timeline; store your own time data under another name, e.g. self.tvec'
+                raise AttributeError(errormsg)
             errormsg = f'Cannot modify attribute "{attr}"; locked attributes are {sc.strjoin(self._locked_attrs)}.\n'
             errormsg += 'If you really mean to do this, use module.setattribute() or set module._lock_attrs = False'
             try:
@@ -413,6 +417,8 @@ class Module(Base):
         cls_lower = cls_name.lower()
         old_name = getattr(self, 'name', None)
         self.name = self._reconcile('name', name, cls_lower)
+        if name is not None or self.name != cls_lower: # The user chose the name, so never rename it
+            self._default_name = False
         default_label = self.name if self.name != cls_lower else cls_name
         if label is None and getattr(self, 'label', None) in [old_name, cls_name]: # The existing label is a default, so update it to match the new name
             label = default_label
@@ -877,10 +883,11 @@ class Module(Base):
     @required()
     def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called *after* a custom finalize_results()
         """ Finalize results """
-        # Scale results
-        for reskey, res in self.results.items():
-            if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
+        # Scale results, including any nested ones
+        scale = self.sim.result_scale(self)
+        for res in self.results.flatten(keep_case=True).values():
+            if res.scale:
+                res.apply_scale(scale)
         return
 
     def to_json(self):
@@ -911,6 +918,8 @@ class Module(Base):
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(timevec, v)
+                if isinstance(v, ss.Result) and v.columns is not None: # One line per column for 2D results
+                    ax.legend(v.columns)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return ss.return_fig(fig)

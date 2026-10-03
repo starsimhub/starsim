@@ -181,6 +181,8 @@ class Sim(ss.Base):
         self.init_modules_pre()
 
         # Final initializations -- this is "post"
+        if self.pars.rescale:
+            self.init_rescale()
         self.init_dists() # Initialize distributions
         self.init_people_vals() # Initialize the values in all the states and networks
         self.init_modules_post() # Initialize the module values
@@ -397,6 +399,67 @@ class Sim(ss.Base):
         """
         # Let People handle its own result initialization
         self.people.init_results()
+
+        # With dynamic rescaling, store the scale factor for each timestep
+        if self.pars.rescale:
+            self.results += ss.Result('pop_scale', label='Population scale factor', scale=False, auto_plot=False, timevec=self.timevec, values=np.ones(self.t.npts))
+        return
+
+    @property
+    def current_scale(self):
+        """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
+        return self.results.pop_scale[self.ti] if self.pars.rescale else self.pars.pop_scale
+
+    def result_scale(self, module=None):
+        """
+        The factor to scale results by: a number, or an array with one value per timestep if `pars.rescale=True`
+
+        Args:
+            module (`ss.Module`): if provided, map the scale onto the module's timevec (if different from the sim's)
+        """
+        if not self.pars.rescale:
+            return self.pars.pop_scale
+        scale = self.results.pop_scale.values
+        if module is not None and not np.array_equal(module.t.yearvec, self.t.yearvec):
+            inds = np.searchsorted(self.t.yearvec, module.t.yearvec + 1e-9, side='right') - 1 # Use the most recent sim timestep, since the scale only changes on sim timesteps; 1e-9 avoids floating-point error
+            scale = scale[np.maximum(inds, 0)]
+        return scale
+
+    def init_rescale(self):
+        """ Check that the diseases support dynamic rescaling, and create the distribution for it """
+        for disease in self.diseases():
+            if not hasattr(disease, 'ti_infected'):
+                errormsg = f'Dynamic rescaling (rescale=True) requires each disease to have a ti_infected state, but "{disease.name}" does not'
+                raise ValueError(errormsg)
+        self.rng_rescale = ss.choose_n(name='rng_rescale') # Choose who to make naive when rescaling
+        return
+
+    def rescale(self):
+        """
+        Dynamically rescale the population; only used if `pars.rescale=True`
+
+        The scale factor starts at 1. Once the fraction of agents who are not naive (i.e. have
+        ever been infected with any disease) exceeds `pars.rescale_threshold`, the scale factor
+        is increased by at least `pars.rescale_factor` (up to `pars.pop_scale`), and the same
+        fraction of non-naive agents are made naive again (via `disease.make_naive()`), so that
+        each agent now represents more people. Based on Covasim's dynamic rescaling.
+        """
+        pars = self.pars
+        ti = self.ti
+        self.rng_rescale.jump_dt(ti=ti+1) # Like other distributions, advance the random numbers for this timestep
+        scale = self.results.pop_scale
+        if scale[ti] < pars.pop_scale: # We have room to rescale
+            not_naive = ss.uids.concatenate([disease.ti_infected.notnan.uids for disease in self.diseases()]).unique()
+            ratio = len(not_naive)/len(self.people) # Current proportion not naive
+            if ratio > pars.rescale_threshold: # Check if we've reached the point to rescale
+                max_ratio = pars.pop_scale/scale[ti] # Don't exceed the total population size
+                scaling_ratio = min(max(ratio/pars.rescale_threshold, pars.rescale_factor), max_ratio)
+                scale[ti:] *= scaling_ratio # Update the scale factor from here on
+                n = int(round(len(not_naive)*(1.0 - 1.0/scaling_ratio))) # For example, rescaling by 2 makes half of the non-naive agents naive
+                self.rng_rescale.set(n=n)
+                new_naive = self.rng_rescale.filter(not_naive)
+                for disease in self.diseases():
+                    disease.make_naive(new_naive)
         return
 
     def init_data(self, data=None):
@@ -562,12 +625,15 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
+        scale = self.result_scale()
         for reskey, res in self.results.items():
-            if isinstance(res, ss.Result): # Note: since Result is a NumPy array, "res" and self.results[key] are not the same object
+            if isinstance(res, ss.Result):
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
-                    self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+                    res.apply_scale(scale)
                 if np.all(res == res[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
+        if self.pars.rescale and self.pars.people_results: # With a scale that varies over time, cumulative results must be summed after scaling
+            self.results.cum_deaths[:] = np.cumsum(self.results.new_deaths)
         self.results_ready = True # Results are ready to use
         return
 
@@ -609,7 +675,7 @@ class Sim(ss.Base):
             how = {'':how} # Match everything
 
         summary = sc.objdict()
-        flat = sc.flattendict(self.results, sep='_')
+        flat = self.results.flatten(sep='_', only_results=False, keep_case=True, columns=True) # Summarize each column of 2D results separately
         for key, res in flat.items():
             if 'timevec' not in key: # Skip module-specific time vectors
                 try:
@@ -1003,8 +1069,13 @@ class Sim(ss.Base):
                     if found:
                         ax.scatter(df.index.values, df[dfkey].values, **kw.data)
 
-                # Plot results
-                ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
+                # Plot results, with one line per column for 2D results
+                if res.columns is None:
+                    ax.plot(res.timevec, res.values, **kw.plot, label=self.label)
+                else:
+                    labels = [f'{col} ({self.label})' if self.label else col for col in res.columns]
+                    ax.plot(res.timevec, res.values, **kw.plot, label=labels)
+                    ax.legend()
                 ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         if show_label in ['title', 'suptitle'] and self.label:

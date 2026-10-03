@@ -2,6 +2,7 @@
 Test the Timeline object
 """
 import numpy as np
+import pytest
 import sciris as sc
 import starsim as ss
 
@@ -126,6 +127,11 @@ def test_timeline():
     assert s6.t.tvec[0] == ss.years(2)
     assert s6.t.tvec[-1] == ss.datedur(years=52).years
     assert len(s6.t) == 51
+
+    print('Testing that a timeline is not a timestep index')
+    with pytest.raises(TypeError):
+        s1.t == 10 # Should be s1.ti == 10
+    assert s1.t == s1.t and s1.t != t1 # Comparing timelines still uses identity
 
     return [s1, t1, s2, t2]
 

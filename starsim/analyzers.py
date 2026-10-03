@@ -37,8 +37,8 @@ class infection_log(Analyzer):
         sim.analyzers[0].plot()
         ```
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.logs = sc.objdict()
         return
 
@@ -53,6 +53,18 @@ class infection_log(Analyzer):
             self.logs[key] = disease.infection_log
             disease.infection_log = None # Reset them to save memory
         return
+
+    @property
+    def log(self):
+        """ The infection log, if there is only one disease """
+        if len(self.logs) != 1:
+            errormsg = f'There are {len(self.logs)} infection logs, so choose one via e.g. analyzer.logs[0] instead'
+            raise ValueError(errormsg)
+        return self.logs[0]
+
+    def to_df(self):
+        """ Convert the infection log to a dataframe, if there is only one disease """
+        return self.log.to_df()
 
     def plot(self, **kwargs):
         """ Plot all of the infection logs """

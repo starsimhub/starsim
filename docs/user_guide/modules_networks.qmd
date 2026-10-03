@@ -56,7 +56,9 @@ Starsim provides different network types for different transmission scenarios:
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
 | `StaticNet` | NetworkX graph conversion | `graph`, `p`, `n_contacts` | Pre-defined network structures |
-| `RandomNet` | Random connections | `n_contacts`, `dur` | General infectious diseases |
+| `RandomNet` | Random connections | `n_contacts`, `dur`, `dynamic`, `age_range` | General infectious diseases |
+| `ClusterNet` | Fully connected clusters | `cluster_size`, `dynamic`, `age_range` | Households and other small groups |
+| `HybridNet` | Covasim's household, school, work, and community networks | `household_size`, `contacts`, `school_ages`, `work_ages` | Respiratory diseases with structured contacts |
 | `MFNet` | Male-female partnerships | `duration`, `acts`, `debut` | Heterosexual STI transmission |
 | `MSMNet` | Male-male partnerships | `duration`, `acts`, `participation` | MSM STI transmission |
 | `PrenatalNet` | Prenatal transmission | `dur`, `start`, `end` | In-utero (vertical) transmission |
@@ -83,6 +85,8 @@ Starsim provides different network types for different transmission scenarios:
 - **For respiratory diseases (flu, COVID-19, measles):**
     - `RandomNet`: Simple random mixing; the default in most cases
     - `MixingPools`: Age-structured mixing with contact matrices
+    - `ClusterNet`: Households or other fully connected groups
+    - `HybridNet`: Households, schools, workplaces, and community, as in Covasim
 - **For sexually transmitted infections:**
     - `MFNet`: Male-female (heterosexual) transmission
     - `MSMNet`: Transmission between men who have sex with men (MSM)
@@ -278,3 +282,46 @@ plt.show()
 
 In the above figure, infections are seeded into the high group at the beginning of the simulation, explaining the spike in new cases at that time. High SES can only infect mid SES, so the mid (orange) wave follows. Low SES can only become infected by mid SES in this example, so the blue wave follows. This example intentionally demonstrates the directional nature of mixing pools and includes strong mixing within groups and bottlenecks between groups to make the point.
 
+## Clustered and hybrid networks
+
+`ss.ClusterNet` divides agents into fully connected clusters, such as households: each agent is assigned to one cluster, with sizes drawn from `cluster_size` (a number is treated as the mean of a Poisson distribution), and every pair of agents within a cluster is connected. By default the clusters are created once and never change; set `dynamic=True` to recreate them on each timestep.
+
+`ss.RandomNet` and `ss.RandomExactNet` also accept `dynamic` (set `dynamic=False` for a static network, where edges are created once and agents who join later, e.g. newborns, are not added) and `age_range`, which restricts the network to agents with `age_range[0] <= age < age_range[1]`. Together, these let you build structured contact patterns, for example:
+
+```{python}
+households = ss.ClusterNet(name='households', cluster_size=ss.poisson(3))
+work = ss.RandomNet(name='work', n_contacts=10, age_range=[20, 65], dynamic=False)
+sim = ss.Sim(n_agents=2000, diseases='sis', networks=[households, work], verbose=0)
+sim.run()
+print(f'Number of households: {sim.networks.households.n_clusters}')
+sim.plot('sis')
+```
+
+`ss.HybridNet` reproduces [Covasim](https://covasim.org/)'s "hybrid" population: when added to a sim, it expands into four separate networks, households (`h`, an `ss.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each an `ss.RandomNet` restricted by age where appropriate. Any `dt`, `start`, or `stop` given to `ss.HybridNet` is passed to all four networks, and each network can then be accessed (or modified) separately, e.g. `sim.networks.s`:
+
+```{python}
+sim = ss.Sim(n_agents=2000, diseases='sis', networks=ss.HybridNet(household_size=3), verbose=0)
+sim.run()
+for net in sim.networks():
+    print(f'{net.name} ({net.label}): {len(net)} edges')
+```
+
+## Working with edges
+
+Networks store their edges as arrays of `p1` (the first agent in each edge), `p2` (the second agent), and `beta`, which can be accessed via `net.edges` or directly like a dictionary, e.g. `net['p1']`. Edges can be removed with `net.remove_edges()`, using either edge indices or a boolean mask, and `net.eligible()` returns the agents who can form edges (alive, born, and optionally within an age range). A new network can be created from a dataframe or dictionary of arrays with `from_df()`:
+
+```{python}
+net = sim.networks.c # The community network from the hybrid sim above
+print(f'Community network has {len(net)} edges')
+
+net.remove_edges(net['p1'] < 100) # Remove edges using a boolean mask
+net.remove_edges([0, 1, 2]) # Remove edges by index
+print(f'After removing edges: {len(net)}')
+
+eligible = net.eligible(age_range=[6, 22]) # A boolean array of school-age agents
+print(f'Eligible school-age agents: {eligible.sum()}')
+
+# Create a network from a dictionary of arrays; beta defaults to 1
+custom = ss.Network(name='custom').from_df(dict(p1=[0, 1, 2], p2=[1, 2, 3]))
+print(custom.to_df())
+```

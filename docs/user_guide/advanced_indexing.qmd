@@ -130,6 +130,19 @@ print('Mean age (values):', age.values.mean()) # <- same as above
 print('Mean age (raw):', age.raw.mean()) # <- different since includes dead agents
 ```
 
+### Indexing 2D arrays
+
+For arrays with multiple columns (see [People, states, and arrays](basics_people.qmd)), the first index selects agents using the rules above, and the second selects columns, by position or by name:
+
+```{python}
+imm = ss.FloatArr('imm', columns=['wild', 'mutant'], default=0, mock=5)
+uids = ss.uids([0, 1])
+imm[uids, 'mutant'] = 0.8 # Same as imm[uids, 1] = 0.8
+print(imm[uids]) # One row per agent
+print(imm[:, 'mutant']) # One column for all active agents
+print((imm.mutant > 0.5).uids) # Convert a single column to UIDs
+```
+
 ## Best practices and common pitfalls
 
 ### Do:

@@ -306,7 +306,7 @@ class MultiSim:
         rkeys = list(rflat.keys())
         length_mismatches = sc.ddict(int)
         for rkey in rkeys:
-            raw[rkey] = np.full((len(rflat[rkey]), len(self.sims)), np.nan)
+            raw[rkey] = np.full(rflat[rkey].shape + (len(self.sims),), np.nan) # Shape (npts, nsims), or (npts, ncols, nsims) for 2D results
             for s, sim in enumerate(self.sims):
                 flat = sim.results.flatten()
                 this_raw = raw[rkey]
@@ -318,7 +318,7 @@ class MultiSim:
                 else:
                     length_mismatches[sim.label] += 1
                     length = min(l1, l2)
-                this_raw[:length, s] = this_flat[:length]
+                this_raw[:length, ..., s] = this_flat[:length]
         if length_mismatches:
             warnmsg = 'Sim results have mismatched lengths; results have been truncated but are not necessarily aligned. Mismatches:\n'
             for k,v in length_mismatches.items():
@@ -328,15 +328,15 @@ class MultiSim:
         for rkey in rkeys:
             res = rflat[rkey]
             if use_mean:
-                r_mean = np.mean(raw[rkey], axis=1)
-                r_std = np.std(raw[rkey], axis=1)
+                r_mean = np.mean(raw[rkey], axis=-1)
+                r_std = np.std(raw[rkey], axis=-1)
                 res[:] = r_mean
                 res.low = r_mean - bounds * r_std
                 res.high = r_mean + bounds * r_std
             else:
-                res[:] = np.quantile(raw[rkey], q=0.5, axis=1)
-                res.low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                res.high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
+                res[:] = np.quantile(raw[rkey], q=0.5, axis=-1)
+                res.low = np.quantile(raw[rkey], q=quantiles['low'], axis=-1)
+                res.high = np.quantile(raw[rkey], q=quantiles['high'], axis=-1)
 
         # Compute and store final results
         reduced_sim.summarize()
@@ -372,6 +372,65 @@ class MultiSim:
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
 
+    def combine(self, output=False):
+        """
+        Combine multiple sims into a single sim, e.g. to treat several smaller sims
+        as one larger population.
+
+        Results that scale with population size (`res.scale=True`, e.g. counts) are
+        summed; other results (e.g. prevalence) are averaged, weighted by each sim's
+        `total_pop`. The population sizes (`n_agents` and `total_pop`) are summed, and
+        `pop_scale` is updated to match. The people are not combined: the combined
+        sim keeps the people (if any) of the first sim.
+
+        Args:
+            output (bool): whether to return the combined sim (otherwise, return the MultiSim)
+
+        Examples:
+            ```python
+            msim = ss.MultiSim(ss.Sim(n_agents=1e3, diseases='sis', networks='random'), n_runs=4)
+            msim.run()
+            msim.combine() # Equivalent to a single sim with n_agents=4e3
+            msim.plot()
+            ```
+        """
+        # Combine the population sizes
+        n_runs = len(self)
+        combined_sim = sc.dcp(self.sims[0])
+        combined_sim.metadata = dict(parallelized=True, combined=True, n_runs=n_runs) # Store how this was parallelized
+        pars = combined_sim.pars
+        pops = np.array([sim.pars.total_pop for sim in self.sims]) # Used to weight the non-count results
+        pars.n_agents = sum(sim.pars.n_agents for sim in self.sims)
+        pars.total_pop = pops.sum()
+        pars.pop_scale = pars.total_pop/pars.n_agents
+
+        # Combine the results
+        flats = [sim.results.flatten() for sim in self.sims]
+        cflat = combined_sim.results.flatten()
+        for key,res in cflat.items():
+            vals = [flat[key].values for flat in flats]
+            if any(len(v) != len(res) for v in vals):
+                errormsg = f'Cannot combine sims with inconsistent lengths for result "{key}": {[len(v) for v in vals]}'
+                raise ValueError(errormsg)
+            raw = np.array(vals) # Shape (n_runs, npts), or (n_runs, npts, ncols) for 2D results
+            res[:] = raw.sum(axis=0) if res.scale else np.average(raw, axis=0, weights=pops)
+            res.low = None # Bounds (e.g. from reduced sims) don't apply to the combined result
+            res.high = None
+
+        # Compute and store final results
+        combined_sim.summarize()
+        if not self._has_orig_sim():
+            self.orig_base_sim = self.base_sim
+        self.base_sim = combined_sim
+        self.results = ss.Results('MultiSim').merge(cflat) # As in reduce()
+        self.summary = combined_sim.summary
+        self.which = 'combined'
+
+        if output:
+            return self.base_sim
+        else:
+            return self
+
     def summarize(self, method='mean', quantiles=None, how='default'):
         """
         Summarize the simulations statistically.
@@ -404,6 +463,87 @@ class MultiSim:
         self.summary = summary # Could reconcile with reduce()'s summary
 
         return summary
+
+    def compare(self, t=None, sim_inds=None, output=False, do_plot=False, **kwargs):
+        """
+        Create a dataframe comparing the sims, with one column per sim and one row per result.
+
+        Args:
+            t (int/str/date): if None, compare the sim summaries (see `sim.summarize()`); else, the timestep index or date to compare the results at
+            sim_inds (list): the indices of the sims to include (default: all)
+            output (bool): whether to return the dataframe (otherwise, print it)
+            do_plot (bool): whether to also plot the comparison (see `msim.plot_compare()`)
+            kwargs (dict): passed to `msim.plot_compare()`
+
+        Examples:
+            ```python
+            s1 = ss.Sim(diseases=ss.SIS(beta=0.05), networks='random', label='Low')
+            s2 = ss.Sim(diseases=ss.SIS(beta=0.10), networks='random', label='High')
+            msim = ss.MultiSim([s1, s2]).run()
+            msim.compare() # Print the summaries
+            df = msim.compare(t='2030-01-01', output=True) # Results on that date
+            ```
+        """
+        sim_inds = sc.ifelse(sim_inds, range(len(self)))
+        year = ss.date(t).years if (t is not None and not sc.isnumber(t)) else None
+        resdict = {}
+        for i in sim_inds:
+            sim = self.sims[i]
+            label = sim.label if sim.label else f'Sim {i}'
+            if label in resdict: # Avoid duplicates
+                label += f' ({i})'
+            if t is None:
+                resdict[label] = sim.summarize() if sim.summary is None else sim.summary
+            else:
+                flat = sim.results.flatten(columns=True)
+                resdict[label] = {}
+                for key,res in flat.items():
+                    if sc.isnumber(t):
+                        ti = t
+                    else: # Nearest timestep to the date, using the result's own timevec since modules can have different dt
+                        ti = sc.findnearest(res.convert_timevec().years, year)
+                    val = res[ti]
+                    if res.scale and val == np.round(val): # Show whole-number counts as ints (but not e.g. 4.5 from scaling)
+                        val = int(val)
+                    resdict[label][key] = val
+
+        df = sc.dataframe(resdict, dtype=object) # Object dtype prevents ints being converted to floats
+        if do_plot:
+            self.plot_compare(df=df, **kwargs)
+        if output:
+            return df
+        else:
+            timestr = 'Summary' if t is None else f'Results for t={t}'
+            print(f'{timestr} for each sim:')
+            print(df)
+            return
+
+    def plot_compare(self, t=None, sim_inds=None, df=None, **kwargs):
+        """
+        Plot a bar chart comparing the sims, with one panel per result; see `msim.compare()`.
+
+        Args:
+            t (int/str/date): passed to `msim.compare()`
+            sim_inds (list): passed to `msim.compare()`
+            df (dataframe): if supplied, plot this instead of calling `msim.compare()`
+            kwargs (dict): see `ss.plot_args()` for all valid options
+
+        Examples:
+            ```python
+            msim = ss.MultiSim(ss.Sim(diseases='sis', networks='random'), n_runs=3).run()
+            msim.plot_compare()
+            ```
+        """
+        if df is None:
+            df = self.compare(t=t, sim_inds=sim_inds, output=True)
+        df = df[df.map(sc.isnumber).all(axis=1)] # Skip non-numeric rows
+        kw = ss.plot_args(kwargs)
+        with ss.style(**kw.style):
+            fig, axs = sc.getrowscols(len(df), make=True, **kw.fig)
+            for ax, (key, row) in zip(sc.toarray(axs).flatten(), df.iterrows()):
+                ax.barh(row.index, row.values.astype(float), **kw.plot)
+                ax.set_title(key)
+        return ss.return_fig(fig, **kw.return_fig)
 
     def plot(self, key=None, fig=None, legend=True, **kwargs):
         """
@@ -482,11 +622,93 @@ class MultiSim:
 
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
-                    ax.fill_between(res.timevec, res.low, res.high, **kw.fill)
-                    ax.plot(res.timevec, res, **kw.plot)
+                    lines = res.by_column().items() if res.columns is not None else [(None, res)] # One line per column for 2D results
+                    for col,gres in lines:
+                        if gres.low is not None: # Combined sims don't have bounds
+                            ax.fill_between(gres.timevec, gres.low, gres.high, **kw.fill)
+                        col_kw = dict(label=col) if col is not None else None
+                        ax.plot(gres.timevec, gres, **sc.mergedicts(col_kw, kw.plot))
+                    if res.columns is not None:
+                        ax.legend(**kw.legend)
                     ss.utils.format_axes(ax, res, n_ticks, show_module)
 
         return ss.return_fig(fig, **kw.return_fig)
+
+    @classmethod
+    def merge(cls, *args, base=False):
+        """
+        Merge several MultiSims into one; see also `msim.split()`.
+
+        Args:
+            args (MultiSim): the MultiSims to merge (either a list, or separate arguments)
+            base (bool): if True, make a new MultiSim from the base sims of each MultiSim (e.g. after `reduce()`); otherwise, merge the lists of sims
+
+        Returns:
+            A new MultiSim
+
+        Examples:
+            ```python
+            m1 = ss.MultiSim(ss.Sim(diseases='sis', networks='random', label='SIS'), n_runs=3).run()
+            m2 = ss.MultiSim(ss.Sim(diseases='sir', networks='random', label='SIR'), n_runs=3).run()
+            msim = ss.MultiSim.merge(m1, m2) # 6 sims
+            m1.mean(); m2.mean()
+            mm = ss.MultiSim.merge(m1, m2, base=True) # 2 sims, the means of each
+            mm.plot()
+            ```
+        """
+        if len(args) == 1 and isinstance(args[0], list):
+            args = args[0] # A single list of MultiSims has been provided
+
+        # Create the MultiSim from the base sim of the first argument
+        msim = cls(base_sim=sc.dcp(args[0].base_sim), label=args[0].label)
+        msim.sims = []
+        msim.chunks = [] # Used to enable automatic splitting later
+        for i,ms in enumerate(args):
+            if base: # Only keep the base sims
+                sim = sc.dcp(ms.base_sim)
+                sim.label = ms.label
+                msim.chunks.append([i])
+                msim.sims.append(sim)
+            else: # Keep all the sims
+                n = len(msim.sims)
+                msim.chunks.append(list(range(n, n+len(ms))))
+                msim.sims += sc.dcp(ms.sims)
+        return msim
+
+    def split(self, inds=None, chunks=None):
+        """
+        Split one MultiSim into several; the reverse of `ss.MultiSim.merge()`.
+
+        Specify either the indices of the sims for each new MultiSim (`inds`), or
+        consecutive chunks (`chunks`). For a merged MultiSim, neither is needed.
+
+        Args:
+            inds (list): a list of lists of indices, with each list turned into a MultiSim
+            chunks (int/list): if an int, split the MultiSim into that many equal chunks; if a list, the number of sims in each chunk
+
+        Returns:
+            A list of MultiSims
+
+        Examples:
+            ```python
+            msim = ss.MultiSim(ss.Sim(diseases='sis', networks='random'), n_runs=6).run()
+            m1, m2 = msim.split(inds=[[0,2,4], [1,3,5]])
+            m1, m2 = msim.split(chunks=[2,4]) # Equivalent to inds=[[0,1], [2,3,4,5]]
+            m1, m2 = msim.split(chunks=2) # Equivalent to inds=[[0,1,2], [3,4,5]]
+            m1, m2 = ss.MultiSim.merge(m1, m2).split() # Use the chunks from the merge
+            ```
+        """
+        if inds is None:
+            if chunks is not None:
+                sim_inds = np.arange(len(self))
+                split = np.cumsum(chunks)[:-1] if sc.isiterable(chunks) else chunks # e.g. chunks=[2,4] or chunks=2
+                inds = np.split(sim_inds, split) # Raises an exception if the chunks don't divide the sims evenly
+            elif hasattr(self, 'chunks'): # Created from a merged MultiSim
+                inds = self.chunks
+            else:
+                errormsg = 'If a MultiSim has not been created via merge(), you must supply either inds or chunks to split it'
+                raise ValueError(errormsg)
+        return [self.__class__(sims=sc.dcp([self.sims[i] for i in indlist])) for indlist in inds]
 
 
 def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,

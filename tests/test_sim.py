@@ -352,6 +352,27 @@ def test_save_mixed_dt():
     return sim
 
 
+@sc.timer()
+def test_rescale():
+    """ Test dynamic rescaling, and that duplicate modules get unique names """
+    sc.heading('Testing dynamic rescaling')
+    def make_sim(init_inf, **kwargs):
+        sir = ss.SIR(beta=ss.perday(0.025), dur_inf=ss.days(10), init_prev=ss.choose_n(init_inf), p_death=0)
+        return ss.Sim(n_agents=5e3, pop_scale=10, diseases=sir, networks=ss.RandomNet(n_contacts=10), dt=ss.days(1), dur=ss.days(150), verbose=0, **kwargs)
+    fixed = make_sim(init_inf=2).run()
+    rescaled = make_sim(init_inf=20, rescale=True).run()
+    scale = rescaled.results.pop_scale
+    assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
+    cum_fixed = fixed.results.sir.cum_infections[-1]
+    cum_rescaled = rescaled.results.sir.cum_infections[-1]
+    assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
+
+    with pytest.warns(RuntimeWarning, match='renaming'):
+        sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
+    assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique
+    return rescaled
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -368,6 +389,7 @@ if __name__ == '__main__':
     sim8 = test_creation_syntax()
     sim9 = test_save()
     sim10 = test_save_mixed_dt()
+    sim11 = test_rescale()
 
     T.toc()
 

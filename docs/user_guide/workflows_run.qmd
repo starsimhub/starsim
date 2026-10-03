@@ -50,6 +50,52 @@ msim.median()
 msim.plot()
 ```
 
+## Comparing sims
+
+To compare sims side by side, use `msim.compare()`. By default this shows the summary of each sim (see `sim.summarize()`), with one column per sim; pass `t` to compare the results at a particular timestep index or date instead (dates are matched against each result's own timeline, so this works even if modules have different timesteps):
+
+```{python}
+s1 = ss.Sim(label='Low beta', n_agents=2000, diseases=ss.SIS(beta=0.05), networks='random')
+s2 = ss.Sim(label='High beta', n_agents=2000, diseases=ss.SIS(beta=0.10), networks='random')
+msim = ss.parallel(s1, s2, verbose=0)
+msim.compare() # Compare the summaries
+msim.compare(t='2030-01-01') # Compare the results on a particular date
+```
+
+Use `output=True` to get the comparison as a dataframe, or `msim.plot_compare()` to plot it as a bar chart, with one panel per result:
+
+```{python}
+msim.plot_compare()
+```
+
+## Combining, merging, and splitting
+
+Several smaller sims can be treated as one larger population with `msim.combine()`. Results that scale with population size (e.g. counts) are summed, and other results (e.g. prevalence) are averaged, weighted by each sim's `total_pop`. Unlike `mean()` and `median()`, there are no uncertainty bounds, since the result is a single sim:
+
+```{python}
+sim = ss.Sim(n_agents=1000, diseases='sis', networks='random', verbose=0)
+msim = ss.MultiSim(sim, n_runs=4).run()
+msim.combine() # Equivalent to a single sim with 4,000 agents
+msim.plot()
+```
+
+You can also merge several MultiSims into one with `ss.MultiSim.merge()`, and split one into several with `msim.split()`. With `base=True`, `merge()` keeps only the base sim of each MultiSim (e.g. the result of `mean()`), which is a quick way to plot several scenarios with uncertainty together:
+
+```{python}
+m1 = ss.MultiSim(ss.Sim(label='Low beta', n_agents=2000, diseases=ss.SIS(beta=0.05), networks='random'), n_runs=3)
+m2 = ss.MultiSim(ss.Sim(label='High beta', n_agents=2000, diseases=ss.SIS(beta=0.10), networks='random'), n_runs=3)
+m1.run(verbose=0)
+m2.run(verbose=0)
+
+merged = ss.MultiSim.merge(m1, m2) # A MultiSim with 6 sims
+m1, m2 = merged.split() # Back to two MultiSims with 3 sims each (or use inds or chunks to split another way)
+
+m1.mean()
+m2.mean()
+scens = ss.MultiSim.merge(m1, m2, base=True) # A MultiSim with 2 sims, the means of each
+scens.plot()
+```
+
 ## Copies
 
 Both `ss.Sim` and `ss.MultiSim` objects let you control whether or not the objects passed into them are copied. By default, sims _do_ copy inputs and multisims _don't_. Let's look at a few examples.

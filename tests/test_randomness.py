@@ -393,6 +393,23 @@ def test_multi_random_length():
     return
 
 
+@sc.timer()
+def test_choose_n_crn():
+    """ ss.choose_n() should choose mostly the same agents when the candidates change slightly """
+    sc.heading('Testing CRN for ss.choose_n')
+    n = 10_000
+    uids1 = ss.uids(np.arange(n))
+    uids2 = uids1[np.random.default_rng(1).random(n) > 0.01] # Remove 1% of candidates
+    weights = np.random.default_rng(2).random(n)
+    for w1,w2 in [(None, None), (weights, weights[uids2])]:
+        c1 = ss.choose_n(500, weights=w1, strict=False).init(slots=uids1).filter(uids1)
+        c2 = ss.choose_n(500, weights=w2, strict=False).init(slots=uids1).filter(uids2)
+        overlap = len(np.intersect1d(c1, c2))
+        print(f'Overlap after removing 1% of candidates: {overlap}/500')
+        assert overlap > 480 # Should be roughly 495, vs. roughly 25 for an independent draw
+    return overlap
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -407,6 +424,7 @@ if __name__ == '__main__':
     o7 = test_combine_rands(do_plot=do_plot)
     o8 = test_crn_option()
     o9 = test_multi_random_length()
+    o10 = test_choose_n_crn()
 
     T.toc()
 

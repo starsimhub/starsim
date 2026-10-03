@@ -60,7 +60,7 @@ from .distributions import (
     link_dists, make_dist, dist_list, scale_types, Dists, Dist,
     random, uniform, normal, lognorm_ex, lognorm_im, expon,
     poisson, nbinom, beta_dist, beta_mean, weibull, gamma, constant,
-    randint, rand_raw, bernoulli, choice, histogram,
+    randint, rand_raw, bernoulli, choose_n, choice, histogram,
     multi_random,
 )
 
@@ -89,10 +89,10 @@ from .modules import (
     Base, Module,
 )
 
-t('networks') # Slow import due to networkx
+t('networks')
 from .networks import (
     Route, Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomExactNet, RandomNet, RandomSafeNet, MFNet, MSMNet,
+    StaticNet, RandomExactNet, RandomNet, RandomSafeNet, ClusterNet, HybridNet, MFNet, MSMNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool,
 )
