@@ -294,6 +294,8 @@ class Network(Route):
             ```
         """
         inds = np.asarray(inds)
+        if not inds.size: # Nothing to remove
+            return
         if inds.dtype == bool:
             if len(inds) != len(self):
                 errormsg = f'Boolean mask has length {len(inds)}, but the network has {len(self)} edges'
@@ -974,6 +976,9 @@ class ClusterNet(Network):
         sizes = np.empty(0, dtype=ss_int)
         while sizes.sum() < n:
             new = np.round(self.pars.cluster_size.rvs(n)).astype(ss_int) # n clusters is enough unless some have size 0
+            if not np.any(new > 0): # Avoid an infinite loop
+                errormsg = f'The cluster size distribution for {self.name} did not produce any clusters of size 1 or more: {self.pars.cluster_size}'
+                raise ValueError(errormsg)
             sizes = np.concatenate([sizes, new[new > 0]])
         n_clusters = np.searchsorted(np.cumsum(sizes), n) + 1
         sizes = sizes[:n_clusters]
@@ -1049,11 +1054,12 @@ class HybridNet(Network):
         """ Create the four networks; called automatically when added to a sim """
         p = self.pars
         n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
+        kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
         networks = [
-            ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], dynamic=p.dynamic),
-            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], dynamic=p.dynamic),
-            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], dynamic=p.dynamic),
-            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], dynamic=p.dynamic),
+            ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
+            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **kw),
+            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **kw),
+            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **kw),
         ]
         return networks
 

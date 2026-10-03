@@ -414,6 +414,8 @@ class MultiSim:
                 raise ValueError(errormsg)
             raw = np.array(vals) # Shape (n_runs, npts), or (n_runs, npts, ncols) for 2D results
             res[:] = raw.sum(axis=0) if res.scale else np.average(raw, axis=0, weights=pops)
+            res.low = None # Bounds (e.g. from reduced sims) don't apply to the combined result
+            res.high = None
 
         # Compute and store final results
         combined_sim.summarize()
@@ -500,7 +502,10 @@ class MultiSim:
                         ti = t
                     else: # Nearest timestep to the date, using the result's own timevec since modules can have different dt
                         ti = sc.findnearest(res.convert_timevec().years, year)
-                    resdict[label][key] = int(res[ti]) if res.scale else res[ti] # Counts are ints
+                    val = res[ti]
+                    if res.scale and val == np.round(val): # Show whole-number counts as ints (but not e.g. 4.5 from scaling)
+                        val = int(val)
+                    resdict[label][key] = val
 
         df = sc.dataframe(resdict, dtype=object) # Object dtype prevents ints being converted to floats
         if do_plot:
