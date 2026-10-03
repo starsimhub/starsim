@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 877,
+  "count": 920,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -68,6 +68,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.analyzers.infection_log.log",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.infection_log.log",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.analyzers.infection_log.plot",
       "domain": "py",
       "role": "function",
@@ -81,6 +89,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/analyzers.html#starsim.analyzers.infection_log.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.analyzers.infection_log.to_df",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.infection_log.to_df",
       "dispname": "-"
     },
     {
@@ -121,6 +137,14 @@
       "role": "attribute",
       "priority": "1",
       "uri": "api/arrays.html#starsim.arrays.Arr.auids",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.arrays.Arr.col",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.Arr.col",
       "dispname": "-"
     },
     {
@@ -289,6 +313,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/arrays.html#starsim.arrays.BaseArr.update",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.arrays.BaseArr.validate_columns",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.BaseArr.validate_columns",
       "dispname": "-"
     },
     {
@@ -1364,6 +1396,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.diseases.Disease.make_naive",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Disease.make_naive",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.diseases.Disease.set_prognoses",
       "domain": "py",
       "role": "function",
@@ -1412,6 +1452,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.diseases.Infection.finalize_infections",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.finalize_infections",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.diseases.Infection.finalize_results",
       "domain": "py",
       "role": "function",
@@ -1425,6 +1473,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.Infection.infect",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.Infection.infect_route",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.infect_route",
       "dispname": "-"
     },
     {
@@ -1500,6 +1556,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.diseases.Infection.validate_init_prev",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.validate_init_prev",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.diseases.Infection",
       "domain": "py",
       "role": "class",
@@ -1516,11 +1580,43 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.diseases.InfectionLog.add_entries",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.add_entries",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.InfectionLog.append",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.append",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.InfectionLog.disp",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.disp",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.diseases.InfectionLog.to_df",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.InfectionLog.to_df",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.InfectionLog.to_graph",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.to_graph",
       "dispname": "-"
     },
     {
@@ -1665,6 +1761,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.SIS.init_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.diseases.SIS.make_naive",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIS.make_naive",
       "dispname": "-"
     },
     {
@@ -1940,6 +2044,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.distributions.Dist.round_rvs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.round_rvs",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.distributions.Dist.rvs",
       "domain": "py",
       "role": "function",
@@ -2017,6 +2129,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dist.validate_pars",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.Dist.validate_round",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.validate_round",
       "dispname": "-"
     },
     {
@@ -2185,6 +2305,38 @@
       "role": "class",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.choice",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.choose_n.filter",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n.filter",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.choose_n.rvs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n.rvs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.choose_n.split",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n.split",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.distributions.choose_n",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n",
       "dispname": "-"
     },
     {
@@ -3260,6 +3412,30 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.networks.ClusterNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.ClusterNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.ClusterNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.ClusterNet.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.ClusterNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.ClusterNet",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.networks.DynamicNetwork.end_pairs",
       "domain": "py",
       "role": "function",
@@ -3281,6 +3457,30 @@
       "role": "class",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.DynamicNetwork",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.HybridNet.expand",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.HybridNet.expand",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.HybridNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.HybridNet.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.HybridNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.HybridNet",
       "dispname": "-"
     },
     {
@@ -3460,6 +3660,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.networks.Network.eligible",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.Network.eligible",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.networks.Network.find_contacts",
       "domain": "py",
       "role": "function",
@@ -3553,6 +3761,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.Network.pop_inds",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.Network.remove_edges",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.Network.remove_edges",
       "dispname": "-"
     },
     {
@@ -3673,6 +3889,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.RandomExactNet.get_edges",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.networks.RandomExactNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet.step",
       "dispname": "-"
     },
     {
@@ -3860,6 +4084,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.parameters.SimPars.expand_modules",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/parameters.html#starsim.parameters.SimPars.expand_modules",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.parameters.SimPars.is_default",
       "domain": "py",
       "role": "function",
@@ -3897,6 +4129,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/parameters.html#starsim.parameters.SimPars.validate_modules",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.parameters.SimPars.validate_name",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/parameters.html#starsim.parameters.SimPars.validate_name",
       "dispname": "-"
     },
     {
@@ -4348,6 +4588,30 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.results.Result.apply_scale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.apply_scale",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.results.Result.by_column",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.by_column",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.results.Result.col",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.col",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.results.Result.convert_timevec",
       "domain": "py",
       "role": "function",
@@ -4425,6 +4689,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/results.html#starsim.results.Result.resample",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.results.Result.stack",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.stack",
       "dispname": "-"
     },
     {
@@ -4572,6 +4844,22 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.run.MultiSim.combine",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.combine",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.run.MultiSim.compare",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.compare",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.run.MultiSim.copy",
       "domain": "py",
       "role": "function",
@@ -4612,11 +4900,27 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.run.MultiSim.merge",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.merge",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.run.MultiSim.plot",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/run.html#starsim.run.MultiSim.plot",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.run.MultiSim.plot_compare",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.plot_compare",
       "dispname": "-"
     },
     {
@@ -4657,6 +4961,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/run.html#starsim.run.MultiSim.shrink",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.run.MultiSim.split",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.split",
       "dispname": "-"
     },
     {
@@ -5012,6 +5324,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.sim.Sim.current_scale",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.current_scale",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.sim.Sim.finalize",
       "domain": "py",
       "role": "function",
@@ -5116,6 +5436,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.sim.Sim.init_rescale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.init_rescale",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.sim.Sim.init_results",
       "domain": "py",
       "role": "function",
@@ -5180,11 +5508,27 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.sim.Sim.rescale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.rescale",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.sim.Sim.reset_time_pars",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/sim.html#starsim.sim.Sim.reset_time_pars",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.sim.Sim.result_scale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.result_scale",
       "dispname": "-"
     },
     {
@@ -7084,6 +7428,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.infection_log.log",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.infection_log.log",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.infection_log.plot",
       "domain": "py",
       "role": "function",
@@ -7097,6 +7449,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/analyzers.html#starsim.analyzers.infection_log.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.infection_log.to_df",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/analyzers.html#starsim.analyzers.infection_log.to_df",
       "dispname": "-"
     },
     {
@@ -7129,6 +7489,14 @@
       "role": "attribute",
       "priority": "1",
       "uri": "api/arrays.html#starsim.arrays.Arr.auids",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Arr.col",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.Arr.col",
       "dispname": "-"
     },
     {
@@ -7297,6 +7665,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/arrays.html#starsim.arrays.BaseArr.update",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.BaseArr.validate_columns",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/arrays.html#starsim.arrays.BaseArr.validate_columns",
       "dispname": "-"
     },
     {
@@ -8300,6 +8676,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Disease.make_naive",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Disease.make_naive",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Disease.set_prognoses",
       "domain": "py",
       "role": "function",
@@ -8348,6 +8732,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Infection.finalize_infections",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.finalize_infections",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Infection.finalize_results",
       "domain": "py",
       "role": "function",
@@ -8361,6 +8753,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.Infection.infect",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Infection.infect_route",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.infect_route",
       "dispname": "-"
     },
     {
@@ -8436,6 +8836,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Infection.validate_init_prev",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.Infection.validate_init_prev",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Infection",
       "domain": "py",
       "role": "class",
@@ -8452,11 +8860,43 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.InfectionLog.add_entries",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.add_entries",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.InfectionLog.append",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.append",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.InfectionLog.disp",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.disp",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.InfectionLog.to_df",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.InfectionLog.to_df",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.InfectionLog.to_graph",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.InfectionLog.to_graph",
       "dispname": "-"
     },
     {
@@ -8601,6 +9041,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/diseases.html#starsim.diseases.SIS.init_results",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SIS.make_naive",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/diseases.html#starsim.diseases.SIS.make_naive",
       "dispname": "-"
     },
     {
@@ -8868,6 +9316,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Dist.round_rvs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.round_rvs",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Dist.rvs",
       "domain": "py",
       "role": "function",
@@ -8945,6 +9401,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.Dist.validate_pars",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Dist.validate_round",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.Dist.validate_round",
       "dispname": "-"
     },
     {
@@ -9089,6 +9553,38 @@
       "role": "class",
       "priority": "1",
       "uri": "api/distributions.html#starsim.distributions.choice",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.choose_n.filter",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n.filter",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.choose_n.rvs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n.rvs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.choose_n.split",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n.split",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.choose_n",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/distributions.html#starsim.distributions.choose_n",
       "dispname": "-"
     },
     {
@@ -10100,6 +10596,30 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.ClusterNet.add_pairs",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.ClusterNet.add_pairs",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.ClusterNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.ClusterNet.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.ClusterNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.ClusterNet",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.DynamicNetwork.end_pairs",
       "domain": "py",
       "role": "function",
@@ -10121,6 +10641,30 @@
       "role": "class",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.DynamicNetwork",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.HybridNet.expand",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.HybridNet.expand",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.HybridNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.HybridNet.step",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.HybridNet",
+      "domain": "py",
+      "role": "class",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.HybridNet",
       "dispname": "-"
     },
     {
@@ -10300,6 +10844,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Network.eligible",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.Network.eligible",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Network.find_contacts",
       "domain": "py",
       "role": "function",
@@ -10393,6 +10945,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.Network.pop_inds",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Network.remove_edges",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.Network.remove_edges",
       "dispname": "-"
     },
     {
@@ -10513,6 +11073,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/networks.html#starsim.networks.RandomExactNet.get_edges",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.RandomExactNet.step",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/networks.html#starsim.networks.RandomExactNet.step",
       "dispname": "-"
     },
     {
@@ -10684,6 +11252,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.SimPars.expand_modules",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/parameters.html#starsim.parameters.SimPars.expand_modules",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.SimPars.is_default",
       "domain": "py",
       "role": "function",
@@ -10721,6 +11297,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/parameters.html#starsim.parameters.SimPars.validate_modules",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.SimPars.validate_name",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/parameters.html#starsim.parameters.SimPars.validate_name",
       "dispname": "-"
     },
     {
@@ -11116,6 +11700,30 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Result.apply_scale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.apply_scale",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Result.by_column",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.by_column",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Result.col",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.col",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Result.convert_timevec",
       "domain": "py",
       "role": "function",
@@ -11193,6 +11801,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/results.html#starsim.results.Result.resample",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Result.stack",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/results.html#starsim.results.Result.stack",
       "dispname": "-"
     },
     {
@@ -11332,6 +11948,22 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.MultiSim.combine",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.combine",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.MultiSim.compare",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.compare",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.MultiSim.copy",
       "domain": "py",
       "role": "function",
@@ -11372,11 +12004,27 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.MultiSim.merge",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.merge",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.MultiSim.plot",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/run.html#starsim.run.MultiSim.plot",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.MultiSim.plot_compare",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.plot_compare",
       "dispname": "-"
     },
     {
@@ -11417,6 +12065,14 @@
       "role": "function",
       "priority": "1",
       "uri": "api/run.html#starsim.run.MultiSim.shrink",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.MultiSim.split",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/run.html#starsim.run.MultiSim.split",
       "dispname": "-"
     },
     {
@@ -11636,6 +12292,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Sim.current_scale",
+      "domain": "py",
+      "role": "attribute",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.current_scale",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Sim.finalize",
       "domain": "py",
       "role": "function",
@@ -11740,6 +12404,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Sim.init_rescale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.init_rescale",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Sim.init_results",
       "domain": "py",
       "role": "function",
@@ -11804,11 +12476,27 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Sim.rescale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.rescale",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Sim.reset_time_pars",
       "domain": "py",
       "role": "function",
       "priority": "1",
       "uri": "api/sim.html#starsim.sim.Sim.reset_time_pars",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Sim.result_scale",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.result_scale",
       "dispname": "-"
     },
     {

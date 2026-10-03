@@ -608,16 +608,21 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.results.Result" id="toc-starsim.results.Result" class="nav-link" data-scroll-target="#starsim.results.Result">Result</a>
   <ul class="collapse">
   <li><a href="#parameters" id="toc-parameters" class="nav-link" data-scroll-target="#parameters">Parameters</a></li>
+  <li><a href="#examples" id="toc-examples" class="nav-link" data-scroll-target="#examples">Examples</a></li>
   <li><a href="#attributes" id="toc-attributes" class="nav-link" data-scroll-target="#attributes">Attributes</a></li>
   <li><a href="#methods" id="toc-methods" class="nav-link" data-scroll-target="#methods">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.results.Result.annualize" id="toc-starsim.results.Result.annualize" class="nav-link" data-scroll-target="#starsim.results.Result.annualize">annualize</a></li>
+  <li><a href="#starsim.results.Result.apply_scale" id="toc-starsim.results.Result.apply_scale" class="nav-link" data-scroll-target="#starsim.results.Result.apply_scale">apply_scale</a></li>
+  <li><a href="#starsim.results.Result.by_column" id="toc-starsim.results.Result.by_column" class="nav-link" data-scroll-target="#starsim.results.Result.by_column">by_column</a></li>
+  <li><a href="#starsim.results.Result.col" id="toc-starsim.results.Result.col" class="nav-link" data-scroll-target="#starsim.results.Result.col">col</a></li>
   <li><a href="#starsim.results.Result.convert_timevec" id="toc-starsim.results.Result.convert_timevec" class="nav-link" data-scroll-target="#starsim.results.Result.convert_timevec">convert_timevec</a></li>
   <li><a href="#starsim.results.Result.disp" id="toc-starsim.results.Result.disp" class="nav-link" data-scroll-target="#starsim.results.Result.disp">disp</a></li>
   <li><a href="#starsim.results.Result.from_df" id="toc-starsim.results.Result.from_df" class="nav-link" data-scroll-target="#starsim.results.Result.from_df">from_df</a></li>
   <li><a href="#starsim.results.Result.init_values" id="toc-starsim.results.Result.init_values" class="nav-link" data-scroll-target="#starsim.results.Result.init_values">init_values</a></li>
   <li><a href="#starsim.results.Result.plot" id="toc-starsim.results.Result.plot" class="nav-link" data-scroll-target="#starsim.results.Result.plot">plot</a></li>
   <li><a href="#starsim.results.Result.resample" id="toc-starsim.results.Result.resample" class="nav-link" data-scroll-target="#starsim.results.Result.resample">resample</a></li>
+  <li><a href="#starsim.results.Result.stack" id="toc-starsim.results.Result.stack" class="nav-link" data-scroll-target="#starsim.results.Result.stack">stack</a></li>
   <li><a href="#starsim.results.Result.summary_method" id="toc-starsim.results.Result.summary_method" class="nav-link" data-scroll-target="#starsim.results.Result.summary_method">summary_method</a></li>
   <li><a href="#starsim.results.Result.to_df" id="toc-starsim.results.Result.to_df" class="nav-link" data-scroll-target="#starsim.results.Result.to_df">to_df</a></li>
   <li><a href="#starsim.results.Result.to_series" id="toc-starsim.results.Result.to_series" class="nav-link" data-scroll-target="#starsim.results.Result.to_series">to_series</a></li>
@@ -688,8 +693,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    low<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    high<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    summarize_by<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Array-like container for holding sim results.</p>
 <section id="parameters" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters">Parameters</h4>
@@ -769,9 +775,23 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>how to summarize the data, e.g.&nbsp;‘sum’ or ‘mean’</td>
 <td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
 </tr>
+<tr class="even">
+<td>columns</td>
+<td><a href="https://docs.python.org/3/builtins/stdtypes.html#list">list</a></td>
+<td>if provided, make a 2D result of shape <code>(npts, len(columns))</code>, with these names for the columns, e.g.&nbsp;<code>['wild', 'alpha']</code></td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
 </tbody>
 </table>
 <p>In most cases, <a href="../api/results.html#starsim.results.Result"><span><code>ss.Result</code></span></a> behaves exactly like <a href="https://numpy.org/doc/stable/reference/generated/numpy.array.html#np.array" title="1"><code>np.array()</code></a>, except with the additional fields listed above. To see everything contained in a result, you can use result.disp().</p>
+<p>For a 2D result, <code>res.alpha</code> or <code>res['alpha']</code> returns a 1D result for that column (which shares data with the 2D result), and <code>res[ti]</code> returns the row for that timestep.</p>
+</section>
+<section id="examples" class="level4 doc-section doc-section-examples">
+<h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples">Examples</h4>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> ss.Result(<span class="st">'new_infections'</span>, columns<span class="op">=</span>[<span class="st">'wild'</span>, <span class="st">'alpha'</span>], shape<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>res[<span class="dv">3</span>] <span class="op">=</span> [<span class="dv">20</span>, <span class="dv">5</span>] <span class="co"># Set the values for timestep 3</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>res[<span class="st">'alpha'</span>][<span class="dv">4</span>] <span class="op">=</span> <span class="dv">8</span> <span class="co"># Set one value for timestep 4</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>res[<span class="st">'alpha'</span>].label <span class="co"># Returns 'new_infections (alpha)'</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 <section id="attributes" class="level4">
 <h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
@@ -817,28 +837,44 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Fast numpy-based resampling of results to annual values.</td>
 </tr>
 <tr class="even">
+<td><a href="#starsim.results.Result.apply_scale">apply_scale</a></td>
+<td>Multiply the values by the population scale: a number, or an array with one entry per timestep</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.results.Result.by_column">by_column</a></td>
+<td>Return a dict of 1D results, one per column, for a 2D result</td>
+</tr>
+<tr class="even">
+<td><a href="#starsim.results.Result.col">col</a></td>
+<td>Return a 1D result for one column of a 2D result, e.g.&nbsp;<code>res.col('alpha')</code>; its values are a view, so modifying them modifies the 2D result</td>
+</tr>
+<tr class="odd">
 <td><a href="#starsim.results.Result.convert_timevec">convert_timevec</a></td>
 <td>Make sure we’re using a timevec that’s in the right format i.e.&nbsp;dates</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.results.Result.disp">disp</a></td>
 <td>Full display of all attributes/methods</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.results.Result.from_df">from_df</a></td>
 <td>Make a copy of the result with new values from a dataframe</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.results.Result.init_values">init_values</a></td>
 <td>Handle values</td>
 </tr>
-<tr class="even">
-<td><a href="#starsim.results.Result.plot">plot</a></td>
-<td>Plot a single result; kwargs are interpreted as plot_kw</td>
-</tr>
 <tr class="odd">
+<td><a href="#starsim.results.Result.plot">plot</a></td>
+<td>Plot a single result (with one line per column for a 2D result); kwargs are interpreted as plot_kw</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.results.Result.resample">resample</a></td>
 <td>Resample the result, e.g.&nbsp;from days to years. Leverages the pandas resample method.</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.results.Result.stack">stack</a></td>
+<td>Make a copy of this 2D result from a list of 1D results, one per column (e.g.&nbsp;after resampling)</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.results.Result.summary_method">summary_method</a></td>
@@ -864,7 +900,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.results.Result.annualize" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.annualize">annualize</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>results.Result.annualize()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>results.Result.annualize()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Fast numpy-based resampling of results to annual values.</p>
 <p>Uses summarize_by if set, otherwise the summary_method() heuristic (new_* → sum, n_* → mean, cum_* → last). Does not modify the original.</p>
 <section id="returns" class="level6 doc-section doc-section-returns">
@@ -887,47 +923,62 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 </section>
 </section>
+<section id="starsim.results.Result.apply_scale" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.results.Result.apply_scale">apply_scale</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>results.Result.apply_scale(scale)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Multiply the values by the population scale: a number, or an array with one entry per timestep</p>
+</section>
+<section id="starsim.results.Result.by_column" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.results.Result.by_column">by_column</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>results.Result.by_column()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return a dict of 1D results, one per column, for a 2D result</p>
+</section>
+<section id="starsim.results.Result.col" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.results.Result.col">col</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>results.Result.col(col)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Return a 1D result for one column of a 2D result, e.g.&nbsp;<code>res.col('alpha')</code>; its values are a view, so modifying them modifies the 2D result</p>
+</section>
 <section id="starsim.results.Result.convert_timevec" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.convert_timevec">convert_timevec</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>results.Result.convert_timevec(force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>results.Result.convert_timevec(force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Make sure we’re using a timevec that’s in the right format i.e.&nbsp;dates</p>
 </section>
 <section id="starsim.results.Result.disp" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.disp">disp</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>results.Result.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>results.Result.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Full display of all attributes/methods</p>
 </section>
 <section id="starsim.results.Result.from_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.from_df">from_df</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>results.Result.from_df(df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>results.Result.from_df(df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Make a copy of the result with new values from a dataframe</p>
 </section>
 <section id="starsim.results.Result.init_values" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.init_values">init_values</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>results.Result.init_values(values<span class="op">=</span><span class="va">None</span>, dtype<span class="op">=</span><span class="va">None</span>, shape<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>results.Result.init_values(values<span class="op">=</span><span class="va">None</span>, dtype<span class="op">=</span><span class="va">None</span>, shape<span class="op">=</span><span class="va">None</span>, force<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Handle values</p>
 </section>
 <section id="starsim.results.Result.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.plot">plot</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>results.Result.plot(</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    fig<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    ax<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    fig_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    plot_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    fill_kw<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Plot a single result; kwargs are interpreted as plot_kw</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>results.Result.plot(</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    fig<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    ax<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    fig_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    plot_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    fill_kw<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Plot a single result (with one line per column for a 2D result); kwargs are interpreted as plot_kw</p>
 </section>
 <section id="starsim.results.Result.resample" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.resample">resample</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>results.Result.resample(</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    new_unit<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    summarize_by<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    use_years<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    sep<span class="op">=</span><span class="st">'_'</span>,</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>results.Result.resample(</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    new_unit<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    summarize_by<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    use_years<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    sep<span class="op">=</span><span class="st">'_'</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Resample the result, e.g.&nbsp;from days to years. Leverages the pandas resample method. Accepts all the Starsim units, plus the Pandas ones documented here: https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases</p>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
@@ -988,22 +1039,27 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 </section>
 </section>
+<section id="starsim.results.Result.stack" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.results.Result.stack">stack</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>results.Result.stack(results)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Make a copy of this 2D result from a list of 1D results, one per column (e.g.&nbsp;after resampling)</p>
+</section>
 <section id="starsim.results.Result.summary_method" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.summary_method">summary_method</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>results.Result.summary_method(die<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>results.Result.summary_method(die<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Infer the summarization method from the result name.</p>
 <p>Heuristic: names containing ‘new_’ → sum; starting with ‘n_’ or containing ‘<em>n</em>’ → mean; containing ‘cum_’ → last; otherwise → mean (or raise if die=True).</p>
 </section>
 <section id="starsim.results.Result.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.to_df">to_df</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>results.Result.to_df(</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    sep<span class="op">=</span><span class="st">'_'</span>,</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    col_names<span class="op">=</span><span class="st">'vlh'</span>,</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    bounds<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    resample<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    set_date_index<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results.Result.to_df(</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    sep<span class="op">=</span><span class="st">'_'</span>,</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    col_names<span class="op">=</span><span class="st">'vlh'</span>,</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    bounds<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    resample<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    set_date_index<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to a dataframe with timevec, value, low, and high columns</p>
 <section id="parameters-2" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h6>
@@ -1055,28 +1111,30 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 </tbody>
 </table>
+<p>For a 2D result, there is one set of dataframe columns per result column, e.g.&nbsp;<code>alpha</code> and <code>alpha_low</code> (or <code>new_infections_alpha</code> and <code>new_infections_alpha_low</code> if <code>col_names='new_infections'</code>).</p>
 </section>
 </section>
 <section id="starsim.results.Result.to_series" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.to_series">to_series</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>results.Result.to_series(set_name<span class="op">=</span><span class="va">False</span>, resample<span class="op">=</span><span class="va">None</span>, sep<span class="op">=</span><span class="st">'_'</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>results.Result.to_series(set_name<span class="op">=</span><span class="va">False</span>, resample<span class="op">=</span><span class="va">None</span>, sep<span class="op">=</span><span class="st">'_'</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to a series with timevec as the index and value as the data Args: set_name (bool): whether to set the name of the series to the name of the result resample (str): if provided, resample the data to this frequency kwargs: passed to the resample method</p>
+<p>For a 2D result, return a dataframe with one column per result column, e.g.&nbsp;<code>new_infections_alpha</code>.</p>
 </section>
 <section id="starsim.results.Result.to_str" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.to_str">to_str</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>results.Result.to_str(label<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>results.Result.to_str(label<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert Result object to a string</p>
 </section>
 <section id="starsim.results.Result.update" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Result.update">update</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>results.Result.update(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>results.Result.update(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Update parameters, and initialize values if needed</p>
 </section>
 </section>
 </section>
 <section id="starsim.results.Results" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.results.Results">Results</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>results.Results(module, <span class="op">*</span>args, strict<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>results.Results(module, <span class="op">*</span>args, strict<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Container for storing results</p>
 <section id="attributes-1" class="level4">
 <h4 class="anchored" data-anchor-id="attributes-1">Attributes</h4>
@@ -1141,33 +1199,35 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.results.Results.annualize" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Results.annualize">annualize</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>results.Results.annualize()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>results.Results.annualize()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Annualize all results, returning a new Results object</p>
 </section>
 <section id="starsim.results.Results.append" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Results.append">append</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>results.Results.append(arg, key<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>results.Results.append(arg, key<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>This is activated by adding as well, e.g.&nbsp;results += result</p>
 </section>
 <section id="starsim.results.Results.flatten" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Results.flatten">flatten</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>results.Results.flatten(</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    sep<span class="op">=</span><span class="st">'_'</span>,</span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    only_results<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    only_auto<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    keep_case<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>results.Results.flatten(</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    sep<span class="op">=</span><span class="st">'_'</span>,</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    only_results<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    only_auto<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    keep_case<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Turn from a nested dictionary into a flat dictionary, keeping only results by default</p>
+<p>If <code>columns=True</code>, split each 2D result into one 1D result per column, e.g.&nbsp;<code>sis_new_infections_alpha</code>.</p>
 </section>
 <section id="starsim.results.Results.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Results.plot">plot</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>results.Results.plot(style<span class="op">=</span><span class="st">'fancy'</span>, fig_kw<span class="op">=</span><span class="va">None</span>, plot_kw<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>results.Results.plot(style<span class="op">=</span><span class="st">'fancy'</span>, fig_kw<span class="op">=</span><span class="va">None</span>, plot_kw<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot all the results</p>
 </section>
 <section id="starsim.results.Results.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.results.Results.to_df">to_df</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>results.Results.to_df(sep<span class="op">=</span><span class="st">'_'</span>, descend<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>results.Results.to_df(sep<span class="op">=</span><span class="st">'_'</span>, descend<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Merge all results dataframes into one Args: sep (str): separator for the column names descend (bool): whether to descend into nested results kwargs: passed to the <a href="../api/results.html#starsim.results.Result.to_df" title="0"><code>Result.to_df()</code></a> method, can include instructions for summarizing results by time</p>
 
 
@@ -1264,7 +1324,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1610,7 +1670,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

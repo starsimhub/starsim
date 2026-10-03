@@ -621,12 +621,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.analyzers.infection_log" id="toc-starsim.analyzers.infection_log" class="nav-link" data-scroll-target="#starsim.analyzers.infection_log">infection_log</a>
   <ul class="collapse">
   <li><a href="#examples-1" id="toc-examples-1" class="nav-link" data-scroll-target="#examples-1">Examples</a></li>
+  <li><a href="#attributes" id="toc-attributes" class="nav-link" data-scroll-target="#attributes">Attributes</a></li>
   <li><a href="#methods-1" id="toc-methods-1" class="nav-link" data-scroll-target="#methods-1">Methods</a>
   <ul class="collapse">
   <li><a href="#starsim.analyzers.infection_log.animate" id="toc-starsim.analyzers.infection_log.animate" class="nav-link" data-scroll-target="#starsim.analyzers.infection_log.animate">animate</a></li>
   <li><a href="#starsim.analyzers.infection_log.finalize_results" id="toc-starsim.analyzers.infection_log.finalize_results" class="nav-link" data-scroll-target="#starsim.analyzers.infection_log.finalize_results">finalize_results</a></li>
   <li><a href="#starsim.analyzers.infection_log.plot" id="toc-starsim.analyzers.infection_log.plot" class="nav-link" data-scroll-target="#starsim.analyzers.infection_log.plot">plot</a></li>
   <li><a href="#starsim.analyzers.infection_log.step" id="toc-starsim.analyzers.infection_log.step" class="nav-link" data-scroll-target="#starsim.analyzers.infection_log.step">step</a></li>
+  <li><a href="#starsim.analyzers.infection_log.to_df" id="toc-starsim.analyzers.infection_log.to_df" class="nav-link" data-scroll-target="#starsim.analyzers.infection_log.to_df">to_df</a></li>
   </ul></li>
   </ul></li>
   </ul></li>
@@ -767,7 +769,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.analyzers.infection_log" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.analyzers.infection_log">infection_log</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>analyzers.infection_log()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>analyzers.infection_log(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Log infections – see <a href="../api/diseases.html#starsim.diseases.InfectionLog" title="0"><code>ss.InfectionLog</code></a> for detail</p>
 <p>This analyzer activates an infection log running in each disease. This is different than other analyzers, but is required since the information required to create an infection log isn’t kept outside of the disease’s <code>infect()</code> step.</p>
 <section id="examples-1" class="level4 doc-section doc-section-examples">
@@ -776,6 +778,23 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dt<span class="op">=</span><span class="fl">0.2</span>, dur<span class="op">=</span><span class="dv">15</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span><span class="st">'infection_log'</span>)</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>sim.analyzers[<span class="dv">0</span>].plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="attributes" class="level4">
+<h4 class="anchored" data-anchor-id="attributes">Attributes</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="#starsim.analyzers.infection_log.log">log</a></td>
+<td>The infection log, if there is only one disease</td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="methods-1" class="level4">
 <h4 class="anchored" data-anchor-id="methods-1">Methods</h4>
@@ -802,6 +821,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tr class="even">
 <td><a href="#starsim.analyzers.infection_log.step">step</a></td>
 <td>Handled by ss.InfectionLog()</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.analyzers.infection_log.to_df">to_df</a></td>
+<td>Convert the infection log to a dataframe, if there is only one disease</td>
 </tr>
 </tbody>
 </table>
@@ -869,6 +892,11 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h5 class="anchored" data-anchor-id="starsim.analyzers.infection_log.step">step</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>analyzers.infection_log.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Handled by ss.InfectionLog()</p>
+</section>
+<section id="starsim.analyzers.infection_log.to_df" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.analyzers.infection_log.to_df">to_df</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>analyzers.infection_log.to_df()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Convert the infection log to a dataframe, if there is only one disease</p>
 
 
 </section>
@@ -964,7 +992,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1310,7 +1338,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

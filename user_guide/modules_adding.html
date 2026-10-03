@@ -647,6 +647,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -858,7 +864,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="a-complete-example" class="level2">
 <h2 class="anchored" data-anchor-id="a-complete-example">A complete example</h2>
 <p>Here’s a self-contained custom intervention that vaccinates a fraction of susceptible agents each year, conferring partial protection. It illustrates parameters (including a time parameter and a distribution), a state, use of <code>self.sim</code> and <code>self.t.dt</code> inside <code>step()</code>, and the automatically generated <code>n_vaccinated</code> result:</p>
-<div id="66a59390" class="cell" data-execution_count="1">
+<div id="b74bd562" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -911,7 +917,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Because we defined <code>vaccinated</code> as a <a href="../api/arrays.html#starsim.arrays.BoolState" title="0"><code>ss.BoolState</code></a>, the count is automatically available as a result, so we can plot the vaccination rollout without any extra code:</p>
-<div id="202641e0" class="cell" data-execution_count="2">
+<div id="eaec964c" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> s2.results.simplevaccination</span>
@@ -933,7 +939,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <h2 class="anchored" data-anchor-id="modules-from-functions">Modules from functions</h2>
 <p>For quick, one-off logic you don’t need a full class. Any module type can be created from a plain function that takes the sim as its only argument: the function becomes the module’s <code>step()</code> and is called once per timestep. This is the mechanism behind “function-based” interventions and analyzers.</p>
 <p>The easiest way is to pass the function directly — Starsim converts it to the right module type automatically, using the function’s name as the module name:</p>
-<div id="ff6a2d52" class="cell" data-execution_count="3">
+<div id="91f5d26c" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1060,7 +1066,7 @@ knockdown</code></pre>
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1406,7 +1412,7 @@ knockdown</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

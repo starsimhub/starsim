@@ -676,6 +676,12 @@ window.Quarto = {
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -911,7 +917,7 @@ window.Quarto = {
 <li>A <a href="../user_guide/modules_connectors.html">connector</a> between two diseases might increase <code>rel_sus</code> to one disease for agents infected with another (co-infection).</li>
 </ul>
 <p>Because they’re ordinary per-agent arrays, you can also set them directly. Here we fully protect everyone under 20 by setting their <code>rel_sus</code> to 0, and see that they avoid infection (aside from the handful seeded as infected at the start via <code>init_prev</code>):</p>
-<div id="4c762e4f" class="cell" data-execution_count="1">
+<div id="71765126" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -930,7 +936,7 @@ window.Quarto = {
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Unprotected (20+):    </span><span class="sc">{</span>ever_infected[older]<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss"> of </span><span class="sc">{</span><span class="bu">len</span>(older)<span class="sc">}</span><span class="ss"> ever infected'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Protected (under 20): 2 of 609 ever infected
-Unprotected (20+):    1337 of 1391 ever infected</code></pre>
+Unprotected (20+):    1334 of 1391 ever infected</code></pre>
 </div>
 </div>
 <div class="callout callout-style-default callout-note callout-titled">
@@ -993,7 +999,7 @@ Warning
 <section id="pattern-1-extending-existing-diseases" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-1-extending-existing-diseases">Pattern 1: Extending existing diseases</h3>
 <p>When you need to modify an existing disease model, inherit from it and override specific methods:</p>
-<div id="ee7648b0" class="cell" data-execution_count="2">
+<div id="58937a3c" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1013,7 +1019,7 @@ Warning
 <section id="pattern-2-extending-an-seir-model" class="level3">
 <h3 class="anchored" data-anchor-id="pattern-2-extending-an-seir-model">Pattern 2: Extending an SEIR model</h3>
 <p>For a disease with a latent period, start from <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>. A simple model needs only new parameter defaults:</p>
-<div id="99957b24" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
+<div id="e7ddff96" class="cell" data-quarto-private-1="{&quot;key&quot;:&quot;jupyter&quot;,&quot;value&quot;:{&quot;outputs_hidden&quot;:false}}" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MySEIR(ss.SEIR):</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -1150,7 +1156,7 @@ Warning
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1496,7 +1502,7 @@ Warning
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -946,7 +946,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td><a href="#starsim.utils.standardize_netkey">standardize_netkey</a></td>
-<td>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</td>
+<td>Standardize network key names</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.utils.validate_sim_data">validate_sim_data</a></td>
@@ -1533,7 +1533,8 @@ array([False,  True,  True,  True, False])</code></pre>
 <section id="starsim.utils.standardize_netkey" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.standardize_netkey">standardize_netkey</h3>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>utils.standardize_netkey(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Networks can be upper or lowercase, and have a suffix ‘net’ or not; this function standardizes them</p>
+<p>Standardize network key names</p>
+<p>Networks can be upper or lowercase, have a suffix ‘net’ or not, and may include a number added to make the name unique; this function standardizes them. For example, ‘RandomNet’, ‘randomnet’, and ‘randomnet_1’ would all be standardized to ‘random’.</p>
 </section>
 <section id="starsim.utils.validate_sim_data" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.utils.validate_sim_data">validate_sim_data</h3>
@@ -1664,7 +1665,7 @@ array([False,  True,  True,  True, False])</code></pre>
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -2007,7 +2008,7 @@ array([False,  True,  True,  True, False])</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

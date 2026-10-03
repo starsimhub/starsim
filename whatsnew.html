@@ -612,6 +612,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -656,9 +662,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul>
+  <li><a href="#version-3.7.0-2026-10-02" id="toc-version-3.7.0-2026-10-02" class="nav-link" data-scroll-target="#version-3.7.0-2026-10-02">Version 3.7.0 (2026-10-02)</a>
+  <ul>
+  <li><a href="#new-features" id="toc-new-features" class="nav-link" data-scroll-target="#new-features">New features</a></li>
+  <li><a href="#changes-that-may-affect-results" id="toc-changes-that-may-affect-results" class="nav-link" data-scroll-target="#changes-that-may-affect-results">Changes that may affect results</a></li>
+  <li><a href="#changes-that-may-require-migration" id="toc-changes-that-may-require-migration" class="nav-link" data-scroll-target="#changes-that-may-require-migration">Changes that may require migration</a></li>
+  </ul></li>
   <li><a href="#version-3.6.2-2026-09-30" id="toc-version-3.6.2-2026-09-30" class="nav-link" data-scroll-target="#version-3.6.2-2026-09-30">Version 3.6.2 (2026-09-30)</a>
   <ul>
-  <li><a href="#changes-that-may-affect-results" id="toc-changes-that-may-affect-results" class="nav-link" data-scroll-target="#changes-that-may-affect-results">Changes that may affect results</a></li>
+  <li><a href="#changes-that-may-affect-results-1" id="toc-changes-that-may-affect-results-1" class="nav-link" data-scroll-target="#changes-that-may-affect-results-1">Changes that may affect results</a></li>
   <li><a href="#other-bugfixes" id="toc-other-bugfixes" class="nav-link" data-scroll-target="#other-bugfixes">Other bugfixes</a></li>
   </ul></li>
   <li><a href="#version-3.6.1-2026-08-29" id="toc-version-3.6.1-2026-08-29" class="nav-link" data-scroll-target="#version-3.6.1-2026-08-29">Version 3.6.1 (2026-08-29)</a></li>
@@ -839,11 +851,48 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term “Regression”. Changes that may require update to downstream code are flagged with the term “Migration”.</p>
+<section id="version-3.7.0-2026-10-02" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.7.0-2026-10-02">Version 3.7.0 (2026-10-02)</h2>
+<p>This release adds features needed to port Covasim to Starsim (Covasim v4), and which are also useful for other disease models: 2D results and agent arrays (e.g.&nbsp;by variant), CRN-safe choice of exactly <em>N</em> agents, dynamic rescaling, Covasim’s “hybrid” network (household, school, workplace, and community networks), and more MultiSim methods.</p>
+<section id="new-features" class="level3">
+<h3 class="anchored" data-anchor-id="new-features">New features</h3>
+<ul>
+<li>2D results: <code>res = ss.Result(..., columns=['wild', 'alpha'])</code> has shape <code>(npts, ncols)</code>. <code>res.alpha</code> (or <code>res.col('alpha')</code>) returns a 1D result for that column; scaling, <code>to_df()</code>, <code>sim.summarize()</code>, <code>resample()</code>/<code>annualize()</code>, <a href="./api/run.html#starsim.run.MultiSim.reduce" title="0"><code>MultiSim.reduce()</code></a> and plotting all handle one column/line per result column.</li>
+<li>2D agent arrays: <code>ss.FloatArr('sus_imm', columns=n_variants)</code> (and the same for <a href="./api/arrays.html#starsim.arrays.BoolArr" title="0"><code>BoolArr</code></a>/<a href="./api/arrays.html#starsim.arrays.IntArr" title="0"><code>IntArr</code></a>) grow with the population like other states. Columns can be named, e.g.&nbsp;<code>columns=['wildtype', 'mutant']</code> allows <code>arr.mutant</code> (or <code>arr['mutant']</code> or <code>arr.col('mutant')</code>, and e.g.&nbsp;<code>arr.mutant += 0.1</code> updates the column), and more dimensions are supported via e.g.&nbsp;<code>columns=(2,3)</code>.</li>
+<li><code>ss.choose_n(n, weights=None)</code> chooses exactly <code>n</code> agents without replacement, and is CRN-safe: if the candidates change slightly, most of the same agents are chosen. It can be used for exact-count seeding, e.g.&nbsp;<code>ss.SIR(init_prev=ss.choose_n(20))</code>, or anywhere else an <a href="./api/distributions.html#starsim.distributions.bernoulli" title="0"><code>ss.bernoulli()</code></a> can be used.</li>
+<li>Distributions accept a <a href="https://docs.python.org/3/builtins/functions.html#round" title="1"><code>round</code></a> option at creation, e.g.&nbsp;<code>ss.lognorm_ex(ss.days(5), ss.days(2), round='nearest')</code>; <code>round=True</code> (or <code>'stochastic'</code>) rounds stochastically as before, and <code>round='nearest'</code> rounds deterministically (also accepted by <code>dist.rvs()</code>).</li>
+<li>Dynamic rescaling, as in Covasim: with <code>ss.Sim(rescale=True)</code>, the population scale factor starts at 1 and increases to <code>pop_scale</code> as agents stop being naive, making some of them naive again via the new <code>disease.make_naive()</code>; the per-timestep scale is in <code>sim.results.pop_scale</code>, and <code>sim.current_scale</code> gives the current value. Controlled by the new sim parameters <code>rescale</code>, <code>rescale_threshold</code> and <code>rescale_factor</code>. See the new <a href="https://docs.starsim.org/user_guide/advanced_rescaling.html">Population rescaling</a> user guide page.</li>
+<li><a href="./api/diseases.html#starsim.diseases.Infection.infect" title="0"><code>ss.Infection.infect()</code></a> is split into <code>infect_route()</code>, which computes transmission along one network, and <code>finalize_infections()</code>, which removes duplicate infections, so multi-strain diseases can call <code>infect_route()</code> once per strain.</li>
+<li>New networks: <a href="./api/networks.html#starsim.networks.ClusterNet" title="0"><code>ss.ClusterNet</code></a> (fully connected clusters, e.g.&nbsp;households) and <a href="./api/networks.html#starsim.networks.HybridNet" title="0"><code>ss.HybridNet</code></a> (Covasim’s household, school, work and community networks, which become four networks <code>h</code>, <code>s</code>, <code>w</code> and <code>c</code> when added to a sim). <a href="./api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a> and <a href="./api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a> have new <code>dynamic</code> (set <a href="https://docs.python.org/3/builtins/constants.html#False" title="1"><code>False</code></a> for a static network) and <code>age_range</code> parameters.</li>
+<li>New network methods: <code>net.remove_edges()</code> (indices or a boolean mask), <code>net['p1']</code> to get an edge column, and <code>net.eligible()</code>; <code>net.from_df()</code> also accepts a dict of arrays, and returns the network.</li>
+<li>New MultiSim methods: <code>combine()</code> (merge the sims into one larger sim), <a href="./api/run.html#starsim.run.MultiSim.merge" title="0"><code>ss.MultiSim.merge()</code></a> and <code>split()</code>, and <code>compare()</code>/<code>plot_compare()</code>.</li>
+<li>The infection log (<a href="./api/analyzers.html#starsim.analyzers.infection_log" title="0"><code>ss.infection_log</code></a>) now records the network of each infection, and extra data per infection (e.g.&nbsp;<code>log.add_entries(uids, sources, t, variant=variants)</code>); it stores entries as arrays, so it is much faster.</li>
+<li>The docs now publish a machine-readable index of the whole API, including default module parameters, for LLMs and other tools: <a href="https://docs.starsim.org/llms.txt" class="uri">https://docs.starsim.org/llms.txt</a> (also <code>llms-full.txt</code>, with examples, and <code>api.json</code>). This replaces the root <code>llms.txt</code>, which was a copy of <code>CLAUDE.md</code>.</li>
+</ul>
+</section>
+<section id="changes-that-may-affect-results" class="level3">
+<h3 class="anchored" data-anchor-id="changes-that-may-affect-results">Changes that may affect results</h3>
+<ul>
+<li><em>Regression</em>: stochastic rounding (<code>dist.rvs(round=True)</code>) is now CRN-safe, so results that use it (e.g.&nbsp;<a href="./api/diseases.html#starsim.diseases.NCD" title="0"><code>ss.NCD</code></a>) will differ.</li>
+<li><em>Regression</em>: results inside nested <a href="./api/results.html#starsim.results.Results" title="0"><code>ss.Results</code></a> are now scaled by <code>pop_scale</code> (previously only top-level results were).</li>
+<li><em>Regression</em>: cumulative infections are now summed after scaling, which may give differences at the level of floating-point precision.</li>
+</ul>
+</section>
+<section id="changes-that-may-require-migration" class="level3">
+<h3 class="anchored" data-anchor-id="changes-that-may-require-migration">Changes that may require migration</h3>
+<ul>
+<li><em>Migration</em>: comparing <code>sim.t</code> (an <a href="./api/timeline.html#starsim.timeline.Timeline" title="0"><code>ss.Timeline</code></a>) to a number, or using it as an index, now raises an error; use <code>sim.ti</code> instead (e.g.&nbsp;<code>if sim.ti == 10</code>). Setting <code>self.t</code> on a module also gives a clearer error.</li>
+<li><em>Migration</em>: module names must be unique across all module types. Two modules with the same default name (e.g.&nbsp;two <a href="./api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet()</code></a>s) are now renamed with a warning (<code>randomnet</code>, <code>randomnet_1</code>) rather than raising an error; explicitly set names that clash still raise an error.</li>
+<li><em>Migration</em>: <a href="./api/diseases.html#starsim.diseases.InfectionLog" title="0"><code>ss.InfectionLog</code></a> is no longer a NetworkX graph; use <code>log.to_df()</code>, or <code>log.to_graph()</code> for a graph.</li>
+<li><em>Migration</em>: <code>init_prev</code> values greater than 1 now raise an error (previously they infected everyone); use <code>ss.choose_n(n)</code> to seed a fixed number of infections.</li>
+</ul>
+</section>
+</section>
 <section id="version-3.6.2-2026-09-30" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.6.2-2026-09-30">Version 3.6.2 (2026-09-30)</h2>
 <p>This release contains many LLM-assisted bugfixes. Most changes should have relatively little impact on users, although results may differ slightly for some results in some projects.</p>
-<section id="changes-that-may-affect-results" class="level3">
-<h3 class="anchored" data-anchor-id="changes-that-may-affect-results">Changes that may affect results</h3>
+<section id="changes-that-may-affect-results-1" class="level3">
+<h3 class="anchored" data-anchor-id="changes-that-may-affect-results-1">Changes that may affect results</h3>
 <ul>
 <li><em>Regression</em>: <a href="./api/demographics.html#starsim.demographics.Deaths" title="0"><code>ss.Deaths</code></a> treated death rates given per month/week/day as per year.</li>
 <li><em>Regression</em>: <a href="./api/diseases.html#starsim.diseases.SIR" title="0"><code>ss.SIR</code></a> recovery/death and <a href="./api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> losses were mistimed when the module had its own <code>dt</code>; CBR, CMR, and burn-in fetus ages also used the sim’s <code>dt</code> instead of the module’s.</li>
@@ -2312,7 +2361,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -2658,7 +2707,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

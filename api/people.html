@@ -971,7 +971,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tr>
 <tr class="odd">
 <td><a href="#starsim.people.People.to_df">to_df</a></td>
-<td>Export to dataframe</td>
+<td>Export to dataframe; 2D states have one column per value, e.g.&nbsp;<code>sus_imm_0</code> (or <code>sus_imm_wild</code> if the columns are named)</td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.people.People.update_post">update_post</a></td>
@@ -1395,7 +1395,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="starsim.people.People.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.to_df">to_df</h5>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>people.People.to_df()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Export to dataframe</p>
+<p>Export to dataframe; 2D states have one column per value, e.g.&nbsp;<code>sus_imm_0</code> (or <code>sus_imm_wild</code> if the columns are named)</p>
 </section>
 <section id="starsim.people.People.update_post" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.people.People.update_post">update_post</h5>
@@ -1533,7 +1533,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1879,7 +1879,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

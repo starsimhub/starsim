@@ -64,7 +64,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </style>
 
 
-<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
 <script src="../site_libs/quarto-nav/headroom.min.js"></script>
 <script src="../site_libs/clipboard/clipboard.min.js"></script>
 <script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
@@ -123,6 +123,9 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
 
 
 <link rel="stylesheet" href="../assets/styles.css">
@@ -647,6 +650,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -726,7 +735,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="simple-usage" class="level2">
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>For simple reporting, it’s possible to use a single function as an analyzer. In this case, the function receives a single argument, <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>, which it has full access to. For example, if you wanted to know the number of connections in the network on each timestep, you could write a small analyzer as follows:</p>
-<div id="c6109bfa" class="cell" data-execution_count="1">
+<div id="41236797" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -785,7 +794,7 @@ Number of edges for network mfnet on step 16: 3844
 Number of edges for network mfnet on step 17: 3890
 Number of edges for network mfnet on step 18: 3925
 Number of edges for network mfnet on step 19: 3956
-  Running 2020 (20/51) (0.13 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.14 s)  ••••••••———————————— 41%
 Number of edges for network mfnet on step 20: 3991
 Number of edges for network mfnet on step 21: 4036
 Number of edges for network mfnet on step 22: 4076
@@ -796,7 +805,7 @@ Number of edges for network mfnet on step 26: 4241
 Number of edges for network mfnet on step 27: 4274
 Number of edges for network mfnet on step 28: 4337
 Number of edges for network mfnet on step 29: 4378
-  Running 2030 (30/51) (0.19 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.20 s)  ••••••••••••———————— 61%
 Number of edges for network mfnet on step 30: 4424
 Number of edges for network mfnet on step 31: 4467
 Number of edges for network mfnet on step 32: 4498
@@ -807,7 +816,7 @@ Number of edges for network mfnet on step 36: 4663
 Number of edges for network mfnet on step 37: 4706
 Number of edges for network mfnet on step 38: 4749
 Number of edges for network mfnet on step 39: 4814
-  Running 2040 (40/51) (0.25 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.26 s)  ••••••••••••••••———— 80%
 Number of edges for network mfnet on step 40: 4859
 Number of edges for network mfnet on step 41: 4867
 Number of edges for network mfnet on step 42: 4904
@@ -818,7 +827,7 @@ Number of edges for network mfnet on step 46: 5121
 Number of edges for network mfnet on step 47: 5172
 Number of edges for network mfnet on step 48: 5236
 Number of edges for network mfnet on step 49: 5287
-  Running 2050 (50/51) (0.32 s)  •••••••••••••••••••• 100%
+  Running 2050 (50/51) (0.33 s)  •••••••••••••••••••• 100%
 
 Number of edges for network mfnet on step 50: 5336
 Figure(896x672)</code></pre>
@@ -842,7 +851,7 @@ Figure(896x672)</code></pre>
 <section id="advanced-usage" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage">Advanced usage</h2>
 <p>Suppose we wanted to create an analyzer that would report on the number of new HIV infections in pregnant women:</p>
-<div id="fcfdf0f6" class="cell" data-execution_count="2">
+<div id="1400f332" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
@@ -877,9 +886,9 @@ Figure(896x672)</code></pre>
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.11 s)  ••••———————————————— 22%
-  Running 2020 (20/51) (0.25 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.38 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.51 s)  ••••••••••••••••———— 80%
+  Running 2020 (20/51) (0.24 s)  ••••••••———————————— 41%
+  Running 2030 (30/51) (0.36 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.50 s)  ••••••••••••••••———— 80%
   Running 2050 (50/51) (0.66 s)  •••••••••••••••••••• 100%
 
 Total infections among pregnant women: 140.0</code></pre>
@@ -887,7 +896,7 @@ Total infections among pregnant women: 140.0</code></pre>
 </div>
 <p>Analyzers are ideal for adding custom results, and because they get added to the sim in the same way as any other result, they also get automatically exported in the same format, e.g.&nbsp;using <code>sim.to_df()</code>.</p>
 <p>Here’s a plot of the results from our HIV in pregnancy analyzer:</p>
-<div id="480d1b06" class="cell" data-execution_count="3">
+<div id="29d9387a" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.hiv_preg</span>
@@ -911,7 +920,7 @@ Total infections among pregnant women: 140.0</code></pre>
 <section id="infection-log" class="level3">
 <h3 class="anchored" data-anchor-id="infection-log">Infection log</h3>
 <p>The infection log produces a line list of infections. It’s integrated into the logic of <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a> in order to track infection sources and targets, which are not kept beyond this (for memory reasons).</p>
-<div id="076417c3" class="cell" data-execution_count="4">
+<div id="3cf898c1" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Demonstrate infection log</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dt<span class="op">=</span><span class="fl">0.2</span>, dur<span class="op">=</span><span class="dv">15</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span><span class="st">'infection_log'</span>)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -926,7 +935,7 @@ Total infections among pregnant women: 140.0</code></pre>
   Running 2008 (40/76) (0.11 s)  ••••••••••—————————— 54%
   Running 2010 (50/76) (0.13 s)  •••••••••••••——————— 67%
   Running 2012 (60/76) (0.16 s)  ••••••••••••••••———— 80%
-  Running 2014 (70/76) (0.18 s)  ••••••••••••••••••—— 93%
+  Running 2014 (70/76) (0.19 s)  ••••••••••••••••••—— 93%
 Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -938,7 +947,7 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>You can see how this raster plot aligns with the peak of infections:</p>
-<div id="42554ea0" class="cell" data-execution_count="5">
+<div id="22a1ff7b" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(672x480)</code></pre>
@@ -952,59 +961,200 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>(Note: <a href="../api/analyzers.html#starsim.analyzers.infection_log" title="0"><code>ss.infection_log()</code></a> also has an <code>.animate()</code> method, which we will leave for you to try out!)</p>
+<p>The log for each disease is an <a href="../api/diseases.html#starsim.diseases.InfectionLog" title="0"><code>ss.InfectionLog</code></a>, stored in <code>infection_log.logs</code> (or <a href="../api/analyzers.html#starsim.analyzers.infection_log.log" title="0"><code>infection_log.log</code></a> if there is only one disease). It stores entries as arrays, and <code>to_df()</code> converts them to a line list, with one row per infection: the time (<code>t</code>), the infecting agent (<code>source</code>, which is <code>-1</code> for seed infections), the infected agent (<code>target</code>), and the name of the network the infection occurred on:</p>
+<div id="cc2c0fec" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>log <span class="op">=</span> infection_log.log</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(log)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> log.to_df()</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>df.tail()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>InfectionLog(disease='sir', n=998, t=2000.0–2013.4)</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="6">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">t</th>
+<th data-quarto-table-cell-role="th">source</th>
+<th data-quarto-table-cell-role="th">target</th>
+<th data-quarto-table-cell-role="th">network</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">993</th>
+<td>2012.2</td>
+<td>38</td>
+<td>272</td>
+<td>randomnet</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">994</th>
+<td>2012.4</td>
+<td>736</td>
+<td>14</td>
+<td>randomnet</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">995</th>
+<td>2012.6</td>
+<td>739</td>
+<td>605</td>
+<td>randomnet</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">996</th>
+<td>2012.8</td>
+<td>350</td>
+<td>641</td>
+<td>randomnet</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">997</th>
+<td>2013.4</td>
+<td>607</td>
+<td>15</td>
+<td>randomnet</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>If you want a NetworkX graph instead (e.g.&nbsp;to analyze transmission chains), use <code>log.to_graph()</code>, which returns a <code>MultiDiGraph</code> with agents as nodes and infections as edges.</p>
+<p>Modules can also record extra data for each infection. A disease that records its own infections (e.g.&nbsp;one with multiple variants) can pass extra data when creating entries, e.g.&nbsp;<code>log.add_entries(uids, sources, time, variant=variants)</code>, while <code>log.add_data(uids, ...)</code> adds data to each agent’s most recent infection, which is useful for recording outcomes that happen later (e.g.&nbsp;diagnosis or death). For example, to record the age of each agent when they were infected:</p>
+<div id="4b56a0df" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> AgeSIR(ss.SIR):</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.infection_log: <span class="co"># The log only exists if the infection_log analyzer is used</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.infection_log.add_data(uids, age<span class="op">=</span><span class="va">self</span>.sim.people.age[uids])</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dt<span class="op">=</span><span class="fl">0.2</span>, dur<span class="op">=</span><span class="dv">15</span>, diseases<span class="op">=</span>AgeSIR(), networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span><span class="st">'infection_log'</span>, verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.analyzers.infection_log.to_df()</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>df.tail()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="7">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">t</th>
+<th data-quarto-table-cell-role="th">source</th>
+<th data-quarto-table-cell-role="th">target</th>
+<th data-quarto-table-cell-role="th">age</th>
+<th data-quarto-table-cell-role="th">network</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">992</th>
+<td>2011.2</td>
+<td>614</td>
+<td>457</td>
+<td>6.916333</td>
+<td>randomnet</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">993</th>
+<td>2011.4</td>
+<td>662</td>
+<td>403</td>
+<td>42.757</td>
+<td>randomnet</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">994</th>
+<td>2011.4</td>
+<td>971</td>
+<td>893</td>
+<td>34.154701</td>
+<td>randomnet</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">995</th>
+<td>2012.4</td>
+<td>710</td>
+<td>628</td>
+<td>58.340557</td>
+<td>randomnet</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">996</th>
+<td>2012.6</td>
+<td>845</td>
+<td>78</td>
+<td>58.191063</td>
+<td>randomnet</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
 </section>
 <section id="dynamics-by-age" class="level3">
 <h3 class="anchored" data-anchor-id="dynamics-by-age">Dynamics by age</h3>
 <p>This analyzer illustrates how you could track infections by age. Since it illustrates some additional key principles of building analyzers, here it is in full:</p>
-<div id="b00ed885" class="cell" data-execution_count="6">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> dynamics_by_age(ss.Analyzer):</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, state, age_bins<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">20</span>, <span class="dv">40</span>, <span class="dv">100</span>)):</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.state <span class="op">=</span> state</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.age_bins <span class="op">=</span> age_bins</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.mins <span class="op">=</span> age_bins[:<span class="op">-</span><span class="dv">1</span>]</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.maxes <span class="op">=</span> age_bins[<span class="dv">1</span>:]</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.hist <span class="op">=</span> {k: [] <span class="cf">for</span> k <span class="kw">in</span> <span class="va">self</span>.mins}</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        people <span class="op">=</span> <span class="va">self</span>.sim.people</span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="bu">min</span>, <span class="bu">max</span> <span class="kw">in</span> <span class="bu">zip</span>(<span class="va">self</span>.mins, <span class="va">self</span>.maxes):</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>            mask <span class="op">=</span> (people.age <span class="op">&gt;=</span> <span class="bu">min</span>) <span class="op">&amp;</span> (people.age <span class="op">&lt;</span> <span class="bu">max</span>)</span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.hist[<span class="bu">min</span>].append(people.states[<span class="va">self</span>.state][mask].<span class="bu">sum</span>())</span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> finalize_results(<span class="va">self</span>):</span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Convert to an array """</span></span>
-<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().finalize_results()</span>
-<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> k,hist <span class="kw">in</span> <span class="va">self</span>.hist.items():</span>
-<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.hist[k] <span class="op">=</span> np.array(hist)</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
-<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>        kw <span class="op">=</span> ss.plot_args(kwargs)</span>
-<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">with</span> ss.style(<span class="op">**</span>kw.style):</span>
-<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>            fig <span class="op">=</span> plt.figure(<span class="op">**</span>kw.fig)</span>
-<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> minage, maxage <span class="kw">in</span> <span class="bu">zip</span>(<span class="va">self</span>.mins, <span class="va">self</span>.maxes):</span>
-<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>                plt.plot(<span class="va">self</span>.sim.t.timevec, <span class="va">self</span>.hist[minage], label<span class="op">=</span><span class="ss">f'Age </span><span class="sc">{</span>minage<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>maxage<span class="sc">}</span><span class="ss">'</span>, <span class="op">**</span>kw.plot)</span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>            plt.legend(<span class="op">**</span>kw.legend)</span>
-<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>            plt.xlabel(<span class="st">'Model time'</span>)</span>
-<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>            plt.ylabel(<span class="st">'Count'</span>)</span>
-<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>            plt.ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ss.return_fig(fig, <span class="op">**</span>kw.return_fig)</span>
-<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a><span class="co"># Demonstrate</span></span>
-<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>by_age <span class="op">=</span> dynamics_by_age(<span class="st">'sis.infected'</span>, age_bins<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">30</span>, <span class="dv">100</span>))</span>
-<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span>by_age, copy_inputs<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>by_age.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="350251cf" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> dynamics_by_age(ss.Analyzer):</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, state, age_bins<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">20</span>, <span class="dv">40</span>, <span class="dv">100</span>)):</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.state <span class="op">=</span> state</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.age_bins <span class="op">=</span> age_bins</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.mins <span class="op">=</span> age_bins[:<span class="op">-</span><span class="dv">1</span>]</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.maxes <span class="op">=</span> age_bins[<span class="dv">1</span>:]</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.hist <span class="op">=</span> {k: [] <span class="cf">for</span> k <span class="kw">in</span> <span class="va">self</span>.mins}</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>        people <span class="op">=</span> <span class="va">self</span>.sim.people</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="bu">min</span>, <span class="bu">max</span> <span class="kw">in</span> <span class="bu">zip</span>(<span class="va">self</span>.mins, <span class="va">self</span>.maxes):</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>            mask <span class="op">=</span> (people.age <span class="op">&gt;=</span> <span class="bu">min</span>) <span class="op">&amp;</span> (people.age <span class="op">&lt;</span> <span class="bu">max</span>)</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.hist[<span class="bu">min</span>].append(people.states[<span class="va">self</span>.state][mask].<span class="bu">sum</span>())</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> finalize_results(<span class="va">self</span>):</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        <span class="co">""" Convert to an array """</span></span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().finalize_results()</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> k,hist <span class="kw">in</span> <span class="va">self</span>.hist.items():</span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.hist[k] <span class="op">=</span> np.array(hist)</span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> plot(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>        kw <span class="op">=</span> ss.plot_args(kwargs)</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">with</span> ss.style(<span class="op">**</span>kw.style):</span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>            fig <span class="op">=</span> plt.figure(<span class="op">**</span>kw.fig)</span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> minage, maxage <span class="kw">in</span> <span class="bu">zip</span>(<span class="va">self</span>.mins, <span class="va">self</span>.maxes):</span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a>                plt.plot(<span class="va">self</span>.sim.t.timevec, <span class="va">self</span>.hist[minage], label<span class="op">=</span><span class="ss">f'Age </span><span class="sc">{</span>minage<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>maxage<span class="sc">}</span><span class="ss">'</span>, <span class="op">**</span>kw.plot)</span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a>            plt.legend(<span class="op">**</span>kw.legend)</span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>            plt.xlabel(<span class="st">'Model time'</span>)</span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>            plt.ylabel(<span class="st">'Count'</span>)</span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a>            plt.ylim(bottom<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ss.return_fig(fig, <span class="op">**</span>kw.return_fig)</span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a><span class="co"># Demonstrate</span></span>
+<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>by_age <span class="op">=</span> dynamics_by_age(<span class="st">'sis.infected'</span>, age_bins<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">30</span>, <span class="dv">100</span>))</span>
+<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span>by_age, copy_inputs<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a>by_age.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.09 s)  ••••••••———————————— 41%
   Running 2030 (30/51) (0.13 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.17 s)  ••••••••••••••••———— 80%
+  Running 2040 (40/51) (0.18 s)  ••••••••••••••••———— 80%
   Running 2050 (50/51) (0.22 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
@@ -1012,7 +1162,7 @@ Figure(672x480)</code></pre>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="modules_analyzers_files/figure-html/cell-7-output-2.png" width="615" height="437" class="figure-img"></p>
+<p><img src="modules_analyzers_files/figure-html/cell-9-output-2.png" width="615" height="437" class="figure-img"></p>
 </figure>
 </div>
 </div>
@@ -1110,7 +1260,7 @@ Figure(672x480)</code></pre>
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1456,7 +1606,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -630,12 +630,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#starsim.sim.Sim.init_modules_pre" id="toc-starsim.sim.Sim.init_modules_pre" class="nav-link" data-scroll-target="#starsim.sim.Sim.init_modules_pre">init_modules_pre</a></li>
   <li><a href="#starsim.sim.Sim.init_people" id="toc-starsim.sim.Sim.init_people" class="nav-link" data-scroll-target="#starsim.sim.Sim.init_people">init_people</a></li>
   <li><a href="#starsim.sim.Sim.init_people_vals" id="toc-starsim.sim.Sim.init_people_vals" class="nav-link" data-scroll-target="#starsim.sim.Sim.init_people_vals">init_people_vals</a></li>
+  <li><a href="#starsim.sim.Sim.init_rescale" id="toc-starsim.sim.Sim.init_rescale" class="nav-link" data-scroll-target="#starsim.sim.Sim.init_rescale">init_rescale</a></li>
   <li><a href="#starsim.sim.Sim.init_results" id="toc-starsim.sim.Sim.init_results" class="nav-link" data-scroll-target="#starsim.sim.Sim.init_results">init_results</a></li>
   <li><a href="#starsim.sim.Sim.init_time" id="toc-starsim.sim.Sim.init_time" class="nav-link" data-scroll-target="#starsim.sim.Sim.init_time">init_time</a></li>
   <li><a href="#starsim.sim.Sim.plot" id="toc-starsim.sim.Sim.plot" class="nav-link" data-scroll-target="#starsim.sim.Sim.plot">plot</a></li>
   <li><a href="#starsim.sim.Sim.products" id="toc-starsim.sim.Sim.products" class="nav-link" data-scroll-target="#starsim.sim.Sim.products">products</a></li>
   <li><a href="#starsim.sim.Sim.profile" id="toc-starsim.sim.Sim.profile" class="nav-link" data-scroll-target="#starsim.sim.Sim.profile">profile</a></li>
+  <li><a href="#starsim.sim.Sim.rescale" id="toc-starsim.sim.Sim.rescale" class="nav-link" data-scroll-target="#starsim.sim.Sim.rescale">rescale</a></li>
   <li><a href="#starsim.sim.Sim.reset_time_pars" id="toc-starsim.sim.Sim.reset_time_pars" class="nav-link" data-scroll-target="#starsim.sim.Sim.reset_time_pars">reset_time_pars</a></li>
+  <li><a href="#starsim.sim.Sim.result_scale" id="toc-starsim.sim.Sim.result_scale" class="nav-link" data-scroll-target="#starsim.sim.Sim.result_scale">result_scale</a></li>
   <li><a href="#starsim.sim.Sim.run" id="toc-starsim.sim.Sim.run" class="nav-link" data-scroll-target="#starsim.sim.Sim.run">run</a></li>
   <li><a href="#starsim.sim.Sim.run_one_step" id="toc-starsim.sim.Sim.run_one_step" class="nav-link" data-scroll-target="#starsim.sim.Sim.run_one_step">run_one_step</a></li>
   <li><a href="#starsim.sim.Sim.save" id="toc-starsim.sim.Sim.save" class="nav-link" data-scroll-target="#starsim.sim.Sim.save">save</a></li>
@@ -653,17 +656,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#starsim.sim.check_sims_match" id="toc-starsim.sim.check_sims_match" class="nav-link" data-scroll-target="#starsim.sim.check_sims_match">check_sims_match</a>
   <ul class="collapse">
-  <li><a href="#parameters-16" id="toc-parameters-16" class="nav-link" data-scroll-target="#parameters-16">Parameters</a></li>
+  <li><a href="#parameters-17" id="toc-parameters-17" class="nav-link" data-scroll-target="#parameters-17">Parameters</a></li>
   <li><a href="#examples-8" id="toc-examples-8" class="nav-link" data-scroll-target="#examples-8">Examples</a></li>
   </ul></li>
   <li><a href="#starsim.sim.demo" id="toc-starsim.sim.demo" class="nav-link" data-scroll-target="#starsim.sim.demo">demo</a>
   <ul class="collapse">
-  <li><a href="#parameters-17" id="toc-parameters-17" class="nav-link" data-scroll-target="#parameters-17">Parameters</a></li>
+  <li><a href="#parameters-18" id="toc-parameters-18" class="nav-link" data-scroll-target="#parameters-18">Parameters</a></li>
   <li><a href="#examples-9" id="toc-examples-9" class="nav-link" data-scroll-target="#examples-9">Examples</a></li>
   </ul></li>
   <li><a href="#starsim.sim.diff_sims" id="toc-starsim.sim.diff_sims" class="nav-link" data-scroll-target="#starsim.sim.diff_sims">diff_sims</a>
   <ul class="collapse">
-  <li><a href="#parameters-18" id="toc-parameters-18" class="nav-link" data-scroll-target="#parameters-18">Parameters</a></li>
+  <li><a href="#parameters-19" id="toc-parameters-19" class="nav-link" data-scroll-target="#parameters-19">Parameters</a></li>
   <li><a href="#examples-10" id="toc-examples-10" class="nav-link" data-scroll-target="#examples-10">Examples</a></li>
   </ul></li>
   </ul></li>
@@ -848,14 +851,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </thead>
 <tbody>
 <tr class="odd">
+<td><a href="#starsim.sim.Sim.current_scale">current_scale</a></td>
+<td>The number of people each agent represents on the current timestep; varies over time if <code>pars.rescale=True</code></td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.sim.Sim.label">label</a></td>
 <td>Get the sim label from the parameters, if available.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.label_to_name">label_to_name</a></td>
 <td>Return a mapping from module labels to module names, e.g.&nbsp;{‘HIV’: ‘hiv’, ‘Pregnancy’: ‘pregnancy’}</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.modules">modules</a></td>
 <td>Return an iterator over all Module instances (stored in standard places) in the Sim</td>
 </tr>
@@ -937,66 +944,78 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Initialize the People states with actual values</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.sim.Sim.init_rescale">init_rescale</a></td>
+<td>Check that the diseases support dynamic rescaling, and create the distribution for it</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.sim.Sim.init_results">init_results</a></td>
 <td>Create initial results that are present in all simulations</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.init_time">init_time</a></td>
 <td>Time indexing; derived values live in the sim rather than in the pars</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.plot">plot</a></td>
 <td>Plot all results in the Sim object</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.products">products</a></td>
 <td>List all products across interventions; not an ndict like the other module types</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.profile">profile</a></td>
 <td>Profile the performance of the simulation using a line profiler (<a href="https://docs.sciris.org/api/sc_profiling.html#sciris.sc_profiling.profile" title="0"><code>sc.profile()</code></a>)</td>
+</tr>
+<tr class="odd">
+<td><a href="#starsim.sim.Sim.rescale">rescale</a></td>
+<td>Dynamically rescale the population; only used if <code>pars.rescale=True</code></td>
 </tr>
 <tr class="even">
 <td><a href="#starsim.sim.Sim.reset_time_pars">reset_time_pars</a></td>
 <td>Reset the time parameters in the modules; used for imposing the sim’s timestep on the modules</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.sim.Sim.result_scale">result_scale</a></td>
+<td>The factor to scale results by: a number, or an array with one value per timestep if <code>pars.rescale=True</code></td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.sim.Sim.run">run</a></td>
 <td>Run the model – the main method for running a simulation.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.run_one_step">run_one_step</a></td>
 <td>Run a single sim step; only used for debugging purposes.</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.save">save</a></td>
 <td>Save to disk as a gzipped pickle.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.set_diagnostics">set_diagnostics</a></td>
 <td>Store detailed diagnostics information in the sim</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.shrink">shrink</a></td>
 <td>“Shrinks” the simulation by removing the people and other memory-intensive</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.start_step">start_step</a></td>
 <td>Start the step – only print progress; all actual changes happen in the modules</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.summarize">summarize</a></td>
 <td>Provide a quick summary of the sim; returns the last entry for count and</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.to_df">to_df</a></td>
 <td>Export results as a Pandas dataframe</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><a href="#starsim.sim.Sim.to_json">to_json</a></td>
 <td>Export results and parameters as JSON.</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.sim.Sim.to_yaml">to_yaml</a></td>
 <td>Export results and parameters as YAML.</td>
 </tr>
@@ -1344,30 +1363,35 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.init_people_vals()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Initialize the People states with actual values</p>
 </section>
+<section id="starsim.sim.Sim.init_rescale" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.sim.Sim.init_rescale">init_rescale</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.init_rescale()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Check that the diseases support dynamic rescaling, and create the distribution for it</p>
+</section>
 <section id="starsim.sim.Sim.init_results" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.init_results">init_results</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.init_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.init_results()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create initial results that are present in all simulations</p>
 <p>This method initializes results by calling <a href="../api/people.html#starsim.people.People.init_results" title="0"><code>People.init_results()</code></a> to let People handle its own result initialization (including automatic BoolState results).</p>
 </section>
 <section id="starsim.sim.Sim.init_time" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.init_time">init_time</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.init_time()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.init_time()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Time indexing; derived values live in the sim rather than in the pars</p>
 </section>
 <section id="starsim.sim.Sim.plot" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.plot">plot</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.plot(</span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>    key<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    fig<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    show_data<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    show_skipped<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    show_module<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    show_label<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>    n_ticks<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    annualize<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
-<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.plot(</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    key<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    fig<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    show_data<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    show_skipped<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>    show_module<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    show_label<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>    n_ticks<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>    annualize<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">**</span>kwargs,</span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Plot all results in the Sim object</p>
 <section id="parameters-7" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-7">Parameters</h6>
@@ -1470,26 +1494,26 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-2" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-2">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run()</span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Basic usage</span></span>
-<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>sim.plot()</span>
-<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot a single result</span></span>
-<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis.prevalence'</span>)</span>
-<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot with a custom figure size, font, and style</span></span>
-<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>sim.plot(figsize<span class="op">=</span>(<span class="dv">12</span>,<span class="dv">16</span>), font<span class="op">=</span><span class="st">'Raleway'</span>, style<span class="op">=</span><span class="st">'fancy'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run()</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Basic usage</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>sim.plot()</span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot a single result</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis.prevalence'</span>)</span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot with a custom figure size, font, and style</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>sim.plot(figsize<span class="op">=</span>(<span class="dv">12</span>,<span class="dv">16</span>), font<span class="op">=</span><span class="st">'Raleway'</span>, style<span class="op">=</span><span class="st">'fancy'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.sim.Sim.products" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.products">products</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.products()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.products()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>List all products across interventions; not an ndict like the other module types</p>
 </section>
 <section id="starsim.sim.Sim.profile" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.profile">profile</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.profile(follow<span class="op">=</span><span class="va">None</span>, do_run<span class="op">=</span><span class="va">True</span>, plot<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.profile(follow<span class="op">=</span><span class="va">None</span>, do_run<span class="op">=</span><span class="va">True</span>, plot<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Profile the performance of the simulation using a line profiler (<a href="https://docs.sciris.org/api/sc_profiling.html#sciris.sc_profiling.profile" title="0"><code>sc.profile()</code></a>)</p>
 <section id="parameters-8" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-8">Parameters</h6>
@@ -1532,31 +1556,63 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-3" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-3">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
-<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS()</span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(networks<span class="op">=</span>net, diseases<span class="op">=</span>sis)</span>
-<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile(follow<span class="op">=</span>[net.add_pairs, sis.infect])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> ss.RandomNet()</span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>sis <span class="op">=</span> ss.SIS()</span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(networks<span class="op">=</span>net, diseases<span class="op">=</span>sis)</span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>prof <span class="op">=</span> sim.profile(follow<span class="op">=</span>[net.add_pairs, sis.infect])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
+</section>
+<section id="starsim.sim.Sim.rescale" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.sim.Sim.rescale">rescale</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.rescale()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Dynamically rescale the population; only used if <code>pars.rescale=True</code></p>
+<p>The scale factor starts at 1. Once the fraction of agents who are not naive (i.e.&nbsp;have ever been infected with any disease) exceeds <code>pars.rescale_threshold</code>, the scale factor is increased by at least <code>pars.rescale_factor</code> (up to <code>pars.pop_scale</code>), and the same fraction of non-naive agents are made naive again (via <code>disease.make_naive()</code>), so that each agent now represents more people. Based on Covasim’s dynamic rescaling.</p>
 </section>
 <section id="starsim.sim.Sim.reset_time_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.reset_time_pars">reset_time_pars</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.reset_time_pars(force<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.reset_time_pars(force<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Reset the time parameters in the modules; used for imposing the sim’s timestep on the modules</p>
+</section>
+<section id="starsim.sim.Sim.result_scale" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.sim.Sim.result_scale">result_scale</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.result_scale(module<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The factor to scale results by: a number, or an array with one value per timestep if <code>pars.rescale=True</code></p>
+<section id="parameters-9" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h6>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>module</td>
+<td><a href="../api/modules.html#starsim.modules.Module" title="0"><code>ss.Module</code></a></td>
+<td>if provided, map the scale onto the module’s timevec (if different from the sim’s)</td>
+<td><a href="https://docs.python.org/3/builtins/constants.html#None" title="1"><code>None</code></a></td>
+</tr>
+</tbody>
+</table>
+</section>
 </section>
 <section id="starsim.sim.Sim.run" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.run">run</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.run(</span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>    until<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    shrink<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    check_method_calls<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    profile<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.run(</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>    until<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    shrink<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    check_method_calls<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    profile<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Run the model – the main method for running a simulation.</p>
-<section id="parameters-9" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-9">Parameters</h6>
+<section id="parameters-10" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1603,17 +1659,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.sim.Sim.run_one_step" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.run_one_step">run_one_step</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.run_one_step(verbose<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.run_one_step(verbose<span class="op">=</span><span class="va">None</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Run a single sim step; only used for debugging purposes.</p>
 <p>Note: sim.run_one_step() runs a single simulation timestep, which involves multiple function calls. In contrast, loop.run_one_step() runs a single function call.</p>
 <p>Note: the verbose here is only for the Loop object, not the sim.</p>
 </section>
 <section id="starsim.sim.Sim.save" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.save">save</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.save(filename<span class="op">=</span><span class="va">None</span>, shrink<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.save(filename<span class="op">=</span><span class="va">None</span>, shrink<span class="op">=</span><span class="va">None</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Save to disk as a gzipped pickle.</p>
-<section id="parameters-10" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-10">Parameters</h6>
+<section id="parameters-11" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-11">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1666,17 +1722,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-4" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-4">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>sim.save() <span class="co"># Saves to a .sim file</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>sim.save() <span class="co"># Saves to a .sim file</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.sim.Sim.set_diagnostics" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.set_diagnostics">set_diagnostics</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.set_diagnostics(rvs<span class="op">=</span><span class="va">True</span>, states<span class="op">=</span><span class="va">True</span>, detailed<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.set_diagnostics(rvs<span class="op">=</span><span class="va">True</span>, states<span class="op">=</span><span class="va">True</span>, detailed<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Store detailed diagnostics information in the sim</p>
 <p>Stores every random number produced during a sim run (by <a href="../api/distributions.html#starsim.distributions.Dist" title="0"><code>ss.Dist</code></a> objects) and/or every state of every agent, at every timestep. This allows e.g. understanding exactly where two runs that should have been identical diverged. Results can be exported (in JSON format) and analyzed externally.</p>
 <p>Although the states export could be used for analysis, users are encouraged to write an <a href="../api/analyzers.html#starsim.analyzers.Analyzer" title="0"><code>ss.Analyzer</code></a> instead, as enabling diagnostics significantly degrades sim run time and memory usage.</p>
-<section id="parameters-11" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-11">Parameters</h6>
+<section id="parameters-12" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-12">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1710,29 +1766,29 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-5" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-5">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="co"># General settings -- use a small sim and few timesteps if possible</span></span>
-<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>kw <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">100</span>, start<span class="op">=</span><span class="dv">0</span>, stop<span class="op">=</span><span class="dv">10</span>, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sis'</span>)</span>
-<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Simplest usage: store info and print states</span></span>
-<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(<span class="op">**</span>kw)</span>
-<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>sim.set_diagnostics()</span>
-<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sim.diagnostics.states)</span>
-<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb34-10"><a href="#cb34-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Configure separately, with custom file export and saving all detail</span></span>
-<span id="cb34-11"><a href="#cb34-11" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(<span class="op">**</span>kw)</span>
-<span id="cb34-12"><a href="#cb34-12" aria-hidden="true" tabindex="-1"></a>sim.set_diagnostics(rvs<span class="op">=</span><span class="st">'diagnostics_rvs.json'</span>, states<span class="op">=</span><span class="st">'diagnostics_states.json'</span>, detailed<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb34-13"><a href="#cb34-13" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
-<span id="cb34-14"><a href="#cb34-14" aria-hidden="true" tabindex="-1"></a>sim.diagnostics.export()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="co"># General settings -- use a small sim and few timesteps if possible</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>kw <span class="op">=</span> <span class="bu">dict</span>(n_agents<span class="op">=</span><span class="dv">100</span>, start<span class="op">=</span><span class="dv">0</span>, stop<span class="op">=</span><span class="dv">10</span>, networks<span class="op">=</span><span class="st">'random'</span>, diseases<span class="op">=</span><span class="st">'sis'</span>)</span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Simplest usage: store info and print states</span></span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(<span class="op">**</span>kw)</span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a>sim.set_diagnostics()</span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sim.diagnostics.states)</span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Configure separately, with custom file export and saving all detail</span></span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(<span class="op">**</span>kw)</span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>sim.set_diagnostics(rvs<span class="op">=</span><span class="st">'diagnostics_rvs.json'</span>, states<span class="op">=</span><span class="st">'diagnostics_states.json'</span>, detailed<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a>sim.diagnostics.export()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.sim.Sim.shrink" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.shrink">shrink</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.shrink(inplace<span class="op">=</span><span class="va">True</span>, full<span class="op">=</span><span class="va">True</span>, size_limit<span class="op">=</span><span class="fl">1.0</span>, base_size<span class="op">=</span><span class="dv">30</span>, die<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.shrink(inplace<span class="op">=</span><span class="va">True</span>, full<span class="op">=</span><span class="va">True</span>, size_limit<span class="op">=</span><span class="fl">1.0</span>, base_size<span class="op">=</span><span class="dv">30</span>, die<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>“Shrinks” the simulation by removing the people and other memory-intensive attributes (e.g., some interventions and analyzers), and returns a copy of the “shrunken” simulation. Used to reduce the memory required for RAM or for saved files.</p>
 <p>After shrinking, each module is expected to be smaller than <code>size_limit*(base_size + n_timesteps)</code> KB. The <code>base_size</code> term covers the fixed structural overhead of a module (parameters, results metadata, etc.) that does not depend on the simulation length, expressed as a number of timesteps’ worth of allowance; the <code>n_timesteps</code> term covers the per-timestep results that legitimately grow with the simulation; and <code>size_limit</code> scales both. A module exceeding this is most likely still holding a per-agent array that failed to shrink.</p>
-<section id="parameters-12" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-12">Parameters</h6>
+<section id="parameters-13" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-13">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1798,15 +1854,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.sim.Sim.start_step" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.start_step">start_step</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.start_step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.start_step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Start the step – only print progress; all actual changes happen in the modules</p>
 </section>
 <section id="starsim.sim.Sim.summarize" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.summarize">summarize</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb37"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.summarize(how<span class="op">=</span><span class="st">'default'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.summarize(how<span class="op">=</span><span class="st">'default'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Provide a quick summary of the sim; returns the last entry for count and cumulative results, and the mean otherwise.</p>
-<section id="parameters-13" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-13">Parameters</h6>
+<section id="parameters-14" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-14">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1829,15 +1885,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.sim.Sim.to_df" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.to_df">to_df</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.to_df(sep<span class="op">=</span><span class="st">'_'</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.to_df(sep<span class="op">=</span><span class="st">'_'</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Export results as a Pandas dataframe Args: sep (str): separator for the keys kwargs: passed to results.to_df()</p>
 </section>
 <section id="starsim.sim.Sim.to_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.to_json">to_json</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.to_json(filename<span class="op">=</span><span class="va">None</span>, keys<span class="op">=</span><span class="va">None</span>, indent<span class="op">=</span><span class="dv">2</span>, verbose<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.to_json(filename<span class="op">=</span><span class="va">None</span>, keys<span class="op">=</span><span class="va">None</span>, indent<span class="op">=</span><span class="dv">2</span>, verbose<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Export results and parameters as JSON.</p>
-<section id="parameters-14" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-14">Parameters</h6>
+<section id="parameters-15" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-15">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1906,17 +1962,17 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-6" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-6">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>json <span class="op">=</span> sim.to_json() <span class="co"># Convert to a dict</span></span>
-<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>sim.to_json(<span class="st">'sim.json'</span>) <span class="co"># Write everything</span></span>
-<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>sim.to_json(<span class="st">'summary.json'</span>, keys<span class="op">=</span><span class="st">'summary'</span>) <span class="co"># Just write the summary</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>json <span class="op">=</span> sim.to_json() <span class="co"># Convert to a dict</span></span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>sim.to_json(<span class="st">'sim.json'</span>) <span class="co"># Write everything</span></span>
+<span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>sim.to_json(<span class="st">'summary.json'</span>, keys<span class="op">=</span><span class="st">'summary'</span>) <span class="co"># Just write the summary</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.sim.Sim.to_yaml" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.sim.Sim.to_yaml">to_yaml</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.to_yaml(filename<span class="op">=</span><span class="va">None</span>, sort_keys<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>sim.Sim.to_yaml(filename<span class="op">=</span><span class="va">None</span>, sort_keys<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Export results and parameters as YAML.</p>
-<section id="parameters-15" class="level6 doc-section doc-section-parameters">
-<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-15">Parameters</h6>
+<section id="parameters-16" class="level6 doc-section doc-section-parameters">
+<h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-16">Parameters</h6>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -1944,8 +2000,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-7" class="level6 doc-section doc-section-examples">
 <h6 class="doc-section doc-section-examples anchored" data-anchor-id="examples-7">Examples</h6>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run()</span>
-<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a>sim.to_yaml(<span class="st">'results.yaml'</span>, keys<span class="op">=</span><span class="st">'results'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run()</span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>sim.to_yaml(<span class="st">'results.yaml'</span>, keys<span class="op">=</span><span class="st">'results'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 </section>
@@ -1977,10 +2033,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.sim.check_sims_match" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.sim.check_sims_match">check_sims_match</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb43"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>sim.check_sims_match(<span class="op">*</span>args, full<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>sim.check_sims_match(<span class="op">*</span>args, full<span class="op">=</span><span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Shortcut to using ss.diff_sims() to check if multiple sims match</p>
-<section id="parameters-16" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-16">Parameters</h4>
+<section id="parameters-17" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-17">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2008,19 +2064,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-8" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-8">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run()</span>
-<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(pars<span class="op">=</span><span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>)).run()</span>
-<span id="cb44-3"><a href="#cb44-3" aria-hidden="true" tabindex="-1"></a>s3 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIR(), networks<span class="op">=</span>ss.RandomNet()).run()</span>
-<span id="cb44-4"><a href="#cb44-4" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> ss.check_sims_match(s1, s2, s3)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb47"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>).run()</span>
+<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(pars<span class="op">=</span><span class="bu">dict</span>(diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>)).run()</span>
+<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a>s3 <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIR(), networks<span class="op">=</span>ss.RandomNet()).run()</span>
+<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> ss.check_sims_match(s1, s2, s3)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.sim.demo" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.sim.demo">demo</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb45"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a>sim.demo(run<span class="op">=</span><span class="va">True</span>, plot<span class="op">=</span><span class="va">True</span>, summary<span class="op">=</span><span class="va">True</span>, show<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>sim.demo(run<span class="op">=</span><span class="va">True</span>, plot<span class="op">=</span><span class="va">True</span>, summary<span class="op">=</span><span class="va">True</span>, show<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create a simple demo simulation for Starsim</p>
 <p>Defaults to using the SIR model with a random network, but these can be configured.</p>
-<section id="parameters-17" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-17">Parameters</h4>
+<section id="parameters-18" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-18">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2060,24 +2116,24 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-9" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-9">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>ss.demo() <span class="co"># Run, plot, and show results</span></span>
-<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a>ss.demo(diseases<span class="op">=</span><span class="st">'hiv'</span>, networks<span class="op">=</span><span class="st">'mf'</span>) <span class="co"># Run with different defaults</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb49"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a>ss.demo() <span class="co"># Run, plot, and show results</span></span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a>ss.demo(diseases<span class="op">=</span><span class="st">'hiv'</span>, networks<span class="op">=</span><span class="st">'mf'</span>) <span class="co"># Run with different defaults</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </section>
 </section>
 <section id="starsim.sim.diff_sims" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.sim.diff_sims">diff_sims</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb47"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a>sim.diff_sims(</span>
-<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a>    sim1,</span>
-<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a>    sim2,</span>
-<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a>    skip_key_diffs<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb47-5"><a href="#cb47-5" aria-hidden="true" tabindex="-1"></a>    skip<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a>    full<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a>    output<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb50"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a>sim.diff_sims(</span>
+<span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>    sim1,</span>
+<span id="cb50-3"><a href="#cb50-3" aria-hidden="true" tabindex="-1"></a>    sim2,</span>
+<span id="cb50-4"><a href="#cb50-4" aria-hidden="true" tabindex="-1"></a>    skip_key_diffs<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb50-5"><a href="#cb50-5" aria-hidden="true" tabindex="-1"></a>    skip<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb50-6"><a href="#cb50-6" aria-hidden="true" tabindex="-1"></a>    full<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb50-7"><a href="#cb50-7" aria-hidden="true" tabindex="-1"></a>    output<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb50-8"><a href="#cb50-8" aria-hidden="true" tabindex="-1"></a>    die<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb50-9"><a href="#cb50-9" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Compute the difference of the summaries of two simulations, and print any values which differ.</p>
-<section id="parameters-18" class="level4 doc-section doc-section-parameters">
-<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-18">Parameters</h4>
+<section id="parameters-19" class="level4 doc-section doc-section-parameters">
+<h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-19">Parameters</h4>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2135,9 +2191,9 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="examples-10" class="level4 doc-section doc-section-examples">
 <h4 class="doc-section doc-section-examples anchored" data-anchor-id="examples-10">Examples</h4>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(rand_seed<span class="op">=</span><span class="dv">1</span>).run()</span>
-<span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(rand_seed<span class="op">=</span><span class="dv">2</span>).run()</span>
-<span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a>ss.diff_sims(s1, s2)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb51"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a>s1 <span class="op">=</span> ss.Sim(rand_seed<span class="op">=</span><span class="dv">1</span>).run()</span>
+<span id="cb51-2"><a href="#cb51-2" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> ss.Sim(rand_seed<span class="op">=</span><span class="dv">2</span>).run()</span>
+<span id="cb51-3"><a href="#cb51-3" aria-hidden="true" tabindex="-1"></a>ss.diff_sims(s1, s2)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 
 
 </section>
@@ -2232,7 +2288,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -2578,7 +2634,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

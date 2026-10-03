@@ -647,6 +647,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -732,7 +738,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="setting-up-the-model" class="level3">
 <h3 class="anchored" data-anchor-id="setting-up-the-model">Setting up the model</h3>
 <p>Here we will define a simple compartmental susceptible-infectious-susceptible (SIS) model. The model definition here is quite similar to the agent-based implementation in Starsim’s <a href="https://github.com/starsimhub/starsim/blob/main/starsim/diseases/sir.py">SIR module</a>; differences are noted in comments. Note that the model runs extremely fast, since a three-state compartmental model (susceptible, infecious, and immunity) runs as fast as an agent-based model with three agents!</p>
-<div id="7ef20b84" class="cell" data-execution_count="1">
+<div id="e0e41009" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">Example compartmental SIS model for Starsim</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
@@ -827,16 +833,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/1001) (0.00 s)  ———————————————————— 0%
-  Running 2010 (100/1001) (0.02 s)  ••—————————————————— 10%
+  Running 2010 (100/1001) (0.03 s)  ••—————————————————— 10%
   Running 2020 (200/1001) (0.05 s)  ••••———————————————— 20%
   Running 2030 (300/1001) (0.07 s)  ••••••—————————————— 30%
-  Running 2040 (400/1001) (0.09 s)  ••••••••———————————— 40%
-  Running 2050 (500/1001) (0.11 s)  ••••••••••—————————— 50%
-  Running 2060 (600/1001) (0.13 s)  ••••••••••••———————— 60%
-  Running 2070 (700/1001) (0.15 s)  ••••••••••••••—————— 70%
-  Running 2080 (800/1001) (0.18 s)  ••••••••••••••••———— 80%
-  Running 2090 (900/1001) (0.20 s)  ••••••••••••••••••—— 90%
-  Running 2100 (1000/1001) (0.22 s)  •••••••••••••••••••• 100%
+  Running 2040 (400/1001) (0.10 s)  ••••••••———————————— 40%
+  Running 2050 (500/1001) (0.12 s)  ••••••••••—————————— 50%
+  Running 2060 (600/1001) (0.14 s)  ••••••••••••———————— 60%
+  Running 2070 (700/1001) (0.16 s)  ••••••••••••••—————— 70%
+  Running 2080 (800/1001) (0.19 s)  ••••••••••••••••———— 80%
+  Running 2090 (900/1001) (0.21 s)  ••••••••••••••••••—— 90%
+  Running 2100 (1000/1001) (0.24 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -848,7 +854,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Let’s compare to our standard agent-based SIS model with similar parameters:</p>
-<div id="3fb07874" class="cell" data-execution_count="2">
+<div id="baf3106d" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the model</span></span>
@@ -861,15 +867,15 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/1001) (0.00 s)  ———————————————————— 0%
   Running 2010 (100/1001) (0.42 s)  ••—————————————————— 10%
-  Running 2020 (200/1001) (0.82 s)  ••••———————————————— 20%
-  Running 2030 (300/1001) (1.23 s)  ••••••—————————————— 30%
-  Running 2040 (400/1001) (1.63 s)  ••••••••———————————— 40%
-  Running 2050 (500/1001) (2.03 s)  ••••••••••—————————— 50%
-  Running 2060 (600/1001) (2.44 s)  ••••••••••••———————— 60%
-  Running 2070 (700/1001) (2.85 s)  ••••••••••••••—————— 70%
-  Running 2080 (800/1001) (3.26 s)  ••••••••••••••••———— 80%
-  Running 2090 (900/1001) (3.66 s)  ••••••••••••••••••—— 90%
-  Running 2100 (1000/1001) (4.06 s)  •••••••••••••••••••• 100%
+  Running 2020 (200/1001) (0.83 s)  ••••———————————————— 20%
+  Running 2030 (300/1001) (1.24 s)  ••••••—————————————— 30%
+  Running 2040 (400/1001) (1.65 s)  ••••••••———————————— 40%
+  Running 2050 (500/1001) (2.06 s)  ••••••••••—————————— 50%
+  Running 2060 (600/1001) (2.57 s)  ••••••••••••———————— 60%
+  Running 2070 (700/1001) (2.98 s)  ••••••••••••••—————— 70%
+  Running 2080 (800/1001) (3.39 s)  ••••••••••••••••———— 80%
+  Running 2090 (900/1001) (3.80 s)  ••••••••••••••••••—— 90%
+  Running 2100 (1000/1001) (4.21 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -889,7 +895,7 @@ Figure(672x480)</code></pre>
 <p>This example adapts the example from the <em>Epidemics</em> v0.4.0 R package:</p>
 <p><a href="https://epiverse-trace.github.io/epidemics/">https://epiverse-trace.github.io/epidemics/</a></p>
 <p>Note that it does not use the same level of detail as the original in terms of the population or contact matrices, but produces similar results.</p>
-<div id="f3818b9f" class="cell" data-execution_count="3">
+<div id="ac6f1a63" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -995,7 +1001,7 @@ Figure(672x480)</code></pre>
 <section id="setting-up-the-model-1" class="level3">
 <h3 class="anchored" data-anchor-id="setting-up-the-model-1">Setting up the model</h3>
 <p>We could define the wealth model as any type of module, since they all can store states and update them. Here we will define wealth as a subclass of <a href="../api/interventions.html#starsim.interventions.Intervention" title="0"><code>ss.Intervention</code></a> (though it could equally well be a subclass of <a href="../api/demographics.html#starsim.demographics.Demographics" title="0"><code>ss.Demographics</code></a> or even <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a>, if you are so inclined). All we need to do is update the <code>wealth</code> state (which we can store inside the “intervention”), and we can also use this class to track the wealth distribution over time and plot it. The full model looks like this:</p>
-<div id="887865f8" class="cell" data-execution_count="4">
+<div id="7d84150e" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co">Define the classic agent-based "wealth model" in Starsim</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
@@ -1078,13 +1084,13 @@ Figure(672x480)</code></pre>
   Running years(10) (10/101) (0.00 s)  ••—————————————————— 11%
   Running years(20) (20/101) (0.01 s)  ••••———————————————— 21%
   Running years(30) (30/101) (0.01 s)  ••••••—————————————— 31%
-  Running years(40) (40/101) (0.01 s)  ••••••••———————————— 41%
-  Running years(50) (50/101) (0.01 s)  ••••••••••—————————— 50%
+  Running years(40) (40/101) (0.02 s)  ••••••••———————————— 41%
+  Running years(50) (50/101) (0.02 s)  ••••••••••—————————— 50%
   Running years(60) (60/101) (0.02 s)  ••••••••••••———————— 60%
-  Running years(70) (70/101) (0.02 s)  ••••••••••••••—————— 70%
-  Running years(80) (80/101) (0.02 s)  ••••••••••••••••———— 80%
-  Running years(90) (90/101) (0.02 s)  ••••••••••••••••••—— 90%
-  Running years(100) (100/101) (0.03 s)  •••••••••••••••••••• 100%
+  Running years(70) (70/101) (0.03 s)  ••••••••••••••—————— 70%
+  Running years(80) (80/101) (0.03 s)  ••••••••••••••••———— 80%
+  Running years(90) (90/101) (0.03 s)  ••••••••••••••••••—— 90%
+  Running years(100) (100/101) (0.04 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1202,7 +1208,7 @@ Figure(672x480)</code></pre>
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1548,7 +1554,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

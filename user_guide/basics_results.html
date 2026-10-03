@@ -650,6 +650,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -697,6 +703,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#plotting-results" id="toc-plotting-results" class="nav-link" data-scroll-target="#plotting-results">Plotting results</a></li>
   <li><a href="#exporting-results" id="toc-exporting-results" class="nav-link" data-scroll-target="#exporting-results">Exporting results</a></li>
   <li><a href="#results-across-multiple-runs" id="toc-results-across-multiple-runs" class="nav-link" data-scroll-target="#results-across-multiple-runs">Results across multiple runs</a></li>
+  <li><a href="#results-with-multiple-columns" id="toc-results-with-multiple-columns" class="nav-link" data-scroll-target="#results-with-multiple-columns">Results with multiple columns</a></li>
   <li><a href="#adding-your-own-results" id="toc-adding-your-own-results" class="nav-link" data-scroll-target="#adding-your-own-results">Adding your own results</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
@@ -728,7 +735,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="where-results-live" class="level2">
 <h2 class="anchored" data-anchor-id="where-results-live">Where results live</h2>
 <p>After a sim has run, all of its outputs are stored in <code>sim.results</code>, which is a nested structure. Each module adds its own group of results, and there are also some sim-level results (such as <code>n_alive</code>):</p>
-<div id="b0226c2b" class="cell" data-execution_count="1">
+<div id="2d2b587e" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -745,7 +752,7 @@ SIR results:   ['timevec', 'n_susceptible', 'n_infected', 'n_recovered', 'preval
 </div>
 </div>
 <p>You access an individual result by drilling down through the module name:</p>
-<div id="ac3c814e" class="cell" data-execution_count="2">
+<div id="576ce3e5" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>new_infections <span class="op">=</span> sim.results.sir.new_infections</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(new_infections)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -786,7 +793,7 @@ SIR results:   ['timevec', 'n_susceptible', 'n_infected', 'n_recovered', 'preval
 </tr>
 </tbody>
 </table>
-<div id="9a682138" class="cell" data-execution_count="3">
+<div id="ed1b1990" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.sir.new_infections</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Use it like an array</span></span>
@@ -809,7 +816,7 @@ First date: 2000.01.01</code></pre>
 <section id="plotting-results" class="level2">
 <h2 class="anchored" data-anchor-id="plotting-results">Plotting results</h2>
 <p>The quickest way to see everything is <code>sim.plot()</code>, which plots all results flagged for automatic plotting:</p>
-<div id="7f7c4c5a" class="cell" data-execution_count="4">
+<div id="f32b0215" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>sim.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(896x672)</code></pre>
@@ -823,7 +830,7 @@ First date: 2000.01.01</code></pre>
 </div>
 </div>
 <p>You can plot a single module’s results, or even a single result on its own:</p>
-<div id="b99e0d12" class="cell" data-execution_count="5">
+<div id="059a32c4" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Just the SIR results</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -837,7 +844,7 @@ First date: 2000.01.01</code></pre>
 </div>
 </div>
 </div>
-<div id="3699431b" class="cell" data-execution_count="6">
+<div id="89d5a96c" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># A single result, with its label and time axis handled automatically</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>sim.results.sir.new_infections.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -855,7 +862,7 @@ First date: 2000.01.01</code></pre>
 <section id="exporting-results" class="level2">
 <h2 class="anchored" data-anchor-id="exporting-results">Exporting results</h2>
 <p>To get results into a pandas dataframe — for example, to save to CSV or analyze further — use <code>to_df()</code>. This works at the level of a single module:</p>
-<div id="210c5396" class="cell" data-execution_count="7">
+<div id="52b5e1a3" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.results.sir.to_df()</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>df.head()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="7">
@@ -933,7 +940,7 @@ First date: 2000.01.01</code></pre>
 </div>
 </div>
 <p>or for the whole sim at once, which flattens every module’s results into one wide dataframe:</p>
-<div id="72cdc7dd" class="cell" data-execution_count="8">
+<div id="2e1c4558" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.to_df()</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Columns:'</span>, <span class="bu">list</span>(df.columns))</span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>df.head()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -1055,7 +1062,7 @@ First date: 2000.01.01</code></pre>
 <section id="results-across-multiple-runs" class="level2">
 <h2 class="anchored" data-anchor-id="results-across-multiple-runs">Results across multiple runs</h2>
 <p>When you run many sims with <a href="../user_guide/workflows_run.html"><span><code>ss.MultiSim</code></span></a>, you usually want summary statistics across the runs rather than each run individually. Calling <code>reduce()</code> (or the convenience methods <code>mean()</code> / <code>median()</code>) combines the runs and populates the <code>low</code> and <code>high</code> uncertainty bounds on each result:</p>
-<div id="532c0cf7" class="cell" data-execution_count="9">
+<div id="e25949d8" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>msim <span class="op">=</span> ss.MultiSim(ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, verbose<span class="op">=</span><span class="dv">0</span>), n_runs<span class="op">=</span><span class="dv">5</span>)</span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>msim.run()</span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>msim.<span class="bu">reduce</span>()</span>
@@ -1077,6 +1084,116 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>Note that across multiple runs the results are stored in a flattened structure keyed by <code>module_result</code> (e.g.&nbsp;<code>sir_new_infections</code>), so you access them with <code>msim.results['sir_new_infections']</code> rather than the nested <code>msim.results.sir...</code> form used for a single sim.</p>
+</section>
+<section id="results-with-multiple-columns" class="level2">
+<h2 class="anchored" data-anchor-id="results-with-multiple-columns">Results with multiple columns</h2>
+<p>Sometimes a result naturally has several values per timestep, such as new infections by variant or by age group. Rather than defining one result per group, you can pass <code>columns</code> to <a href="../api/results.html#starsim.results.Result" title="0"><code>ss.Result</code></a>, which makes a 2D result of shape <code>(npts, ncols)</code>:</p>
+<div id="d013622e" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> InfectionsByAge(ss.Analyzer):</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" Count new infections among children and adults """</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> init_results(<span class="va">self</span>):</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().init_results()</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_results(</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>            ss.Result(<span class="st">'new_infections'</span>, columns<span class="op">=</span>[<span class="st">'children'</span>, <span class="st">'adults'</span>], label<span class="op">=</span><span class="st">'New infections'</span>),</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>        new <span class="op">=</span> <span class="va">self</span>.sim.diseases.sis.ti_infected <span class="op">==</span> <span class="va">self</span>.ti</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        children <span class="op">=</span> <span class="va">self</span>.sim.people.age <span class="op">&lt;</span> <span class="dv">15</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.results.new_infections[<span class="va">self</span>.ti] <span class="op">=</span> [np.count_nonzero(new <span class="op">&amp;</span> children), np.count_nonzero(new <span class="op">&amp;</span> <span class="op">~</span>children)]</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2010</span>, dt<span class="op">=</span>ss.weeks(<span class="dv">1</span>), diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span>InfectionsByAge(), verbose<span class="op">=</span><span class="dv">0</span>).run()</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.infectionsbyage.new_infections</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Shape:'</span>, res.shape)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Shape: (522, 2)</code></pre>
+</div>
+</div>
+<p>Each column is available as a 1D result, via <code>res.adults</code> or <code>res.col('adults')</code>, or all at once via <code>res.by_column()</code>. These share data with the 2D result, so modifying one modifies the other:</p>
+<div id="f75dcf1a" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(res.adults)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Label:'</span>, res.adults.label)</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Columns:'</span>, <span class="bu">list</span>(res.by_column().keys()))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Result(InfectionsByAge.new_infections_adults: min=0, mean=1.18199, max=15)
+Label: New infections (adults)
+Columns: ['children', 'adults']</code></pre>
+</div>
+</div>
+<p>Most operations handle each column separately: results are scaled by <code>pop_scale</code>, <code>to_df()</code> and <code>sim.to_df()</code> give one dataframe column per result column, <code>sim.summarize()</code> summarizes each column, and <a href="../api/run.html#starsim.run.MultiSim.reduce" title="0"><code>MultiSim.reduce()</code></a> computes bounds for each column. Likewise, <code>resample()</code> and <code>annualize()</code> resample along time only, inferring how to aggregate from the name of the parent result (e.g.&nbsp;<code>new_</code> results are summed):</p>
+<div id="8efd24a3" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>annual <span class="op">=</span> res.annualize()</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Annual shape:'</span>, annual.shape)</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>annual.to_df().head()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Annual shape: (10, 2)</code></pre>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="12">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">timevec</th>
+<th data-quarto-table-cell-role="th">children</th>
+<th data-quarto-table-cell-role="th">adults</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">0</th>
+<td>2000-07-02</td>
+<td>2.0</td>
+<td>22.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">1</th>
+<td>2001-07-02</td>
+<td>1.0</td>
+<td>5.0</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">2</th>
+<td>2002-07-02</td>
+<td>2.0</td>
+<td>7.0</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">3</th>
+<td>2003-07-02</td>
+<td>3.0</td>
+<td>18.0</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">4</th>
+<td>2004-07-02</td>
+<td>4.0</td>
+<td>30.0</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>Plotting a 2D result shows one line per column:</p>
+<div id="4d8d5562" class="cell" data-execution_count="13">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>res.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Figure(672x480)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="basics_results_files/figure-html/cell-14-output-2.png" width="566" height="451" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
 </section>
 <section id="adding-your-own-results" class="level2">
 <h2 class="anchored" data-anchor-id="adding-your-own-results">Adding your own results</h2>
@@ -1172,7 +1289,7 @@ Figure(672x480)</code></pre>
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1518,7 +1635,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

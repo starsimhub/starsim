@@ -647,6 +647,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -707,6 +713,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#choosing-the-right-network-type" id="toc-choosing-the-right-network-type" class="nav-link" data-scroll-target="#choosing-the-right-network-type">Choosing the right network type</a></li>
   </ul></li>
   <li><a href="#core-implementation-methods" id="toc-core-implementation-methods" class="nav-link" data-scroll-target="#core-implementation-methods">Core implementation methods</a></li>
+  <li><a href="#clustered-and-hybrid-networks" id="toc-clustered-and-hybrid-networks" class="nav-link" data-scroll-target="#clustered-and-hybrid-networks">Clustered and hybrid networks</a></li>
+  <li><a href="#working-with-edges" id="toc-working-with-edges" class="nav-link" data-scroll-target="#working-with-edges">Working with edges</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
@@ -833,8 +841,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <tr class="even">
 <td><a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>RandomNet</code></a></td>
 <td>Random connections</td>
-<td><code>n_contacts</code>, <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a></td>
+<td><code>n_contacts</code>, <a href="../api/time.html#starsim.time.dur" title="0"><code>dur</code></a>, <code>dynamic</code>, <code>age_range</code></td>
 <td>General infectious diseases</td>
+</tr>
+<tr class="odd">
+<td><a href="../api/networks.html#starsim.networks.ClusterNet" title="0"><code>ClusterNet</code></a></td>
+<td>Fully connected clusters</td>
+<td><code>cluster_size</code>, <code>dynamic</code>, <code>age_range</code></td>
+<td>Households and other small groups</td>
+</tr>
+<tr class="even">
+<td><a href="../api/networks.html#starsim.networks.HybridNet" title="0"><code>HybridNet</code></a></td>
+<td>Covasim’s household, school, work, and community networks</td>
+<td><code>household_size</code>, <code>contacts</code>, <code>school_ages</code>, <code>work_ages</code></td>
+<td>Respiratory diseases with structured contacts</td>
 </tr>
 <tr class="odd">
 <td><a href="../api/networks.html#starsim.networks.MFNet" title="0"><code>MFNet</code></a></td>
@@ -937,6 +957,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <ul>
 <li><a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>RandomNet</code></a>: Simple random mixing; the default in most cases</li>
 <li><a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a>: Age-structured mixing with contact matrices</li>
+<li><a href="../api/networks.html#starsim.networks.ClusterNet" title="0"><code>ClusterNet</code></a>: Households or other fully connected groups</li>
+<li><a href="../api/networks.html#starsim.networks.HybridNet" title="0"><code>HybridNet</code></a>: Households, schools, workplaces, and community, as in Covasim</li>
 </ul></li>
 <li><strong>For sexually transmitted infections:</strong>
 <ul>
@@ -1008,7 +1030,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </tbody>
 </table>
 <p>Let’s compare a simple SIR model configured with transmission using a single Mixing Pool to a similar model using a contact network. Mixing pools are not the same as contact networks, so the results are not expected to be identical.</p>
-<div id="9104b5a4" class="cell" data-execution_count="1">
+<div id="c1fad1ea" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1043,7 +1065,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <p>Ultimately, the acquisition probability for each susceptible agent in <code>dst_uids</code> is computed as</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> <span class="va">self</span>.pars.beta <span class="op">*</span> trans <span class="op">*</span> acq</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>You can see the <code>beta</code> parameter here, which is another pool parameter and should use <code>ss.timeprob()</code> to automatically adjust for time units. Mixing pools do not currently use the <code>beta</code> parameters configured in individual disease modules.</p>
-<div id="8034ba57" class="cell" data-execution_count="2">
+<div id="e82472b5" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>mp <span class="op">=</span> ss.MixingPool(</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    diseases <span class="op">=</span> <span class="st">'sir'</span>, <span class="co"># Use this pool only for SIR, not other diseases (HIV in this example)</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    src <span class="op">=</span> <span class="kw">lambda</span> sim: sim.people.age <span class="op">&lt;</span> <span class="dv">15</span>, <span class="co"># Infection sources will be agents under age 15</span></span>
@@ -1059,8 +1081,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   Running 2010 (10/51) (0.03 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.05 s)  ••••••••———————————— 41%
   Running 2030 (30/51) (0.07 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.08 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.10 s)  •••••••••••••••••••• 100%
+  Running 2040 (40/51) (0.09 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.11 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -1073,7 +1095,7 @@ Figure(896x672)</code></pre>
 </div>
 </div>
 <p><a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> (plural) allows you to configure multiple individual <a href="../api/networks.html#starsim.networks.MixingPool" title="0"><code>MixingPool</code></a> pools. This first example shows how to do age mixing. Like <a href="../api/networks.html#starsim.networks.MixingPool" title="0"><code>MixingPool</code></a>, <a href="../api/networks.html#starsim.networks.MixingPools" title="0"><code>MixingPools</code></a> also takes <code>src</code> and <code>dst</code>, however each of these parameters must be a dictionary with key specifying the name of each group and value as in the singlular mixing pool proving the uids by a callable function or list of uids.</p>
-<div id="1ca4487b" class="cell" data-execution_count="3">
+<div id="714e6c3d" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -1149,7 +1171,7 @@ The second axis (columns) of the contact matrix is the DESTINATION group
 </div>
 </div>
 <p>Mixing pools work well with properties other than age. Here’s an example that mixes by socio-economic status (SES).</p>
-<div id="ad67a5b4" class="cell" data-execution_count="4">
+<div id="b222aedb" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define SES states</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ses <span class="op">=</span> sc.objdict(low<span class="op">=</span><span class="dv">0</span>, mid<span class="op">=</span><span class="dv">1</span>, high<span class="op">=</span><span class="dv">2</span>)</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -1213,6 +1235,71 @@ The second axis (columns) of the contact matrix is the DESTINATION group
 </div>
 </div>
 <p>In the above figure, infections are seeded into the high group at the beginning of the simulation, explaining the spike in new cases at that time. High SES can only infect mid SES, so the mid (orange) wave follows. Low SES can only become infected by mid SES in this example, so the blue wave follows. This example intentionally demonstrates the directional nature of mixing pools and includes strong mixing within groups and bottlenecks between groups to make the point.</p>
+</section>
+<section id="clustered-and-hybrid-networks" class="level2">
+<h2 class="anchored" data-anchor-id="clustered-and-hybrid-networks">Clustered and hybrid networks</h2>
+<p><a href="../api/networks.html#starsim.networks.ClusterNet" title="0"><code>ss.ClusterNet</code></a> divides agents into fully connected clusters, such as households: each agent is assigned to one cluster, with sizes drawn from <code>cluster_size</code> (a number is treated as the mean of a Poisson distribution), and every pair of agents within a cluster is connected. By default the clusters are created once and never change; set <code>dynamic=True</code> to recreate them on each timestep.</p>
+<p><a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a> and <a href="../api/networks.html#starsim.networks.RandomExactNet" title="0"><code>ss.RandomExactNet</code></a> also accept <code>dynamic</code> (set <code>dynamic=False</code> for a static network, where edges are created once and agents who join later, e.g.&nbsp;newborns, are not added) and <code>age_range</code>, which restricts the network to agents with <code>age_range[0] &lt;= age &lt; age_range[1]</code>. Together, these let you build structured contact patterns, for example:</p>
+<div id="7478de51" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>households <span class="op">=</span> ss.ClusterNet(name<span class="op">=</span><span class="st">'households'</span>, cluster_size<span class="op">=</span>ss.poisson(<span class="dv">3</span>))</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>work <span class="op">=</span> ss.RandomNet(name<span class="op">=</span><span class="st">'work'</span>, n_contacts<span class="op">=</span><span class="dv">10</span>, age_range<span class="op">=</span>[<span class="dv">20</span>, <span class="dv">65</span>], dynamic<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>[households, work], verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Number of households: </span><span class="sc">{</span>sim<span class="sc">.</span>networks<span class="sc">.</span>households<span class="sc">.</span>n_clusters<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Number of households: 644
+Figure(768x576)</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="modules_networks_files/figure-html/cell-6-output-2.png" width="756" height="566" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><a href="../api/networks.html#starsim.networks.HybridNet" title="0"><code>ss.HybridNet</code></a> reproduces <a href="https://covasim.org/">Covasim</a>’s “hybrid” population: when added to a sim, it expands into four separate networks, households (<code>h</code>, an <a href="../api/networks.html#starsim.networks.ClusterNet" title="0"><code>ss.ClusterNet</code></a>), and schools (<code>s</code>), workplaces (<code>w</code>), and community (<code>c</code>), each an <a href="../api/networks.html#starsim.networks.RandomNet" title="0"><code>ss.RandomNet</code></a> restricted by age where appropriate. Any <code>dt</code>, <code>start</code>, or <code>stop</code> given to <a href="../api/networks.html#starsim.networks.HybridNet" title="0"><code>ss.HybridNet</code></a> is passed to all four networks, and each network can then be accessed (or modified) separately, e.g.&nbsp;<code>sim.networks.s</code>:</p>
+<div id="7a6fb5ad" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">2000</span>, diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>ss.HybridNet(household_size<span class="op">=</span><span class="dv">3</span>), verbose<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> net <span class="kw">in</span> sim.networks():</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>net<span class="sc">.</span>name<span class="sc">}</span><span class="ss"> (</span><span class="sc">{</span>net<span class="sc">.</span>label<span class="sc">}</span><span class="ss">): </span><span class="sc">{</span><span class="bu">len</span>(net)<span class="sc">}</span><span class="ss"> edges'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>h (Households): 3062 edges
+s (Schools): 4799 edges
+w (Workplaces): 10648 edges
+c (Community): 20160 edges</code></pre>
+</div>
+</div>
+</section>
+<section id="working-with-edges" class="level2">
+<h2 class="anchored" data-anchor-id="working-with-edges">Working with edges</h2>
+<p>Networks store their edges as arrays of <code>p1</code> (the first agent in each edge), <code>p2</code> (the second agent), and <code>beta</code>, which can be accessed via <code>net.edges</code> or directly like a dictionary, e.g.&nbsp;<code>net['p1']</code>. Edges can be removed with <code>net.remove_edges()</code>, using either edge indices or a boolean mask, and <code>net.eligible()</code> returns the agents who can form edges (alive, born, and optionally within an age range). A new network can be created from a dataframe or dictionary of arrays with <code>from_df()</code>:</p>
+<div id="16c14e69" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> sim.networks.c <span class="co"># The community network from the hybrid sim above</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Community network has </span><span class="sc">{</span><span class="bu">len</span>(net)<span class="sc">}</span><span class="ss"> edges'</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>net.remove_edges(net[<span class="st">'p1'</span>] <span class="op">&lt;</span> <span class="dv">100</span>) <span class="co"># Remove edges using a boolean mask</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>net.remove_edges([<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>]) <span class="co"># Remove edges by index</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'After removing edges: </span><span class="sc">{</span><span class="bu">len</span>(net)<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>eligible <span class="op">=</span> net.eligible(age_range<span class="op">=</span>[<span class="dv">6</span>, <span class="dv">22</span>]) <span class="co"># A boolean array of school-age agents</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'Eligible school-age agents: </span><span class="sc">{</span>eligible<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a network from a dictionary of arrays; beta defaults to 1</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>custom <span class="op">=</span> ss.Network(name<span class="op">=</span><span class="st">'custom'</span>).from_df(<span class="bu">dict</span>(p1<span class="op">=</span>[<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>], p2<span class="op">=</span>[<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]))</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(custom.to_df())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Community network has 20160 edges
+After removing edges: 19142
+Eligible school-age agents: 479
+   p1  p2  beta
+0   0   1   1.0
+1   1   2   1.0
+2   2   3   1.0</code></pre>
+</div>
+</div>
 
 
 </section>
@@ -1304,7 +1391,7 @@ The second axis (columns) of the contact matrix is the DESTINATION group
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1650,7 +1737,7 @@ The second axis (columns) of the contact matrix is the DESTINATION group
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

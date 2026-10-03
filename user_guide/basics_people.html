@@ -647,6 +647,12 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../user_guide/advanced_rescaling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Population rescaling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_profiling.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Profiling and debugging</span></a>
   </div>
@@ -693,6 +699,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <li><a href="#creating-default-people" id="toc-creating-default-people" class="nav-link" data-scroll-target="#creating-default-people">Creating default people</a></li>
   <li><a href="#creating-custom-people" id="toc-creating-custom-people" class="nav-link" data-scroll-target="#creating-custom-people">Creating custom people</a></li>
   <li><a href="#modifying-people-with-modules" id="toc-modifying-people-with-modules" class="nav-link" data-scroll-target="#modifying-people-with-modules">Modifying People with modules</a></li>
+  <li><a href="#multi-column-states" id="toc-multi-column-states" class="nav-link" data-scroll-target="#multi-column-states">Multi-column states</a></li>
   <li><a href="#debugging-and-analyzing" id="toc-debugging-and-analyzing" class="nav-link" data-scroll-target="#debugging-and-analyzing">Debugging and analyzing</a></li>
   </ul>
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
@@ -733,7 +740,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </ol>
 <p>All agents have a <code>uid</code> (universal identifier), which corresponds to their position in the array. Starsim keeps track of a list of <code>auids</code> (active UIDs), corresponding to agents who are alive or are otherwise participating in the simulation. This way, Starsim knows to skip over dead agents (or otherwise removed, e.g.&nbsp;from migration) when calculating disease progression, aging, etc.</p>
 <p>In most cases, you shouldn’t need to worry about <a href="../api/arrays.html#starsim.arrays.uids" title="0"><code>uids</code></a>, <code>auids</code>, etc. However, this example illustrates how they work:</p>
-<div id="39bd5767" class="cell" data-execution_count="1">
+<div id="45e8c86d" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
@@ -807,7 +814,7 @@ Mean age of alive agents: 38.27644
 <section id="creating-default-people" class="level2">
 <h2 class="anchored" data-anchor-id="creating-default-people">Creating default people</h2>
 <p>When you create a sim, it automatically creates <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a>, and you can use the <code>n_agents</code> argument to control the population size:</p>
-<div id="82edff16" class="cell" data-execution_count="2">
+<div id="3152c6a2" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss </span>
@@ -832,12 +839,12 @@ Mean age of alive agents: 38.27644
 <section id="creating-custom-people" class="level2">
 <h2 class="anchored" data-anchor-id="creating-custom-people">Creating custom people</h2>
 <p>Rather than relying on the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> to create people, you can create your own <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> and add them to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a> as a separate argument. The example below is equivalent to the one immediately above:</p>
-<div id="1b3f0b7d" class="cell" data-execution_count="3">
+<div id="e1ca90a5" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>people <span class="op">=</span> ss.People(<span class="dv">1000</span>)</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>people)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>The main reason to create custom people is if you want to specify a particular age/sex distribution. The following example creates a population with the age distribution of Nigeria:</p>
-<div id="cf872e5c" class="cell" data-execution_count="4">
+<div id="25f73d7c" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>age_data <span class="op">=</span> pd.read_csv(<span class="st">'test_data/nigeria_age.csv'</span>)</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(n_agents<span class="op">=</span><span class="fl">10e3</span>, age_data<span class="op">=</span>age_data)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, copy_inputs<span class="op">=</span><span class="va">False</span>).init()</span>
@@ -855,7 +862,7 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>Another reason to create custom people is if there are additional attributes that you want to track. Let’s say we want to add a state to track urban/rural status. The example below also illustrates how you can add a stochastic state whose values are sampled from a distribution.</p>
-<div id="9f1872ee" class="cell" data-execution_count="5">
+<div id="db332bc0" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> urban_function(n):</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" Make a function to randomly assign people to urban/rural locations """</span> </span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.random.choice(a<span class="op">=</span>[<span class="va">True</span>, <span class="va">False</span>], p<span class="op">=</span>[<span class="fl">0.5</span>, <span class="fl">0.5</span>], size<span class="op">=</span>n)</span>
@@ -874,7 +881,7 @@ Number of urban people: 8</code></pre>
 <section id="modifying-people-with-modules" class="level2">
 <h2 class="anchored" data-anchor-id="modifying-people-with-modules">Modifying People with modules</h2>
 <p>We saw an example above of adding a custom state to people. However, a far more common way to add states to people is by adding a module to the <a href="../api/sim.html#starsim.sim.Sim" title="0"><code>Sim</code></a>. All the states of the modules will automatically get added to the main <a href="../api/people.html#starsim.people.People" title="0"><code>People</code></a> instance.</p>
-<div id="be8124e8" class="cell" data-execution_count="6">
+<div id="c067ed95" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>ppl <span class="op">=</span> ss.People(<span class="dv">30</span>)</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(people<span class="op">=</span>ppl, diseases<span class="op">=</span>ss.SIS(init_prev<span class="op">=</span><span class="fl">0.1</span>), networks<span class="op">=</span>ss.RandomNet())</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -883,7 +890,7 @@ Number of urban people: 8</code></pre>
 <pre><code>Initializing sim with 30 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.02 s)  ••••———————————————— 22%
-  Running 2020 (20/51) (0.04 s)  ••••••••———————————— 41%
+  Running 2020 (20/51) (0.05 s)  ••••••••———————————— 41%
   Running 2030 (30/51) (0.07 s)  ••••••••••••———————— 61%
   Running 2040 (40/51) (0.09 s)  ••••••••••••••••———— 80%
   Running 2050 (50/51) (0.11 s)  •••••••••••••••••••• 100%
@@ -894,12 +901,64 @@ Number of infected people: 13</code></pre>
 <p>When states or arrays are added by modules, they are stored as dictionaries under the name of that module.</p>
 <p>Note that the Starsim <a href="../api/arrays.html#starsim.arrays.Arr" title="0"><code>Arr</code></a> class can be used like a Numpy array, with all the standard arithmetic operations like sums, mean, counting, etc.</p>
 </section>
+<section id="multi-column-states" class="level2">
+<h2 class="anchored" data-anchor-id="multi-column-states">Multi-column states</h2>
+<p>Sometimes each agent needs more than one value for the same quantity, such as immunity to each of several variants. Rather than defining one state per variant, you can give an array <code>columns</code>, which makes a 2D array with one row per agent and one column per value. Like any other state, it grows as agents are born:</p>
+<div id="dc520dcb" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Immunity(ss.Module):</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" Track susceptibility to two variants, with susceptibility to the mutant decreasing over time """</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(<span class="op">**</span>kwargs)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.define_states(</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>            ss.FloatArr(<span class="st">'sus_imm'</span>, columns<span class="op">=</span>[<span class="st">'wild'</span>, <span class="st">'mutant'</span>], default<span class="op">=</span><span class="fl">1.0</span>),</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> step(<span class="va">self</span>):</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.sus_imm.mutant <span class="op">*=</span> <span class="fl">0.9</span> <span class="co"># Update the "mutant" column for all agents</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>imm_sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, modules<span class="op">=</span>Immunity(), demographics<span class="op">=</span><span class="va">True</span>, dur<span class="op">=</span><span class="dv">5</span>, verbose<span class="op">=</span><span class="va">False</span>).run()</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>imm <span class="op">=</span> imm_sim.people.immunity.sus_imm</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Number of agents:'</span>, <span class="bu">len</span>(imm_sim.people))</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Shape of values:'</span>, imm.values.shape)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Number of agents: 1058
+Shape of values: (1058, 2)</code></pre>
+</div>
+</div>
+<p>Named columns can be accessed as attributes (<code>imm.mutant</code>), as keys (<code>imm['mutant']</code>), or via <code>imm.col('mutant')</code>; each of these returns a regular 1D array, and assigning to it (e.g.&nbsp;<code>imm.mutant = 0</code> or <code>imm.mutant += 0.1</code>) modifies the 2D array. When indexing, the first index selects agents as usual, and the second selects columns by name or by position:</p>
+<div id="f2ba6b9f" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>uids <span class="op">=</span> ss.uids([<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">2</span>])</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'All columns for 3 agents:</span><span class="ch">\n</span><span class="st">'</span>, imm[uids])</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mutant column for 3 agents:'</span>, imm[uids, <span class="st">'mutant'</span>])</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Mean mutant susceptibility:'</span>, imm.mutant.mean())</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>imm[uids, <span class="st">'wild'</span>] <span class="op">=</span> <span class="dv">0</span> <span class="co"># Make these agents immune to the wild type</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'Agents immune to the wild type:'</span>, (imm.col(<span class="st">'wild'</span>) <span class="op">&lt;</span> <span class="fl">0.5</span>).uids)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>All columns for 3 agents:
+ [[1.        0.5314409]
+ [1.        0.5314409]
+ [1.        0.5314409]]
+Mutant column for 3 agents: [0.5314409 0.5314409 0.5314409]
+Mean mutant susceptibility: 0.5603617
+Agents immune to the wild type: [0 1 2]</code></pre>
+</div>
+</div>
+<p>Since a 2D array has more than one value per agent, it can’t be converted to UIDs directly; use a single column instead, as above. Some other things to note:</p>
+<ul>
+<li>Use e.g.&nbsp;<code>columns=3</code> for unnamed columns (accessed by position only), or a tuple such as <code>columns=(2,3)</code> for more dimensions.</li>
+<li>Column names must be unique, and can’t be the same as an array attribute or method (e.g.&nbsp;<code>'raw'</code> or <code>'mean'</code>).</li>
+<li><code>arr[:, [0,2]]</code> returns columns 0 and 2 for every active agent.</li>
+<li><code>people.to_df()</code> exports one dataframe column per value, e.g.&nbsp;<code>immunity.sus_imm_wild</code> and <code>immunity.sus_imm_mutant</code> (or <code>_0</code>, <code>_1</code>, etc. for unnamed columns).</li>
+</ul>
+</section>
 <section id="debugging-and-analyzing" class="level2">
 <h2 class="anchored" data-anchor-id="debugging-and-analyzing">Debugging and analyzing</h2>
 <p>There are several ways to explore the People object. One way is by exporting to a dataframe:</p>
-<div id="535324eb" class="cell" data-execution_count="7">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="0994848b" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> sim.people.to_df()</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>df.disp()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>    uid  slot  alive      age  female  ti_dead  ti_removed  scale  randomnet.participant  sis.susceptible  sis.infected  sis.rel_sus  sis.rel_trans  sis.ti_infected  sis.ti_recovered  sis.immunity
 0     0     0   True  31.9029    True      NaN         NaN    1.0                  False            False          True       0.7484            1.0             50.0           59.8571        1.2516
@@ -935,24 +994,24 @@ Number of infected people: 13</code></pre>
 </div>
 </div>
 <p>This is usually too much information to understand directly, but can be useful for producing summary statistics; for example, let’s say we want to understand the relationship between time since recovery and immunity:</p>
-<div id="4bb29050" class="cell" data-execution_count="8">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>plt.scatter(df[<span class="st">'sis.ti_recovered'</span>], df[<span class="st">'sis.immunity'</span>])</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Time of recovery'</span>)</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Immunity'</span>)</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="ed53c4ab" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>plt.scatter(df[<span class="st">'sis.ti_recovered'</span>], df[<span class="st">'sis.immunity'</span>])</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Time of recovery'</span>)</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'Immunity'</span>)</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display">
 <div>
 <figure class="figure">
-<p><img src="basics_people_files/figure-html/cell-9-output-1.png" width="590" height="431" class="figure-img"></p>
+<p><img src="basics_people_files/figure-html/cell-11-output-1.png" width="590" height="431" class="figure-img"></p>
 </figure>
 </div>
 </div>
 </div>
 <p>Sometimes we want to explore a single agent in more detail. For this, there is a <code>person()</code> method, which will return all the attributes of that particular agent (equivalent to a single row in the dataframe):</p>
-<div id="bc3daf71" class="cell" data-execution_count="9">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>sim.people.person(<span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-display" data-execution_count="9">
+<div id="f4fecf5a" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sim.people.person(<span class="dv">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="11">
 <pre><code>#0. 'uid':                   10
 #1. 'slot':                  10
 #2. 'alive':                 True
@@ -1062,7 +1121,7 @@ Number of infected people: 13</code></pre>
     }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
-        var filterRegex = new RegExp('/' + window.location.host + '/');
+        var filterRegex = new RegExp("https:\/\/docs\.starsim\.org");
       var isInternal = (href) => {
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
@@ -1408,7 +1467,7 @@ Number of infected people: 13</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.6.2 (2026-09-30).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
