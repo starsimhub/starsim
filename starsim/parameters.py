@@ -142,8 +142,8 @@ class Pars(sc.objdict):
 
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist):
-            if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
-                errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
+            if isinstance(old, ss.bernoulli) and not isinstance(new, (ss.bernoulli, ss.choose_n)): # Both have filter()
+                errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {type(new)} is invalid"
                 raise TypeError(errormsg)
             else:
                 self[key] = new
@@ -162,8 +162,8 @@ class Pars(sc.objdict):
             if newtype is None: # Same type of dist, set parameters
                 old.set(**new)
             else: # We need to create a new distribution
-                if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
-                    errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
+                if isinstance(old, ss.bernoulli) and newtype not in ['bernoulli', 'choose_n']:
+                    errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {newtype} is invalid"
                     raise TypeError(errormsg)
                 else:
                     dist = ss.make_dist(new)
@@ -212,6 +212,9 @@ class SimPars(Pars):
         n_agents (int/float): The number of agents to run (default 10,000)
         total_pop (int/float): If provided, scale the agents to this effective population size
         pop_scale (float): If provided, use this agent-to-population scale factor (total_pop = n_agents*pop_scale)
+        rescale (bool): If True, start with a scale factor of 1 and increase it to pop_scale as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False)
+        rescale_threshold (float): If rescaling, the fraction of agents who are not naive that triggers rescaling (default 0.05)
+        rescale_factor (float): If rescaling, the minimum factor by which to increase the scale each time (default 1.2)
         unit (str): The time unit for the simulation (default 'year'; other choices are 'day', 'week', 'month')
         start (float/str/date): The starting date for the simulation (default 2000); can be a year or date
         stop (float/str/date): If provided, the ending date for the simulation (if not provided, calculate from "dur")
@@ -241,6 +244,9 @@ class SimPars(Pars):
         self.n_agents  = 10e3 # Number of agents
         self.total_pop = None # If defined, used for calculating the scale factor
         self.pop_scale = None # How much to scale the population
+        self.rescale   = False # Whether to rescale the population dynamically (see docstring)
+        self.rescale_threshold = 0.05 # Fraction of non-naive agents that triggers rescaling
+        self.rescale_factor    = 1.2 # Minimum factor to rescale by each time
         self.people_results = True # Whether to collect automatic People-level results every timestep (see docstring)
 
         # Simulation parameters
@@ -351,22 +357,66 @@ class SimPars(Pars):
 
         # Convert any modules that are not already Module objects
         modules = self.convert_modules()
+        modules = self.expand_modules(modules)
         self._reset_modules()
+        products = []
+        names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
         for source, mod in modules:
             if source == 'modules':
                 # Modules from 'modules=' get sorted by type
                 for modkey, modclass in modmap.items():
                     if isinstance(mod, modclass):
-                        self[modkey].append(mod)
                         break
                 else:
-                    self['custom'].append(mod)
+                    modkey = 'custom'
             else:
                 # Modules from specific containers stay where the user put them
-                self[source].append(mod)
+                modkey = source
+            self.validate_name(mod, modkey, names)
+            if getattr(mod, 'has_product', False) and not any(mod.product is p for p in products): # Products share the same namespaces; the same product can be used by more than one intervention
+                self.validate_name(mod.product, 'products', names)
+                products.append(mod.product)
+            self[modkey].append(mod)
 
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
+        return
+
+    @staticmethod
+    def expand_modules(modules):
+        """
+        Replace any module that defines an `expand()` method with the modules it returns, e.g. `ss.HybridNet()` → four networks
+
+        Args:
+            modules (list): (source, module) tuples, as returned by `convert_modules()`
+        """
+        out = []
+        for source, mod in modules:
+            if hasattr(mod, 'expand'):
+                out += [(source, m) for m in mod.expand()]
+            else:
+                out.append((source, mod))
+        return out
+
+    @staticmethod
+    def validate_name(mod, modkey, names):
+        """
+        Ensure the module name is unique, renaming it if it is the default name (e.g. "sir" → "sir_1")
+
+        Args:
+            mod (`ss.Module`): the module to validate
+            modkey (str): the type of module, e.g. "diseases"
+            names (dict): the names used so far, mapped to their module type; updated in place
+        """
+        name = mod.name
+        if name in names:
+            if mod._default_name:
+                mod.name = sc.uniquename(name, list(names), style='_%d')
+                ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
+            else:
+                errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
+                raise ValueError(errormsg)
+        names[mod.name] = modkey
         return
 
     def validate_demographics(self):
