@@ -54,6 +54,18 @@ class infection_log(Analyzer):
             disease.infection_log = None # Reset them to save memory
         return
 
+    @property
+    def log(self):
+        """ The infection log, if there is only one disease """
+        if len(self.logs) != 1:
+            errormsg = f'There are {len(self.logs)} infection logs, so choose one via e.g. analyzer.logs[0] instead'
+            raise ValueError(errormsg)
+        return self.logs[0]
+
+    def to_df(self):
+        """ Convert the infection log to a dataframe, if there is only one disease """
+        return self.log.to_df()
+
     def plot(self, **kwargs):
         """ Plot all of the infection logs """
         kw = ss.plot_args(kwargs, alpha=0.7)

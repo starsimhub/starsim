@@ -528,8 +528,14 @@ class People:
         return
 
     def to_df(self):
-        """ Export to dataframe """
-        df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
+        """ Export to dataframe; 2D states have one column per value, e.g. `sus_imm_0` """
+        cols = dict(uid=self.uid, slot=self.slot)
+        for key,state in self.states.items():
+            if state.ndim > 1:
+                cols.update({f'{key}_{i}':col for i,col in enumerate(state.values.reshape(len(state), -1).T)})
+            else:
+                cols[key] = state
+        df = sc.dataframe(**cols)
         return df
 
     def plot(self, key=None, alive=True, bins=50, hist_kw=None, max_plots=20, figsize=(16,12), **kwargs):
