@@ -614,7 +614,7 @@ class InfectionLog:
         if n:
             sources = np.nan if sources is None else sources
             chunk = dict(t=np.full(n, time, dtype=object), source=sources, target=uids, **kwargs)
-            self.chunks.append({k:np.broadcast_to(v, n) if np.ndim(v) == 0 else np.asarray(v) for k,v in chunk.items()})
+            self.chunks.append({k:np.broadcast_to(v, n) if np.ndim(v) == 0 else np.array(v) for k,v in chunk.items()}) # Copy arrays, so later changes to them don't change the log
             self.n += n
         return
 
@@ -634,8 +634,9 @@ class InfectionLog:
             uids (array): The UIDs of the target nodes (the agents that were infected)
             kwargs (dict): Remaining arguments are stored as data for each entry, either a scalar or one value per UID
         """
-        uids = sc.toarray(uids)
+        uids = np.array(uids) # Copy arrays, so later changes to them don't change the log
         if len(uids):
+            kwargs = {k:np.array(v) if np.ndim(v) else v for k,v in kwargs.items()}
             self.updates.append((self.n, uids, kwargs)) # Store the number of entries so far, so only earlier entries are updated
         return
 
@@ -665,9 +666,10 @@ class InfectionLog:
                     v = pd.Series(v, index=uids)[last.index].values # Match per-UID values to the entries
                 df.loc[last.values, k] = v
 
-        # Convert network IDs to names
+        # Convert network IDs to names, leaving any other values (e.g. names) as-is
         if self.networks and 'network' in df.columns:
-            df['network'] = df['network'].map(dict(enumerate(self.networks)))
+            names = dict(enumerate(self.networks))
+            df['network'] = df['network'].map(lambda v: names.get(v, v))
 
         df = df.sort_values(['t', 'source', 'target'], kind='stable')
         df = df.reset_index(drop=True)

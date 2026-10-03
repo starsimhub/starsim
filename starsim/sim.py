@@ -631,7 +631,7 @@ class Sim(ss.Base):
                     res.apply_scale(scale)
                 if np.all(res == res[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
-        if self.pars.rescale: # With a scale that varies over time, cumulative results must be summed after scaling
+        if self.pars.rescale and self.pars.people_results: # With a scale that varies over time, cumulative results must be summed after scaling
             self.results.cum_deaths[:] = np.cumsum(self.results.new_deaths)
         self.results_ready = True # Results are ready to use
         return

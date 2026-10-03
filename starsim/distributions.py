@@ -1804,6 +1804,11 @@ class choose_n(Dist):
             uids = uids.uids
 
         keys = self.rvs(uids) # One random number per candidate; also evaluates the parameters
+        if not len(keys): # No candidates: rvs() returns early without evaluating the parameters, so don't use them
+            if self.die:
+                errormsg = f'{self} could not choose any agents since there are no candidates'
+                raise ValueError(errormsg)
+            return ss.uids()
         n = min(int(self._pars.n), len(keys))
         weights = self._pars.weights
         if weights is not None:

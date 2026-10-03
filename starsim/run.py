@@ -483,6 +483,7 @@ class MultiSim:
             ```
         """
         sim_inds = sc.ifelse(sim_inds, range(len(self)))
+        year = ss.date(t).years if (t is not None and not sc.isnumber(t)) else None
         resdict = {}
         for i in sim_inds:
             sim = self.sims[i]
@@ -492,9 +493,14 @@ class MultiSim:
             if t is None:
                 resdict[label] = sim.summarize() if sim.summary is None else sim.summary
             else:
-                ti = t if sc.isnumber(t) else sc.findnearest(sim.t.yearvec, ss.date(t).years) # Nearest timestep to the date
                 flat = sim.results.flatten(columns=True)
-                resdict[label] = {key:(int(res[ti]) if res.scale else res[ti]) for key,res in flat.items()} # Counts are ints
+                resdict[label] = {}
+                for key,res in flat.items():
+                    if sc.isnumber(t):
+                        ti = t
+                    else: # Nearest timestep to the date, using the result's own timevec since modules can have different dt
+                        ti = sc.findnearest(res.convert_timevec().years, year)
+                    resdict[label][key] = int(res[ti]) if res.scale else res[ti] # Counts are ints
 
         df = sc.dataframe(resdict, dtype=object) # Object dtype prevents ints being converted to floats
         if do_plot:
