@@ -14,7 +14,7 @@ ss_int = ss.dtypes.int
 _ = None
 
 
-@nb.njit(cache=True)
+@nb.jit(cache=True)
 def fisher_yates_shuffle(arr, randvals):
     """ In-place Fisher-Yates shuffle using precomputed uniform random values.
 
@@ -489,7 +489,17 @@ class Network(Route):
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
         """
-        self.remove_edges(np.isin(self.edges.p1, uids) | np.isin(self.edges.p2, uids))
+        p1 = self.edges.p1
+        p2 = self.edges.p2
+
+        # Make a lookup table of the UIDs to remove (much faster than np.isin() for many edges)
+        n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(uids, initial=-1)) + 1
+        is_removed = np.zeros(n, dtype=bool)
+        is_removed[uids] = True
+
+        # Remove edges where either partner is being removed
+        remove = is_removed[p1] | is_removed[p2]
+        self.remove_edges(remove)
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
@@ -776,14 +786,45 @@ class RandomNet(RandomExactNet):
     correctly forms most of its edges with itself); drawing targets uniformly over
     agents instead would destroy that clustering and bias the realized degrees.
 
+    Alternatively, with `uniform_targets=True`, each target is chosen uniformly from all
+    eligible agents, regardless of their own `n_contacts`, as in Covasim v3's random networks.
+    This gives less variable numbers of contacts (e.g. with `n_contacts=ss.poisson(20)`, a
+    variance of about 15, rather than 30 for the default or 20 for `ss.RandomExactNet`), but
+    loses the mixing structure described above.
+
     Note: like `ss.RandomExactNet`, this is not random-number safe; see `ss.RandomSafeNet`
     for the CRN-safe (but slower) version.
+
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
+        uniform_targets (bool): if True, choose the target of each edge uniformly from the eligible agents, rather than in proportion to their number of contacts
+
+    Example:
+        ```python
+        # Static network with Poisson-distributed contacts, as in Covasim v3
+        net = ss.RandomNet(n_contacts=ss.poisson(20), dynamic=False, uniform_targets=True)
+        ```
     """
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, uniform_targets=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            uniform_targets = False,
+        )
+        self.update_pars(pars, **kwargs)
+        return
+
     def get_edges(self, inds, n_contacts):
         """ Find edges by sampling the source stubs with replacement (see `ss.RandomExactNet.get_edges`) """
         source = np.repeat(inds, n_contacts)
         n = len(source)
-        if n:
+        if n and self.pars.uniform_targets:
+            idx = self.dist.rng.integers(0, len(inds), n) # A random target agent for each source stub
+            target = np.take(np.asarray(inds), idx).view(ss.uids)
+        elif n:
             idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
             nc = np.asarray(n_contacts)
             nc0 = int(nc.flat[0])
@@ -860,18 +901,13 @@ class RandomSafeNet(DynamicNetwork):
         center = v[1:-1]
         p1_dist = abs(center - v[:-2])
         p2_dist = abs(center - v[2:])
-        use_p1 = sc.findinds(p1_dist < p2_dist)
-        use_p2 = sc.findinds(p1_dist > p2_dist) # Can refactor
+        use_p1 = p1_dist <= p2_dist # Ties (which are common with many agents, since the random numbers are float32) go to the lower neighbor
         source = agent[1:-1]
-        target = np.zeros(len(source), dtype=agent.dtype).view(ss.uids)
-        target[use_p1] = agent[:-2][use_p1]
-        target[use_p2] = agent[2:][use_p2]
+        target = np.where(use_p1, agent[:-2], agent[2:]).view(ss.uids)
 
         # Store additional information for debugging
         if debug:
-            dist = np.zeros(len(source))
-            dist[use_p1] = p1_dist[use_p1]
-            dist[use_p2] = p2_dist[use_p2]
+            dist = np.where(use_p1, p1_dist, p2_dist)
             out = sc.objdict()
             out.pairs = sorted(list(zip(source, target)))
             out.src = source
@@ -1023,6 +1059,7 @@ class HybridNet(Network):
         school_ages (list): the age range of agents in schools
         work_ages (list): the age range of agents in workplaces
         dynamic (bool): whether the networks are recreated on each timestep
+        uniform_targets (bool): whether to choose the targets of edges in schools, workplaces, and community uniformly, as in Covasim v3 (see `ss.RandomNet`)
 
     Examples:
         ```python
@@ -1034,7 +1071,7 @@ class HybridNet(Network):
         hybrid = ss.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))
         ```
     """
-    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, **kwargs):
+    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, uniform_targets=_, **kwargs):
         super().__init__()
         self.define_pars(
             household_size = ss.poisson(lam=2.0), # Covasim v3 default (contacts['h'])
@@ -1043,6 +1080,7 @@ class HybridNet(Network):
             school_ages = [6, 22],
             work_ages = [22, 65],
             dynamic = False,
+            uniform_targets = False,
         )
         defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
         self.update_pars(pars, **kwargs)
@@ -1055,11 +1093,12 @@ class HybridNet(Network):
         p = self.pars
         n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
         kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
+        rkw = dict(uniform_targets=p.uniform_targets, **kw)
         networks = [
             ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
-            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **kw),
-            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **kw),
-            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **kw),
+            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **rkw),
+            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **rkw),
+            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **rkw),
         ]
         return networks
 

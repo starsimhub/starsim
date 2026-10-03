@@ -22,7 +22,7 @@ def np_indexer(arr, inds):
     """ Much faster than Numba for small numbers of indices (<1k) """
     return arr[inds]
 
-@nb.njit(fastmath=True, parallel=False, cache=True)
+@nb.jit(fastmath=True, parallel=False, cache=True)
 def nb_indexer(arr, inds):
     """ Roughly 30% faster than NumPy for large numbers of indices (>10k)
 
@@ -33,7 +33,7 @@ def nb_indexer(arr, inds):
         out[i] = arr[inds[i]]
     return out
 
-@nb.njit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
+@nb.jit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
 def nb_true(auids, vals, want):
     """ Return the UIDs where `bool(vals[k])` equals `want` (True for true(), False for false()).
 

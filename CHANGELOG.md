@@ -2,6 +2,19 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.7.1 (2026-10-03)
+
+### New features
+- `ss.RandomNet(uniform_targets=True)` (and `ss.HybridNet(uniform_targets=True)`) chooses the target of each edge uniformly from the eligible agents, as in Covasim v3, rather than in proportion to their number of contacts. This gives less variable numbers of contacts (e.g. a variance of 15 rather than 30 with `n_contacts=ss.poisson(20)`).
+
+### Performance
+- Network transmission, `ss.find_contacts()`, and removing dead agents from networks are faster (about 3x faster for contact tracing-heavy Covasim sims). Random numbers for transmission are now only drawn for edges that can transmit.
+
+### Changes that may affect results
+- *Regression*: with `ss.options.crn = False`, transmission results differ stochastically, since fewer random numbers are drawn. Results with CRN (the default) are unchanged.
+- *Regression*: `ss.RandomSafeNet` gave every edge whose random numbers were tied to agent 0, so with many agents, agent 0 had a very large number of contacts (e.g. 28,000 with 100,000 agents); these edges now go to one of the tied neighbors.
+
+
 ## Version 3.7.0 (2026-10-02)
 This release adds features needed to port Covasim to Starsim (Covasim v4), and which are also useful for other disease models: 2D results and agent arrays (e.g. by variant), CRN-safe choice of exactly *N* agents, dynamic rescaling, Covasim's "hybrid" network (household, school, workplace, and community networks), and more MultiSim methods.
 

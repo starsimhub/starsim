@@ -233,7 +233,7 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-def find_contacts(p1, p2, inds):  # pragma: no cover
+def find_contacts(p1, p2, inds):
     """
     Variation on Network.find_contacts() that avoids sorting.
 
@@ -241,13 +241,19 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be
     an int64 array since this is what's returned by true() etc. functions by default.
     """
-    pairing_partners = set()
-    inds = set(inds)
-    for i in range(len(p1)):
-        if p1[i] in inds:
-            pairing_partners.add(p2[i])
-        if p2[i] in inds:
-            pairing_partners.add(p1[i])
+    p1 = np.asarray(p1)
+    p2 = np.asarray(p2)
+
+    # Make a lookup table of which people are in inds (much faster than np.isin() or a set)
+    n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(inds, initial=-1)) + 1
+    is_ind = np.zeros(n, dtype=bool)
+    is_ind[inds] = True
+
+    # Find the partners in each direction
+    partners_of_p1 = p2[is_ind[p1]]
+    partners_of_p2 = p1[is_ind[p2]]
+    pairing_partners = set(partners_of_p1.tolist())
+    pairing_partners.update(partners_of_p2.tolist())
     return pairing_partners
 
 
