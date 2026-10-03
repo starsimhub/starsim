@@ -138,6 +138,10 @@ class Loop:
         for mod in sim.modules:
             self += mod.start_step
 
+        # Rescale the population if needed
+        if sim.pars.rescale:
+            self += sim.rescale
+
         # Update any nonspecific modules
         for mod in sim.custom():
             self += mod.step
