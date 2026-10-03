@@ -263,7 +263,7 @@ def test_arr_2d():
     nv = 3
 
     # Standalone tests
-    imm = ss.FloatArr('imm', default=0, shape=nv, mock=5)
+    imm = ss.FloatArr('imm', default=0, columns=nv, mock=5)
     two = ss.uids([0, 1])
     imm[two, 2] = 0.8
     assert imm[two].shape == (2, nv) # Indexing by UIDs returns one row per agent
@@ -272,11 +272,22 @@ def test_arr_2d():
     with pytest.raises(ValueError):
         (imm > 0.5).uids # UIDs are not defined for 2D arrays
 
+    # Named columns
+    named = ss.FloatArr('imm', default=0, columns=['wildtype', 'mutant'], mock=5)
+    named[two, 'mutant'] = 0.8
+    assert np.array_equal((named.col('mutant') > 0.5).uids, two) # Columns can be accessed by name
+    assert np.array_equal(named[:, 'mutant'], named[:, 1]) # Names can also be used when indexing
+    assert np.array_equal(named.mutant, named.col('mutant')) and np.array_equal(named['mutant'], named.col('mutant')) # Or as attributes or keys
+    with pytest.raises(ValueError):
+        ss.FloatArr('imm', columns=['raw', 'mean'], mock=5) # Column names can't clash with attributes
+    with pytest.raises(KeyError):
+        named.col('omicron')
+
     # Test in a sim with births and deaths
     class VarSIS(ss.SIS):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self.define_states(ss.FloatArr('sus_imm', default=0.5, shape=nv))
+            self.define_states(ss.FloatArr('sus_imm', default=0.5, columns=nv))
 
         def step(self):
             out = super().step()

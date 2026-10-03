@@ -54,16 +54,42 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
     An object that acts exactly like a NumPy array, except stores the values in self.values.
     """
+    columns = None # Column names for 2D arrays, e.g. ['wild', 'alpha']
+
     def __init__(self, values, *args, **kwargs):
         self.values = np.array(values, *args, **kwargs)
         return
 
     def __getattr__(self, attr):
-        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. -- and allow e.g. arr.alpha for a named column """
         if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
             return self.__getattribute__(attr)
+        elif self.columns is not None and attr in self.columns:
+            return self.col(attr)
         else:
             return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
+
+    def validate_columns(self):
+        """ Check that column names are strings that don't clash with attributes, e.g. "low" """
+        if self.columns is not None:
+            self.columns = list(self.columns)
+            for col in self.columns:
+                if not isinstance(col, str) or col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col):
+                    errormsg = f'Invalid column name "{col}" for "{self.name}": column names must be strings that are not attributes'
+                    raise ValueError(errormsg)
+        return
+
+    def _col_index(self, v):
+        """ Convert a column name to its index, e.g. 'alpha' → 1; other values are returned unchanged """
+        if not isinstance(v, str):
+            return v
+        if self.columns is None:
+            errormsg = f'Cannot get column "{v}" since "{self.name}" does not have named columns; use e.g. columns=["a", "b"] to name them'
+            raise KeyError(errormsg)
+        elif v not in self.columns:
+            errormsg = f'Column "{v}" not found in "{self.name}"; available columns are {self.columns}'
+            raise KeyError(errormsg)
+        return self.columns.index(v)
 
     # Define more base methods
     def __len__(self):   return self.values.__len__()
@@ -213,6 +239,13 @@ class Arr(BaseArr):
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
         mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
+        columns (int/list): if provided, create a 2D array with this many columns (e.g. one per variant), or a list of column names (e.g. `['wildtype', 'mutant']`)
+
+    For 2D arrays (i.e. if `columns` is supplied), `arr[uids]` returns an array of shape `(len(uids), ncols)`,
+    `arr[uids, v]` or `arr[:, v]` returns column `v`, and `arr.col(v)` returns column `v` as a 1D `Arr`. If the columns
+    are named, `v` can also be a name, e.g. `arr.col('mutant')`, `arr['mutant']`, or `arr.mutant`. A scalar default fills every column, and a callable
+    default should return an array of shape `(n, ncols)`. Arrays with more dimensions are also supported via a tuple,
+    e.g. `columns=(2,3)` gives a raw array of shape `(len_tot, 2, 3)`.
 
     Examples:
         ```python
@@ -224,9 +257,20 @@ class Arr(BaseArr):
         # Use within a simulation
         sim = ss.Sim(n_agents=100).init()
         sim.people.age.mean()  # Mean age of active agents
+
+        # Create a 2D array, e.g. immunity to each of 3 variants
+        imm = ss.FloatArr('imm', default=0, columns=3, mock=5)
+        imm[ss.uids([0, 1]), 2] = 0.8 # Set immunity to variant 2 for agents 0 and 1
+        imm[ss.uids([0, 1])] # Returns an array of shape (2, 3)
+        (imm.col(2) > 0.5).uids  # Returns ss.uids([0, 1])
+
+        # Create a 2D array with named columns
+        imm = ss.FloatArr('imm', default=0, columns=['wildtype', 'mutant'], mock=5)
+        imm[ss.uids([0, 1]), 'mutant'] = 0.8 # Same as imm[ss.uids([0, 1]), 1] = 0.8
+        (imm.col('mutant') > 0.5).uids  # Returns ss.uids([0, 1])
         ```
     """
-    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None):
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None, columns=None):
         # Set attributes
         self.name = name
         self.label = label or name
@@ -237,6 +281,19 @@ class Arr(BaseArr):
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
         self.people = people # Used solely for accessing people.auids
 
+        # Handle 2D (or higher) arrays; item_shape is the shape of each agent's values, e.g. (3,) for columns=3
+        self.columns = None
+        if isinstance(columns, (list, tuple)) and all(isinstance(col, str) for col in columns): # Named columns, e.g. columns=['wildtype', 'mutant']
+            self.columns = columns
+            columns = len(columns)
+        self.item_shape = () if columns is None else tuple(np.atleast_1d(columns))
+        self.ndim = 1 + len(self.item_shape)
+        if self.ndim > 1:
+            self._index = np_indexer # Numba indexing is 1D only; set here so there's no extra check on each access
+            if isinstance(default, ss.Dist):
+                errormsg = f'A distribution cannot be used as the default for 2D array "{name}"; use a callable returning an array of shape (n, ncols) instead'
+                raise TypeError(errormsg)
+
         if self.people is None:
             # This Arr is being defined in advance (e.g., as a module state) and we want a bidirectional link
             # with a People instance for dynamic growth. These properties will be initialized later when the
@@ -245,7 +302,7 @@ class Arr(BaseArr):
             self.len_tot = 0
             self.initialized = skip_init
             if raw is None:
-                self.raw = np.empty(0, dtype=self.dtype)
+                self.raw = np.empty((0, *self.item_shape), dtype=self.dtype)
             else:
                 self.raw = raw # Can't check length since we don't have the People object yet
         else:
@@ -256,12 +313,12 @@ class Arr(BaseArr):
             self.len_tot = self.people.uid.len_tot
             self.initialized = True
             if raw is None:
-                self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+                self.raw = np.full((self.len_tot, *self.item_shape), dtype=self.dtype, fill_value=self.nan)
             else:
-                if raw.size == self.len_tot:
+                if len(raw) == self.len_tot:
                     self.raw = raw # Do not coerce dtype
                 else:
-                    errormsg = f'Cannot populate array of length {self.len_tot} with values of length {raw.size}'
+                    errormsg = f'Cannot populate array of length {self.len_tot} with values of length {len(raw)}'
                     raise ValueError(errormsg)
 
         # If we have a mock People object, initialize the values
@@ -270,6 +327,8 @@ class Arr(BaseArr):
             self.people = ss.mock_people(n_agents)
             if raw is None:
                 self.init_vals()
+
+        self.validate_columns() # Do this last, so column names can be checked against all attributes
         return
 
     def __repr__(self):
@@ -294,9 +353,12 @@ class Arr(BaseArr):
         In short:
             - ss.uids, integer, or integer array: raw
             - BoolArr, boolean array, or full slice: values
+            - tuple (for 2D arrays, e.g. `arr[uids, v]`): the first element is converted as above, and the second can be a column name
         """
-        if isinstance(key, (uids, int, ss_int, tuple)) or (isinstance(key, np.ndarray) and key.dtype == int): # Catch immediately for speed
+        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, np.ndarray) and key.dtype == int): # Catch immediately for speed
             return key
+        elif isinstance(key, tuple):
+            return (self._convert_key(key[0]),) + tuple(self._col_index(k) for k in key[1:])
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
         elif isinstance(key, slice):
@@ -326,11 +388,15 @@ class Arr(BaseArr):
 
     def __getitem__(self, key):
         if not isinstance(key, uids): # Shortcut since main pathway
+            if isinstance(key, str): # Named column, e.g. arr['mutant']
+                return self.col(key)
             key = self._convert_key(key)
         return self._index(self.raw, key)
 
     def __setitem__(self, key, value):
         if not isinstance(key, uids):
+            if isinstance(key, str): # Named column for all active agents, e.g. arr['mutant'] = 0.5
+                key = (slice(None), key)
             key = self._convert_key(key)
         self.raw[key] = value
         return
@@ -387,7 +453,7 @@ class Arr(BaseArr):
         if both_raw:
             result_raw = c
         else:
-            result_raw = np.empty(self_raw.size, dtype=np.bool_)
+            result_raw = np.empty(self_raw.shape, dtype=np.bool_)
             result_raw[inds] = c
 
         if inplace:
@@ -551,14 +617,14 @@ class Arr(BaseArr):
                 ss.warn('Trying to access non-initialized Arr object; in most cases, Arr objects need to be initialized with a Sim object, but set skip_init=True if this is intentional.')
             return uids(np.arange(len(self.raw)))
 
-    def count(self):
-        """ Count the number of nonzero (truthy) values among active agents. """
-        return np.count_nonzero(self.values)
+    def count(self, axis=None):
+        """ Count the number of nonzero (truthy) values among active agents (for 2D arrays, use `axis=0` to count each column) """
+        return np.count_nonzero(self.values, axis=axis)
 
     @property
     def values(self):
         """ Return the values of the active agents """
-        if self.raw.size == self.auids.size:
+        if len(self.raw) == self.auids.size:
             return self.raw
         else:
             try:
@@ -603,7 +669,9 @@ class Arr(BaseArr):
     def notnanvals(self):
         """ Return values that are not-NaN """
         vals = self.values # Shorten and avoid double indexing
-        if self.nan_eq:
+        if self.ndim > 1: # For 2D (or higher) arrays, return a flat array of all non-NaN values
+            return vals[vals != self.nan] if self.nan_eq else vals[~np.isnan(vals)]
+        elif self.nan_eq:
             return vals[np.nonzero(vals != self.nan)[0]]
         else:
             return vals[np.nonzero(~np.isnan(vals))[0]]
@@ -624,7 +692,7 @@ class Arr(BaseArr):
         # Physically reshape the arrays, if needed
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
-            new_empty = np.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
+            new_empty = np.empty((n_grow, *self.item_shape), dtype=self.dtype) # 10x faster than np.zeros()
             self.raw = np.concatenate([self.raw, new_empty], axis=0)
             self.len_tot = len(self.raw)
             if n_grow > n_new: # We added extra space at the end, set to NaN
@@ -742,6 +810,7 @@ class Arr(BaseArr):
 
     def true(self):
         """ Efficiently convert truthy values to UIDs """
+        if self.ndim > 1: self._uids_error()
         vals = self.values
         auids = self.auids
         if vals.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
@@ -750,11 +819,32 @@ class Arr(BaseArr):
 
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
+        if self.ndim > 1: self._uids_error()
         vals = self.values
         auids = self.auids
         if vals.size >= numba_indexing:
             return uids(nb_true(auids.view(np.ndarray), vals, False))
         return auids[~vals.astype(bool)]
+
+    def _uids_error(self):
+        errormsg = f'Cannot convert 2D array "{self.name}" to UIDs; use e.g. arr.col(v).uids instead'
+        raise ValueError(errormsg)
+
+    def col(self, v):
+        """
+        Return column `v` of a 2D array as a 1D `Arr`, e.g. `(imm.col(2) > 0.5).uids` or `imm.col('mutant')`
+
+        For arrays with more dimensions, returns an `Arr` with one fewer dimension.
+        The new `Arr` is a view, so setting its values also changes the original array.
+        It is not linked to `People`, so should not be stored (since it will not grow).
+        """
+        new = self.asnew(self.raw[:, self._col_index(v)], name=f'{self.name}[{v}]', copy=False)
+        new.columns = None
+        new.item_shape = self.item_shape[1:]
+        new.ndim = self.ndim - 1
+        if new.ndim == 1:
+            del new._index # Revert to the class method
+        return new
 
     def to_json(self):
         """ Export to JSON """
@@ -920,7 +1010,12 @@ class BoolState(BoolArr):
     Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
     (e.g. in `module.define_states()`, whether or not they are BoolStates.
     """
-    pass
+    def __init__(self, name=None, **kwargs):
+        if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
+            errormsg = f'BoolState "{name}" cannot be 2D since it automatically generates results; use ss.BoolArr instead'
+            raise ValueError(errormsg)
+        super().__init__(name=name, **kwargs)
+        return
 
 
 class IndexArr(Arr):

@@ -82,7 +82,7 @@ def test_2d_results():
     class BySex(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('n_infected', groups=['female', 'male'], label='Infected'))
+            self.define_results(ss.Result('n_infected', columns=['female', 'male'], label='Infected'))
 
         def step(self):
             infected = self.sim.diseases.sis.infected
@@ -92,17 +92,17 @@ def test_2d_results():
     sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=BySex())
     sim.run()
     res = sim.results.bysex.n_infected
-    assert res.shape == (sim.t.npts, 2) # One column per group
+    assert res.shape == (sim.t.npts, 2) # One column per sex
     assert np.array_equal(res.sum(axis=1), sim.results.sis.n_infected) # Scaled the same as 1D results
-    assert np.array_equal(res['male'], res[:,1]) and res['male'].label == 'Infected (male)' # Each group is a 1D result
+    assert np.array_equal(res.male, res[:,1]) and res['male'].label == 'Infected (male)' # Each column is a 1D result
     assert res.annualize().shape == res.resample('year').shape == (len(np.unique(res.timevec.years.astype(int))), 2) # Resampled along time only
     assert res.to_df().columns.tolist() == ['timevec', 'female', 'male']
-    assert 'bysex_n_infected_male' in sim.to_df().columns # Columns for each group
-    assert sim.summary.bysex_n_infected_male == res['male'].mean() # Summarized by group
+    assert 'bysex_n_infected_male' in sim.to_df().columns # Dataframe columns for each result column
+    assert sim.summary.bysex_n_infected_male == res['male'].mean() # Summarized by column
     res.plot()
     sim.plot()
     with pytest.raises(ValueError):
-        ss.Result('n_infected', groups=['low', 'high']) # Group names can't clash with attributes
+        ss.Result('n_infected', columns=['low', 'high']) # Column names can't clash with attributes
 
     return sim
 
