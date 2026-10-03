@@ -482,6 +482,7 @@ def test_edge_ops():
     assert len(net) == 1 and net.p1[0] == 1
     net.remove_edges([0]) # ...or by index
     assert len(net) == 0
+    ss.RandomNet().validate() # A network with no edges yet is valid
     return net
 
 

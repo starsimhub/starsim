@@ -371,7 +371,7 @@ def test_link_timepars():
 
     # Durations are now linked too
     dur = ss.years(100)
-    sis.pars.dur_test = dur
+    sis.pars.update(dur_test=dur, create=True) # Parameters are locked after initialization, so need create=True
     sis.link_timepars()
     assert sis.pars.dur_test.to_dt() == 100*12
 

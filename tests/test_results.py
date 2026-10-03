@@ -71,6 +71,10 @@ def test_export():
     sim.results.sis1.plot()
     sim.results.sis2.plot()
 
+    # Results can be merged like a dict
+    merged = sc.mergedicts(sim.results, {})
+    assert merged.keys() == sim.results.keys()
+
     return sim
 
 
