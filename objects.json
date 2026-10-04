@@ -1,7 +1,7 @@
 {
   "project": "starsim",
   "version": "0.0.9999",
-  "count": 920,
+  "count": 923,
   "items": [
     {
       "name": "starsim.analyzers.Analyzer",
@@ -4052,6 +4052,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.parameters.Pars.lock",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/parameters.html#starsim.parameters.Pars.lock",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.parameters.Pars.to_json",
       "domain": "py",
       "role": "function",
@@ -5300,6 +5308,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.sim.Sim.add_module",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.add_module",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.sim.Sim.check_method_calls",
       "domain": "py",
       "role": "function",
@@ -5473,6 +5489,14 @@
       "role": "attribute",
       "priority": "1",
       "uri": "api/sim.html#starsim.sim.Sim.label_to_name",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.sim.Sim.lock_pars",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.lock_pars",
       "dispname": "-"
     },
     {
@@ -11220,6 +11244,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Pars.lock",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/parameters.html#starsim.parameters.Pars.lock",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Pars.to_json",
       "domain": "py",
       "role": "function",
@@ -12268,6 +12300,14 @@
       "dispname": "-"
     },
     {
+      "name": "starsim.Sim.add_module",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.add_module",
+      "dispname": "-"
+    },
+    {
       "name": "starsim.Sim.check_method_calls",
       "domain": "py",
       "role": "function",
@@ -12441,6 +12481,14 @@
       "role": "attribute",
       "priority": "1",
       "uri": "api/sim.html#starsim.sim.Sim.label_to_name",
+      "dispname": "-"
+    },
+    {
+      "name": "starsim.Sim.lock_pars",
+      "domain": "py",
+      "role": "function",
+      "priority": "1",
+      "uri": "api/sim.html#starsim.sim.Sim.lock_pars",
       "dispname": "-"
     },
     {

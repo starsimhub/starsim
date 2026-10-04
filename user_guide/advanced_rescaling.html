@@ -732,7 +732,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="static-scaling" class="level2">
 <h2 class="anchored" data-anchor-id="static-scaling">Static scaling</h2>
 <p>The <code>pop_scale</code> parameter sets how many people each agent represents. You can set it directly, or set <code>total_pop</code> and let Starsim calculate <code>pop_scale = total_pop/n_agents</code>:</p>
-<div id="32468bc1" class="cell" data-execution_count="1">
+<div id="e281e5df" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -769,7 +769,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <li>Chooses enough non-naive agents to make the same fraction naive again (e.g.&nbsp;half of them, if the scale doubles), and resets them by calling <code>disease.make_naive()</code> for each disease.</li>
 </ol>
 <p>As a result, every agent always represents the same number of people. Some of those people may be naive while others may be infected. When the scale factor increases, the infected people are “spread” across fewer agents, which frees up agents to represent the population that has not been infected yet.</p>
-<div id="8bd88029" class="cell" data-execution_count="2">
+<div id="7558f435" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>dynamic <span class="op">=</span> ss.Sim(pars, diseases<span class="op">=</span>sir, rescale<span class="op">=</span><span class="va">True</span>, label<span class="op">=</span><span class="st">'Dynamic'</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>dynamic.run()</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -813,7 +813,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="results-only-count-the-people-that-agents-represent" class="level2">
 <h2 class="anchored" data-anchor-id="results-only-count-the-people-that-agents-represent">Results only count the people that agents represent</h2>
 <p>While the scale factor is less than <code>pop_scale</code>, part of the population is not represented by any agent. These people are all naive, but they don’t appear in the results. Above, the dynamically rescaled sim starts with 5,000 people alive rather than 1 million, so its prevalence is 200 times too high:</p>
-<div id="0b421d19" class="cell" data-execution_count="3">
+<div id="56aa9b9b" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> dynamic.results</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f'n_alive = </span><span class="sc">{</span>res<span class="sc">.</span>n_alive[<span class="dv">0</span>]<span class="sc">:n}</span><span class="ss">, n_susceptible = </span><span class="sc">{</span>res<span class="sc">.</span>sir<span class="sc">.</span>n_susceptible[<span class="dv">0</span>]<span class="sc">:n}</span><span class="ss">, n_infected = </span><span class="sc">{</span>res<span class="sc">.</span>sir<span class="sc">.</span>n_infected[<span class="dv">0</span>]<span class="sc">:n}</span><span class="ss">, prevalence = </span><span class="sc">{</span>res<span class="sc">.</span>sir<span class="sc">.</span>prevalence[<span class="dv">0</span>]<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
@@ -821,7 +821,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Starsim does not correct for this automatically, since the right correction depends on the disease and on what each result means. For a disease where the unrepresented people are simply susceptible, you can add them back in <code>finalize_results()</code>. At each timestep, the scaled agents represent <code>n_agents</code> people, and <code>n_agents*(pop_scale/scale - 1)</code> more people are not represented:</p>
-<div id="6088d6b3" class="cell" data-execution_count="4">
+<div id="406c066b" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FullPopSIR(ss.SIR):</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">""" SIR whose results include the people not represented by agents during dynamic rescaling """</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> finalize_results(<span class="va">self</span>):</span>
@@ -1294,7 +1294,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.1 (2026-10-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

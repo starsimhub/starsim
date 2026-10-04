@@ -1,5 +1,5 @@
 {
-  "version": "3.7.0",
+  "version": "3.7.1",
   "description": "A fast, flexible agent-based disease modeling framework",
   "notes": [
     "Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks, including co-transmission of multiple diseases and the effect of interventions.",
@@ -658,8 +658,8 @@
       "name": "ss.find_contacts",
       "kind": "function",
       "module": "utils",
-      "signature": "(p1, p2, inds)",
-      "summary": "Variation on Network.find_contacts() that avoids sorting.",
+      "signature": "(p1, p2, inds, as_array=False)",
+      "summary": "Find the partners of the specified agents in an edge list; see also `Network.find_contacts()`.",
       "pars": {},
       "example": "",
       "aliases": [],
@@ -779,7 +779,7 @@
       "name": "ss.HybridNet",
       "kind": "class",
       "module": "networks",
-      "signature": "(pars=None, household_size=None, contacts=None, beta=None, school_ages=None, work_ages=None, dynamic=None, **kwargs)",
+      "signature": "(pars=None, household_size=None, contacts=None, beta=None, school_ages=None, work_ages=None, dynamic=None, uniform_targets=None, **kwargs)",
       "summary": "Covasim v3's \"hybrid\" population: households, schools, workplaces, and community",
       "pars": {
         "household_size": "ss.poisson(lam=2.0)",
@@ -787,7 +787,8 @@
         "beta": "{'h': 3.0, 's': 0.6, 'w': 0.6, 'c': 0.3}",
         "school_ages": "[6, 22]",
         "work_ages": "[22, 65]",
-        "dynamic": "False"
+        "dynamic": "False",
+        "uniform_targets": "False"
       },
       "example": "sim = ss.Sim(diseases='sis', networks=ss.HybridNet())\nsim.run()\nprint(sim.networks.keys()) # ['h', 's', 'w', 'c']\n\n# Larger households and smaller schools; contacts and beta can be partial\nhybrid = ss.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))",
       "aliases": [],
@@ -1578,16 +1579,17 @@
       "name": "ss.RandomNet",
       "kind": "class",
       "module": "networks",
-      "signature": "(pars=None, n_contacts=None, dur=None, beta=None, age_range=None, dynamic=None, **kwargs)",
+      "signature": "(pars=None, n_contacts=None, dur=None, beta=None, age_range=None, dynamic=None, uniform_targets=None, **kwargs)",
       "summary": "A faster, approximate version of `ss.RandomExactNet`",
       "pars": {
         "n_contacts": "ss.constant(v=10)",
         "dur": "ss.years(0)",
         "beta": "1.0",
         "age_range": "None",
-        "dynamic": "True"
+        "dynamic": "True",
+        "uniform_targets": "False"
       },
-      "example": "",
+      "example": "# Static network with Poisson-distributed contacts, as in Covasim v3\nnet = ss.RandomNet(n_contacts=ss.poisson(20), dynamic=False, uniform_targets=True)",
       "aliases": [],
       "deprecated": false
     },
@@ -1676,7 +1678,7 @@
       "name": "ss.Results",
       "kind": "class",
       "module": "results",
-      "signature": "(module, *args, strict=True, **kwargs)",
+      "signature": "(module=None, *args, strict=True, **kwargs)",
       "summary": "Container for storing results",
       "pars": {},
       "example": "",

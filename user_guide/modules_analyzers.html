@@ -735,7 +735,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="simple-usage" class="level2">
 <h2 class="anchored" data-anchor-id="simple-usage">Simple usage</h2>
 <p>For simple reporting, it’s possible to use a single function as an analyzer. In this case, the function receives a single argument, <a href="../api/sim.html#starsim.sim" title="0"><code>sim</code></a>, which it has full access to. For example, if you wanted to know the number of connections in the network on each timestep, you could write a small analyzer as follows:</p>
-<div id="41236797" class="cell" data-execution_count="1">
+<div id="8075a93d" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
@@ -783,7 +783,7 @@ Number of edges for network mfnet on step 6: 3504
 Number of edges for network mfnet on step 7: 3545
 Number of edges for network mfnet on step 8: 3577
 Number of edges for network mfnet on step 9: 3611
-  Running 2010 (10/51) (0.07 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.08 s)  ••••———————————————— 22%
 Number of edges for network mfnet on step 10: 3633
 Number of edges for network mfnet on step 11: 3660
 Number of edges for network mfnet on step 12: 3697
@@ -851,7 +851,7 @@ Figure(896x672)</code></pre>
 <section id="advanced-usage" class="level2">
 <h2 class="anchored" data-anchor-id="advanced-usage">Advanced usage</h2>
 <p>Suppose we wanted to create an analyzer that would report on the number of new HIV infections in pregnant women:</p>
-<div id="1400f332" class="cell" data-execution_count="2">
+<div id="958618c0" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
@@ -885,9 +885,9 @@ Figure(896x672)</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
-  Running 2010 (10/51) (0.11 s)  ••••———————————————— 22%
+  Running 2010 (10/51) (0.12 s)  ••••———————————————— 22%
   Running 2020 (20/51) (0.24 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.36 s)  ••••••••••••———————— 61%
+  Running 2030 (30/51) (0.37 s)  ••••••••••••———————— 61%
   Running 2040 (40/51) (0.50 s)  ••••••••••••••••———— 80%
   Running 2050 (50/51) (0.66 s)  •••••••••••••••••••• 100%
 
@@ -896,7 +896,7 @@ Total infections among pregnant women: 140.0</code></pre>
 </div>
 <p>Analyzers are ideal for adding custom results, and because they get added to the sim in the same way as any other result, they also get automatically exported in the same format, e.g.&nbsp;using <code>sim.to_df()</code>.</p>
 <p>Here’s a plot of the results from our HIV in pregnancy analyzer:</p>
-<div id="29d9387a" class="cell" data-execution_count="3">
+<div id="c24b134d" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>res <span class="op">=</span> sim.results.hiv_preg</span>
@@ -920,7 +920,7 @@ Total infections among pregnant women: 140.0</code></pre>
 <section id="infection-log" class="level3">
 <h3 class="anchored" data-anchor-id="infection-log">Infection log</h3>
 <p>The infection log produces a line list of infections. It’s integrated into the logic of <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a> in order to track infection sources and targets, which are not kept beyond this (for memory reasons).</p>
-<div id="3cf898c1" class="cell" data-execution_count="4">
+<div id="26b82fa1" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Demonstrate infection log</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(n_agents<span class="op">=</span><span class="dv">1000</span>, dt<span class="op">=</span><span class="fl">0.2</span>, dur<span class="op">=</span><span class="dv">15</span>, diseases<span class="op">=</span><span class="st">'sir'</span>, networks<span class="op">=</span><span class="st">'random'</span>, analyzers<span class="op">=</span><span class="st">'infection_log'</span>)</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -932,10 +932,10 @@ Total infections among pregnant women: 140.0</code></pre>
   Running 2002 (10/76) (0.03 s)  ••—————————————————— 14%
   Running 2004 (20/76) (0.05 s)  •••••——————————————— 28%
   Running 2006 (30/76) (0.08 s)  ••••••••———————————— 41%
-  Running 2008 (40/76) (0.11 s)  ••••••••••—————————— 54%
+  Running 2008 (40/76) (0.10 s)  ••••••••••—————————— 54%
   Running 2010 (50/76) (0.13 s)  •••••••••••••——————— 67%
   Running 2012 (60/76) (0.16 s)  ••••••••••••••••———— 80%
-  Running 2014 (70/76) (0.19 s)  ••••••••••••••••••—— 93%
+  Running 2014 (70/76) (0.18 s)  ••••••••••••••••••—— 93%
 Figure(672x480)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -947,7 +947,7 @@ Figure(672x480)</code></pre>
 </div>
 </div>
 <p>You can see how this raster plot aligns with the peak of infections:</p>
-<div id="22a1ff7b" class="cell" data-execution_count="5">
+<div id="df38bfc6" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sim.diseases.sir.plot()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Figure(672x480)</code></pre>
@@ -962,7 +962,7 @@ Figure(672x480)</code></pre>
 </div>
 <p>(Note: <a href="../api/analyzers.html#starsim.analyzers.infection_log" title="0"><code>ss.infection_log()</code></a> also has an <code>.animate()</code> method, which we will leave for you to try out!)</p>
 <p>The log for each disease is an <a href="../api/diseases.html#starsim.diseases.InfectionLog" title="0"><code>ss.InfectionLog</code></a>, stored in <code>infection_log.logs</code> (or <a href="../api/analyzers.html#starsim.analyzers.infection_log.log" title="0"><code>infection_log.log</code></a> if there is only one disease). It stores entries as arrays, and <code>to_df()</code> converts them to a line list, with one row per infection: the time (<code>t</code>), the infecting agent (<code>source</code>, which is <code>-1</code> for seed infections), the infected agent (<code>target</code>), and the name of the network the infection occurred on:</p>
-<div id="cc2c0fec" class="cell" data-execution_count="6">
+<div id="1cec38de" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>log <span class="op">=</span> infection_log.log</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(log)</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> log.to_df()</span>
@@ -1028,7 +1028,7 @@ Figure(672x480)</code></pre>
 </div>
 <p>If you want a NetworkX graph instead (e.g.&nbsp;to analyze transmission chains), use <code>log.to_graph()</code>, which returns a <code>MultiDiGraph</code> with agents as nodes and infections as edges.</p>
 <p>Modules can also record extra data for each infection. A disease that records its own infections (e.g.&nbsp;one with multiple variants) can pass extra data when creating entries, e.g.&nbsp;<code>log.add_entries(uids, sources, time, variant=variants)</code>, while <code>log.add_data(uids, ...)</code> adds data to each agent’s most recent infection, which is useful for recording outcomes that happen later (e.g.&nbsp;diagnosis or death). For example, to record the age of each agent when they were infected:</p>
-<div id="4b56a0df" class="cell" data-execution_count="7">
+<div id="b363ee36" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> AgeSIR(ss.SIR):</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> set_prognoses(<span class="va">self</span>, uids, sources<span class="op">=</span><span class="va">None</span>):</span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().set_prognoses(uids, sources)</span>
@@ -1106,7 +1106,7 @@ Figure(672x480)</code></pre>
 <section id="dynamics-by-age" class="level3">
 <h3 class="anchored" data-anchor-id="dynamics-by-age">Dynamics by age</h3>
 <p>This analyzer illustrates how you could track infections by age. Since it illustrates some additional key principles of building analyzers, here it is in full:</p>
-<div id="350251cf" class="cell" data-execution_count="8">
+<div id="ec575e6d" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> dynamics_by_age(ss.Analyzer):</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, state, age_bins<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">20</span>, <span class="dv">40</span>, <span class="dv">100</span>)):</span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
@@ -1152,10 +1152,10 @@ Figure(672x480)</code></pre>
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/51) (0.00 s)  ———————————————————— 2%
   Running 2010 (10/51) (0.04 s)  ••••———————————————— 22%
-  Running 2020 (20/51) (0.09 s)  ••••••••———————————— 41%
-  Running 2030 (30/51) (0.13 s)  ••••••••••••———————— 61%
-  Running 2040 (40/51) (0.18 s)  ••••••••••••••••———— 80%
-  Running 2050 (50/51) (0.22 s)  •••••••••••••••••••• 100%
+  Running 2020 (20/51) (0.08 s)  ••••••••———————————— 41%
+  Running 2030 (30/51) (0.12 s)  ••••••••••••———————— 61%
+  Running 2040 (40/51) (0.16 s)  ••••••••••••••••———— 80%
+  Running 2050 (50/51) (0.20 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -1606,7 +1606,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.1 (2026-10-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

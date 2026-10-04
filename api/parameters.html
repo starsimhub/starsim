@@ -612,6 +612,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul class="collapse">
   <li><a href="#starsim.parameters.Pars.check_key_mismatch" id="toc-starsim.parameters.Pars.check_key_mismatch" class="nav-link" data-scroll-target="#starsim.parameters.Pars.check_key_mismatch">check_key_mismatch</a></li>
   <li><a href="#starsim.parameters.Pars.dict_update" id="toc-starsim.parameters.Pars.dict_update" class="nav-link" data-scroll-target="#starsim.parameters.Pars.dict_update">dict_update</a></li>
+  <li><a href="#starsim.parameters.Pars.lock" id="toc-starsim.parameters.Pars.lock" class="nav-link" data-scroll-target="#starsim.parameters.Pars.lock">lock</a></li>
   <li><a href="#starsim.parameters.Pars.to_json" id="toc-starsim.parameters.Pars.to_json" class="nav-link" data-scroll-target="#starsim.parameters.Pars.to_json">to_json</a></li>
   <li><a href="#starsim.parameters.Pars.update" id="toc-starsim.parameters.Pars.update" class="nav-link" data-scroll-target="#starsim.parameters.Pars.update">update</a></li>
   </ul></li>
@@ -722,10 +723,14 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <td>Redefine default dict.update(), since overwritten in this class; should not usually be used</td>
 </tr>
 <tr class="odd">
+<td><a href="#starsim.parameters.Pars.lock">lock</a></td>
+<td>Lock the parameters, so that setting a key that doesn’t exist raises an error</td>
+</tr>
+<tr class="even">
 <td><a href="#starsim.parameters.Pars.to_json">to_json</a></td>
 <td>Convert to JSON representation</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><a href="#starsim.parameters.Pars.update">update</a></td>
 <td>Update internal dict with new pars.</td>
 </tr>
@@ -741,14 +746,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>parameters.Pars.dict_update(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Redefine default dict.update(), since overwritten in this class; should not usually be used</p>
 </section>
+<section id="starsim.parameters.Pars.lock" class="level5">
+<h5 class="anchored" data-anchor-id="starsim.parameters.Pars.lock">lock</h5>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>parameters.Pars.lock(locked<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Lock the parameters, so that setting a key that doesn’t exist raises an error</p>
+<p>Parameters are locked when the sim is initialized, so that e.g.&nbsp;a typo in <code>sim.pars['rand_sed'] = 2</code> raises an error rather than silently doing nothing. Use <code>pars.lock(False)</code> to unlock, or <code>pars.update(create=True)</code> to add a new key.</p>
+</section>
 <section id="starsim.parameters.Pars.to_json" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.Pars.to_json">to_json</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>parameters.Pars.to_json(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>parameters.Pars.to_json(<span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert to JSON representation</p>
 </section>
 <section id="starsim.parameters.Pars.update" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.Pars.update">update</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>parameters.Pars.update(pars<span class="op">=</span><span class="va">None</span>, create<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>parameters.Pars.update(pars<span class="op">=</span><span class="va">None</span>, create<span class="op">=</span><span class="va">False</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Update internal dict with new pars.</p>
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
@@ -788,7 +799,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.parameters.SimPars" class="level3">
 <h3 class="anchored" data-anchor-id="starsim.parameters.SimPars">SimPars</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars(pars<span class="op">=</span><span class="va">None</span>, create<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars(pars<span class="op">=</span><span class="va">None</span>, create<span class="op">=</span><span class="va">True</span>, <span class="op">**</span>kwargs)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Create the parameters for the simulation. Typically, this function is used internally rather than called by the user; e.g.&nbsp;typical use would be to do sim = ss.Sim() and then inspect sim.pars, rather than calling this function directly.</p>
 <section id="parameters-2" class="level4 doc-section doc-section-parameters">
 <h4 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-2">Parameters</h4>
@@ -1017,13 +1028,13 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </table>
 <section id="starsim.parameters.SimPars.convert_modules" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.convert_modules">convert_modules</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.convert_modules()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.convert_modules()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Convert different types of representations for modules into a standardized object representation that can be parsed and used by a Sim object</p>
 <p>Returns a flat list of (source_key, ss.Module) tuples</p>
 </section>
 <section id="starsim.parameters.SimPars.expand_modules" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.expand_modules">expand_modules</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.expand_modules(modules)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.expand_modules(modules)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Replace any module that defines an <code>expand()</code> method with the modules it returns, e.g.&nbsp;<a href="../api/networks.html#starsim.networks.HybridNet" title="0"><code>ss.HybridNet()</code></a> → four networks</p>
 <section id="parameters-3" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-3">Parameters</h6>
@@ -1049,32 +1060,32 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.parameters.SimPars.is_default" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.is_default">is_default</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.is_default(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.is_default(key)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check if the provided value matches the default</p>
 </section>
 <section id="starsim.parameters.SimPars.validate" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate">validate</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Call parameter validation methods</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_agents" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_agents">validate_agents</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_agents()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_agents()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Check that n_agents is supplied and convert to an integer</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_demographics" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_demographics">validate_demographics</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_demographics()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_demographics()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate demographics-related input parameters</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_modules" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_modules">validate_modules</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_modules()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_modules()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate modules passed in pars</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_name" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_name">validate_name</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_name(mod, modkey, names)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_name(mod, modkey, names)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Ensure the module name is unique, renaming it if it is the default name (e.g.&nbsp;“sir” → “sir_1”)</p>
 <section id="parameters-4" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-4">Parameters</h6>
@@ -1112,22 +1123,22 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </section>
 <section id="starsim.parameters.SimPars.validate_networks" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_networks">validate_networks</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_networks()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_networks()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate networks</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_sim_pars" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_sim_pars">validate_sim_pars</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_sim_pars()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_sim_pars()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate each of the parameter values</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_total_pop" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_total_pop">validate_total_pop</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_total_pop()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_total_pop()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Ensure one but not both of total_pop and pop_scale are defined</p>
 </section>
 <section id="starsim.parameters.SimPars.validate_verbose" class="level5">
 <h5 class="anchored" data-anchor-id="starsim.parameters.SimPars.validate_verbose">validate_verbose</h5>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_verbose()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>parameters.SimPars.validate_verbose()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Validate verbosity</p>
 
 
@@ -1570,7 +1581,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.7.0 (2026-10-02).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.1 (2026-10-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -1,4 +1,4 @@
-# Starsim v3.7.0
+# Starsim v3.7.1
 
 > A fast, flexible agent-based disease modeling framework
 
@@ -66,8 +66,8 @@ This file lists all 195 public Starsim functions and classes. It is generated fr
 - `ss.ClusterNet(pars=None, cluster_size=None, age_range=None, beta=None, dynamic=None, **kwargs)`: Fully connected clusters of agents, e.g. households, schools, or workplaces
   - Default pars: `cluster_size=ss.poisson(lam=4)`, `age_range=None`, `beta=1.0`, `dynamic=False`
 - `ss.DynamicNetwork(pars=None, edges=None, **kwargs)`: A network where partnerships update dynamically
-- `ss.HybridNet(pars=None, household_size=None, contacts=None, beta=None, school_ages=None, work_ages=None, dynamic=None, **kwargs)`: Covasim v3's "hybrid" population: households, schools, workplaces, and community
-  - Default pars: `household_size=ss.poisson(lam=2.0)`, `contacts={'s': 20, 'w': 16, 'c': 20}`, `beta={'h': 3.0, 's': 0.6, 'w': 0.6, 'c': 0.3}`, `school_ages=[6, 22]`, `work_ages=[22, 65]`, `dynamic=False`
+- `ss.HybridNet(pars=None, household_size=None, contacts=None, beta=None, school_ages=None, work_ages=None, dynamic=None, uniform_targets=None, **kwargs)`: Covasim v3's "hybrid" population: households, schools, workplaces, and community
+  - Default pars: `household_size=ss.poisson(lam=2.0)`, `contacts={'s': 20, 'w': 16, 'c': 20}`, `beta={'h': 3.0, 's': 0.6, 'w': 0.6, 'c': 0.3}`, `school_ages=[6, 22]`, `work_ages=[22, 65]`, `dynamic=False`, `uniform_targets=False`
 - `ss.MaternalNet(pars=None, edges=None, **kwargs)`: Alias for `PrenatalNet`, kept for backwards compatibility
 - `ss.MFNet(pars=None, duration=None, debut=None, acts=None, participation=None, rel_part_rates=None, **kwargs)`: This network is built by **randomly pairing** males and female with variable relationship durations.
   - Default pars: `duration=ss.lognorm_ex(mean=15, std=1)`, `debut=ss.normal(loc=16, scale=1.0)`, `acts=ss.poisson(lam=80)`, `participation=ss.bernoulli(p=0.9)`, `rel_part_rates=1.0`
@@ -82,8 +82,8 @@ This file lists all 195 public Starsim functions and classes. It is generated fr
 - `ss.PrenatalNet(pars=None, edges=None, **kwargs)`: Prenatal transmission network
 - `ss.RandomExactNet(pars=None, n_contacts=None, dur=None, beta=None, age_range=None, dynamic=None, **kwargs)`: Random connectivity between agents
   - Default pars: `n_contacts=ss.constant(v=10)`, `dur=ss.years(0)`, `beta=1.0`, `age_range=None`, `dynamic=True`
-- `ss.RandomNet(pars=None, n_contacts=None, dur=None, beta=None, age_range=None, dynamic=None, **kwargs)`: A faster, approximate version of `ss.RandomExactNet`
-  - Default pars: `n_contacts=ss.constant(v=10)`, `dur=ss.years(0)`, `beta=1.0`, `age_range=None`, `dynamic=True`
+- `ss.RandomNet(pars=None, n_contacts=None, dur=None, beta=None, age_range=None, dynamic=None, uniform_targets=None, **kwargs)`: A faster, approximate version of `ss.RandomExactNet`
+  - Default pars: `n_contacts=ss.constant(v=10)`, `dur=ss.years(0)`, `beta=1.0`, `age_range=None`, `dynamic=True`, `uniform_targets=False`
 - `ss.RandomSafeNet(pars=None, n_edges=None, dur=None, beta=None, **kwargs)`: Create a CRN-safe, O(N) random network
   - Default pars: `n_edges=5`, `dur=ss.years(0)`, `beta=1.0`
 - `ss.Route(name=None, label=None, **kwargs)`: A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
@@ -212,7 +212,7 @@ This file lists all 195 public Starsim functions and classes. It is generated fr
 ## Results (ss.results)
 
 - `ss.Result(name=None, label=None, dtype=<class 'float'>, shape=None, scale=True, auto_plot=True, module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, columns=None, **kwargs)`: Array-like container for holding sim results.
-- `ss.Results(module, *args, strict=True, **kwargs)`: Container for storing results
+- `ss.Results(module=None, *args, strict=True, **kwargs)`: Container for storing results
 
 ## Running multiple simulations (ss.run)
 
@@ -257,7 +257,7 @@ This file lists all 195 public Starsim functions and classes. It is generated fr
 ## Utilities (ss.utils)
 
 - `ss.apply_age_range(age_string, arr)`: Return a boolean mask for values in `arr` that fall within the age range.
-- `ss.find_contacts(p1, p2, inds)`: Variation on Network.find_contacts() that avoids sorting.
+- `ss.find_contacts(p1, p2, inds, as_array=False)`: Find the partners of the specified agents in an edge list; see also `Network.find_contacts()`.
 - `ss.load(filename, **kwargs)`: Alias to Sciris `sc.loadany()`
 - `ss.ndict(*args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs)`: A dictionary-like class that provides additional functionalities for handling named items.
 - `ss.parse_age_range(age_string) -> tuple`: Parse an age range string into lower and upper bounds.
@@ -325,4 +325,4 @@ This file lists all 195 public Starsim functions and classes. It is generated fr
 - `ssl.HouseholdNet(pars=None, dhs_data=None, dynamic=True, prob_move_out=None, update_freq=None, **kwargs)`: A household contact network built from DHS-style survey data.
 - `ssl.NullNet(n_people=None, **kwargs)`: A convenience class for a network of size n that only has self-connections with a weight of 0. This network can be useful for debugging purposes or as a placeholder network during development for conditions that require more complex network mechanisms.
 
-<!-- Generated by `python make_api.py` for Starsim v3.7.0: llms.txt -->
+<!-- Generated by `python make_api.py` for Starsim v3.7.1: llms.txt -->
