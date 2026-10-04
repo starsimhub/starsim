@@ -92,7 +92,15 @@ def test_randomfast():
     s3 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
     assert np.array_equal(nw2.p2, s3.networks[0].p2), 'RandomNet should be reproducible for a fixed seed'
 
-    o = sc.objdict(nw1=nw1, nw2=nw2)
+    # With uniform targets, the variance in degree is lower: about n_contacts/2 from the sources plus n_contacts/2 from the targets (as in Covasim v3)
+    n = 10_000
+    s4 = ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=ss.poisson(20), uniform_targets=True), rand_seed=1).init()
+    nw4 = s4.networks[0]
+    deg4 = np.bincount(np.concatenate([np.asarray(nw4.p1), np.asarray(nw4.p2)]), minlength=n)
+    assert np.isclose(deg4.mean(), 20, rtol=0.05), f'Mean degree should be ~20, not {deg4.mean()}'
+    assert np.isclose(deg4.var(), 15, rtol=0.1), f'Degree variance with uniform targets should be ~15, not {deg4.var()}'
+
+    o = sc.objdict(nw1=nw1, nw2=nw2, nw4=nw4)
     return o
 
 
@@ -135,6 +143,13 @@ def test_randomsafe():
     print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid2:%}')
     print(f'Similarity for random-safe networks after {pars.dur} timesteps:\n{simil.safe:%}\n')
     assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
+
+    # With many agents, some random numbers are tied; check that these edges don't all go to agent 0
+    n = 20_000
+    s5 = ss.Sim(n_agents=n, networks=ss.RandomSafeNet(n_edges=10), rand_seed=1).init()
+    nw5 = s5.networks[0]
+    deg5 = np.bincount(np.concatenate([np.asarray(nw5.p1), np.asarray(nw5.p2)]), minlength=n)
+    assert deg5.max() < 40, f'No agent should have many more than 20 contacts, but agent {deg5.argmax()} has {deg5.max()}'
 
     o = sc.objdict(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
     return o
@@ -453,6 +468,11 @@ def test_edge_ops():
     net = ss.Network(name='mynet').from_df(df) # Create from a dataframe
     assert net.name == 'mynet' and len(net) == 4
     assert np.array_equal(net['p1'], df.p1) # Access edge columns like a dict
+
+    # Find contacts (both directions, including the agents themselves if they're each other's contacts), as an array or a set
+    net2 = ss.Network(p1=[1,2,3,4], p2=[2,3,1,4])
+    assert np.array_equal(net2.find_contacts([1,3]), [1,2,3])
+    assert ss.find_contacts(net2.p1, net2.p2, [1,3]) == {1,2,3}
     assert net.beta.sum() == 4 # Beta defaults to 1
 
     net.from_df(dict(p1=[0, 1], p2=[1, 2], beta=[1, 2])) # Replace the edges with a dict of arrays
@@ -462,6 +482,7 @@ def test_edge_ops():
     assert len(net) == 1 and net.p1[0] == 1
     net.remove_edges([0]) # ...or by index
     assert len(net) == 0
+    ss.RandomNet().validate() # A network with no edges yet is valid
     return net
 
 
@@ -504,6 +525,10 @@ def test_hybrid():
     assert np.all(sim.people.age[nets.s.members] < 22) # Schools are age-restricted
     assert nets.h.edges.beta[0] == 3.0 # Default v3 per-network beta
     assert nets.c.pars.n_contacts.pars.lam == 10 # Partial update of contacts
+
+    # As in Covasim v3, choose the targets of random edges uniformly
+    sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ss.HybridNet(uniform_targets=True), verbose=0).init()
+    assert all(sim2.networks[k].pars.uniform_targets for k in ['s', 'w', 'c'])
     return sim
 
 

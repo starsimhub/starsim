@@ -354,8 +354,26 @@ class People:
     
     @property
     def dead(self):
-        """ Dead boolean. Also includes removed agents """
-        return ~self.alive
+        """
+        Whether each agent has died
+
+        Unlike other arrays, this covers every agent ever created (indexed by UID),
+        since dead agents are removed from the active agents. Agents who were removed
+        for other reasons (e.g. emigration) are not counted as dead.
+
+        Examples:
+            ```python
+            sim = ss.Sim(diseases=dict(type='sir', p_death=0.5), networks='random').run()
+            n_deaths = sim.people.dead.sum()
+            dead_uids = sim.people.dead.uids
+            ```
+        """
+        n = self.n_uids
+        raw = np.zeros(self.uid.len_tot, dtype=bool)
+        raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
+        dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
+        dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
+        return dead
 
     @property
     def born(self):
@@ -498,7 +516,7 @@ class People:
         """
         Remove agents who are exiting the population (death, migration, etc)
         """
-        uids = self.dead.uids
+        uids = self.alive.false() # Agents who are still active but no longer alive
         if len(uids):
 
             # Remove the UIDs from the networks too

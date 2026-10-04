@@ -13,17 +13,13 @@ published with the docs (e.g. <https://docs.starsim.org/llms.txt>):
 
 This is a docs build tool: nothing here is part of the Starsim package itself.
 
-To regenerate the artifacts::
+The artifacts are not committed to the repository: they are generated when the
+docs are built. To generate them manually::
 
     cd docs && python make_api.py
-
-To check that they are up to date (used by the test suite, hence CI)::
-
-    cd docs && python make_api.py --check
 """
 
 import re
-import sys
 import inspect
 import textwrap
 import warnings
@@ -31,7 +27,7 @@ import sciris as sc
 import starsim as ss
 import starsim.library as ssl
 
-__all__ = ['make_index', 'load', 'write', 'check']
+__all__ = ['make_index', 'load', 'write']
 
 thisdir = sc.thispath(__file__)
 jsonfile = thisdir / 'api.json'
@@ -384,44 +380,5 @@ def write(verbose=True):
     return written
 
 
-def check(verbose=True):
-    """
-    Check whether the generated artifacts match the current API.
-
-    Args:
-        verbose (bool): whether to print which files are out of date
-
-    Returns:
-        The list of files that are out of date (empty if everything matches).
-    """
-    index = make_index()
-    stale = []
-
-    def compare(path, expected):
-        """ Compare a file to what it should contain, treating a missing file as stale """
-        if not path.exists():
-            return 'missing'
-        actual = sc.loadjson(path) if path.suffix == '.json' else sc.loadtext(path)
-        return None if actual == expected else 'out of date'
-
-    for path,expected in [(jsonfile, index),
-                          (llmsfile, make_llms_txt(index, examples=False)),
-                          (llmsfullfile, make_llms_txt(index, examples=True))]:
-        reason = compare(path, expected)
-        if reason:
-            stale.append(path)
-            if verbose:
-                print(f'  {path.name} is {reason}')
-    if verbose and not stale:
-        print(f'All API artifacts are up to date ({index["n_entries"]} entries, v{index["version"]})')
-    return stale
-
-
 if __name__ == '__main__':
-    if '--check' in sys.argv:
-        stale = check()
-        if stale:
-            print('Run "python make_api.py" to regenerate.')
-            sys.exit(1)
-    else:
-        write()
+    write()

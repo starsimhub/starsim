@@ -259,7 +259,7 @@ class Infection(Disease):
         return new_cases, sources, networks
 
     @staticmethod
-    @nb.njit(cache=True) # No fastmath: a stray NaN must compare False (no transmission), not be assumed absent
+    @nb.jit(cache=True) # No fastmath: a stray NaN must compare False (no transmission), not be assumed absent
     def _nb_transmit(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Optimized transmission kernel: returns the (source, target) UIDs of transmitting edges.
 
@@ -278,6 +278,19 @@ class Infection(Disease):
             trg_out[m] = trg[i]
             m += transmitted
         return src_out[:m], trg_out[:m]
+
+    @staticmethod
+    @nb.jit(cache=True) # No fastmath: a stray NaN must compare False (edge dropped), as in _nb_transmit()
+    def _nb_can_transmit(src, trg, rel_trans, rel_sus, beta_per_dt):
+        """ Return the indices of the edges with a nonzero transmission probability, in edge order """
+        n = src.shape[0]
+        inds = np.empty(n, dtype=np.int64)
+        m = 0
+        for i in range(n):
+            can_transmit = rel_trans[src[i]] * rel_sus[trg[i]] * beta_per_dt[i] > 0 # Same expression as _nb_transmit()
+            inds[m] = i # Written every iteration (branchless); kept only if m advances
+            m += can_transmit
+        return inds[:m]
 
     def compute_transmission(self, src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Compute the probability of a->b transmission for networks (for other routes, the Route handles this) """
@@ -343,8 +356,17 @@ class Infection(Disease):
                     if beta: # Skip networks with no transmission
                         disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
                         beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-                        randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+                        if np.ndim(beta_per_dt) == 0: # net_beta returns a per-edge array, but tolerate a scalar
+                            beta_per_dt = np.full(len(src), beta_per_dt, dtype=ss_float)
+
+                        # Only draw random numbers for edges that can transmit (infectious source, susceptible target). With CRN, each
+                        # edge's random number depends only on its source and target, so this gives identical results to drawing for every edge.
+                        inds = self._nb_can_transmit(src, trg, rel_trans.raw, rel_sus.raw, beta_per_dt)
+                        src_can = src[inds]
+                        trg_can = trg[inds]
+                        beta_can = beta_per_dt[inds]
+                        randvals = self.trans_rng.rvs(src_can, trg_can) # Generate a new random number based on the two other random numbers (called even if empty, to keep CRN draws in sync)
+                        args = (src_can, trg_can, rel_trans, rel_sus, beta_can, randvals) # Set up the arguments to calculate transmission
                         target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                         new_cases.append(target_uids)
                         sources.append(source_uids)

@@ -36,7 +36,7 @@ _U30, _U27, _U31, _U11 = np.uint64(30), np.uint64(27), np.uint64(31), np.uint64(
 _U40 = np.uint64(40) # 64 - 24: keep the top 24 bits for a float32-representable uniform
 _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniforms, so they're independent of the draw itself
 
-@nb.njit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
+@nb.jit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
           nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
 def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     """
@@ -1234,7 +1234,7 @@ class Dist:
 
     def shrink(self, max_arr_size=100):
         """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
-        to_shrink = ['slots', '_slots', 'module', 'sim', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
+        to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
         ss.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
         shrunk = ss.shrink()
@@ -2029,7 +2029,7 @@ class multi_random(sc.prettyobj):
         return
 
     @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
+    @nb.jit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
     def combine_rvs(rvs_list, int_type, int_max):
         """ Combine inputs into one number """
         # Combine using bitwise-xor
@@ -2043,7 +2043,7 @@ class multi_random(sc.prettyobj):
         return rvs
 
     @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
+    @nb.jit(fastmath=True, parallel=False, cache=True)
     def combine2_rvs(a, b, int_type, int_max):
         """ Fast path for the common two-distribution case (avoids nb.typed.List, ~550us/call) """
         ra = a.view(int_type)

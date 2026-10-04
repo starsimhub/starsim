@@ -699,7 +699,10 @@ class Module(Base):
             ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
-            sim.pars[self.name] = self.pars
+            if self.name in sim.pars:
+                sim.pars[self.name] = self.pars
+            else: # Add a new key, which is allowed even if the sim's parameters are locked
+                sim.pars.update({self.name: self.pars}, create=True)
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()
