@@ -23,6 +23,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 - `dist.shrink()` now removes the SciPy distribution and the random number generator, so modules with many distributions no longer fail the size check in `sim.shrink()`.
 - `ss.Results()` can be created without a module, so results can be merged like dicts, e.g. `sc.mergedicts(sim.results, other)`.
 - `network.validate()` no longer fails for a network with no edges, and `sim.current_scale` no longer fails if called during initialization with `rescale=True`.
+- *GitHub info*: PR [1433](https://github.com/starsimhub/starsim/pull/1433)
 
 
 ## Version 3.7.0 (2026-10-02)
@@ -51,6 +52,7 @@ This release adds features needed to port Covasim to Starsim (Covasim v4), and w
 - *Migration*: module names must be unique across all module types. Two modules with the same default name (e.g. two `ss.RandomNet()`s) are now renamed with a warning (`randomnet`, `randomnet_1`) rather than raising an error; explicitly set names that clash still raise an error.
 - *Migration*: `ss.InfectionLog` is no longer a NetworkX graph; use `log.to_df()`, or `log.to_graph()` for a graph.
 - *Migration*: `init_prev` values greater than 1 now raise an error (previously they infected everyone); use `ss.choose_n(n)` to seed a fixed number of infections.
+- *GitHub info*: PR [1431](https://github.com/starsimhub/starsim/pull/1431)
 
 
 ## Version 3.6.2 (2026-09-30)
@@ -87,6 +89,7 @@ This release contains many LLM-assisted bugfixes. Most changes should have relat
 - Fixed diagnostics (`sim.set_diagnostics()`) never recording random variates; `sim.init_dists()` no longer changes dist seeds when called again; and other small fixes to time, distribution, and debugging utilities.
 - Fixed several docstring examples.
 - *Migration*: `ss.Network` now takes `pars` as its first argument, like other modules, plus an optional `edges` dict or dataframe; standard module arguments (`name`, `label`, `dt`, etc.) are passed to `update_pars()` and other keyword arguments are still treated as edges. `ss.Network('name')` no longer works; use `ss.Network(name='name')`.
+- *GitHub info*: PR [1427](https://github.com/starsimhub/starsim/pull/1427)
 
 
 ## Version 3.6.1 (2026-08-29)
@@ -413,11 +416,13 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 
 ## Version 3.0.6 (2026-01-28)
 - Fixed bug in `sim.loop.plot_cpu()` when using pandas v3
+- *GitHub info*: PR [1118](https://github.com/starsimhub/starsim/pull/1118)
 
 
 ## Version 3.0.5 (2025-10-22).
 - Fixed bugs with products being added/stepped multiple times.
 - Fixed bug that prevented `Result.resample(output_form='series')` from being used.
+- *GitHub info*: PR [1095](https://github.com/starsimhub/starsim/pull/1095)
 
 
 ## Version 3.0.4 (2025-10-22)
@@ -428,6 +433,7 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 
 ## Version 3.0.3 (2025-10-07)
 - Swapped order of `age` and `female` states in People to allow `female` dist to use `age` state during population initialization.
+- *GitHub info*: PR [1051](https://github.com/starsimhub/starsim/pull/1051)
 
 
 ## Version 3.0.2 (2025-08-25)
