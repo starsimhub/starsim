@@ -483,8 +483,8 @@ class Result(ss.BaseArr):
 
 class Results(ss.ndict):
     """ Container for storing results """
-    def __init__(self, module, *args, strict=True, **kwargs):
-        if not isinstance(module, str):
+    def __init__(self, module=None, *args, strict=True, **kwargs):
+        if module is not None and not isinstance(module, str):
             modlabel = getattr(module, 'label', None)
             modname = getattr(module, 'name', None)
             modcls = module.__class__.__name__

@@ -35,6 +35,13 @@ def test_people():
     # Possible to add a module to people outside a sim (not typical workflow)
     ppl.add_module(ssl.diseases.HIV())
 
+    # Dead agents are removed from other arrays, but people.dead covers all agents
+    sim = ss.Sim(n_agents=small, diseases=dict(type='sir', init_prev=0.2, p_death=0.5), networks='random', verbose=0).run()
+    dead = sim.people.dead
+    assert len(dead) == sim.people.n_uids > len(sim.people)
+    assert dead.sum() == sim.results.cum_deaths[-1] > 0
+    assert not np.isin(dead.uids, sim.people.auids).any()
+
     return ppl
 
 

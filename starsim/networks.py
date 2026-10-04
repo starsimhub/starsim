@@ -14,7 +14,7 @@ ss_int = ss.dtypes.int
 _ = None
 
 
-@nb.njit(cache=True)
+@nb.jit(cache=True)
 def fisher_yates_shuffle(arr, randvals):
     """ In-place Fisher-Yates shuffle using precomputed uniform random values.
 
@@ -226,6 +226,8 @@ class Network(Route):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
+        if not len(self.edges): # No edges have been added yet
+            return
         n = len(self.edges.p1)
         for key, dtype in self.meta.items():
             if dtype:
@@ -445,38 +447,25 @@ class Network(Route):
 
         For some purposes (e.g. contact tracing) it's necessary to find all the edges
         associated with a subset of the people in this network. Since edges are bidirectional
-        it's necessary to check both p1 and p2 for the target indices. The return type is a Set
-        so that there is no duplication of indices (otherwise if the Network has explicit
-        symmetric interactions, they could appear multiple times). This is also for performance so
-        that the calling code doesn't need to perform its own unique() operation. Note that
-        this cannot be used for cases where multiple connections count differently than a single
-        infection, e.g. exposure risk.
+        it's necessary to check both p1 and p2 for the target indices. Each contact is only
+        returned once (otherwise if the Network has explicit symmetric interactions, they could
+        appear multiple times), so the calling code doesn't need to perform its own unique()
+        operation. Note that this cannot be used for cases where multiple connections count
+        differently than a single infection, e.g. exposure risk.
 
         Args:
             inds (array): indices of people whose edges to return
             as_array (bool): if true, return as sorted array (otherwise, return as unsorted set)
 
         Returns:
-            contact_inds (array): a set of indices for pairing partners
+            contact_inds (array/set): the indices of the pairing partners
 
         Example: If there were a network with
         - p1 = [1,2,3,4]
         - p2 = [2,3,1,4]
         Then find_edges([1,3]) would return {1,2,3}
         """
-
-        # Check types
-        if not isinstance(inds, np.ndarray):
-            inds = sc.promotetoarray(inds)
-        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from utils.true(), which returns int64
-            inds = np.array(inds, dtype=np.int64)
-
-        # Find the edges
-        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, inds)
-        if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss_int)
-            contact_inds.sort()
-
+        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
         return contact_inds
 
     def add_pairs(self):
@@ -489,7 +478,17 @@ class Network(Route):
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
         """
-        self.remove_edges(np.isin(self.edges.p1, uids) | np.isin(self.edges.p2, uids))
+        p1 = self.edges.p1
+        p2 = self.edges.p2
+
+        # Make a lookup table of the UIDs to remove (much faster than np.isin() for many edges)
+        n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(uids, initial=-1)) + 1
+        is_removed = np.zeros(n, dtype=bool)
+        is_removed[uids] = True
+
+        # Remove edges where either partner is being removed
+        remove = is_removed[p1] | is_removed[p2]
+        self.remove_edges(remove)
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
@@ -776,14 +775,45 @@ class RandomNet(RandomExactNet):
     correctly forms most of its edges with itself); drawing targets uniformly over
     agents instead would destroy that clustering and bias the realized degrees.
 
+    Alternatively, with `uniform_targets=True`, each target is chosen uniformly from all
+    eligible agents, regardless of their own `n_contacts`, as in Covasim v3's random networks.
+    This gives less variable numbers of contacts (e.g. with `n_contacts=ss.poisson(20)`, a
+    variance of about 15, rather than 30 for the default or 20 for `ss.RandomExactNet`), but
+    loses the mixing structure described above.
+
     Note: like `ss.RandomExactNet`, this is not random-number safe; see `ss.RandomSafeNet`
     for the CRN-safe (but slower) version.
+
+    Args:
+        n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
+        uniform_targets (bool): if True, choose the target of each edge uniformly from the eligible agents, rather than in proportion to their number of contacts
+
+    Example:
+        ```python
+        # Static network with Poisson-distributed contacts, as in Covasim v3
+        net = ss.RandomNet(n_contacts=ss.poisson(20), dynamic=False, uniform_targets=True)
+        ```
     """
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, uniform_targets=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            uniform_targets = False,
+        )
+        self.update_pars(pars, **kwargs)
+        return
+
     def get_edges(self, inds, n_contacts):
         """ Find edges by sampling the source stubs with replacement (see `ss.RandomExactNet.get_edges`) """
         source = np.repeat(inds, n_contacts)
         n = len(source)
-        if n:
+        if n and self.pars.uniform_targets:
+            idx = self.dist.rng.integers(0, len(inds), n) # A random target agent for each source stub
+            target = np.take(np.asarray(inds), idx).view(ss.uids)
+        elif n:
             idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
             nc = np.asarray(n_contacts)
             nc0 = int(nc.flat[0])
@@ -831,6 +861,7 @@ class RandomSafeNet(DynamicNetwork):
         self.update_pars(pars, **kwargs)
         if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years, as for ss.RandomExactNet (the default isn't ss.years(0) so a Dist is allowed)
         self.dist = ss.random(name='RandomSafeNet')
+        self.dist.hash_dtype = np.float64 # Since float32 only gives 2^24 distinct values, which would mean many ties (e.g. 25% of edges with a million agents)
         return
 
     def rep_rand(self, uids, sort=True):
@@ -860,18 +891,13 @@ class RandomSafeNet(DynamicNetwork):
         center = v[1:-1]
         p1_dist = abs(center - v[:-2])
         p2_dist = abs(center - v[2:])
-        use_p1 = sc.findinds(p1_dist < p2_dist)
-        use_p2 = sc.findinds(p1_dist > p2_dist) # Can refactor
+        use_p1 = p1_dist <= p2_dist # Ties (which are common with many agents, since the random numbers are float32) go to the lower neighbor
         source = agent[1:-1]
-        target = np.zeros(len(source), dtype=agent.dtype).view(ss.uids)
-        target[use_p1] = agent[:-2][use_p1]
-        target[use_p2] = agent[2:][use_p2]
+        target = np.where(use_p1, agent[:-2], agent[2:]).view(ss.uids)
 
         # Store additional information for debugging
         if debug:
-            dist = np.zeros(len(source))
-            dist[use_p1] = p1_dist[use_p1]
-            dist[use_p2] = p2_dist[use_p2]
+            dist = np.where(use_p1, p1_dist, p2_dist)
             out = sc.objdict()
             out.pairs = sorted(list(zip(source, target)))
             out.src = source
@@ -1023,6 +1049,7 @@ class HybridNet(Network):
         school_ages (list): the age range of agents in schools
         work_ages (list): the age range of agents in workplaces
         dynamic (bool): whether the networks are recreated on each timestep
+        uniform_targets (bool): whether to choose the targets of edges in schools, workplaces, and community uniformly, as in Covasim v3 (see `ss.RandomNet`)
 
     Examples:
         ```python
@@ -1034,7 +1061,7 @@ class HybridNet(Network):
         hybrid = ss.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))
         ```
     """
-    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, **kwargs):
+    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, uniform_targets=_, **kwargs):
         super().__init__()
         self.define_pars(
             household_size = ss.poisson(lam=2.0), # Covasim v3 default (contacts['h'])
@@ -1043,6 +1070,7 @@ class HybridNet(Network):
             school_ages = [6, 22],
             work_ages = [22, 65],
             dynamic = False,
+            uniform_targets = False,
         )
         defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
         self.update_pars(pars, **kwargs)
@@ -1055,11 +1083,12 @@ class HybridNet(Network):
         p = self.pars
         n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
         kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
+        rkw = dict(uniform_targets=p.uniform_targets, **kw)
         networks = [
             ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
-            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **kw),
-            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **kw),
-            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **kw),
+            RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **rkw),
+            RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **rkw),
+            RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **rkw),
         ]
         return networks
 

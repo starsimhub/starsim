@@ -29,7 +29,7 @@ def lognormal_ex(mean=0, std=1, size=1):
 # NB: fastmath and parallel make little difference
 jit_kw = dict(cache=True, fastmath=False, parallel=False)
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_get_edges(inds, n_contacts):
     """ Build source array from contact counts and Fisher-Yates shuffle into target """
     n_half_edges = 0
@@ -54,7 +54,7 @@ def nb_get_edges(inds, n_contacts):
     return source, target
 
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_end_pairs(p1, p2, edge_beta, edge_dur):
     """ Decrement durations and compact active edges in fused passes """
     n = len(p1)
@@ -83,7 +83,7 @@ def nb_end_pairs(p1, p2, edge_beta, edge_dur):
     return new_p1, new_p2, new_beta, new_dur
 
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_step_state(infected, susceptible, ti_recovered, ti):
     """ Progress infectious -> recovered in one fused pass """
     for i in range(len(infected)):
@@ -92,7 +92,7 @@ def nb_step_state(infected, susceptible, ti_recovered, ti):
             susceptible[i] = True
 
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_update_immunity(immunity, rel_sus, waning):
     """ Wane immunity and update relative susceptibility in one pass; return mean rel_sus """
     total = 0.0
@@ -109,7 +109,7 @@ def nb_update_immunity(immunity, rel_sus, waning):
     return total / n
 
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_infect(p1, p2, edge_beta, infected, susceptible, rel_sus, disease_beta, n_agents):
     """ Fused edge traversal, transmission sampling, and deduplication """
     n_edges = len(p1)
@@ -150,7 +150,7 @@ def nb_infect(p1, p2, edge_beta, infected, susceptible, rel_sus, disease_beta, n
     return uids
 
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_set_prognoses(uids, susceptible, infected, immunity, ti_recovered, imm_boost, dur_inf_mean, ti):
     """ Set prognoses with inline lognormal sampling """
     sigma = np.sqrt(np.log(1.0 + 1.0 / (dur_inf_mean * dur_inf_mean)))  # std=1
@@ -165,7 +165,7 @@ def nb_set_prognoses(uids, susceptible, infected, immunity, ti_recovered, imm_bo
         ti_recovered[uid] = ti + dur
 
 
-@nb.njit(**jit_kw)
+@nb.jit(**jit_kw)
 def nb_count_states(susceptible, infected):
     """ Count susceptible and infected in a single pass """
     n_sus = 0

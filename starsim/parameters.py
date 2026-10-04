@@ -34,6 +34,34 @@ class Pars(sc.objdict):
         super().__init__(**kwargs)
         return
 
+    _locked = False # Whether new keys can be added; set by lock()
+
+    def lock(self, locked=True):
+        """
+        Lock the parameters, so that setting a key that doesn't exist raises an error
+
+        Parameters are locked when the sim is initialized, so that e.g. a typo in
+        `sim.pars['rand_sed'] = 2` raises an error rather than silently doing nothing.
+        Use `pars.lock(False)` to unlock, or `pars.update(create=True)` to add a new key.
+        """
+        object.__setattr__(self, '_locked', locked) # Set as an attribute, not a key
+        return self
+
+    def __setitem__(self, key, value):
+        if self._locked and key not in self:
+            errormsg = f'Key "{key}" not found; available keys are {list(self.keys())}. To add a new parameter, use pars.update({key}=..., create=True).'
+            raise sc.KeyNotFoundError(errormsg)
+        return super().__setitem__(key, value)
+
+    def __deepcopy__(self, memo):
+        """ Copy the keys directly, since by default a copy sets the attributes first, so locked parameters couldn't be copied """
+        new = self.__class__.__new__(self.__class__)
+        memo[id(self)] = new
+        for key,value in self.items():
+            dict.__setitem__(new, key, sc.dcp(value, memo))
+        new.__dict__.update(sc.dcp(self.__dict__, memo))
+        return new
+
     def update(self, pars=None, create=False, **kwargs):
         """
         Update internal dict with new pars.
@@ -54,7 +82,7 @@ class Pars(sc.objdict):
         # Perform the update
         for key,new in pars.items():
             if key not in self.keys(): # It's a new parameter and create=True: update directly
-                self[key] = new
+                super().__setitem__(key, new) # Skip the check for locked parameters
             else:
                 old = self[key] # Get the existing object we're about to update
                 if isinstance(old, atomic_classes): # It's a number, string, etc: update directly

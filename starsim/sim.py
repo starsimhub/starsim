@@ -174,6 +174,7 @@ class Sim(ss.Base):
 
         # Validation and initialization -- this is "pre"
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
@@ -189,6 +190,7 @@ class Sim(ss.Base):
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
+        self.lock_pars() # Don't allow new parameters to be added by mistake
 
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
 
@@ -199,6 +201,68 @@ class Sim(ss.Base):
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
             self.diagnostics.store_states(key='init')
         return self
+
+    def add_module(self, module, key=None):
+        """
+        Add a module to a sim that has already been initialized, and possibly run part-way
+
+        Usually modules are supplied when the sim is created; use this method to add
+        one later, e.g. an intervention after running the sim to a certain date. It
+        should be called between timesteps (not from within a module's `step()`). The
+        module's results cover the whole sim, but are only filled in from the current
+        timestep onwards.
+
+        Args:
+            module (`ss.Module`): the module to add
+            key (str): the type of module, e.g. "interventions" (if None, determine from the module's class)
+
+        Examples:
+            ```python
+            sim = ss.Sim(diseases='sis', networks='random')
+            sim.run(until='2010-01-01')
+            sim.add_module(ss.routine_vx(product=ss.simple_vx(disease='sis'), prob=0.5))
+            sim.run()
+            ```
+        """
+        if not self.initialized:
+            errormsg = 'The sim must be initialized before calling sim.add_module(); to add a module before initialization, include it when creating the sim'
+            raise RuntimeError(errormsg)
+        if self.complete:
+            errormsg = f'Cannot add module "{module.name}" to a sim that has finished running'
+            raise AlreadyRunError(errormsg)
+
+        # Figure out the type of module, and make sure the name is unique
+        if key is None:
+            key = 'custom'
+            for modkey, modclass in ss.module_map().items():
+                if isinstance(module, modclass):
+                    key = modkey
+                    break
+        names = {mod.name:None for mod in self.modules}
+        ss.SimPars.validate_name(module, key, names)
+        modules = [module]
+        if getattr(module, 'has_product', False) and not any(module.product is p for p in self.products()):
+            ss.SimPars.validate_name(module.product, 'products', names)
+            modules.append(module.product)
+        getattr(self, key).append(module) # Not self[key], since subclasses may override __getitem__
+        self.pars[key][module.name] = module.pars
+
+        # Initialize the module(s), as in sim.init()
+        for mod in modules:
+            mod.init_pre(self)
+        self.dists.init(obj=self) # Only initializes the new distributions
+        for mod in modules:
+            self.dists.copy_to_module(mod)
+            mod.init_post()
+            mod.t.ti = np.searchsorted(mod.t.yearvec, self.t.now('year')) # Start the module at the current time
+
+        # Add the module to the loop, and resume from the same place
+        loop = self.loop
+        current = loop.plan[loop.index]
+        loop.init()
+        loop.index = sc.findfirst([(entry.func == current.func and entry.ti == current.ti) for entry in loop.plan])
+        self.lock_pars()
+        return module
 
     def get_module(self, query, die=True, match_case=False):
         """
@@ -358,6 +422,13 @@ class Sim(ss.Base):
 
         return
 
+    def lock_pars(self, locked=True):
+        """ Lock the sim and module parameters, so setting a parameter that doesn't exist raises an error """
+        self.pars.lock(locked)
+        for mod in self.modules:
+            mod.pars.lock(locked)
+        return
+
     def init_modules_pre(self):
         """ Initialize all the modules with the sim """
         for mod in self.modules:
@@ -408,7 +479,11 @@ class Sim(ss.Base):
     @property
     def current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `pars.rescale=True` """
-        return self.results.pop_scale[self.ti] if self.pars.rescale else self.pars.pop_scale
+        if not self.pars.rescale:
+            return self.pars.pop_scale
+        elif 'pop_scale' not in self.results: # The results aren't initialized yet, e.g. during a module's init_post()
+            return 1.0 # With rescaling, the scale starts at 1
+        return self.results.pop_scale[self.ti]
 
     def result_scale(self, module=None):
         """
