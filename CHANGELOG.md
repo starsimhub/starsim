@@ -4,7 +4,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.
-- *GitHub info*: PR [TBC](https://github.com/starsimhub/starsim/pull/TBC)
+- *GitHub info*: PR [1435](https://github.com/starsimhub/starsim/pull/1435)
 
 
 ## Version 3.7.1 (2026-10-03)
