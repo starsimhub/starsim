@@ -978,6 +978,7 @@ class ClusterNet(Network):
             ss.FloatArr('cluster', label='Cluster ID'),
         )
         self.rng_order = ss.random() # Order in which agents are assigned to clusters
+        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ss.RandomSafeNet
         self.n_clusters = 0
         return
 
@@ -993,7 +994,7 @@ class ClusterNet(Network):
     def add_pairs(self):
         """ Assign agents to clusters, and connect every pair of agents within each cluster """
         uids = self.eligible(self.pars.age_range).uids
-        uids = uids[np.argsort(self.rng_order.rvs(uids))] # Shuffle
+        uids = uids[np.argsort(self.rng_order.rvs(uids), kind='stable')] # Shuffle; use a stable sort since the default order of ties depends on the CPU
         n = len(uids)
         if not n:
             return
@@ -1222,6 +1223,7 @@ class MSMNet(SexualNetwork):
         )
         self.update_pars(pars, **kwargs)
         self.dist = ss.random(name='MSMNet') # For shuffling available males before pairing
+        self.dist.hash_dtype = np.float64 # Avoid ties, as for ss.RandomSafeNet
         return
 
     def init_post(self):
@@ -1246,7 +1248,7 @@ class MSMNet(SexualNetwork):
     def add_pairs(self):
         """ Pair all unpartnered MSM """
         available_m = self.available(self.sim.people, 'male')
-        available_m = available_m[np.argsort(self.dist.rvs(available_m))] # Shuffle so pairing is random
+        available_m = available_m[np.argsort(self.dist.rvs(available_m), kind='stable')] # Shuffle so pairing is random; use a stable sort since the default order of ties depends on the CPU
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
