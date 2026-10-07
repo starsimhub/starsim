@@ -238,13 +238,13 @@ class Arr(BaseArr):
 
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
-        dtype (class): The dtype to use for this instance (if None, infer from value)
+        dtype (class): The dtype to use for this instance (if None, inferred from the raw values or default value, else the Starsim float default)
         default (any): Specify default value for new agents. This can be:
 
             * A scalar with the same dtype (or castable to the same dtype) as the Arr;
             * A callable, with a single argument for the number of values to produce;
             * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
-        nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
+        nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied. If None, a sensible sentinel is inferred from the dtype (e.g. np.nan for floats, '' for strings).
         label (str): The human-readable name for the state
         raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
@@ -286,9 +286,12 @@ class Arr(BaseArr):
         self.name = name
         self.label = label or name
         self.default = default
-        if nan is not None: self.nan = nan
-        if dtype is None: dtype = np.asarray(default).dtype if np.isscalar(default) else ss_float # Infer from the default value
+        if dtype is None:
+            dtype = self._default_dtype(default=default, raw=raw)
         self.dtype = dtype
+        if nan is None:
+            nan = self._default_nan(dtype)
+        self.nan = nan
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
         self.people = people # Used solely for accessing people.auids
 
@@ -342,6 +345,55 @@ class Arr(BaseArr):
         self.columns = colnames
         self.validate_columns() # Do this last, so column names can be checked against all attributes
         return
+
+    @staticmethod
+    def _default_dtype(default=None, raw=None):
+        """
+        Choose a dtype when the user does not supply one explicitly.
+
+        The dtype is inferred from the raw values if provided, otherwise from
+        the default value (if it is a scalar), otherwise the Starsim float
+        default is used. Previously, leaving dtype unset meant `self.dtype`
+        fell through to the NumPy-proxy `__getattr__`, which recursed
+        infinitely since the underlying array did not exist yet.
+        """
+        if raw is not None:
+            return np.asarray(raw).dtype
+        elif default is not None and not callable(default) and not isinstance(default, ss.Dist):
+            return np.asarray(default).dtype
+        else:
+            return ss_float
+
+    @staticmethod
+    def _default_nan(dtype):
+        """
+        Choose a sensible NaN sentinel for the given dtype when the user does
+        not supply one explicitly. This mirrors the dtype handling in
+        `_math_result_type`, extended to string, bytes, datetime, and other
+        dtypes. Previously, leaving nan unset meant `self.nan` fell through
+        to the NumPy-proxy `__getattr__`, raising a confusing
+        `AttributeError: 'numpy.ndarray' object has no attribute 'nan'`.
+        """
+        try:
+            dt = np.dtype(dtype)
+        except TypeError:
+            return None
+        if np.issubdtype(dt, np.bool_):
+            return False
+        elif np.issubdtype(dt, np.integer):
+            return int_nan
+        elif np.issubdtype(dt, np.floating):
+            return np.nan
+        elif np.issubdtype(dt, np.str_):
+            return ''
+        elif np.issubdtype(dt, np.bytes_):
+            return b''
+        elif np.issubdtype(dt, np.datetime64):
+            return np.datetime64('NaT')
+        elif np.issubdtype(dt, np.timedelta64):
+            return np.timedelta64('NaT')
+        else:
+            return None
 
     def __repr__(self):
         arr_str = np.array2string(self.values, max_line_width=200)

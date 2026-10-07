@@ -491,6 +491,48 @@ def test_uids_array_wrap():
 
 
 @sc.timer()
+def test_arr_nonstandard_dtype():
+    sc.heading('Testing Arr with non-standard dtypes (issue #1331)')
+
+    # A string-dtype Arr used directly as a disease state (the issue example);
+    # previously crashed during sim init with
+    # "AttributeError: 'numpy.ndarray' object has no attribute 'nan'"
+    class PrepDisease(ss.SIS):
+        def __init__(self, pars=None, **kwargs):
+            super().__init__(pars, **kwargs)
+            self.define_states(ss.Arr('prep_product', dtype='U10'))
+
+    sim = ss.Sim(n_agents=100, diseases=PrepDisease(), networks='random')
+    sim.init()
+    prod = sim.diseases.prepdisease.prep_product
+    assert prod.nan == '', 'string Arr should use empty string as the NaN sentinel'
+    assert (prod.values == '').all(), 'all agents should start with the empty-string sentinel'
+    prod[ss.uids([0, 2])] = 'pill'
+    assert list(prod.values[:3]) == ['pill', '', 'pill'], 'string values should be settable'
+    assert not bool(prod.isnan.values[0]), 'set values should not be NaN'
+    assert bool(prod.isnan.values[1]), 'isnan should detect the empty-string sentinel'
+    assert len(prod.notnanvals) == 2, 'notnanvals should return the two set values'
+
+    # NaN sentinel is inferred from the dtype when not supplied explicitly
+    assert np.isnan(ss.Arr('f', dtype=float, mock=3).nan), 'float -> np.nan'
+    assert ss.Arr('i', dtype=int, mock=3).nan == ss.dtypes.int_nan, 'int -> int_nan'
+    assert ss.Arr('b', dtype=bool, mock=3).nan is False, 'bool -> False'
+    assert ss.Arr('s', dtype=str, mock=3).nan == '', 'str -> empty string'
+
+    # An explicitly supplied nan still takes precedence over inference
+    assert ss.Arr('x', dtype=float, nan=-1.0, mock=3).nan == -1.0
+
+    # Dtype is inferred when not supplied (previously raised RecursionError via __getattr__)
+    assert ss.Arr('age', default=0, mock=5).dtype == np.dtype(np.int64)
+    assert list(ss.Arr('age', default=0, mock=5).values) == [0]*5
+
+    # Existing subclasses are unaffected (they pass dtype and nan explicitly)
+    assert np.isnan(ss.FloatArr('f', mock=3).nan)
+    assert ss.IntArr('i', mock=3).nan == ss.dtypes.int_nan
+    assert ss.BoolArr('b', mock=3).nan is False
+    return
+
+
 def test_uids_construction():
     sc.heading('Testing uids construction and dtype validation')
 
@@ -535,6 +577,7 @@ if __name__ == '__main__':
     cat   = test_uids_concatenate()
     wrap  = test_uids_array_wrap()
     const = test_uids_construction()
+    nstd  = test_arr_nonstandard_dtype()
 
     sc.toc(T)
     plt.show()
