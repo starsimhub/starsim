@@ -2,25 +2,26 @@
 
 ## Recommendation
 
-1. **Adopt EMOD's four-part decomposition: where × when and how many × to whom × what.** It is the most complete treatment in the review and each part is independently substitutable. *[CK: I don't know if it's this separable in practice. "What" yes. But everything else could collapse. For example: distribute treatment drugs to the top 100 clinics with the most positive cases while stocks last. Where, when, how many, and to whom are all a function of who tests positive.]*
-2. **Eligibility is a declarative predicate over agent and model state**, built from Python operators — not an opaque callable. *[CK: or an opaque callable as an escape hatch.]*
+1. **An intervention is *what* plus *delivery*.** What is a product (a vaccine, a test, a treatment) or a change to a quantity. Delivery is who gets it, when, and how many. The "what" separates cleanly; who, when, where, and how many often do not separate from each other, so delivery is either a few simple keywords or one function.
+2. **Eligibility is written against the model's real attributes.** The general form is a function of the sim, as in Starsim today. The short form is the same expression written directly on the people and disease objects, which is evaluated later when the sim runs. No separate vocabulary of predicate names.
 3. **Keep Starsim's product/delivery split**, and separate efficacy from waning as EMOD does.
-4. **Most interventions are a `ss.transfer` between strata or an `ss.Effect` on a named quantity.** Do not build a class lattice for what is already two primitives.
-5. **The simple case stays a one-liner.** Covasim's `days`/`changes` form was simpler than what replaced it, and that simplicity should come back.
-6. **Interventions carry a cost.** Nothing else in the review except Atomica does this, and it is what the policy audience needs.
-7. **Scenarios live in the model file**, not in a shell script.
+4. **Many interventions are an `ss.transfer` between strata or an `ss.modify` on a named quantity.** Do not build a class for what is already one of those.
+5. **The simple case stays a one-liner.** Covasim's `days`/`changes` form was simpler than what replaced it, and it comes back as `ss.change(..., at=, by=)`.
+6. **Coverage as a fraction and capacity as a number are different things**, and both are needed: `coverage=0.7` and `capacity=50_000`.
+7. **Interventions carry a cost.** Nothing else in the review except Atomica does this, and it is what the policy audience needs.
+8. **Scenarios live in the model file**, not in a shell script, and a baseline contains whatever is really in place.
 
 ## Why
 
 ### The split that runs through the whole review
 
-Finding 1 of the [landscape review](../approaches/README.md#cross-cutting-findings): "Structural rigour and intervention expressiveness have not yet appeared in the same framework." [camdl](../approaches/camdl.md), [odin](../approaches/odin.md), [summer2](../approaches/summer2.md), and [epipack](../approaches/epipack.md) have the best model specification and essentially no intervention vocabulary. [EMOD](../approaches/emod.md), [EpiHiper](../approaches/epihiper.md), [Starsim](../approaches/starsim.md), and [Atomica](../approaches/atomica.md) have the best intervention vocabulary and weak structural specification.
+Finding 1 of the [landscape review](../approaches/README.md#cross-cutting-findings): "Structural rigor and intervention expressiveness have not yet appeared in the same framework." [camdl](../approaches/camdl.md), [odin](../approaches/odin.md), [summer2](../approaches/summer2.md), and [epipack](../approaches/epipack.md) have the best model specification and essentially no intervention vocabulary. [EMOD](../approaches/emod.md), [EpiHiper](../approaches/epihiper.md), [Starsim](../approaches/starsim.md), and [Atomica](../approaches/atomica.md) have the best intervention vocabulary and weak structural specification.
 
 Closing that split is, per the review, "the most concrete contribution available to this project."
 
-### The four parts
+### What separates and what does not
 
-From [EMOD](../approaches/emod.md), which decomposes a campaign event into four orthogonal pieces:
+[EMOD](../approaches/emod.md) decomposes a campaign event into four pieces:
 
 | Part | Question | EMOD |
 |---|---|---|
@@ -29,17 +30,17 @@ From [EMOD](../approaches/emod.md), which decomposes a campaign event into four 
 | To whom | Eligibility | `Targeting_Config` |
 | What | The product | `Intervention_Config` + `Waning_Config` |
 
-Starsim has parts two and four (`RoutineDelivery` / `CampaignDelivery` mixins, and `ss.Product`). camdl's `transfer(...)` is part four only. Nobody else has more than one.
+This is the most complete treatment in the review and it is a useful checklist. As a design it overstates how independent the pieces are. Consider a realistic policy: *distribute treatment drugs to the 100 clinics with the most positive cases, while stocks last.* Where, when, how many, and to whom are all functions of who tested positive. Only "what" (the drug) can be swapped without touching the rest.
 
-### Eligibility is the piece everyone is missing
+So the lingua franca keeps two parts. Starsim already has this split (`ss.Product` and the `RoutineDelivery` / `CampaignDelivery` mixins), and its review says "the product/delivery split is the right decomposition and should survive into the design."
 
-[Starsim](../approaches/starsim.md): "Eligibility is an arbitrary callable returning UIDs, which is fully general and completely opaque: it is Python, so it cannot be serialized, diagrammed, or checked."
+### Eligibility in existing frameworks
 
-[EpiModel](../approaches/epimodel.md)'s tabular scenario grammar is genuinely good — `{scenario, param, at, value}` covers a surprising fraction of real specifications without any code — and its limit is exactly the same: "it can only set parameter values, so anything that targets a *subset of agents* (screen 40% of over-50s annually) has to fall back to procedural code."
+[Starsim](../approaches/starsim.md) takes eligibility as a function of the sim that returns who is eligible. That is fully general, works with any custom attribute, and is the form to keep. Its limits, per its review: "it is Python, so it cannot be serialized, diagrammed, or checked."
 
-[flepiMoP](../approaches/flepimop.md)'s modifiers have the same shape and the same ceiling.
+[EpiModel](../approaches/epimodel.md)'s tabular scenario grammar, `{scenario, param, at, value}`, covers a large fraction of real specifications without any code, and its limit is that "it can only set parameter values, so anything that targets a *subset of agents* (screen 40% of over-50s annually) has to fall back to procedural code." [flepiMoP](../approaches/flepimop.md)'s modifiers have the same shape and the same ceiling.
 
-Against that, two frameworks show what the declarative version looks like. **EMOD:**
+Two frameworks have eligibility as data. **EMOD:**
 
 ```json
 "Targeting_Config": {
@@ -49,145 +50,204 @@ Against that, two frameworks show what the declarative version looks like. **EMO
 }
 ```
 
-**EpiHiper** goes further with set algebra over typed node *and edge* predicates, computed, named, and reusable — "the most expressive targeting mechanism in the review".
-
-And [`individual`](../approaches/individual.md) shows the imperative version of the same algebra, with bitsets:
+**EpiHiper** has set algebra over typed node and edge predicates, "the most expressive targeting mechanism in the review", at the cost of a separate rule language. And [`individual`](../approaches/individual.md) shows the same algebra in code, with bitsets:
 
 ```r
 I <- health$get_index_of("I")
 I$and(already_scheduled$not(inplace = TRUE))
 ```
 
-Its review draws the conclusion: "the lingua franca should have a **declarative set expression** over agent state — the EpiHiper form — with the bitset algebra as its natural implementation."
+The aim is to get eligibility that reads like the `individual` version, can be saved like the EMOD version when it is simple, and falls back to a plain function when it is not.
 
 ## The proposal
 
-### Eligibility as a predicate
-
-Python's operators build the expression tree. It reads like the sentence and it is data.
-
-**EMOD** (the 12-line JSON above) → **lingua franca:**
+### What and delivery
 
 ```python
-eligible = (ss.age > 65) & ~sir.vaccinated # [CK: this looks pretty, but what is "ss.age"? What if I have a custom attribute? I don't like how Polars solved this, but they did solve it, sort of.]
+ss.vaccinate(bcg, coverage=0.7, years=[2021, 2025], eligible=...)
+#            what ─┘  └──────────── delivery ─────────────────┘
 ```
 
-**EpiHiper's "school edges on Fridays"** (roughly 200 lines of JSON across variables, sets, triggers, and interventions) →
+Delivery has two forms. The **simple keywords** cover most programs:
+
+| Keyword | Meaning |
+|---|---|
+| `start=`, `stop=` | When delivery begins and ends (dates or years) |
+| `years=` / `dates=` | Specific times (a campaign) |
+| `interval=` | How often (routine delivery) |
+| `eligible=` | Who can receive it |
+| `coverage=` | Fraction of the eligible who receive it |
+| `capacity=` | Number available, per round or per unit time |
+| `on=` | An event in another module that triggers it (e.g. `on=anc.visit`) |
+
+When who, when, where, and how many depend on each other, write **one function** that returns who gets it this step:
 
 ```python
-ss.Effect(ss.weekday == 'Fri', school.contacts, multiply=0.0)
+def top_clinics(sim):
+    """ People awaiting treatment at the 100 clinics with the most positives """
+    hiv, ppl = sim.diseases.hiv, sim.people
+    waiting  = (hiv.diagnosed & ~hiv.on_art).uids
+    counts   = np.bincount(ppl.clinic[waiting], minlength=n_clinics)
+    top      = np.argsort(counts)[-100:]
+    return waiting[np.isin(ppl.clinic[waiting], top)]
+
+ss.treat(art, deliver=top_clinics, capacity=ss.timeseries('art_stock.csv'))   # while stocks last
 ```
 
-The predicate vocabulary is small and closed:
+`deliver=` replaces the who/when keywords; `capacity=` still applies on top, so "while stocks last" does not have to be written by hand.
+
+### Eligibility
+
+**The general form** is a function of the sim. This is Starsim's current form, and it works with anything, including attributes the modeler added:
 
 ```python
-ss.age, ss.sex, ss.uid                    # built-in agent attributes # [CK: Or could "just" be self.sim.people.age]
-sir.I, sir.vaccinated                     # any state, as a predicate # [CK: will need to think about how ~sir.vaccinated won't immediately evaluate]
-ss.has(vaccine)                           # EMOD's HasIntervention
-ss.time, ss.weekday, ss.year              # model-level observables # [CK: "weekday" does not seem like it falls in a small vocabulary]
-sim.results.n_infected > 1000             # EpiHiper's triggers: predicates over results
-&  |  ~  >  <  ==                         # composition
+eligible = lambda sim: (sim.people.age > 65) & ~sim.diseases.sir.vaccinated
 ```
 
-`ss.age > 65` returns an `ss.Expr`, not a boolean. That is the whole trick, and it is the same trick pandas and SQLAlchemy use, so the syntax is already familiar to the audience.
-
-The lambda escape hatch remains and prints its cost:
+**The short form** drops the `lambda sim:` when the objects are already in scope:
 
 ```python
-eligible = lambda sim, uids: my_complicated_thing(sim, uids)
-# ! opaque predicate: not serializable, not diagrammable, not usable in compartmental backends
+ppl = ss.People(n_agents=10_000)
+sir = ss.Disease(...)
+
+eligible = (ppl.age > 65) & ~sir.vaccinated
 ```
 
-### Most interventions are already primitives
+This is the EMOD `Targeting_Config` above in one line. It works because `ppl.age` and `sir.vaccinated` are state arrays that have not been initialized yet (the sim has not been built). Comparing or combining an uninitialized state array does not compute anything; it builds a condition that remembers the expression and is evaluated each time it is needed once the sim is running. After initialization the same expression evaluates immediately, as now. So `~sir.vaccinated` written before the run means "whoever is unvaccinated at the time", not "whoever is unvaccinated now".
+
+There is nothing new to learn: the names are the attributes that already exist on the objects, a custom attribute works the same way as a built-in one (`ppl.clinic == 12`), and the two forms can be mixed. Because the short form is recorded as an expression, it can be printed by `describe()` and saved in the model spec, which a function cannot.
+
+**In a compartmental run** the same condition is evaluated on groups. It works if everything it uses is a stratification (age groups, sex, vaccination status), and stops with a clear message otherwise:
+
+```text
+Cannot evaluate eligibility for 'bcg_campaign' with method='ode':
+  ppl.clinic is a per-agent attribute and is not a stratification.
+  Fix: stratify by clinic, or run with method='abm'.
+```
+
+**When** is `start=`, `stop=`, `years=`/`dates=`, and `interval=`. Anything more complex is a function of the sim, with `min_duration=` so that a policy does not switch on and off every step:
+
+```python
+ss.modify(school.pars.n_contacts, multiply=0.2,
+          when=lambda sim: sim.results.sir.new_infections[-7:].sum() > 1000,
+          min_duration=ss.weeks(4))
+```
+
+This covers [EMOD](../approaches/emod.md)'s event broadcast/observe and [EpiHiper](../approaches/epihiper.md)'s triggers ("close schools when weekly cases exceed 1000"). There is no built-in vocabulary for calendar conditions such as weekdays. EpiHiper's "no school contacts on Fridays" (roughly 200 lines of JSON across variables, sets, triggers, and interventions) is a function:
+
+```python
+ss.modify(school.pars.n_contacts, multiply=lambda sim: 0.0 if sim.now.weekday() == 4 else 1.0)
+```
+
+### Many interventions are already primitives
 
 Before adding an intervention class, check whether it is one of the two primitives that already exist.
 
-**Vaccination is a transfer between strata** ([stratification.md](stratification.md)):
+**Vaccination can be a transfer between strata** ([stratification.md](stratification.md)). [Epydemix](../approaches/epydemix.md) and [MEmilio](../approaches/memilio.md)'s `secirvvs` add vaccinated copies of the compartments by hand; here it is one line:
 
 ```python
-ss.transfer(vaccinated='no -> yes', coverage=0.7, years=[2021, 2022], eligible=ss.age > 65) # [CK: 'no -> yes' is a really ugly way to set a boolean]
+ss.transfer(vaccinated=True, rate=ss.peryear(0.3))
 ```
 
-The disease model never mentions vaccination. `rel_sus` for the vaccinated stratum is declared once on the dimension, following [EpiHiper](../approaches/epihiper.md)'s state properties.
+For a boolean, write the value people move to. The disease model never mentions vaccination; `rel_sus` for the vaccinated stratum is declared once on the stratification, following [EpiHiper](../approaches/epihiper.md)'s state properties. Use `ss.vaccinate` (below) when there is a product with efficacy, waning, and cost, or a campaign with coverage.
 
-**A contact reduction is an effect** ([composition-and-effects.md](composition-and-effects.md)):
+**A contact reduction is a modifier** ([composition-and-effects.md](composition-and-effects.md)):
 
 ```python
-ss.Effect(ss.date('2020-03-15') <= ss.time <= ss.date('2020-06-01'), school.contacts, multiply=0.2) # [CK: I prefer start= and stop=, although we'll also need to support much more complex "when"]
+ss.modify(school.pars.n_contacts, multiply=0.2, start='2020-03-15', stop='2020-06-01')
 ```
 
-which is exactly [Epydemix](../approaches/epydemix.md)'s `add_intervention(layer_name="school", start_date=..., reduction_factor=0.2)` and [MEmilio](../approaches/memilio.md)'s `contact_matrix.add_damping(0.6, SimulationTime(12.5))`, in one line, with the layer and the dates visible.
+which is [Epydemix](../approaches/epydemix.md)'s `add_intervention(layer_name="school", start_date=..., reduction_factor=0.2)` and [MEmilio](../approaches/memilio.md)'s `contact_matrix.add_damping(0.6, SimulationTime(12.5))`, with the network and the dates visible. When it stops, the contact rate returns to its base value.
 
-**A parameter change is an effect too**, which subsumes [EpiModel](../approaches/epimodel.md)'s scenario table and [flepiMoP](../approaches/flepimop.md)'s modifiers:
+**A parameter change is a modifier too**, which covers [EpiModel](../approaches/epimodel.md)'s scenario table and [flepiMoP](../approaches/flepimop.md)'s modifiers:
 
 ```python
-ss.Effect(ss.time > ss.date('2020-03-15'), sir.beta, multiply=0.4)
+ss.modify(sir.pars.beta, multiply=0.4, start='2020-03-15')
 ```
 
-That is three of the four intervention mechanisms in the entire review, expressed with primitives that exist for other reasons. The class lattice is for what remains.
-
-### Products, delivery, and waning
-
-What remains is the delivery of a *thing* with efficacy characteristics — vaccines, diagnostics, treatments. Starsim's product/delivery split is right and its review says so: "The product/delivery split is the right decomposition and should survive into the design."
-
-EMOD adds the missing piece — efficacy and its decay are separate objects (`Vaccine_Take`, `Vaccine_Type` as acquisition-/transmission-/mortality-blocking, and a `Waning_Config` that may be constant, exponential, or a piecewise map).
-
-```python
-bcg = ss.Vaccine(
-    blocks     = 'acquisition',  # or 'transmission', 'severity', 'mortality' # [CK: or a combination ... how would that work? Maybe efficacy could be a dict]
-    efficacy   = 0.85,
-    waning     = ss.exp_decay(halflife=ss.years(5)),
-    cost       = 12.50,
-)
-
-ss.vaccinate(bcg, coverage=0.7, years=[2021, 2025], eligible=ss.age < 5)
-```
-
-The delivery half keeps Starsim's two shapes — `RoutineDelivery` (start, end, coverage, interval) and `CampaignDelivery` (specific years, coverage) — but as keyword arguments rather than mixin classes, because `years=[2021, 2025]` versus `interval=ss.years(1)` already says which one it is.
-
-Diagnostics and cascades follow HPVsim's screen → triage → treat pattern, which Starsim's `BaseTest`/`BaseTreatment` classes already generalize:
-
-```python
-ss.screen(ss.Test(sens=0.9, spec=0.98), coverage=0.4, interval=ss.years(3), # [CK: can spell out sensitivity and specificity]
-          eligible=(ss.age > 30) & (ss.sex == 'f'),
-          on_positive=ss.treat(ss.Treatment(efficacy=0.95)))
-```
-
-### Bring back the simple form
+### The simple form
 
 From the [Covasim note](../approaches/notes.md#covasim--hpvsim--stisim--fpsim):
 
-> `change_beta(days=[30, 60], changes=[0.5, 1.0])` — a list of days and a list of changes — is a smaller, more legible time-varying-parameter grammar than the class lattice that replaced it. flepiMoP's modifiers and EpiModel's scenario tables are the same shape. **Simplicity here was arguably lost in the generalisation.**
+> `change_beta(days=[30, 60], changes=[0.5, 1.0])` — a list of days and a list of changes — is a smaller, more legible time-varying-parameter grammar than the class lattice that replaced it. flepiMoP's modifiers and EpiModel's scenario tables are the same shape. **Simplicity here was arguably lost in the generalization.**
 
-So it comes back, as sugar over `ss.Effect`:
-
-```python
-ss.change(sir.beta, days=[30, 60], to=[0.5, 1.0]) # [CK: "days" is obviously COVID-specific]
-```
-
-Three frameworks converged on this shape. It should be one line, and it should be the first thing in the documentation.
-
-### Triggers
-
-[EMOD](../approaches/emod.md)'s event broadcast/observe and [EpiHiper](../approaches/epihiper.md)'s triggers make reactive policy declarative — "when a new infection is observed, trigger contact tracing", or "close schools when weekly cases exceed 1000". Most frameworks make this a callback.
-
-Since a predicate can already reference results, a trigger needs no new machinery:
+It comes back, for any parameter and any time unit:
 
 ```python
-ss.Effect(sim.results.new_infections.weekly > 1000, school.contacts, multiply=0.2)
+ss.change(sir.pars.beta, at=['2020-03-15', '2020-06-01'], by=[0.5, 1.0])
+ss.change(sir.pars.beta, at=[ss.days(30), ss.days(60)],   by=[0.5, 1.0])   # the Covasim example
+ss.change(hiv.pars.condom_use, at=[2010, 2020], to=[0.3, 0.6])
 ```
 
-The only addition is a per-trigger hysteresis, because policies do not flap:
+`at=` takes dates, years, or durations since the start of the sim. `by=` gives multipliers relative to the baseline value; `to=` gives absolute values. Three frameworks converged on this shape. It should be one line, and it should be the first thing in the documentation on interventions.
+
+### Products
+
+A product is the thing delivered: a vaccine, a diagnostic, a treatment. [EMOD](../approaches/emod.md) keeps efficacy and its decay as separate objects (`Vaccine_Take`, `Vaccine_Type` as acquisition-, transmission-, or mortality-blocking, and a `Waning_Config` that may be constant, exponential, or a piecewise map). Starsim's `ss.Vx`, `ss.Dx`, and `ss.Tx` are the same things under shorter names.
 
 ```python
-ss.Effect(..., min_duration=ss.weeks(4))
+bcg = ss.Vaccine(
+    efficacy = dict(acquisition=0.85, severity=0.5),
+    waning   = ss.exp_decay(halflife=ss.years(5)),
+    cost     = 12.50,
+)
+
+ss.vaccinate(bcg, coverage=0.7, years=[2021, 2025], eligible=ppl.age < 5)
 ```
+
+A vaccine usually protects against more than one thing, so `efficacy` is a dict keyed by what is blocked (`acquisition`, `transmission`, `severity`, `mortality`). A single number, `efficacy=0.85`, means acquisition.
+
+### Delivery
+
+Starsim has `RoutineDelivery` (start, end, coverage, interval) and `CampaignDelivery` (specific years, coverage) as mixin classes, combined with each kind of intervention to give `routine_vx`, `campaign_vx`, `routine_screening`, `campaign_screening`, and so on. Here they are keyword arguments, because `years=[2021, 2025]` versus `interval=ss.years(1)` already says which one it is:
+
+```python
+ss.vaccinate(bcg, coverage=0.7, years=[2021, 2025])                               # campaign
+ss.vaccinate(bcg, coverage=0.9, start=2021, stop=2030, eligible=ppl.age < 1)      # routine
+```
+
+**Coverage and capacity.** `coverage=0.7` is a fraction of the eligible population. `capacity=50_000` is a number of doses, tests, or treatment slots, per round for a campaign or per unit time for routine delivery, and it may be a time series. This is [EMOD](../approaches/emod.md)'s `NChooser` (target a number, not a fraction) and it is how real programs are usually constrained. Both can be given: reach 70% of those eligible, but no more than 50,000.
+
+```python
+ss.vaccinate(bcg, coverage=0.7, capacity=50_000, years=[2021, 2025])
+```
+
+**Follow-ups.** Diagnostics and cascades follow HPVsim's screen → triage → treat pattern. **Starsim today** connects the steps by passing each one an eligibility function that looks up the previous one's outcomes:
+
+```python
+screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
+triage = ss.routine_triage(product=my_triage, eligibility=screened_pos, prob=0.9, start_year=2030)
+```
+
+**Lingua franca:** a delivery names what happens next, and the follow-up is itself a delivery, so it can have its own coverage and its own follow-up, to any depth:
+
+```python
+ss.screen(
+    ss.Test(sensitivity=0.9, specificity=0.98),
+    coverage    = 0.4,
+    interval    = ss.years(3),
+    eligible    = (ppl.age > 30) & ppl.female,
+    on_positive = ss.screen(                       # triage
+        colposcopy,
+        coverage    = 0.8,                         # 20% lost to follow-up
+        on_positive = ss.treat(ss.Treatment(efficacy=0.95), coverage=0.9),
+    ),
+)
+```
+
+**Triggered by another module.** A delivery can happen when something happens elsewhere in the model, with `on=`:
+
+```python
+ss.screen(hiv_test, on=anc.visit, coverage=0.95, on_positive=ss.treat(art))
+```
+
+For logic that does not fit these keywords, write a module with a `step()`; see the worked example in [composition-and-effects.md](composition-and-effects.md#complex-interactions-are-a-step).
 
 ### Cost
 
-Only [Atomica](../approaches/atomica.md) represents an intervention as something with a unit cost and a coverage function that a budget constrains — the representation a health ministry needs. Its `Targetable` column declares which parameters a programme may move, which is also a partial answer to the connector problem.
+Only [Atomica](../approaches/atomica.md) represents an intervention as something with a unit cost and a coverage function that a budget constrains, which is the representation a health ministry needs. Its `Targetable` column declares which parameters a program may move.
 
-`cost=` on the product is the whole requirement for v1: it makes cost-effectiveness a result rather than a post-processing script, and it is what keeps the door open to [PyRoss](../approaches/notes.md#pyross)-style optimal control and Atomica-style budget optimization later without committing to either now.
+`cost=` on the product is the whole requirement for v1: it makes cost-effectiveness a result, not a post-processing script, and it leaves room for [PyRoss](../approaches/notes.md#pyross)-style optimal control and Atomica-style budget optimization later without committing to either now.
 
 ### Scenarios in the file
 
@@ -195,33 +255,39 @@ Only [Atomica](../approaches/atomica.md) represents an intervention as something
 
 ```python
 sims = ss.parallel(
-    baseline = ss.Sim(sir),
-    vaccine  = ss.Sim(sir, interventions=vx),
-    both     = ss.Sim(sir, interventions=[vx, masks]),
+    baseline = ss.Sim(hiv, interventions=art),
+    prep     = ss.Sim(hiv, interventions=[art, prep]),
+    scale_up = ss.Sim(hiv, interventions=[art_90, prep]),
 )
 sims.plot()
 ```
 
-camdl's discipline is worth copying exactly: **interventions are inactive by default and enabled by scenario**, which makes the baseline unambiguous. And because [common random numbers](stochasticity-and-reproducibility.md) are on, the paired difference is the effect rather than the noise. *[CK: unclear what this means, often a baseline will have interventions active, eg ART for HIV.]*
+A baseline is the world as it is, so it contains whatever is really in place (ART, for HIV). Each scenario is a complete sim that says exactly what it contains; nothing is switched on or off implicitly. Because [common random numbers](stochasticity-and-reproducibility.md) are on, the difference between two scenarios is the effect of the intervention and not noise.
 
 ## Trade-offs
 
-- **The predicate algebra is a real implementation cost** — an expression tree, evaluators for each backend, and error messages. It is the price of eligibility being data, and every framework without it has the documented ceiling.
-- **A predicate that references agent-level attributes has no compartmental meaning** unless the attribute is a dimension. `(ss.age > 65)` works in both because age is a dimension; `ss.uid % 7 == 0` works only in an ABM. Capability check, named.
-- **`ss.Effect` doing this much work makes it central.** If it is wrong, a lot is wrong. That is an argument for it being small: a condition, a target, a combiner.
-- **Products are a vocabulary that will grow.** Vaccines, tests, treatments, bednets, condoms, contact tracing. Resist: most are `ss.Effect` on a named quantity with a coverage and an eligibility, and only the ones with genuinely distinct structure (a diagnostic returns a *result*) need a class.
+- **Conditions that evaluate later are an implementation cost, and a possible source of confusion.** The same expression builds a condition before the sim is initialized and returns an array after. The rule is simple to state, but error messages have to be good, and `describe()` should show each condition as written.
+- **A function cannot be saved or drawn.** Eligibility or delivery written as a function is printed by name in `describe()` and the model spec records that a function was used, not what it does. This is accepted: the function is the general form and must always work.
+- **A condition on a per-agent attribute has no compartmental meaning** unless the attribute is a stratification. `ppl.age > 65` works in both if the model is stratified by age with a boundary at 65; `ppl.clinic == 12` works only with agents. The run stops and names the attribute.
+- **`deliver=fn` hides structure.** A delivery function can do anything, so two interventions using one cannot be compared keyword by keyword. Use the keywords when they fit.
+- **Products are a vocabulary that will grow.** Vaccines, tests, treatments, bednets, condoms, contact tracing. Most are an `ss.modify` on a named quantity with a coverage and an eligibility, and only the ones with distinct structure (a diagnostic returns a *result*) need a class.
 
 ## Rejected
 
-- **A class lattice per intervention type.** Starsim's `routine_screening` / `campaign_screening` / `routine_triage` / `campaign_triage` / `routine_vx` / `campaign_vx` is a Cartesian product of two axes spelled out as classes. Keyword arguments, one class each.
-- **Interventions as contact reductions only** (Epydemix, MEmilio). Covers COVID-era scenarios and nothing else.
-- **Interventions as extra compartments** (Epydemix's answer for vaccination, MEmilio's `secirvvs`). This is what `ss.transfer` between strata replaces, and it is why vaccination need not touch the disease model.
-- **Opaque eligibility callables as the primary mechanism** (Starsim today). Available as an escape hatch.
-- **A separate rule language** (EpiHiper's variables/sets/triggers/operations). The semantics are the best in the review; the syntax is 200 lines of JSON for one Friday. Python operators give the same semantics in one line.
-- **Budget optimization in v1** (Atomica, PyRoss). Do not foreclose; do not build.
+- **Four independent parts** (EMOD's decomposition taken literally). Where, when, how many, and to whom depend on each other in real programs. What + delivery.
+- **A vocabulary of global predicate names** (`ss.age > 65`, `ss.weekday == 'Fri'`). It reads well for the built-in attributes and has no answer for custom ones without something like Polars' `pl.col('name')`, and the list of names never stays small. The real attributes on the real objects need no list.
+- **A class per combination of intervention type and delivery type.** Starsim's `routine_screening` / `campaign_screening` / `routine_triage` / `campaign_triage` / `routine_vx` / `campaign_vx` is two axes spelled out as classes. Keyword arguments, one function each.
+- **Interventions as contact reductions only** (Epydemix, MEmilio). Covers COVID-era scenarios and little else.
+- **Interventions as extra compartments written by hand** (Epydemix's answer for vaccination, MEmilio's `secirvvs`). This is what `ss.transfer` between strata replaces, and it is why vaccination need not touch the disease model.
+- **`'no -> yes'` arrows for booleans.** `ss.transfer(vaccinated=True, ...)`.
+- **A separate rule language** (EpiHiper's variables/sets/triggers/operations). The semantics are the best in the review; the syntax is 200 lines of JSON for one Friday.
+- **Edge-level eligibility** (EpiHiper's edge predicates). Networks are enough: to change school contacts, modify the school network.
+- **Interventions that are inactive unless a scenario enables them** (camdl). Baselines usually contain real interventions; each scenario lists what it contains.
+- **Budget optimization in v1** (Atomica, PyRoss). Do not rule it out; do not build it yet.
 
 ## Open questions
 
-- **Stock constraints.** "Vaccinate as many as we have doses for" is EMOD's `NChooser` (target a number, not a fraction) and is common in real programmes. Coverage-as-a-number versus coverage-as-a-fraction is a real distinction and probably belongs in `coverage=`. *[CK: yes, this is important.]*
-- **Does eligibility need edge predicates?** EpiHiper's set algebra covers edges as well as nodes, which is what makes "close school contacts" expressible directly rather than as a layer. Layers may be enough. *[CK: agree layers -- well, networks -- are enough.]*
-- **Cascades with state.** "Screen, and if positive, triage, and if positive, treat" is a chain where each step has its own coverage and loss-to-follow-up. `on_positive=` handles depth two; deeper cascades may need a different shape. *[CK: yes, it works if the triggered-intervention can then trigger its own follow-up interventions.]*
+- **Who gets it when capacity runs out?** With 50,000 doses and 80,000 people eligible, the default is a random 50,000. Real programs prioritize (oldest first, highest risk first). Probably a `priority=` function or attribute; not settled.
+- **Stock that carries over.** `capacity=` per round or per unit time does not by itself express a stock that is delivered in batches and depleted over time. A time series covers the simple cases; a stock that depends on use may need `deliver=fn`.
+- **How far do conditions that evaluate later extend?** Comparisons and `&`, `|`, `~` on state arrays are clear. Arithmetic (`ppl.age - hiv.ti_infected`) and indexing are less so. The fallback is always the function form, so the short form can start small.
+- **Should `ss.transfer` accept the delivery keywords?** A vaccination campaign with coverage and years but no product could be written as a transfer or as `ss.vaccinate` with a minimal product. One of them should be the documented way.
