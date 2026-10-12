@@ -14,6 +14,7 @@ Reading a translation next to its original is the fastest way to see whether the
 - **Aligned scrolling**: keep semantically corresponding regions in view together, rather than aligning by line number
 - **Annotations**: surface the vignette's commentary inline, anchored to the relevant region
 - **Results comparison**: where reference outputs exist, show the original's and the translation's results together
+- **Scorecard**: for each model, lines of code and run time for the original and the translation, so the "no more lines, no more time" test is visible at a glance across the whole corpus
 
 Because the two sides are different languages, a plain textual diff will not be meaningful. The alignment needs to come from the vignette declaring the correspondence between its blocks and the original's — worth settling on a format for that early, since it affects how vignettes are written.
 

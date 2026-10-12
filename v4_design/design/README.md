@@ -1,73 +1,75 @@
 # Design
 
-The specification of the epi modeling lingua franca, derived from the practices argued for in [best-practices](../best-practices).
+The specification of the epi modeling lingua franca, following the practices argued for in [best-practices](../best-practices).
 
 ## Purpose
 
-This is the core of the project. Where `approaches` describes what frameworks do and `best-practices` takes a position on what they *should* do, `design` says exactly what this language *is*: the objects, the semantics, the compiled representation, the errors, and the tests that make its claims falsifiable.
+Where `approaches` describes what existing frameworks do and `best-practices` takes a position on what they should do, `design` says what this language is: the objects a model is made of, what they mean, how a model is run and fitted, how it is saved, what the library says when something is wrong, and the tests that hold the design to its claims.
+
+The measure of success is the north star from the [root README](../README.md): **a model should never be easier to write without the lingua franca than with it.**
 
 ## How to read these
 
-Every document is normative. Requirement keywords are used in the usual sense:
+The documents are a specification. MUST, SHOULD, and MAY are used where a requirement is real, and sparingly:
 
-- **MUST** / **MUST NOT** — a conformance requirement. An implementation that violates one does not implement this specification.
-- **SHOULD** — a strong recommendation with acknowledged exceptions.
-- **MAY** — genuinely optional.
+- **MUST** / **MUST NOT**: required for the behavior to be correct.
+- **SHOULD**: recommended, with exceptions.
+- **MAY**: optional.
 
-Each document opens with a pointer to the `best-practices` document that justifies it, and each significant decision either cites that justification or is recorded in [19-open-questions.md](19-open-questions.md) as a choice made here. Code is written as `starsim` (`import starsim as ss`), because [the base for the lingua franca is Starsim](../README.md); where the specification departs from Starsim's current behavior, it says so.
+The general policy is to guess a sensible default and print it, not to raise an error.
+
+Each document starts with a pointer to the `best-practices` document that justifies it. Code is written against Starsim (`import starsim as ss`), because [the base for the lingua franca is Starsim](../README.md); where the specification differs from Starsim's current behavior, it says so. Decisions that are still guesses are collected in [19-open-questions.md](19-open-questions.md).
 
 ## Contents
 
 ### Start here
 
-- [00-overview.md](00-overview.md) — the whole language on one page, the object model, and what the compiler does.
+- [00-overview.md](00-overview.md): the whole language in one example, what a model is made of, and what happens at build time.
 
 ### The language
 
-- [01-objects.md](01-objects.md) — the class hierarchy, the three construction forms, the equivalence rule, the module contract, and `summary()`.
-- [02-types.md](02-types.md) — durations, rates, probabilities, frequencies, counts; the arithmetic lattice; bare numbers; calendar time; per-module timesteps.
-- [03-states-and-transitions.md](03-states-and-transitions.md) — **the core.** States, the arrow grammar, the six transition kinds, dwell times, branching, `ss.Continuous`, and every inference rule.
-- [04-parameters.md](04-parameters.md) — `ss.Par`, the parameter ladder, shapes, requirements, and named data with provenance.
-- [05-dimensions.md](05-dimensions.md) — stratification as an operator; dimension kinds; transfers between coordinates; the enforced restrictions.
-- [06-routes.md](06-routes.md) — the force of infection, stated as an equation; route classes; layers; mobility; geography.
-- [07-effects.md](07-effects.md) — `ss.Effect`, the closed target list, combiner resolution, and the `ss.Expr` predicate algebra.
-- [08-interventions.md](08-interventions.md) — the four-part decomposition, products, delivery, cascades, triggers, and scenarios.
-- [09-results.md](09-results.md) — auto-generated results, characteristics, the outcome cascade, the likelihood, and transmission provenance.
+- [01-objects.md](01-objects.md): the class hierarchy, capitalization, constructing a model, how things get their names, `ss.Sim`, and `describe()`.
+- [02-types.md](02-types.md): Starsim's durations, rates, probabilities, and frequencies; how bare numbers get their units; time in a sim; distributions.
+- [03-states-and-transitions.md](03-states-and-transitions.md): the core. States, the one transition class and its three spellings, rates that mention states, dwell times, branching, functions in any slot, and `ss.Compartments`.
+- [04-parameters.md](04-parameters.md): `ss.par`, the forms a value can take, values by stratum, values kept outside the model, and named data.
+- [05-dimensions.md](05-dimensions.md): stratification by age, space, risk, or strain; `stratify` returns a new model; `ss.transfer`.
+- [06-routes.md](06-routes.md): who meets whom. The force of infection, networks and mixing pools, counts used literally, layers, mobility, and geography.
+- [07-effects.md](07-effects.md): interactions between modules. `ss.modify`, conditions, and plain code in `step()`.
+- [08-interventions.md](08-interventions.md): products, delivery, follow-ups, `ss.change`, triggers, and scenarios.
+- [09-results.md](09-results.md): automatic results, declared results and `ss.outcome`, data attached by name, and the transmission log.
 
-### Semantics
+### Running and fitting
 
-- [10-execution.md](10-execution.md) — phases, queued updates, competing hazards, interleaved timesteps, sub-steps, and determinism.
-- [11-random.md](11-random.md) — per-distribution streams, common random numbers and their checked contract, five-level run identity, and convergence checks.
-
-### Execution and inference
-
-- [12-backends.md](12-backends.md) — the paradigm lattice, the seven methods, the backend contract, the capability matrix, and the three classes of conversion.
-- [13-inference.md](13-inference.md) — calibration with nothing extra declared, automatic method selection, staged fitting, and sensitivity.
+- [10-execution.md](10-execution.md): the ordered loop, what runs when, competing hazards, per-module timesteps, and building the sim.
+- [11-random.md](11-random.md): random number streams, common random numbers, the run hash, and convergence checks.
+- [12-backends.md](12-backends.md): run methods. `method='auto'`, the methods, the standard approximations and how they are reported, `methods()`, and the try-it rule for functions.
+- [13-inference.md](13-inference.md): `sim.calibrate()`, goodness of fit, how the fitting method is chosen, sensitivity, and model comparison.
 
 ### Machinery
 
-- [14-ir.md](14-ir.md) — the intermediate representation: schema, expression encoding, normalization, hashing, and versioning.
-- [15-errors.md](15-errors.md) — the required message shape and the full error catalogue.
-- [16-interop.md](16-interop.md) — import from and export to other frameworks, with fidelity stated per source.
+- [14-model-spec.md](14-model-spec.md): the model spec, the JSON form of a model: its structure, rate expressions, functions, normalization, hashing, and versioning.
+- [15-errors.md](15-errors.md): errors, warnings, and notes: the message shape and the list of every code.
+- [16-interop.md](16-interop.md): importing from and exporting to other frameworks, and the vignette test.
 
 ### Discipline
 
-- [17-vocabulary.md](17-vocabulary.md) — every public name in the language, counted, with the budget rules and the slot-type table.
-- [18-conformance.md](18-conformance.md) — conformance levels, the twelve required test suites, and the model corpus.
-- [19-open-questions.md](19-open-questions.md) — what was settled here, what is still open and blocking, and the risks to the design as a whole.
+- [17-vocabulary.md](17-vocabulary.md): every public name, counted; the capitalization rule; keywords and slots; what was removed since the first draft.
+- [18-conformance.md](18-conformance.md): the test suites, including the north-star test, and the corpus of models they run on.
+- [19-open-questions.md](19-open-questions.md): what this revision settled, what is open, what is deferred, and the risks.
 
-## The claims this specification makes falsifiable
+## What the specification claims
 
-1. **The model is data.** Everything downstream is a function of [14-ir.md](14-ir.md).
-2. **The paradigm is a run-time choice.** [12-backends.md](12-backends.md).
-3. **Nothing is silently approximated.** Every conversion is exact, approximate with a named closure, or refused by name.
-4. **Defaults are guessed and printed.** [01-objects.md](01-objects.md) §`summary()`.
-5. **The vocabulary is small enough to hold**, and the count is published rather than asserted. [17-vocabulary.md](17-vocabulary.md).
+1. **The model is data.** States, transitions, and parameters are objects, so the diagram, the equations, the stratified model, the hash, and the saved file all come from the same thing. [14-model-spec.md](14-model-spec.md)
+2. **The run method is chosen for you and can be changed.** `method='auto'` picks the simplest representation that runs the model exactly, and says which; `method=` asks for another. [12-backends.md](12-backends.md)
+3. **Approximations are named when they happen.** Asking for a method the model does not natively fit uses the standard approximation and prints one line saying so; `approx=False` makes it an error instead. [12-backends.md](12-backends.md#approximations)
+4. **Defaults are guessed and printed.** `describe()` shows every guess, marked as one. [01-objects.md](01-objects.md#describe)
+5. **The vocabulary is small and counted.** [17-vocabulary.md](17-vocabulary.md)
+6. **A model is never easier to write without the lingua franca than with it.** For each vignette, the lingua franca version takes no more lines of model code and no more run time than the original framework's. [18-conformance.md](18-conformance.md#13-north-star)
 
-Each has a test suite in [18-conformance.md](18-conformance.md). A claim without a test is not a claim.
+Each claim has a test suite in [18-conformance.md](18-conformance.md).
 
 ## Relationship to other folders
 
-- Justified by [best-practices](../best-practices); every decision here cites the practice it follows.
-- Informed by the reviews in [approaches](../approaches), which supply the evidence for those practices.
-- Exercised by [vignettes](../vignettes), which translate the [examples](../examples) corpus into this specification. Each translation is a conformance test, and each failure is a documented limit rather than a defect.
+- Justified by [best-practices](../best-practices).
+- Informed by the reviews in [approaches](../approaches).
+- Exercised by [vignettes](../vignettes), which translate the [examples](../examples) corpus into this specification. Each translation is tested for results, length, and speed against its original, and where it falls short the vignette says why.
