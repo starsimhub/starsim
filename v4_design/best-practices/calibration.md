@@ -2,13 +2,15 @@
 
 ## Recommendation
 
-1. **Nothing extra should need declaring.** If parameters carry bounds and priors, and outcomes carry data and a likelihood, calibration is `sim.calibrate()`.
-2. **Keep Starsim's Optuna-based `ss.Calibration` as the default**, because it works on any model including agent-based ones. *[CK: No, I think the method should be selected based on the model -- sure use Optuna if it's agent based, but switch to another method if it's not.]*
-3. **Offer the method ladder, and pick for the user by default.** Which method is right follows from the model, not from the user's preferences. *[CK: yes, thought this seems to be the opposite of your point above.]*
-4. **Fitting configuration is separate from the model.** camdl's split is right: fitting is not part of a model's structural identity. *[CK: yes, though in practice they often live in the same script, which avoids drift.]*
-5. **Adopt staged fitting with convergence gates** for the cases that need it.
-6. **Report whether it converged**, not just the best-fit parameters.
-7. **Common random numbers make calibration cheaper**; say so and use them.
+1. **Nothing extra should need declaring.** If parameters carry bounds and results have data, calibration is `sim.calibrate()`.
+2. **Nobody has to think about likelihoods to fit a model.** The default goodness of fit is a normalized root-mean-square error per data series, combined with equal weights. A likelihood is optional, and giving one enables posterior methods.
+3. **Choose the method from the model, and print the choice.** Least squares for a deterministic model, ABC-SMC for a stochastic compartmental one, Optuna for an expensive agent-based one. One keyword overrides it.
+4. **Fitting settings are separate from the model but normally live in the same script.** They do not change what the model is, so they hash separately; keeping them next to the model stops the two drifting apart.
+5. **Do better than Starsim's `CalibComponent`.** Data attaches to results by name; the rest is inferred.
+6. **Adopt staged fitting with convergence gates** for the cases that need it.
+7. **Report whether it converged**, not just the best-fit parameters.
+8. **Common random numbers make calibration cheaper**; say so and use them.
+9. **Comparing models is part of v1.** `ss.compare_models([sim_sir, sim_seir], data=df)` fits each and compares how well they predict data they were not fitted to.
 
 ## Why
 
@@ -16,35 +18,78 @@
 
 By the time a model reaches calibration, three things have been said elsewhere in this folder:
 
-- **What can move**: `ss.Par(..., bounds=[0.001, 0.5], prior=...)` from [parameters-and-distributions.md](parameters-and-distributions.md) — camdl's `beta : rate in [0.001, 2.0] ~ prior`.
-- **What is compared to what**: `ss.Outcome(..., data=..., likelihood=...)` from [results-and-observation.md](results-and-observation.md) — camdl's `observations` block and odin's `cases ~ Poisson(incidence)`.
+- **What can move**: `ss.par(0.05, bounds=[0.001, 0.5])` from [parameters-and-distributions.md](parameters-and-distributions.md), which is camdl's `beta : rate in [0.001, 2.0]`.
+- **What is compared to what**: results have names, and the data file has columns with the same names ([results-and-observation.md](results-and-observation.md)). This is how Covasim attaches data.
 - **How much noise a comparison has**: [common random numbers](stochasticity-and-reproducibility.md).
 
-So the entire calibration interface is one method call. Any framework that requires more is asking the user to say something twice.
+So the calibration interface is one method call. A framework that requires more is asking the user to say something twice.
 
-### Where the likelihood lives
+### What Starsim asks for today
 
-[odin](../approaches/odin.md) puts it in the model file, in two lines, and gets a particle filter from dust and MCMC from monty. Its review: "The likelihood is in the model. Two lines, and the particle-filter machinery follows." Its architecture is also the cleanest split in the review — **odin is a language, dust is an engine, monty is an inference layer, and they meet at defined interfaces** — so monty works against any dust model, DSL-generated or not.
+`ss.Calibration` wraps Optuna. Fitting an SIR's prevalence to three data points takes a parameter dictionary, a function that copies those parameters into the sim, a component, and the calibration object (abridged from the Starsim calibration tutorial):
 
-[camdl](../approaches/camdl.md) does the same, plus a separate `fit.toml` with named stages, so that "IF2 to find the mode, then PGAS to characterise the posterior around it" is two declared stages rather than a script.
+```python
+calib_pars = dict(
+    beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
+)
 
-Against that: [summer2](../approaches/summer2.md), [epipack](../approaches/epipack.md), [MEmilio](../approaches/memilio.md), [EMOD](../approaches/emod.md), [EpiHiper](../approaches/epihiper.md), [`individual`](../approaches/individual.md), and [LASER](../approaches/laser.md) have no observation model, so comparison to data happens outside the framework and every project rebuilds it.
+def build_sim(sim, calib_pars, **kwargs):
+    for k, pars in calib_pars.items():
+        if k == 'beta':
+            sim.pars.diseases.pars.beta = ss.perday(pars['value'])
+    return sim
 
-### The method depends on the model, and the review shows the mapping
+prevalence = ss.Normal(
+    name = 'Disease prevalence',
+    conform = 'prevalent',
+    expected = pd.DataFrame({'x': [0.13, 0.16, 0.06]},
+        index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')),
+    extract_fn = lambda sim: pd.DataFrame({'x': sim.results.sir.prevalence},
+        index=pd.Index(sim.results.timevec, name='t')),
+    sigma2 = 0.05,
+)
+
+calib = ss.Calibration(sim=sim, calib_pars=calib_pars, build_fn=build_sim,
+                       components=[prevalence], total_trials=100)
+calib.calibrate()
+```
+
+Every piece of that restates something the model already knows. The bounds belong to the parameter. `build_sim` exists only because the calibration does not know where `beta` lives. `extract_fn` names a result that already has a name. `conform='prevalent'` says prevalence is a stock rather than a flow, which the result already knows. And the user had to pick a likelihood (`ss.Normal`, with a variance) before they could fit anything.
+
+The same fit in the lingua franca, with `prevalence.csv` holding a date column and a `prevalence` column:
+
+```python
+sir = ss.Disease(
+    infection = ss.transmission('S -> I', beta=ss.par(0.15, bounds=[0.01, 0.30])),
+    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+)
+sim = ss.Sim(sir, data='prevalence.csv', start='2020-01-01', stop='2020-03-01', unit='day')
+fit = sim.calibrate()
+```
+
+### The method depends on the model
 
 | Model | Method | Framework |
 |---|---|---|
-| Deterministic ODE, tractable likelihood | Gradient-based optimization, NUTS | [camdl](../approaches/camdl.md) (analytic gradients by source-to-source differentiation), [summer2](../approaches/summer2.md) (JAX autodiff over the whole model) |
-| Discrete-time stochastic, latent states | Particle filter + PMCMC | [odin](../approaches/odin.md)/dust/monty, [SimInf](../approaches/siminf.md), [epymorph](../approaches/epymorph.md) |
-| Stochastic, awkward likelihood, cheap to simulate | ABC / ABC-SMC | [Epydemix](../approaches/epydemix.md), [SimInf](../approaches/siminf.md) |
-| Agent-based, expensive, no likelihood | Optuna / surrogate / LFMCMC | [Starsim](../approaches/starsim.md), [epiworld](../approaches/epiworld.md) |
+| Deterministic ODE | Least squares (gradient-based or simplex); NUTS if a likelihood is given | [camdl](../approaches/camdl.md) (analytic gradients by source-to-source differentiation), [summer2](../approaches/summer2.md) (JAX autodiff over the whole model) |
+| Stochastic compartmental, no likelihood | ABC-SMC | [Epydemix](../approaches/epydemix.md), [SimInf](../approaches/siminf.md) |
+| Stochastic compartmental, likelihood given | Particle filter + particle MCMC | [odin](../approaches/odin.md)/dust/monty, [SimInf](../approaches/siminf.md), [epymorph](../approaches/epymorph.md) |
+| Agent-based, expensive | Optuna (point estimate); ABC when affordable | [Starsim](../approaches/starsim.md), [epiworld](../approaches/epiworld.md) (LFMCMC) |
 | Any, for sensitivity rather than fit | LHS + PRCC | [MetaCast](../approaches/metacast.md) |
 
-The mapping is deterministic enough to automate. A user should not have to know that their model's structure makes NUTS available and ABC wasteful.
+The mapping is regular enough to automate. A user should not have to know that their model's structure makes gradients available, or that 200 Optuna trials on a model that runs in a millisecond is a waste when ABC-SMC would also give them uncertainty.
 
-### What Starsim has
+Optuna is the right choice for expensive agent-based models: it makes no assumptions, it parallelizes, and it handles the case (expensive, stochastic, no gradient) that defeats everything else in the table. It is not the default for every model.
 
-`ss.Calibration` wraps Optuna, with `CalibComponent` objects defining likelihood terms against data. Optuna is the right default for agent-based models: it makes no assumptions, it parallelizes, and it handles the case — expensive, stochastic, no gradient — that defeats everything else in the table. `CalibComponent` is also, in effect, an observation model declared at calibration time rather than in the model, which is the piece that moves. *[CK: I don't particularly care for CalibComponent; it's so complicated and verbose. Let's try to do better with the lingua franca.]*
+ABC-SMC is the default for stochastic compartmental models. This is likely to be a common case: the model is cheap to run, the user has not written a likelihood, and they want uncertainty. ABC needs only a distance between simulated and observed series, and the default goodness of fit is exactly that.
+
+### Likelihoods are optional
+
+[odin](../approaches/odin.md) puts the likelihood in the model file, in two lines (`cases <- data()`, `cases ~ Poisson(incidence)`), and gets a particle filter from dust and MCMC from monty. [camdl](../approaches/camdl.md) does the same, plus a separate `fit.toml` with named stages. Both are right that when there is a likelihood it belongs with the quantity it describes. Both also require one before anything can be fitted, and most epidemiologists fitting a model to case counts do not start from a likelihood. They start from "make the curve go through the points".
+
+So the lingua franca starts there too. A normalized root-mean-square error is less rigorous than a likelihood: it does not weight points by their expected noise and it does not give a posterior on its own. It is simple, it has no settings, and it is what the user would have written by hand. The likelihood is there when wanted.
+
+Against that: [summer2](../approaches/summer2.md), [epipack](../approaches/epipack.md), [MEmilio](../approaches/memilio.md), [EMOD](../approaches/emod.md), [EpiHiper](../approaches/epihiper.md), [`individual`](../approaches/individual.md), and [LASER](../approaches/laser.md) have no built-in comparison to data at all, so every project rebuilds it.
 
 ## The proposal
 
@@ -52,101 +97,161 @@ The mapping is deterministic enough to automate. A user should not have to know 
 
 ```python
 sir = ss.Disease(
-    beta      = ss.Par(0.05, bounds=[0.01, 0.5]), # [CK: let's use ss.par() for this]
-    dur_inf   = ss.Par(ss.days(10), bounds=[3, 30]),
-    infection = ss.transmission('S -> I', beta=beta),
-    recovery  = ss.progression('I -> R', dur=dur_inf),
+    infection = ss.transmission('S -> I', beta=ss.par(0.05, bounds=[0.01, 0.5])),
+    recovery  = ss.progression('I -> R', dur=ss.par(10, bounds=[3, 30])),
+    cases     = ss.outcome('infection', p=0.5, delay=5),
 )
 
-sim = ss.Sim(sir, start='2020-01-01', stop='2020-12-31')
-sim.observe(cases = ss.Outcome(sir.infection, p=0.5, delay=ss.days(5),
-                               data='data/weekly_cases.csv', every=ss.weeks(1),
-                               likelihood=ss.neg_binomial(k=ss.Par(bounds=[0.1, 100]))))
-# [CK: it's not clear to me that sim.observe should be needed as separate from sim.results]
+sim = ss.Sim(sir, data='weekly_cases.csv', start='2020-01-01', stop='2020-12-31', unit='day')
 fit = sim.calibrate()
 ```
 
-`calibrate()` reads the bounds from the parameters and the likelihood from the outcomes. Nothing is repeated. `sim.calibrate(pars=['beta'])` restricts what moves; `sim.calibrate(method='abc')` overrides the choice.
+`weekly_cases.csv` has a date column and a `cases` column. The column name matches the result name, so the data is attached to that result: `sim.plot()` shows the two together, and `calibrate()` fits every parameter that has `bounds` to every result that has data. Because `cases` is a flow, simulated cases are summed over each interval between data points before comparing (weekly data against a daily model works with no extra settings); a stock such as prevalence is read at the data's dates.
+
+`sim.calibrate(pars=['beta'])` restricts what moves (parameters are named by their slot, `infection.beta`, or just `beta` when that is unambiguous). `sim.calibrate(method='abc')` overrides the method.
+
+### Goodness of fit
+
+For each data series, the default mismatch is the root-mean-square difference between model and data, divided by the mean of the data. Dividing by the mean puts a series of thousands of weekly cases and a series of prevalence fractions on the same scale, so they can be added. The total is the weighted sum, with equal weights unless told otherwise:
+
+```python
+sim  = ss.Sim(sir, data='cases_and_deaths.csv', unit='day')   # columns: date, cases, deaths
+fit  = sim.calibrate()                                        # equal weights
+fit2 = sim.calibrate(weights=dict(cases=1, deaths=3))         # trust the deaths more
+```
+
+To use a likelihood instead, attach one to the result. The model's value is the mean; the distribution supplies the noise:
+
+```python
+cases = ss.outcome('infection', p=0.5, delay=5,
+                   likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))   # n: dispersion, fitted
+```
+
+That is camdl's `weekly_cases ~ neg_binomial(mean = rho * projected, r = k)`. With a likelihood on every fitted result, posterior methods (NUTS, particle MCMC) become available and are chosen automatically.
 
 ### Choosing the method
 
+A deterministic model:
+
 ```text
->>> sim.calibrate()
-model: deterministic ODE, 2 free parameters, analytic likelihood available
-method: L-BFGS-B with analytic gradients  (override with method=)
+>>> fit = sim.calibrate()
+model: deterministic (ode), 2 free parameters, 1 data series (cases, 52 points)
+fit: normalized RMSE
+method: least squares, Nelder-Mead  (override with method=)
 ...
-converged: yes (grad norm 3e-7, 41 evaluations)
-beta     0.052  [0.048, 0.057]
-dur_inf  9.3 d  [8.1, 10.6]
+converged: yes (63 evaluations)
+infection.beta   0.052
+recovery.dur     9.3 days
+note: point estimates only. For uncertainty, add a likelihood or use method='abc'.
 ```
 
-versus the same model run as an ABM:
+The same model run with `method='stochastic'`:
 
 ```text
->>> sim.calibrate()
-model: agent-based, 2 free parameters, no tractable likelihood
-method: Optuna TPE, 200 trials, 4 replicates each  (override with method=)
-note: common random numbers on — paired evaluation, ~4× fewer replicates than independent
+model: stochastic compartmental (binomial), 2 free parameters, 1 data series
+fit: normalized RMSE
+method: ABC-SMC, 5 generations, 500 particles  (override with method=)
+...
+infection.beta   0.052  [0.047, 0.058]
+recovery.dur     9.3 days  [8.0, 10.9]
 ```
 
-Two things are happening. The method is chosen from properties of the model that the model already declared, which is only possible because the model is data. And the CRN note is not decoration: with paired evaluation the objective is much less noisy, which is the practical payoff of [the CRN machinery](stochasticity-and-reproducibility.md) and is rarely stated as a calibration benefit.
+And as an agent-based model:
+
+```text
+model: agent-based, 2 free parameters, 1 data series
+fit: normalized RMSE
+method: Optuna TPE, 200 trials, 4 replicates each  (override with method=)
+note: common random numbers on: paired evaluation needs fewer replicates
+note: Optuna gives a best estimate, not a posterior. No intervals are reported.
+```
+
+The method is chosen from things the library already knows about the model: whether it is deterministic, whether a likelihood was given, and how long one run takes. The note about common random numbers matters in practice: with paired evaluation the objective is much less noisy, which is a benefit of [the CRN machinery](stochasticity-and-reproducibility.md) that is rarely stated.
+
+For deterministic models with more than a few parameters, gradients come from JAX, which is also what makes the ODE runs fast ([summer2](../approaches/summer2.md) does this). Small models use plain SciPy.
+
+### Fitting settings
+
+Method, number of trials, chains, and gates are arguments to `calibrate()`, in the same script as the model:
+
+```python
+fit = sim.calibrate(method='optuna', trials=500, reps=4)
+```
+
+camdl separates `.camdl` from `fit.toml` "to keep structural identity separate from fitting configuration"; [flepiMoP](../approaches/flepimop.md) puts everything in one document. The lingua franca keeps the conceptual separation and not the second file. Bounds, data, and any likelihood are part of the model, because they are statements about the system and how it is observed. The fitting procedure is not: changing the number of Optuna trials does not change the model, so it has its own entry in the [run hash](stochasticity-and-reproducibility.md). Keeping both in one script means the settings cannot drift from the model they were tuned for.
 
 ### Staged fitting
 
-camdl's `fit.toml` has named stages with convergence gates. The cases that need this are real — find the mode cheaply, then characterize the posterior around it — and it should not require a script:
+camdl's `fit.toml` has named stages with convergence gates. The case that needs this is real (find the mode cheaply, then characterize the posterior around it) and it should not require a script:
 
 ```python
-fit = sim.calibrate(stages=[
-    ss.Stage('optuna', trials=500),
-    ss.Stage('mcmc', draws=2000, init='previous'),
+fit = sim.calibrate(method=[
+    dict(method='optuna', trials=500),
+    dict(method='nuts', draws=2000),
 ])
 ```
 
-A stage that fails its convergence gate stops the sequence and says so, rather than feeding a bad mode into an expensive sampler.
-
-### Fitting configuration is not part of the model
-
-camdl separates `.camdl` from `fit.toml` deliberately, "to keep structural identity separate from fitting configuration". [flepiMoP](../approaches/flepimop.md) puts everything in one document and its review notes both are defensible.
-
-The resolution follows from [run identity](stochasticity-and-reproducibility.md): the *likelihood* is part of the model (it is a statement about how data relate to the process, and it belongs with the outcome that produces the quantity), while the *fitting procedure* — method, trials, chains, gates — is configuration and hashes separately. Changing the number of Optuna trials does not change the model.
+`method=` takes a list, and each stage starts from where the previous one ended. A stage that does not converge stops the sequence, says so, and returns the last good fit, rather than feeding a bad starting point into an expensive sampler.
 
 ### Report the fit
 
 ```python
-fit.summary()      # estimates, intervals, convergence diagnostics
-fit.plot()         # trajectories against data, per outcome stream
-fit.apply(sim)     # a sim with the calibrated values [CK: it's not clear to me what is being "applied" -- why not fit.sim or similar]
+fit.summary()      # estimates, intervals where the method gives them, convergence diagnostics
+fit.plot()         # trajectories against data, one panel per data series
+fit.pars           # the fitted values
+fit.sim            # the calibrated sim, ready to run or to build scenarios from
 ```
 
-camdl's discipline is the target: "Convergence is a checked claim, not an assumption." Report R̂ and ESS for MCMC; report gradient norm and iterations for optimization; report acceptance and ESS for particle filters; report whether the best trial was near a bound, because that usually means the bound was wrong rather than the parameter.
+camdl's standard is the target: "Convergence is a checked claim, not an assumption." Report R-hat and effective sample size for MCMC; gradient norm and iterations for optimization; acceptance rate and effective sample size for ABC and particle filters; and whether the best value was near a bound, because that usually means the bound was wrong rather than the parameter.
+
+### Comparing models
+
+"Does this model need an exposed compartment?" is a question about structure, not about parameter values. Because each model is a described object and the data attaches by name, the comparison can be done the same way every time:
+
+```python
+comparison = ss.compare_models([sim_sir, sim_seir], data='weekly_cases.csv')
+comparison.summary()
+```
+
+```text
+          free pars   fit (in-sample)   prediction (held-out)
+sir               2             0.118                   0.171
+seir              3             0.094                   0.102
+```
+
+Each model is fitted to the first part of each data series and scored on the rest, so an extra parameter only helps if it improves prediction. This is the idea behind camdl's prequential scoring. The held-out fraction and the score are settings with defaults; the models can differ in any way as long as each produces the results named in the data.
 
 ### Sensitivity, which is not calibration
 
-[MetaCast](../approaches/metacast.md) ships LHS + PRCC parallelized via dask, and it is the only framework in the review that treats sensitivity analysis as built-in. It answers a different question — which parameters matter — and it is often what the user actually wanted:
+[MetaCast](../approaches/metacast.md) ships LHS + PRCC parallelized via dask, and it is the only framework in the review that treats sensitivity analysis as built-in. It answers a different question (which parameters matter), and it is often what the user wanted:
 
 ```python
-sim.sensitivity()   # LHS over declared bounds, PRCC against declared results
+sim.sensitivity()   # LHS over declared bounds, PRCC against the results
 ```
 
-Free, because the bounds and the results are already declared.
+It needs nothing new, because the bounds and the results already exist.
 
 ## Trade-offs
 
-- **Automatic method selection can be wrong.** Mitigation: it is printed, and it is one keyword to override. The alternative — the user chooses from five methods on their first day — is worse.
-- **Declaring the likelihood in the model file commits to a form.** Negative binomial with an overdispersion parameter covers most surveillance count data; anything else takes a custom likelihood function, which should be allowed and priced. *[CK: Hmm. Seems like something simple like RMS should be the default for simplicity, even if not as rigorous. But I could be convinced.]*
-- **Optuna is not an inference method.** It gives a point estimate and a search history, not a posterior, and the summary must not present its trial spread as an interval. This is a real hazard in current practice.
-- **Analytic gradients are a large implementation project.** camdl gets them from source-to-source symbolic differentiation; summer2 gets them from JAX. Wrapping JAX for the compartmental backend is the cheap route and worth taking, since it also makes the ODE backend fast. *[CK: Agree]*
+- **Automatic method selection can be wrong.** It is printed, and it is one keyword to override. The alternative, where the user chooses from five methods on their first day, is worse.
+- **Normalized RMSE is not a statistical model of the data.** It treats every point in a series as equally noisy, and dividing by the mean behaves badly for a series that is mostly zeros. It is the default because it is simple and needs no decisions; the summary says which measure was used, and a likelihood is one keyword away.
+- **Weights are arbitrary.** Equal weights across series is a convention, not a truth. A joint likelihood is the principled alternative and needs the correlation between series, which is rarely known. Weights are the v1 answer.
+- **Optuna is not an inference method.** It gives a point estimate and a search history, not a posterior, and the summary must not present its trial spread as an interval.
+- **ABC needs many runs.** Fine for a compartmental model that runs in milliseconds; for an agent-based model it is used only when the run time allows, and the printout says how many runs it will take.
+- **Gradients are an implementation project.** camdl gets them from symbolic differentiation; summer2 gets them from JAX. Wrapping JAX for the compartmental methods is the cheaper route and worth taking, since it also makes ODE runs fast.
 
 ## Rejected
 
 - **A separate calibration DSL.** Everything needed is already declared; a second vocabulary would be a second place for it to drift.
-- **`CalibComponent`-style likelihood declaration at calibration time** (Starsim today). It duplicates the observation model. Declare it once, with the outcome. *[CK: fine, as long as the user isn't forced into thinking about likelihoods when they just want to build a model.]*
-- **ABC as the default** (Epydemix). Right for cheap stochastic models with awkward likelihoods, wasteful when a likelihood exists. *[CK: it's not clear to me that that's not the regime we'll be in a lot of the time. I'd revisit this, though you may be right]*
+- **`CalibComponent`-style declaration at calibration time** (Starsim today). It restates the result name, the data alignment, and the bounds, and it makes a likelihood mandatory.
+- **A required likelihood** (odin, camdl). Right when the user has one; a barrier when they just want to fit a curve.
+- **One method for every model.** Optuna on a cheap ODE wastes runs and gives no gradient-based convergence check; NUTS on an agent-based model is not possible. The method follows from the model.
 - **Requiring the user to choose an inference method.** They should be able to; they should not have to.
-- **Bundling the inference engine.** [odin](../approaches/odin.md)'s odin/dust/monty split is the architectural precedent — "an engine can be replaced, and the inference layer is reusable by models that were never written in the DSL". Wrap Optuna, JAX, and a particle filter; own none of them.
+- **Bundling the inference engine.** [odin](../approaches/odin.md)'s odin/dust/monty split is the precedent: "an engine can be replaced, and the inference layer is reusable by models that were never written in the DSL". Wrap Optuna, JAX, an ABC sampler, and a particle filter; own none of them.
 
 ## Open questions
 
-- **Multi-objective and multi-stream weighting.** Fitting cases *and* deaths *and* seroprevalence requires either a joint likelihood (correct, and requires their correlation) or weights (practical, and arbitrary). camdl's multiple observation streams assume independence. This needs a stated default. *[CK: I think weights is fine, but could be convinced.]*
-- **Calibrating structure, not just parameters.** "Does this model need an exposed compartment?" is a model-comparison question, and once models are data it is mechanizable (prequential scoring, which camdl has). Out of scope for v1, worth not foreclosing. *[CK: agree, it would be a superpower to be able to rigorously compare two models: `comparison = ss.calib_compare([sim_sir, sim_seir], against=data)`. If we could include this in v1 -- incredible.]
-- **The `β`/`c` identifiability question** raised in [population-and-mixing.md](population-and-mixing.md): the factoring is right for portability and means the two are not separately identifiable from incidence. Fitting the product needs a clean spelling.
+- **The normalization.** Dividing RMSE by the mean of the data is one choice; the range or the standard deviation are others, and count data with many zeros may want a different default.
+- **Likelihoods on results that are not outcomes.** `likelihood=` is shown on `ss.outcome`. A ratio such as `prevalence = I / N` needs somewhere to put one too.
+- **Joint likelihoods with correlation between series** are out of v1.
+- **`beta` and the contact rate.** When a network or mixing pool supplies the contacts ([population-and-mixing.md](population-and-mixing.md)), `beta` is per contact, and incidence data identifies only the product of `beta` and the contact rate. Giving bounds to one and fixing the other is the simple answer; fitting the product by name may be worth a spelling.
