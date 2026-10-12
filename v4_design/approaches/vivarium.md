@@ -4,9 +4,9 @@
 |---|---|
 | **Language** | Python (pandas-backed state table) |
 | **Paradigms** | Agent-based microsimulation, discrete time; disease as an explicit state machine |
-| **Specification style** | Components assembled in a YAML model specification; behaviour written as Python `Component` subclasses |
+| **Specification style** | Components assembled in a YAML model specification; behavior written as Python `Component` subclasses |
 | **Version reviewed** | 4.1.6 |
-| **Licence** | BSD-3-Clause |
+| **License** | BSD-3-Clause |
 | **Code** | <https://github.com/ihmeuw/vivarium-suite> (the `ihmeuw/vivarium` repository is **archived**) |
 | **Docs** | <https://vivarium-engine.readthedocs.io/> |
 | **Paper** | — |
@@ -14,7 +14,7 @@
 
 ## What it's for
 
-Vivarium is IHME's microsimulation framework: individual-level simulation of health outcomes driven by Global Burden of Disease data, used for intervention and forecasting analyses. It is not primarily an infectious disease framework — its centre of gravity is risk factors, chronic disease, and health-system outcomes — and it is in this review for its **architecture**, which solves a problem that the infectious disease frameworks handle much less well.
+Vivarium is IHME's microsimulation framework: individual-level simulation of health outcomes driven by Global Burden of Disease data, used for intervention and forecasting analyses. It is not primarily an infectious disease framework — its center of gravity is risk factors, chronic disease, and health-system outcomes — and it is in this review for its **architecture**, which solves a problem that the infectious disease frameworks handle much less well.
 
 That problem is: **how do independently-written components modify each other's quantities without stepping on each other?**
 
@@ -125,14 +125,14 @@ This is the same capability Starsim gets from per-agent slots and hashed distrib
 - **An explicit disease state machine** (`Machine` / `State` / `Transition` / `TransientState` / `Trigger`) separate from the component system.
 - **Common random numbers keyed on declared attributes**, configured in the model specification.
 - **Lookup tables and data artifacts** as the standard data interface, with `data_sources` declarable in `CONFIGURATION_DEFAULTS`.
-- **Components listed in YAML**, so model composition is declarative even though component behaviour is code.
+- **Components listed in YAML**, so model composition is declarative even though component behavior is code.
 - **Sub-components**, giving hierarchical model composition.
 
 ## Limitations
 
 - **Recently renamed and relocated.** `vivarium` → `vivarium-engine`, moved into a monorepo, with the reviewed repository archived. Anything built on the old import path needs migration.
 - **Not an infectious disease framework.** No transmission, no contact structure, no networks, no force of infection. `SIS_DiseaseModel` in the examples is driven by an incidence *rate*, not by contact with infectious simulants. Adding transmission means writing it.
-- **Component behaviour is Python.** The YAML lists components; it does not define them. The disease structure, the rates, and the effects are all code.
+- **Component behavior is Python.** The YAML lists components; it does not define them. The disease structure, the rates, and the effects are all code.
 - **pandas state table.** Readable and slow relative to the array-based frameworks (Starsim, LASER, epiworld), and memory-hungry at scale.
 - **Steep learning curve.** Value pipelines, lifecycle phases, population views, lookup tables, artifacts, and the resource system are a lot of machinery before the first line of epidemiology.
 - **IHME/GBD-shaped.** The data interfaces assume GBD-style artifacts indexed by age, sex, year, and location.
@@ -142,8 +142,8 @@ This is the same capability Starsim gets from per-agent slots and hashed distrib
 ## Implications for the lingua franca
 
 1. **Adopt the value-pipeline pattern for cross-module effects.** This is the most important thing in the entry. The lingua franca needs a way for a co-infection, a risk factor, an intervention, or a seasonal forcing to modify a quantity owned by another module *declaratively*, with a stated combination rule. Vivarium's shape — **named quantity, one producer, many registered modifiers, declared combiner** — solves the Starsim connector problem (last-write-wins, invisible dependencies) without giving up composability. It also makes the effect inspectable: you can ask "what modifies `diarrhea.incidence_rate`?" and get an answer.
-2. **Declare the combination rule, because it is a modelling decision.** Two interventions that each reduce transmission by 40% might compose multiplicatively (`0.6 × 0.6`) or additively (`1 − 0.8`), and the choice changes the answer. Vivarium makes the combiner an explicit, named object; epidemics (Epiverse-TRACE) chose additive globally and documented why; most frameworks leave it implicit in the order of operations. **The lingua franca must let this be stated.**
-3. **Adopt declared read/write access to state.** `PopulationView` means a component announces which state it reads and which it writes, and the framework enforces it. In a language whose goal is no hidden behaviour, a module that can silently write any other module's state is a hole. This is the same requirement as epymorph's declared `AttributeDef` requirements, extended from inputs to writes.
+2. **Declare the combination rule, because it is a modeling decision.** Two interventions that each reduce transmission by 40% might compose multiplicatively (`0.6 × 0.6`) or additively (`1 − 0.8`), and the choice changes the answer. Vivarium makes the combiner an explicit, named object; epidemics (Epiverse-TRACE) chose additive globally and documented why; most frameworks leave it implicit in the order of operations. **The lingua franca must let this be stated.**
+3. **Adopt declared read/write access to state.** `PopulationView` means a component announces which state it reads and which it writes, and the framework enforces it. In a language whose goal is no hidden behavior, a module that can silently write any other module's state is a hole. This is the same requirement as epymorph's declared `AttributeDef` requirements, extended from inputs to writes.
 4. **A lifecycle with named phases and declared priorities beats a flat step list.** `time_step_prepare` → `time_step` → `time_step_cleanup` → `collect_metrics` gives components a place to put things without fighting over ordering, and priorities settle the remainder declaratively. Combined with `individual`'s queued-update semantics (which make within-phase order irrelevant), this is a good target: named phases, declared priorities, order-independence inside a phase.
-5. **Common random numbers keyed on declared attributes is the portable formulation.** Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalises better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly.
-6. **Note that a framework can be declarative about *composition* while remaining imperative about *behaviour*.** Vivarium's YAML lists components and configuration; the components are Python. That is a coherent position and a common one (Starsim's dict form, EMOD's campaigns over a C++ engine). The lingua franca's ambition is stronger — behaviour declarative too — and Vivarium is a useful reminder of what the fallback looks like and how far it gets you.
+5. **Common random numbers keyed on declared attributes is the portable formulation.** Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalizes better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly.
+6. **Note that a framework can be declarative about *composition* while remaining imperative about *behavior*.** Vivarium's YAML lists components and configuration; the components are Python. That is a coherent position and a common one (Starsim's dict form, EMOD's campaigns over a C++ engine). The lingua franca's ambition is stronger — behavior declarative too — and Vivarium is a useful reminder of what the fallback looks like and how far it gets you.

@@ -6,16 +6,16 @@
 | **Paradigms** | Stochastic compartmental (continuous-time Markov chain, Gillespie) on a network of nodes, with scheduled events |
 | **Specification style** | Transitions as strings — `"S -> propensity -> I"` — parsed and compiled to C |
 | **Version reviewed** | 10.1.0 |
-| **Licence** | GPL-3 |
+| **License** | GPL-3 |
 | **Code** | <https://github.com/stewid/SimInf> |
 | **Docs** | <https://CRAN.R-project.org/package=SimInf> |
 | **Paper** | [10.18637/jss.v091.i12](https://doi.org/10.18637/jss.v091.i12) |
 
 ## What it's for
 
-SimInf simulates disease spread over networks of subpopulations, using Gillespie's algorithm for within-node dynamics and **scheduled events** for between-node movement. It was built for livestock disease modelling, where the data is a national animal-movement register: real, dated, recorded transfers of animals between holdings.
+SimInf simulates disease spread over networks of subpopulations, using Gillespie's algorithm for within-node dynamics and **scheduled events** for between-node movement. It was built for livestock disease modeling, where the data is a national animal-movement register: real, dated, recorded transfers of animals between holdings.
 
-That origin produced a design worth studying — a clean separation between **continuous stochastic dynamics** (the transitions) and **discrete scheduled interventions on the population** (the events) — that generalises well beyond veterinary epidemiology.
+That origin produced a design worth studying — a clean separation between **continuous stochastic dynamics** (the transitions) and **discrete scheduled interventions on the population** (the events) — that generalizes well beyond veterinary epidemiology.
 
 ## How a model is specified
 
@@ -94,11 +94,11 @@ The consequence is that a real animal-movement register — 200,000 dated transf
 
 Being continuous-time is a real advantage for correctness — the exponential-conversion errors that afflict discrete-time frameworks simply do not arise — and a real limitation for scale, since Gillespie cost grows with event count.
 
-No dimensional types; propensities are C expressions and their units are the modeller's responsibility.
+No dimensional types; propensities are C expressions and their units are the modeler's responsibility.
 
 ## Strengths
 
-- **Transitions as parsed strings that read like the reaction.** `"S -> beta * S * I / N -> I"` is close to the notation a modeller would write, is data before it is code, and compiles to C.
+- **Transitions as parsed strings that read like the reaction.** `"S -> beta * S * I / N -> I"` is close to the notation a modeler would write, is data before it is code, and compiles to C.
 - **Order-independent intermediate variables**, with an optional integer type annotation.
 - **Explicit global/local parameter split** as part of the model's data layout.
 - **Discrete and continuous state side by side** (`u` and `v`), which is the natural formulation for environmentally-transmitted diseases.
@@ -127,4 +127,4 @@ No dimensional types; propensities are C expressions and their units are the mod
 3. **The `u`/`v` split — discrete stochastic state alongside continuous state — is worth adopting.** Environmental reservoirs, accumulated exposure, and vector abundance are all naturally continuous and coupled to a discrete disease process. Frameworks without this force everything into compartments. Starsim's `FloatArr` states play a similar role at the agent level; SimInf's is at the node level.
 4. **Global versus local parameter scope should be declared.** SimInf's `gdata`/`ldata` and MetaCast's `universal_params`/`subpop_params` are the same idea arrived at twice. In a language with dimensions, this becomes "a parameter has a shape" — which is epymorph's answer (`Shapes.Scalar` versus `Shapes.N` versus `Shapes.TxN`) and is the more general form.
 5. **Continuous-time execution should be a backend, not a paradigm.** SimInf shows the correctness benefit of never converting a rate to a per-step probability. camdl already offers Gillespie alongside chain-binomial and ODE from one model. The lingua franca should treat discrete-time versus continuous-time as a backend choice with a declared cost, not as a property of the model.
-6. **`package_skeleton()` is an idea worth stealing outright.** A command that turns a model into a distributable, installable, citable artefact directly serves reproducibility, and it is trivial once the model is data.
+6. **`package_skeleton()` is an idea worth stealing outright.** A command that turns a model into a distributable, installable, citable artifact directly serves reproducibility, and it is trivial once the model is data.

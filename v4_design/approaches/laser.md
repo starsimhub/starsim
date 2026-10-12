@@ -6,7 +6,7 @@
 | **Paradigms** | Agent-based, spatial/metapopulation, discrete time; large-scale (national to continental) |
 | **Specification style** | A model is a `LaserFrame` of agent properties plus a list of **components**, each with an init and a step function |
 | **Version reviewed** | `laser-core` 0.6.x |
-| **Licence** | MIT |
+| **License** | MIT |
 | **Code** | <https://github.com/InstituteforDiseaseModeling/laser-core> |
 | **Docs** | <https://docs.idmod.org/projects/laser/en/latest/> |
 | **Paper** | — |
@@ -38,7 +38,7 @@ model.population.add_vector_property("position", length=3, dtype=np.float32)
 start, end = model.population.add(10)
 ```
 
-Behaviour is added as **components**, each an object with an initialiser and a `step` function operating on one or more properties. The top-level script assembles them:
+Behavior is added as **components**, each an object with an initializer and a `step` function operating on one or more properties. The top-level script assembles them:
 
 ```python
 model.components = [VitalDynamics_ABM, DiseaseState_ABM, Transmission_ABM, RI_ABM, SIA_ABM]
@@ -58,7 +58,7 @@ combined = ps1 + ps2
 
 Stated in the architecture document, and they explain nearly everything else:
 
-1. **Preallocate memory.** All arrays allocated at initialisation; nothing allocated during the run.
+1. **Preallocate memory.** All arrays allocated at initialization; nothing allocated during the run.
 2. **Sequential array access.** Iterate through preallocated arrays, ideally once per timestep, for cache friendliness.
 3. **Fixed data structures.** Agents are marked dead rather than removed; "preborn" agents are in the array from the start and activated at the right timestep; the array never resizes.
 4. **Time-specific data slots.** Reports and outputs allocate a slot per timestep and location in advance.
@@ -72,11 +72,11 @@ The consequences for *specification* are direct: the population has a fixed capa
 | Population | `LaserFrame` | Columnar; `add_scalar_property`, `add_vector_property`, `add`, `sort`, `squash`; HDF5-backed |
 | Agent property | a column | Typed (`dtype`), with a default |
 | Node / patch | `node_id`, a built-in property | Geospatial focus is in the core; single-node models set it uniformly |
-| Component | init function + `step` function | The unit of behaviour |
-| Parameters | `PropertySet` | Dot-access dict, composable with `+`, JSON-serialisable |
+| Component | init function + `step` function | The unit of behavior |
+| Parameters | `PropertySet` | Dot-access dict, composable with `+`, JSON-serializable |
 | Migration | `laser_core.migration` | `gravity`, `competing_destinations`, `stouffer`, `radiation`, `distance`, `row_normalizer` — a library of published spatial interaction models |
 | Scheduling | `SortedQueue` | Priority queue for scheduled events (non-disease deaths) |
-| Demographics | `laser_core.demographics` | Age pyramids, Kaplan–Meier estimators, date-of-birth / expected-date-of-death initialisation |
+| Demographics | `laser_core.demographics` | Age pyramids, Kaplan–Meier estimators, date-of-birth / expected-date-of-death initialization |
 
 ## What distinguishes it from Starsim
 
@@ -93,7 +93,7 @@ Both are IDM Python agent-based frameworks. The differences are instructive beca
 | **Results** | Declared `ss.Result` objects with labels and timevecs | Preallocated arrays by (timestep, node) |
 | **Scale target** | 10⁴–10⁶ agents | 10⁷–10⁹ agent-timesteps |
 
-The migration library is the clearest single differentiator: `gravity`, `competing_destinations`, `stouffer`, and `radiation` are the four standard published spatial-interaction models, implemented, parameterised, and sanity-checked. Nothing else in this review ships that.
+The migration library is the clearest single differentiator: `gravity`, `competing_destinations`, `stouffer`, and `radiation` are the four standard published spatial-interaction models, implemented, parameterized, and sanity-checked. Nothing else in this review ships that.
 
 ## Time
 
@@ -104,13 +104,13 @@ Scheduling is via `SortedQueue`, a priority queue of future events — the same 
 ## Strengths
 
 - **Explicit, stated performance principles**, with the whole design derived from them. Rare, and it makes the trade-offs auditable.
-- **A migration model library**: gravity, competing destinations, Stouffer, radiation, with distance calculation, row normalisation, and parameter sanity checks. This is the best spatial-interaction vocabulary in the review.
-- **Spatial structure in the core.** `node_id` is a built-in property rather than a modelling convention.
+- **A migration model library**: gravity, competing destinations, Stouffer, radiation, with distance calculation, row normalization, and parameter sanity checks. This is the best spatial-interaction vocabulary in the review.
+- **Spatial structure in the core.** `node_id` is a built-in property rather than a modeling convention.
 - **Columnar agent storage** (`LaserFrame`) with typed scalar and vector properties, HDF5 persistence, and `sort`/`squash` operations.
 - **Preallocation as a discipline**: no runtime allocation, no array resizing, cache-friendly sequential access, and therefore predictable performance at scale.
 - **Preborn agents** as a births mechanism — an elegant way to avoid dynamic growth.
-- **`PropertySet`** — composable, dot-accessible, JSON-serialisable parameter sets.
-- **Demographic initialisation utilities**: age pyramids, Kaplan–Meier, date-of-death sampling.
+- **`PropertySet`** — composable, dot-accessible, JSON-serializable parameter sets.
+- **Demographic initialization utilities**: age pyramids, Kaplan–Meier, date-of-death sampling.
 - **Genuinely small core.** `laser-core` is a handful of modules; the disease models live outside it.
 
 ## Limitations
@@ -127,9 +127,9 @@ Scheduling is via `SortedQueue`, a priority queue of future events — the same 
 
 ## Implications for the lingua franca
 
-1. **The migration library is directly reusable and should be referenced by name.** Gravity, radiation, Stouffer, and competing-destinations are the published models for spatial interaction, and a metapopulation vocabulary needs to be able to say "the mobility matrix is a gravity model with parameters k, a, b, c" rather than only "here is a matrix". This is the movement-model counterpart to EpiModel's network-by-target-statistics point: **structure should be specifiable by its generating model, not only by its realisation.**
+1. **The migration library is directly reusable and should be referenced by name.** Gravity, radiation, Stouffer, and competing-destinations are the published models for spatial interaction, and a metapopulation vocabulary needs to be able to say "the mobility matrix is a gravity model with parameters k, a, b, c" rather than only "here is a matrix". This is the movement-model counterpart to EpiModel's network-by-target-statistics point: **structure should be specifiable by its generating model, not only by its realization.**
 2. **LASER and Starsim together bound the agent-based design space at IDM**, and the differences are the design questions. Fixed-capacity preallocation versus dynamic UIDs; shared state table versus module-owned states; unitless steps versus typed time; spatial-in-core versus spatial-as-network. A lingua franca that has to compile to both needs to know which of these are *semantic* (typed time, state ownership) and which are purely *implementation* (preallocation, dead-flagging). Most are implementation — which is encouraging, and worth confirming deliberately.
-3. **Preallocation is an implementation strategy that the language can enable.** If the model declares its maximum population, its node set, and its output shape — which a declarative language naturally does — a backend can preallocate without the modeller thinking about it. The constraint LASER imposes on its users is information the lingua franca would already have.
-4. **The shared-mutable-state hazard appears here in its strongest form**, and reinforces the recommendation from the Vivarium and Starsim entries: components writing arbitrary columns of a shared table is fast and unanalysable. Declared read/write sets cost nothing at run time — they are compile-time information — and would let a backend keep LASER's performance while recovering the analysis.
-5. **"Declarative behaviour with SQL-like step functions" is worth pursuing, because LASER's authors already identified the need.** A step function that filters agents by a predicate, samples a subset, and updates a column is exactly the "select a set, thin it, act" primitive identified in the `individual` entry, and it is expressible declaratively. That LASER's own architecture document reaches for this is corroborating evidence for the shape of the primitive.
-6. **Spatial structure deserves first-class status.** LASER puts `node_id` in the core; epymorph puts geography in the RUME; MEmilio has graph-ODE and traveller states; Starsim treats space as one network among several. For an eradication-scale or subnational-planning audience, space is not one stratification dimension among many, and the design should decide deliberately whether it gets special treatment.
+3. **Preallocation is an implementation strategy that the language can enable.** If the model declares its maximum population, its node set, and its output shape — which a declarative language naturally does — a backend can preallocate without the modeler thinking about it. The constraint LASER imposes on its users is information the lingua franca would already have.
+4. **The shared-mutable-state hazard appears here in its strongest form**, and reinforces the recommendation from the Vivarium and Starsim entries: components writing arbitrary columns of a shared table is fast and unanalyzable. Declared read/write sets cost nothing at run time — they are compile-time information — and would let a backend keep LASER's performance while recovering the analysis.
+5. **"Declarative behavior with SQL-like step functions" is worth pursuing, because LASER's authors already identified the need.** A step function that filters agents by a predicate, samples a subset, and updates a column is exactly the "select a set, thin it, act" primitive identified in the `individual` entry, and it is expressible declaratively. That LASER's own architecture document reaches for this is corroborating evidence for the shape of the primitive.
+6. **Spatial structure deserves first-class status.** LASER puts `node_id` in the core; epymorph puts geography in the RUME; MEmilio has graph-ODE and traveler states; Starsim treats space as one network among several. For an eradication-scale or subnational-planning audience, space is not one stratification dimension among many, and the design should decide deliberately whether it gets special treatment.

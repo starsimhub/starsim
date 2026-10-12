@@ -6,7 +6,7 @@
 | **Paradigms** | Metapopulation ODE — a user-supplied subpopulation model broadcast across arbitrary dimensions |
 | **Specification style** | A Python function defining the subpopulation model, plus a declarative dimension specification |
 | **Version reviewed** | 0.x |
-| **Licence** | (see repository) |
+| **License** | (see repository) |
 | **Code** | <https://github.com/m-d-grunnill/MetaCast> |
 | **Docs** | <https://metacast.readthedocs.io/> |
 | **Paper** | Grunnill et al. (2024), *JOSS* 9(99): 6851, [10.21105/joss.06851](https://doi.org/10.21105/joss.06851) |
@@ -95,7 +95,7 @@ Also worth noting: `asymptomatic_transmission_modifier` applies automatically to
 ## Strengths
 
 - **Structure as a dimension algebra.** Age, space, risk, and vaccination status are all just dimensions; the model author writes within-group dynamics once. Conceptually the cleanest statement of the stratification problem in the review.
-- **Transfers between coordinates as a declarative form.** `{from_coordinates, to_coordinates, states, parameter}` expresses vaccination, ageing, and migration in one vocabulary — and expresses them as *dimension movement*, not as model transitions.
+- **Transfers between coordinates as a declarative form.** `{from_coordinates, to_coordinates, states, parameter}` expresses vaccination, aging, and migration in one vocabulary — and expresses them as *dimension movement*, not as model transitions.
 - **Force of infection factored out** of the subpopulation model and computed by the framework, with an explicit `foi_population_focus` choice for the denominator convention.
 - **Parameters explicitly classified** as universal or subpopulation-specific.
 - **Epidemiological set semantics**: `infected_states`, `infectious_states`, `symptomatic_states` as distinct declared sets, with the asymptomatic transmission modifier following from the difference.
@@ -114,8 +114,8 @@ Also worth noting: `asymptomatic_transmission_modifier` applies automatically to
 
 ## Implications for the lingua franca
 
-1. **Take the framing: stratification, metapopulation, and multi-group structure are one operation.** MetaCast, summer2 (`stratify_with`), camdl (`dimensions` + `stratify`), and epymorph (`MultiStrataRUME`) are four attempts at the same thing, and MetaCast states the general case most plainly. The lingua franca should have **one dimension concept** covering age, space, risk, strain, and vaccination status — with, as summer2 and camdl both show, a way to mark which dimensions carry extra structure (ageing flows, movement, residence times).
-2. **Transfers between coordinates deserve to be a declared form.** Vaccination as `{from: [high, unvaccinated], to: [high, vaccination_lag], states: all, rate: nu}` is a genuinely different and useful way of saying it: the individual does not change disease state, they change *dimension coordinate*. camdl's `transfer(from = S, to = V)` is close, but MetaCast's version generalises across all states at once and across arbitrary dimensions. This is a strong candidate primitive for the intervention vocabulary.
+1. **Take the framing: stratification, metapopulation, and multi-group structure are one operation.** MetaCast, summer2 (`stratify_with`), camdl (`dimensions` + `stratify`), and epymorph (`MultiStrataRUME`) are four attempts at the same thing, and MetaCast states the general case most plainly. The lingua franca should have **one dimension concept** covering age, space, risk, strain, and vaccination status — with, as summer2 and camdl both show, a way to mark which dimensions carry extra structure (aging flows, movement, residence times).
+2. **Transfers between coordinates deserve to be a declared form.** Vaccination as `{from: [high, unvaccinated], to: [high, vaccination_lag], states: all, rate: nu}` is a genuinely different and useful way of saying it: the individual does not change disease state, they change *dimension coordinate*. camdl's `transfer(from = S, to = V)` is close, but MetaCast's version generalizes across all states at once and across arbitrary dimensions. This is a strong candidate primitive for the intervention vocabulary.
 3. **Force of infection should be framework-computed and explicitly configured.** Factoring λ out of the model is right. Doing it through string-concatenated parameter names is not. The lingua franca needs an explicit, checked form: which states are infectious, which mixing structure applies, which denominator convention (`None` / `i` / `j`) is in force — with the convention named rather than assumed, because the three choices are genuinely different models and the difference is invisible in most frameworks.
-4. **Declare the epidemiological state sets.** `infected_states`, `infectious_states`, `symptomatic_states` as separate declared sets, with behaviour following from their differences, is a small idea worth keeping. It is how a framework knows that "infected" and "infectious" are not the same claim — a distinction Starsim also makes (`infectious` defaults to an alias for `infected` and can differ) and most others elide.
+4. **Declare the epidemiological state sets.** `infected_states`, `infectious_states`, `symptomatic_states` as separate declared sets, with behavior following from their differences, is a small idea worth keeping. It is how a framework knows that "infected" and "infectious" are not the same claim — a distinction Starsim also makes (`infectious` defaults to an alias for `infected` and can differ) and most others elide.
 5. **This is the strongest argument against imperative subpopulation models.** MetaCast has the right decomposition and the wrong medium: the dimension algebra is declarative and checkable, while the model it broadcasts is index arithmetic. Put camdl's or epipack's transition objects inside MetaCast's dimension algebra and you have most of what this project needs.

@@ -6,14 +6,14 @@
 | **Paradigms** | Metapopulation — compartmental dynamics within nodes, discrete movement between them |
 | **Specification style** | Composition of independently declared parts: IPM (disease) × MM (movement) × scope (geography) × initializer × parameters |
 | **Version reviewed** | current `main` |
-| **Licence** | (see repository) |
+| **License** | (see repository) |
 | **Code** | <https://github.com/NAU-CCL/epymorph> |
 | **Docs** | <https://docs.epimorph.org> |
 | **Paper** | — (EpiMoRPH project, NAU) |
 
 ## What it's for
 
-epymorph is a spatial metapopulation framework whose organising idea is that **the disease process, the movement process, and the geography are three independent things that get combined**. You can swap the disease without touching the movement model, swap the movement model without touching the disease, and re-run either over a different geographic scope with the same code.
+epymorph is a spatial metapopulation framework whose organizing idea is that **the disease process, the movement process, and the geography are three independent things that get combined**. You can swap the disease without touching the movement model, swap the movement model without touching the disease, and re-run either over a different geographic scope with the same code.
 
 This is the cleanest separation of concerns in the review, and it is directly relevant: the lingua franca's paradigm-independence goal is a similar factoring, one axis over.
 
@@ -51,7 +51,7 @@ class SIRS(CompartmentModel):
         ]
 ```
 
-**The MM (Movement Model)** — one or more `MovementClause`s, each declaring what it needs, when it fires, which sub-step travellers leave on, and when they return:
+**The MM (Movement Model)** — one or more `MovementClause`s, each declaring what it needs, when it fires, which sub-step travelers leave on, and when they return:
 
 ```python
 class CentroidsClause(MovementClause):
@@ -86,7 +86,7 @@ A `MultiStrataRUME` composes several IPM/MM/params triples (a "GPM") into one ex
 | Data requirement | `AttributeDef(name, type, shape, default_value, comment)` | **Declared, typed, and shaped** — a real interface contract |
 | Shape | `Shapes.Scalar`, `Shapes.N`, `Shapes.T`, `Shapes.TxN`, `Shapes.NxN`, … | Time × node × arm shape algebra, checked |
 | Movement | `MovementModel` of `MovementClause`s | Each with `requirements`, `predicate`, `leaves`, `returns` |
-| Timing | `EveryDay()`, `TickIndex(step=)`, `TickDelta(step=, days=)` | Sub-daily ticks; travellers leave on one and return on another |
+| Timing | `EveryDay()`, `TickIndex(step=)`, `TickDelta(step=, days=)` | Sub-daily ticks; travelers leave on one and return on another |
 | Geography | `GeoScope` — states, counties, tracts | With real census hierarchies |
 | Data source | ADRIO | Fetches an attribute from an external source, with caching and an inspection report |
 | Stratum | `GPM` (Geo-Population Model) | An (IPM, MM, init, params) bundle |
@@ -109,7 +109,7 @@ Nothing else in the review makes a model's data dependencies declarative in this
 
 ## Time
 
-The timeline is `TimeFrame`, and movement runs on **sub-daily ticks**: a clause declares which tick travellers leave on (`TickIndex(step=0)`) and when they come back (`TickDelta(step=1, days=0)`). This gives commuting — leave in the morning, mix at the destination, return in the evening — without a continuous-time formulation.
+The timeline is `TimeFrame`, and movement runs on **sub-daily ticks**: a clause declares which tick travelers leave on (`TickIndex(step=0)`) and when they come back (`TickDelta(step=1, days=0)`). This gives commuting — leave in the morning, mix at the destination, return in the evening — without a continuous-time formulation.
 
 Disease rates are per-day floats with declared shapes. There are no dimensional types, but the **shape** system does a related job: `Shapes.TxN` says a parameter varies by time and node, and passing a scalar where `TxN` is required is an error.
 
@@ -126,9 +126,9 @@ Disease rates are per-day floats with declared shapes. There are no dimensional 
 
 ## Limitations
 
-- **The IPM is Python subclassing.** `edges()` is a method returning a list; the model is a class, not a document. Serialisation of structure is not the design.
+- **The IPM is Python subclassing.** `edges()` is a method returning a list; the model is a class, not a document. Serialization of structure is not the design.
 - **No dimensional types.** Shapes are checked, units are not.
-- **Movement clauses are code.** The `predicate` / `leaves` / `returns` declaration is elegant, but the movement mechanism itself (the dispersal kernel, the row normalisation) is an ordinary Python method.
+- **Movement clauses are code.** The `predicate` / `leaves` / `returns` declaration is elegant, but the movement mechanism itself (the dispersal kernel, the row normalization) is an ordinary Python method.
 - **US-centric.** GeoScope and the ADRIO library are built around US Census geography and US data sources. Applying it elsewhere means writing ADRIOs.
 - **Compartmental within nodes only.** No individual agents; heterogeneity is by node and by stratum.
 - **No intervention vocabulary.** Interventions are time-varying parameters (which the `TxN` shape supports well) or bespoke code.
@@ -136,9 +136,9 @@ Disease rates are per-day floats with declared shapes. There are no dimensional 
 
 ## Implications for the lingua franca
 
-1. **Adopt the declared-requirement contract.** A model that says "I need `beta`, a float, shaped time × node" and is bound to data separately is checkable, portable, and provenanced. This is the single most transferable idea in epymorph, and it generalises past geography: every module in a lingua franca model — disease, network, demography, intervention — could declare its data interface the same way. It also solves a problem Starsim's connectors have, since a declared requirement makes cross-module dependencies visible.
+1. **Adopt the declared-requirement contract.** A model that says "I need `beta`, a float, shaped time × node" and is bound to data separately is checkable, portable, and provenanced. This is the single most transferable idea in epymorph, and it generalizes past geography: every module in a lingua franca model — disease, network, demography, intervention — could declare its data interface the same way. It also solves a problem Starsim's connectors have, since a declared requirement makes cross-module dependencies visible.
 2. **Adopt a shape algebra.** `Scalar` / `N` / `T` / `TxN` / `NxN` as checked shapes catches broadcasting bugs that dimensional types alone would not. Dimensional types say *what a number means*; shapes say *how many of them there are and along which axis*. A language spanning agents, patches, strata, and time needs both.
-3. **The three-way factoring is the model to follow.** Disease × movement × geography for metapopulations generalises to disease × contact structure × population for the whole design space. Starsim's `Route` abstraction is reaching for the same thing from the agent-based side; epymorph shows what it looks like when the separation is total rather than partial.
+3. **The three-way factoring is the model to follow.** Disease × movement × geography for metapopulations generalizes to disease × contact structure × population for the whole design space. Starsim's `Route` abstraction is reaching for the same thing from the agent-based side; epymorph shows what it looks like when the separation is total rather than partial.
 4. **Sub-tick movement timing is worth expressing.** Leave on tick 0, return on tick 1 of the next day is a compact way to say "commuting", and it is a genuinely different time structure from either a single `dt` or Starsim's per-module timelines. The language should be able to express within-step scheduling of this kind.
 5. **Validate at definition, not at run.** epymorph checks IPM well-formedness when the class is defined. camdl checks at compile. The general principle — the earliest possible check — should be explicit in the design.
 6. **Data resolution deserves a vocabulary.** Between epymorph's ADRIOs (pull with provenance), Epydemix's bundled data, and camdl's `read(...)`, there is a clear need for the language to express *where a parameter's value comes from* rather than only its value. That belongs in the design alongside the model structure.

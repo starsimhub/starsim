@@ -6,7 +6,7 @@
 | **Paradigms** | Compartmental — stochastic (default) and deterministic, with age/contact-matrix structure |
 | **Specification style** | Imperative construction of a model object: compartments, then transitions, then population |
 | **Version reviewed** | 1.x |
-| **Licence** | GPL-3.0 |
+| **License** | GPL-3.0 |
 | **Code** | <https://github.com/epistorm/epydemix> |
 | **Docs** | <https://epydemix.readthedocs.io/>, <https://www.epydemix.org/> |
 | **Paper** | Gozzi et al. (2025), *PLOS Comp Biol* 21(11): e1013735, [10.1371/journal.pcbi.1013735](https://doi.org/10.1371/journal.pcbi.1013735) |
@@ -14,7 +14,7 @@
 
 ## What it's for
 
-Epydemix is compartmental epidemic modelling with the data already attached. It is named in the project brief as an interconversion target, and it represents the "batteries included" end of the design space: the model vocabulary is small and unsurprising, and the value is in `epydemix_data` — population structures and contact matrices for over 400 locations — plus a built-in Approximate Bayesian Computation calibration stack.
+Epydemix is compartmental epidemic modeling with the data already attached. It is named in the project brief as an interconversion target, and it represents the "batteries included" end of the design space: the model vocabulary is small and unsurprising, and the value is in `epydemix_data` — population structures and contact matrices for over 400 locations — plus a built-in Approximate Bayesian Computation calibration stack.
 
 It is the clearest example in the review of a framework whose *data bundling* is the product and whose *specification language* is deliberately minimal.
 
@@ -84,7 +84,7 @@ model.add_intervention(
 )
 ```
 
-An intervention is a **contact-layer modification over a date range** — either a multiplicative reduction or a wholesale replacement matrix. That covers school closures, workplace restrictions, and lockdowns, which is most of what a COVID-era scenario model needs, and nothing else. Pharmaceutical interventions are modelled as extra compartments and transitions.
+An intervention is a **contact-layer modification over a date range** — either a multiplicative reduction or a wholesale replacement matrix. That covers school closures, workplace restrictions, and lockdowns, which is most of what a COVID-era scenario model needs, and nothing else. Pharmaceutical interventions are modeled as extra compartments and transitions.
 
 The `override_parameter` / `delete_override` / `clear_overrides` mechanism handles time-varying parameters separately.
 
@@ -109,12 +109,12 @@ Worth noting for this project specifically: Epydemix ships a CLI explicitly desi
 
 ## Limitations
 
-- **Model structure is built imperatively.** `add_transition` calls in sequence; the model is a Python object, not a document. No serialisation of structure.
+- **Model structure is built imperatively.** `add_transition` calls in sequence; the model is a Python object, not a document. No serialization of structure.
 - **No stratification operator.** Age structure comes from the `Population`'s contact matrix, which stratifies mixing but not compartments — a model where progression differs by age needs the compartments written out.
 - **No dimensional types**, no units, no rate/probability distinction.
 - **Interventions are contact-layer-only.** Vaccination, treatment, screening, and testing have no vocabulary; they are compartments and transitions.
 - **No observation model.** Calibration compares simulated compartment counts to data through a metric function; there is no declared reporting process, delay, or ascertainment.
-- **Deterministic mode is secondary.** The design centre is stochastic simulation plus ABC.
+- **Deterministic mode is secondary.** The design center is stochastic simulation plus ABC.
 - **GPL-3.0**, which is more restrictive than most of the rest of the reviewed set and may matter for interconversion tooling.
 
 ## Implications for the lingua franca
@@ -124,4 +124,4 @@ Worth noting for this project specifically: Epydemix ships a CLI explicitly desi
 3. **Data bundling is a first-class design concern, not packaging.** Epydemix's real contribution is that `load_epydemix_population("United_States", "mistry_2021")` works. A lingua franca that can express a contact matrix but cannot say *which* contact matrix, from *which* source, for *which* place, has moved the problem rather than solved it. Consider whether population and mixing references belong in the language — as camdl's `read("data/lga_pop.tsv", column = "patch")` partly does — with provenance attached.
 4. **Quantiles-across-replicates as the default output.** For any stochastic paradigm, the natural result object is a distribution over trajectories, not a trajectory. Epydemix makes this the default; most frameworks make the user aggregate.
 5. **Note the agent-facing CLI.** Epydemix chose a documented CLI contract as its machine interface rather than exposing its Python API. camdl chose the same (CLI plus offline versioned docs). For an AI-native language, the interface an agent drives may matter as much as the syntax it writes.
-6. **The intervention gap repeats.** Epydemix's interventions are contact reductions and nothing else; summer2 and odin have none; Starsim and EMOD have rich ones with no structural specification underneath. The pattern across the whole review is that structural rigour and intervention expressiveness have not yet appeared in the same framework.
+6. **The intervention gap repeats.** Epydemix's interventions are contact reductions and nothing else; summer2 and odin have none; Starsim and EMOD have rich ones with no structural specification underneath. The pattern across the whole review is that structural rigor and intervention expressiveness have not yet appeared in the same framework.

@@ -6,7 +6,7 @@
 | **Paradigms** | Compartmental — ODE (default) and stochastic |
 | **Specification style** | Declarative model object; structure built by method calls, then *transformed* by stratification |
 | **Version reviewed** | `summerepi2` (Monash EMU) |
-| **Licence** | BSD-2-Clause |
+| **License** | BSD-2-Clause |
 | **Code** | <https://github.com/monash-emu/summer2> |
 | **Docs** | <https://summer2.readthedocs.io/> |
 | **Paper** | — (documented; used across Monash EMU's TB, COVID-19 and other work) |
@@ -15,7 +15,7 @@
 
 summer2 builds stratified compartmental models. Its distinctive claim is not the compartments — those are ordinary — but **stratification as a transformation applied to a finished model**. You build an unstratified SIR, then apply an age stratification, then a vaccination stratification, then a strain stratification, and summer2 rewrites the compartments, the flows, the mixing, and the outputs accordingly.
 
-This is the most developed answer anywhere in the review to the question "how do you add a dimension to a model without rewriting it", and that question is close to the centre of what the lingua franca has to solve.
+This is the most developed answer anywhere in the review to the question "how do you add a dimension to a model without rewriting it", and that question is close to the center of what the lingua franca has to solve.
 
 ## How a model is specified
 
@@ -49,7 +49,7 @@ m.stratify_with(age_strat)
 m.request_output_for_flow("incidenceXage_00", "infection", source_strata={"age": "00"})
 ```
 
-`stratify_with()` is where the work happens. It splits every listed compartment, splits every flow (`flow.stratify(strat)`), applies the flow adjustments, extends the mixing categories, and — for an `AgeStratification` — generates the inter-stratum ageing flows automatically. The user does not touch the flows they already wrote.
+`stratify_with()` is where the work happens. It splits every listed compartment, splits every flow (`flow.stratify(strat)`), applies the flow adjustments, extends the mixing categories, and — for an `AgeStratification` — generates the inter-stratum aging flows automatically. The user does not touch the flows they already wrote.
 
 ## Core abstractions
 
@@ -57,7 +57,7 @@ m.request_output_for_flow("incidenceXage_00", "infection", source_strata={"age":
 |---|---|---|
 | Compartment | `Compartment(name, strata)` | Names carry their strata; `_original_compartment_names` tracks the pre-stratified set |
 | Flow | `add_transition_flow`, `add_infection_frequency_flow`, `add_infection_density_flow`, `add_crude_birth_flow`, `add_replacement_birth_flow`, `add_importation_flow`, `add_death_flow`, `add_universal_death_flows` | A closed vocabulary of **named flow kinds**, not an open rate expression |
-| Stratification | `Stratification(name, strata, compartments)` | Plus `AgeStratification` (adds ageing flows) and `StrainStratification` (multi-strain force of infection) |
+| Stratification | `Stratification(name, strata, compartments)` | Plus `AgeStratification` (adds aging flows) and `StrainStratification` (multi-strain force of infection) |
 | Stratum adjustment | `Adjustment` — `Multiply`, `Overwrite` | Applied to flows and to infectiousness, per stratum |
 | Mixing | `set_mixing_matrix(matrix_or_function)` | Only allowed on a full stratification; builds up `_mixing_categories` |
 | Parameter | `param("name")`, `set_default_parameters({...})` | Symbolic — parameters are graph nodes, resolved at run time |
@@ -87,14 +87,14 @@ It is the same architectural move as camdl's IR and odin's dependency sort, arri
 
 `CompartmentalModel(times=(start, end), timestep=1.0, ref_date=datetime)`. Times may be given as datetimes if `ref_date` is set, and are converted to numbers internally. The constructor checks that the timestep divides the period exactly.
 
-There are **no dimensional types**. Rates are floats and their units are the modeller's responsibility. `add_infection_frequency_flow` versus `add_infection_density_flow` is the one place where a dimensional distinction is made explicit in the API — frequency-dependent versus density-dependent transmission — and it is made by *choosing a different function*, which is a coarse but effective form of typing.
+There are **no dimensional types**. Rates are floats and their units are the modeler's responsibility. `add_infection_frequency_flow` versus `add_infection_density_flow` is the one place where a dimensional distinction is made explicit in the API — frequency-dependent versus density-dependent transmission — and it is made by *choosing a different function*, which is a coarse but effective form of typing.
 
 ## Strengths
 
 - **Stratification as a first-class, validated transformation.** The single best treatment of the problem in the review.
 - **A closed vocabulary of named flow kinds.** `add_infection_frequency_flow` versus `add_infection_density_flow` versus `add_transition_flow` versus `add_crude_birth_flow` encodes real epidemiological distinctions in the API, so the framework knows what a flow *means* and can transform it correctly under stratification. An open "rate expression" cannot be stratified automatically; a named flow kind can.
 - **Adjustments (`Multiply` / `Overwrite`) as the base-model/stratum interface** — generic process, per-stratum modifier, neither aware of the other.
-- **Special-cased stratification types.** `AgeStratification` generating ageing flows and `StrainStratification` restructuring the force of infection are exactly the cases that are laborious and error-prone by hand.
+- **Special-cased stratification types.** `AgeStratification` generating aging flows and `StrainStratification` restructuring the force of infection are exactly the cases that are laborious and error-prone by hand.
 - **Correct restrictions, enforced.** Mixing matrices only on complete stratifications; one age stratification; one strain stratification; strains cannot carry a mixing matrix.
 - **Symbolic parameters and a compiled computation graph**, with a JAX backend giving JIT and autodiff over the whole model.
 - **Derived outputs as a requested DAG**, with source/destination stratum filters, so `incidence in children` is one line rather than a post-processing script.
@@ -114,9 +114,9 @@ There are **no dimensional types**. Rates are floats and their units are the mod
 
 ## Implications for the lingua franca
 
-1. **Stratification must be an operator, not a rewrite.** summer2 proves this works and shows exactly what it requires: the framework must know what each flow *means* in order to know how it transforms. This is a strong argument for a **closed, semantically meaningful set of transition kinds** in the lingua franca — infection (frequency), infection (density), progression, birth, death, importation, ageing — rather than only an open rate expression.
+1. **Stratification must be an operator, not a rewrite.** summer2 proves this works and shows exactly what it requires: the framework must know what each flow *means* in order to know how it transforms. This is a strong argument for a **closed, semantically meaningful set of transition kinds** in the lingua franca — infection (frequency), infection (density), progression, birth, death, importation, aging — rather than only an open rate expression.
 2. **The adjustment mechanism is the right base-model/stratum interface.** `Multiply` and `Overwrite` per stratum, applied to flows and to infectiousness, keeps the base model stratum-agnostic. Adopt this shape; consider whether `Overwrite` should exist at all, given how it interacts with multiple stratifications.
-3. **Special-case the stratifications that carry structure.** Age (which implies ageing flows), strain (which implies a restructured force of infection), and space (which implies movement) are not generic dimensions. camdl makes the same distinction differently, by separating population strata from residence structure. Both are recognising that dimensions are not interchangeable, and the lingua franca needs a way to say which kind a dimension is.
+3. **Special-case the stratifications that carry structure.** Age (which implies aging flows), strain (which implies a restructured force of infection), and space (which implies movement) are not generic dimensions. camdl makes the same distinction differently, by separating population strata from residence structure. Both are recognizing that dimensions are not interchangeable, and the lingua franca needs a way to say which kind a dimension is.
 4. **Enforce the restrictions that follow from the structure.** "A mixing matrix requires a complete stratification" is a correctness property, not an implementation limit, and summer2 checks it. A multi-paradigm language will have many such properties; each should be a named error.
 5. **Compile, do not evaluate.** summer2's `networkx` DAG, odin's topological sort, and camdl's IR are three routes to the same requirement. Whatever the lingua franca's surface syntax, the model must become a graph before it becomes a computation.
 6. **Requested outputs with stratum filters** — `request_output_for_flow("incidence", "infection", source_strata={"age": "00"})` — is a good declarative output vocabulary and pairs naturally with camdl's `incidence(transition[age = child])`. Both name a transition and select strata; the lingua franca should have one such form.

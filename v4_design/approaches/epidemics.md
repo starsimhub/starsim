@@ -6,7 +6,7 @@
 | **Paradigms** | Deterministic compartmental (ODE via odin); one discrete-time stochastic model |
 | **Specification style** | **Model structure is fixed.** The user composes a scenario from *composable elements* |
 | **Version reviewed** | 0.5.0 |
-| **Licence** | MIT |
+| **License** | MIT |
 | **Code** | <https://github.com/epiverse-trace/epidemics> |
 | **Docs** | <https://epiverse-trace.github.io/epidemics/> |
 | **Paper** | — |
@@ -14,7 +14,7 @@
 
 ## What it's for
 
-`epidemics` is deliberately the opposite of a modelling framework. Its scope statement is unusually clear:
+`epidemics` is deliberately the opposite of a modeling framework. Its scope statement is unusually clear:
 
 > *epidemics* aims to help public health practitioners — rather than research-focussed modellers — to rapidly simulate disease outbreak scenarios […] *epidemics* **trades away some flexibility in defining model structures for a gain in the ease of defining epidemic scenario components** such as affected populations and model events.
 
@@ -81,7 +81,7 @@ The package ships a `design-principles.Rmd` vignette, which is itself notable �
 
 **Interventions compose additively, not multiplicatively.** Two interventions reducing contacts by X% and Y% give `C × (1 − (X + Y))`, not `C × (1 − X)(1 − Y)`. The stated reason is that additive effects were considered easier for users to understand.
 
-This is a striking choice. Multiplicative composition is the more defensible modelling assumption and the more common one; the package chose the other and **documented the choice and its rationale**. Whether or not one agrees, the fact that it is written down is exactly right, and it stands in contrast to the many frameworks where the composition rule is whatever the implementation happens to do.
+This is a striking choice. Multiplicative composition is the more defensible modeling assumption and the more common one; the package chose the other and **documented the choice and its rationale**. Whether or not one agrees, the fact that it is written down is exactly right, and it stands in contrast to the many frameworks where the composition rule is whatever the implementation happens to do.
 
 **Model-specific composable-element sets.** The Ebola model does not accept a `vaccination` element, because vaccination is considered unlikely in its use case. The Ebola model also refuses rate interventions on `infectiousness_rate` and `removal_rate`, because those parameters determine the number of Erlang sub-compartments and cannot be changed mid-run without redistributing individuals. That is a **capability restriction derived from the model's internal structure, enforced and explained** — the same discipline camdl applies through its capability checks.
 

@@ -45,7 +45,7 @@ Every document follows the same template, so that the sections can be read acros
 | [EoN](eon.md) | Python | Network SIR/SIS, ODE approximations | Function calls over a NetworkX graph; a `Gillespie_simple_contagion` spec for custom processes | Pairs simulation with the corresponding analytic approximations — relevant to converting between paradigms |
 | [flepiMoP](flepimop.md) | Python / R | Metapopulation, inference pipeline | YAML configuration spanning model, seeding, interventions, and fitting | Config-file specification at production scale, including the intervention grammar |
 | [EpiHiper](epihiper.md) | C++ / JSON | ABM on explicit contact networks, national scale | Five JSON documents against published schemas | The only framework here where *both* the disease model and the intervention layer are data; declarative dwell-time distributions and a real set/trigger/action rule language |
-| [Vivarium](vivarium.md) | Python | Agent-based microsimulation | Components listed in YAML; behaviour as `Component` subclasses with a declared lifecycle | The value-pipeline pattern — named quantities with one producer, many registered modifiers, and a declared combiner — is the best answer here to cross-module effects |
+| [Vivarium](vivarium.md) | Python | Agent-based microsimulation | Components listed in YAML; behavior as `Component` subclasses with a declared lifecycle | The value-pipeline pattern — named quantities with one producer, many registered modifiers, and a declared combiner — is the best answer here to cross-module effects |
 | [LASER](laser.md) | Python / Numba | Spatial ABM at eradication scale | A columnar `LaserFrame` of agent properties plus a list of components | IDM's other agent-based engine; its design point differs from Starsim's in instructive ways, and its migration-model library is the best spatial-interaction vocabulary in the review |
 | [epidemics](epidemics.md) | R (odin under the hood) | Compartmental, fixed structures | Model structure is a library; the user composes *composable elements* around it | The clearest statement of the opposite design choice — fix the structure, open the scenario — with a published design-principles document |
 
@@ -56,9 +56,9 @@ Shorter entries, collected in [notes.md](notes.md): enough to place each one and
 | Framework | Language | The idea worth taking |
 |---|---|---|
 | [Covasim / HPVsim / STIsim / FPsim](notes.md#covasim--hpvsim--stisim--fpsim) | Python | Starsim's lineage; Covasim's `days`/`changes` intervention form was simpler than what replaced it |
-| [Kendrick](notes.md#kendrick) | Pharo / Smalltalk | The earliest and most explicit statement of separation-of-concerns as the organising principle for epidemic models |
+| [Kendrick](notes.md#kendrick) | Pharo / Smalltalk | The earliest and most explicit statement of separation-of-concerns as the organizing principle for epidemic models |
 | [PyRoss](notes.md#pyross) | Python | Optimal control — "what intervention is best?" rather than "what if we do X?" — plus multiple stochastic approximations of one model |
-| [Mesa](notes.md#mesa) | Python | Agent activation order as a named, user-selected modelling decision; `AgentSet` as a select-then-act primitive |
+| [Mesa](notes.md#mesa) | Python | Agent activation order as a named, user-selected modeling decision; `AgentSet` as a select-then-act primitive |
 | [ModelingToolkit.jl / Catalyst.jl](notes.md#modelingtoolkitjl--catalystjl) | Julia | **Per-reaction `PhysicalScale`** — paradigm declared per *transition*, not per model. The sharpest version of this project's central idea, in another field |
 | [SBML](notes.md#sbml-systems-biology-markup-language) | XML standard | Twenty-five years of interchange-format experience, including why an unauthorable format degrades into a lossy export target |
 | [ASKEM AMR / MIRA](notes.md#askem-model-representation-amr--mira) | JSON / Python | The closest prior art: a closed Template taxonomy of transition types, and **ontology-identified Concepts** that let two models' compartments be compared |
@@ -74,16 +74,16 @@ The landscape database (as of 2026.08.25) lists 137 tools. Most are not in scope
 
 Other models considered and not included:
 
-- **FRED** — **excluded on licence.** Distributed under a University of Pittsburgh EULA, not an open-source licence, per the landscape database's licence audit. (Included if open source; it is not.)
+- **FRED** — **excluded on license.** Distributed under a University of Pittsburgh EULA, not an open-source license, per the landscape database's license audit. (Included if open source; it is not.)
 - **GLEAM / GLEAMviz** — closed source. A landmark metapopulation model, referenced from [epymorph.md](epymorph.md) as the paradigm's reference point rather than reviewed on its own.
-- **Episimmer** — excluded on licence (Commons Clause is not open source).
+- **Episimmer** — excluded on license (Commons Clause is not open source).
 - **MetaWards**, **GEMS**, **Epi Info** — real tools, but each is effectively one application with a configuration surface, and each is covered better for our purposes by something already in the list. Reasons in [notes.md](notes.md#frameworks-considered-and-not-written-up).
 - **NDlib** — a network diffusion library with a compartment-composition API; EoN covers the same ground more rigorously and ships the analytic approximations alongside.
 - **statnet / ergm** — the network substrate under EpiModel, discussed inside [epimodel.md](epimodel.md).
 - **dust / monty** — the engine and inference layers under odin; discussed inside [odin.md](odin.md).
 - **Stan, PyMC, NumPyro** — inference substrates rather than model-structure languages. They belong to the calibration discussion in `best-practices`, not here.
 
-**EpiHiper is included** (MIT licence, published in *PNAS Nexus*, in national-scale use at the CDC Scenario Modeling Hub) and turned out to be one of the more valuable entries — see [epihiper.md](epihiper.md).
+**EpiHiper is included** (MIT license, published in *PNAS Nexus*, in national-scale use at the CDC Scenario Modeling Hub) and turned out to be one of the more valuable entries — see [epihiper.md](epihiper.md).
 
 Two categories are added that the landscape database deliberately excludes, because its inclusion criteria are about the IDD community and ours are about model representation:
 
@@ -94,7 +94,7 @@ Two categories are added that the landscape database deliberately excludes, beca
 
 Things that only became visible by reading across the whole set. These are observations for `best-practices` to argue with, not conclusions.
 
-**1. Structural rigour and intervention expressiveness have not yet appeared in the same framework.** The frameworks with the best model specification — camdl, odin, summer2, epipack — have essentially no intervention vocabulary. The frameworks with the best intervention vocabulary — EMOD, EpiHiper, Starsim, Atomica — have weak or absent structural specification. The one exception is EpiHiper, which has both as data and is close to unreadable. Closing this split is the most concrete contribution available to this project.
+**1. Structural rigor and intervention expressiveness have not yet appeared in the same framework.** The frameworks with the best model specification — camdl, odin, summer2, epipack — have essentially no intervention vocabulary. The frameworks with the best intervention vocabulary — EMOD, EpiHiper, Starsim, Atomica — have weak or absent structural specification. The one exception is EpiHiper, which has both as data and is close to unreadable. Closing this split is the most concrete contribution available to this project.
 
 **2. Five independent arrivals at dimensional typing.** Starsim (`dur`/`per`/`prob`/`freq`), camdl (`rate`/`probability`/`count`/`time`), Atomica (a `Format` column in a spreadsheet), EMULSION (rate/probability/duration as three alternative transition keys), and Catalyst.jl (`@unit_checks`). Five different media, five different communities, one small vocabulary. This is as settled as anything in the review.
 
@@ -110,11 +110,11 @@ Things that only became visible by reading across the whole set. These are obser
 
 **8. Eligibility should be a declarative predicate, and two frameworks show how.** EMOD's `Targeting_Config` (named conditions composed as AND-of-ORs) and EpiHiper's `sets` (set algebra over typed node and edge predicates) are data. Starsim's `eligibility` callable and EpiModel's modules are opaque code. This is the piece missing from every scenario grammar in the review — EpiModel's tables and flepiMoP's modifiers can move a parameter over a time window but cannot target a subgroup.
 
-**9. Cross-module effects need a declared combination rule.** Two interventions each reducing transmission by 40% might compose multiplicatively or additively, and the answer changes. Vivarium declares it (named combiners and post-processors on value pipelines); `epidemics` declares it globally and justifies the choice; Starsim's connectors are last-write-wins; most frameworks leave it implicit in execution order. This is a modelling decision that must be statable.
+**9. Cross-module effects need a declared combination rule.** Two interventions each reducing transmission by 40% might compose multiplicatively or additively, and the answer changes. Vivarium declares it (named combiners and post-processors on value pipelines); `epidemics` declares it globally and justifies the choice; Starsim's connectors are last-write-wins; most frameworks leave it implicit in execution order. This is a modeling decision that must be statable.
 
-**10. Order dependence is usually hidden, and it does not have to be.** `individual` makes it irrelevant (queued updates, applied after all processes run). Vivarium makes it declared (named lifecycle phases with priorities). Starsim makes it inspectable (`Loop` as a data object). Mesa makes it a user-selected modelling decision. Everyone else leaves it in the order the code happens to run.
+**10. Order dependence is usually hidden, and it does not have to be.** `individual` makes it irrelevant (queued updates, applied after all processes run). Vivarium makes it declared (named lifecycle phases with priorities). Starsim makes it inspectable (`Loop` as a data object). Mesa makes it a user-selected modeling decision. Everyone else leaves it in the order the code happens to run.
 
-**11. Structure should be specifiable by its generating model, not only its realisation.** EpiModel fits a network from target statistics (`netest` → `netdx` → `netsim`); LASER ships gravity, radiation, Stouffer, and competing-destinations mobility models; Epydemix and epymorph resolve contact matrices and geography from named data sources. A language that only accepts an edge list or a matrix has moved the problem rather than solved it — because the description, not the realisation, is what modellers actually have.
+**11. Structure should be specifiable by its generating model, not only its realization.** EpiModel fits a network from target statistics (`netest` → `netdx` → `netsim`); LASER ships gravity, radiation, Stouffer, and competing-destinations mobility models; Epydemix and epymorph resolve contact matrices and geography from named data sources. A language that only accepts an edge list or a matrix has moved the problem rather than solved it — because the description, not the realization, is what modelers actually have.
 
 **12. Nobody except MIRA can tell whether two models' compartments mean the same thing.** MIRA's ontology-identified `Concept`s are what make automated model comparison and merging possible. For a project whose goal includes interconversion, this is an idea we do not currently have and probably need.
 

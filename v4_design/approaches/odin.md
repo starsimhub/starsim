@@ -6,7 +6,7 @@
 | **Paradigms** | Continuous-time ODE; discrete-time stochastic (difference equations with distributional draws) |
 | **Specification style** | Embedded DSL — R syntax, non-R semantics — compiled |
 | **Version reviewed** | odin2 0.3.46 |
-| **Licence** | MIT |
+| **License** | MIT |
 | **Code** | <https://github.com/mrc-ide/odin2>, <https://github.com/mrc-ide/dust2>, <https://github.com/mrc-ide/monty> |
 | **Docs** | <https://mrc-ide.github.io/odin2>, the [odin & monty book](https://mrc-ide.github.io/odin-monty/) |
 | **Paper** | dust: [10.12688/wellcomeopenres.16466.2](https://doi.org/10.12688/wellcomeopenres.16466.2) |
@@ -14,7 +14,7 @@
 
 ## What it's for
 
-odin lets a modeller write a system of differential or difference equations more or less as they would write it on paper, and get a compiled C++ implementation with a particle filter and an MCMC layer attached. It is the workhorse behind a large fraction of MRC Centre / Imperial modelling output, and the closest thing in R to what camdl is in its own language.
+odin lets a modeler write a system of differential or difference equations more or less as they would write it on paper, and get a compiled C++ implementation with a particle filter and an MCMC layer attached. It is the workhorse behind a large fraction of MRC Centre / Imperial modeling output, and the closest thing in R to what camdl is in its own language.
 
 The three-package split is the design: **odin** is a language, **dust** is an execution engine, **monty** is an inference layer, and they meet at defined interfaces rather than being one monolith. A model written in odin compiles to the dust interface; monty runs particle filters and MCMC against anything that implements that interface, odin-generated or not.
 
@@ -78,9 +78,9 @@ y <- dust2::dust_system_simulate(sys, 0:100)
 
 ## Time
 
-Time is `time`, the step is `dt`, and both are available inside the model. That last point matters more than it sounds: because `dt` is in scope, the modeller writes `p_SI <- 1 - exp(-beta * I / N * dt)` explicitly, so the rate-to-probability conversion is *visible in the model text* rather than hidden in the engine.
+Time is `time`, the step is `dt`, and both are available inside the model. That last point matters more than it sounds: because `dt` is in scope, the modeler writes `p_SI <- 1 - exp(-beta * I / N * dt)` explicitly, so the rate-to-probability conversion is *visible in the model text* rather than hidden in the engine.
 
-That is a real design position, and a defensible one — it is the opposite of Starsim's (where `ss.peryear(0.1).to_prob(dt)` makes the conversion the type's job). odin's version is more transparent and less safe: nothing stops a modeller writing `p_SI <- beta * I / N * dt`, which is correct only for small `dt`, and nothing marks `beta` as a rate rather than a probability. **There is no unit or dimension system.** Parameters are `real`, `integer`, or `logical`.
+That is a real design position, and a defensible one — it is the opposite of Starsim's (where `ss.peryear(0.1).to_prob(dt)` makes the conversion the type's job). odin's version is more transparent and less safe: nothing stops a modeler writing `p_SI <- beta * I / N * dt`, which is correct only for small `dt`, and nothing marks `beta` as a rate rather than a probability. **There is no unit or dimension system.** Parameters are `real`, `integer`, or `logical`.
 
 For discrete-time models the order of events within a step is documented precisely: reset `zero_every` accumulators, read variables, look up interpolations at `t0`, evaluate all assignments (with `time = t0` and all variables at start-of-step values), write new state, advance time — then, separately, compare to data at `t0 + dt`. Having this written down at all puts odin ahead of most of the review.
 
@@ -139,7 +139,7 @@ This is powerful and correct, and it is a markedly lower-level treatment than `s
 - **No dimensional types.** Rates, probabilities, counts, and durations are all `real`. The `1 - exp(-r*dt)` conversion is written by hand every time, and writing `r*dt` instead is not an error.
 - **Compartmental only.** No agents, no networks, no individual heterogeneity. Stratification-by-array is the only structural axis.
 - **Stratification is manual.** Adding a dimension means editing every equation.
-- **No intervention vocabulary at all.** Time-varying parameters go through `interpolate()`; anything else is an equation the modeller writes. There is no notion of a scheduled action, a coverage level, or a targeted subgroup.
+- **No intervention vocabulary at all.** Time-varying parameters go through `interpolate()`; anything else is an equation the modeler writes. There is no notion of a scheduled action, a coverage level, or a targeted subgroup.
 - **No common random numbers**, so paired scenario comparison is unavailable.
 - **R-embedded.** The DSL is written inside an R call, parsed by R's parser, and compiled by R's toolchain. Portability outside R is limited to the JavaScript target.
 - **Delays carry implicit state**, and the docs acknowledge that continuing a delayed system is not the same as starting one from a point in state space. This is honest and unresolved.

@@ -6,7 +6,7 @@
 | **Paradigms** | Deterministic compartmental (ODE); stochastic individual-contact (random mixing); stochastic dynamic-network (TERGM) |
 | **Specification style** | Function-call API: `param.*()` / `init.*()` / `control.*()`, plus user-supplied module functions |
 | **Version reviewed** | 2.6.2 (2026-07-29) |
-| **Licence** | GPL-3 |
+| **License** | GPL-3 |
 | **Code** | <https://github.com/EpiModel/EpiModel> |
 | **Docs** | <https://www.epimodel.org/>, <https://epimodel.github.io/EpiModel/> |
 | **Paper** | Jenness, Goodreau & Morris (2018), *JSS* 84(8), [10.18637/jss.v084.i08](https://doi.org/10.18637/jss.v084.i08) |

@@ -6,7 +6,7 @@
 | **Paradigms** | ODE, integro-differential (IDE), linear-chain-trick (LCT / GLCT), SDE, metapopulation (graph-ODE), agent-based, and hybrid agent–metapopulation |
 | **Specification style** | C++ template model classes; parameters as typed tag structs |
 | **Version reviewed** | current `main` |
-| **Licence** | Apache-2.0 |
+| **License** | Apache-2.0 |
 | **Code** | <https://github.com/SciCompMod/memilio> |
 | **Docs** | <https://memilio.readthedocs.io/> |
 | **Paper** | Bicker et al. (2026), [arXiv:2602.11381](https://doi.org/10.48550/arXiv.2602.11381), plus a paper per model family |
@@ -66,14 +66,14 @@ Three features of this are worth extracting from the C++ noise.
 | Family | What it adds | Cost |
 |---|---|---|
 | **ODE** | Baseline compartmental | Exponential dwell times |
-| **LCT / GLCT** | Linear chain trick: sub-compartments give Erlang (and generalised) dwell-time distributions | More state |
-| **IDE** | Integro-differential: arbitrary dwell-time distributions via memory kernels | Non-Markovian, harder to solve and to initialise |
+| **LCT / GLCT** | Linear chain trick: sub-compartments give Erlang (and generalized) dwell-time distributions | More state |
+| **IDE** | Integro-differential: arbitrary dwell-time distributions via memory kernels | Non-Markovian, harder to solve and to initialize |
 | **SDE** | Diffusion-approximation stochasticity | Approximation valid only at moderate-to-large populations |
-| **Graph-ODE / metapop** | Nodes with explicit mobility, including traveller states in transit | Mobility formulation matters (there is a paper on exactly this) |
+| **Graph-ODE / metapop** | Nodes with explicit mobility, including traveler states in transit | Mobility formulation matters (there is a paper on exactly this) |
 | **ABM** | Individual agents with locations and activity-driven contacts | Cost, and calibration difficulty |
 | **Hybrid** | Agents where resolution is needed, metapopulation elsewhere | Coupling semantics at the boundary |
 
-That MEmilio has a published paper for nearly every one of these, including one revisiting *"the Linear Chain Trick in epidemiological models: implications of underlying assumptions for numerical solutions"*, is itself the point: the choice between these formulations is a modelling decision with consequences, and the library is built to make the comparison possible.
+That MEmilio has a published paper for nearly every one of these, including one revisiting *"the Linear Chain Trick in epidemiological models: implications of underlying assumptions for numerical solutions"*, is itself the point: the choice between these formulations is a modeling decision with consequences, and the library is built to make the comparison possible.
 
 ## SBML import
 
@@ -94,7 +94,7 @@ This is the same design as Epydemix's contact-layer interventions, with the same
 ## Strengths
 
 - **The widest paradigm coverage in the review by a wide margin**, with each family implemented properly rather than approximated.
-- **Dwell-time distributions treated as a first-class modelling axis**: exponential (ODE), Erlang (LCT), generalised (GLCT), arbitrary (IDE). This is the single most under-served concept in every other framework here.
+- **Dwell-time distributions treated as a first-class modeling axis**: exponential (ODE), Erlang (LCT), generalized (GLCT), arbitrary (IDE). This is the single most under-served concept in every other framework here.
 - **Hybrid agent–metapopulation models**, with the coupling as an explicit design object and a paper justifying it.
 - **Parameters as compile-time-checked types.** Nothing else in the review checks parameter names at build time.
 - **Typed multi-dimensional population indices** (age × infection state), checked.
@@ -106,7 +106,7 @@ This is the same design as Epydemix's contact-layer interventions, with the same
 
 ## Limitations
 
-- **The model is C++ template code.** Adding a compartment means writing a new model class. There is no model-definition language, no serialisable structure, and no way to introspect a model as data.
+- **The model is C++ template code.** Adding a compartment means writing a new model class. There is no model-definition language, no serializable structure, and no way to introspect a model as data.
 - **Every model family is a separate implementation.** `ode_seir`, `lct_secir`, `ide_seir`, and `sde_sir` are different C++ classes with different parameter sets. There is no single specification from which the paradigms are generated — which is precisely the gap this project is trying to fill, and MEmilio is the clearest demonstration that the gap is real and expensive: this library is a large, well-funded, multi-year effort, and the paradigm coverage was bought by writing each one separately.
 - **High barrier to entry.** C++17 templates, CMake, and a large API.
 - **No intervention vocabulary** beyond contact-matrix dampings.
@@ -116,8 +116,8 @@ This is the same design as Epydemix's contact-layer interventions, with the same
 ## Implications for the lingua franca
 
 1. **MEmilio is the cost estimate for *not* having a lingua franca.** Twenty-plus model families, each implemented independently, each with its own paper, sharing a parameter convention but not a specification. If one typed specification could generate the ODE, LCT, SDE, and metapopulation forms of the same model, that is the value proposition, quantified.
-2. **Dwell-time distribution is a first-class modelling axis and the language must express it.** ODE means exponential; LCT means Erlang with *k* stages; IDE means an arbitrary kernel. camdl handles this with `via erlang` / `via hyper_erlang` and — importantly — classifies it as *residence structure* rather than population stratification. That distinction is right, and MEmilio's model list is the evidence for how much rides on it. Most frameworks in this review silently assume exponential dwell times and never say so.
+2. **Dwell-time distribution is a first-class modeling axis and the language must express it.** ODE means exponential; LCT means Erlang with *k* stages; IDE means an arbitrary kernel. camdl handles this with `via erlang` / `via hyper_erlang` and — importantly — classifies it as *residence structure* rather than population stratification. That distinction is right, and MEmilio's model list is the evidence for how much rides on it. Most frameworks in this review silently assume exponential dwell times and never say so.
 3. **Adopt the paradigm lattice as the design's map.** Not "compartmental / metapopulation / SDE / ABM" as four options, but a lattice with axes: aggregation (compartment ↔ agent), stochasticity (deterministic ↔ diffusion ↔ jump), dwell time (exponential ↔ Erlang ↔ arbitrary), and space (single ↔ patch ↔ explicit mobility). A model specification selects a point; a conversion moves along an axis. This is a more useful framing than a list of paradigms, and it makes the "which conversions are meaningful" question answerable per axis.
 4. **Compile-time parameter checking is achievable and worth it.** MEmilio gets it from C++ types; camdl gets it from its compiler; Starsim gets a runtime version from `define_pars` locking. EpiModel, Epydemix, and MetaCast get nothing. A misspelled parameter name should be a compile error.
-5. **Study the SBML importer.** It is a working instance of the exact artefact this project needs (interchange format → executable framework model), including the parts that do not map cleanly.
-6. **Traveller state in transit is a real modelling concern.** MEmilio has a paper on how to represent people who are in the process of moving between patches. A metapopulation vocabulary that only has "in patch i" or "in patch j" cannot say this, and the lingua franca should decide deliberately whether it can.
+5. **Study the SBML importer.** It is a working instance of the exact artifact this project needs (interchange format → executable framework model), including the parts that do not map cleanly.
+6. **Traveler state in transit is a real modeling concern.** MEmilio has a paper on how to represent people who are in the process of moving between patches. A metapopulation vocabulary that only has "in patch i" or "in patch j" cannot say this, and the lingua franca should decide deliberately whether it can.

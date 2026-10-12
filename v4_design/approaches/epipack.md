@@ -6,14 +6,14 @@
 | **Paradigms** | Compartmental — deterministic ODE, stochastic well-mixed (Gillespie), and stochastic on networks; all from one process specification |
 | **Specification style** | Reaction-style tuples — the model is a list of processes |
 | **Version reviewed** | 0.1.x |
-| **Licence** | MIT |
+| **License** | MIT |
 | **Code** | <https://github.com/benmaier/epipack> |
 | **Docs** | <http://epipack.benmaier.org> |
 | **Paper** | [10.21105/joss.03097](https://doi.org/10.21105/joss.03097) |
 
 ## What it's for
 
-epipack exists to make the *analysis* steps of compartmental modelling cheap enough that changing the model stays cheap. Its stated motivation is that adding or removing a compartment with pen and paper is easy, while redoing the ODE derivation, the numerical integration, the stochastic simulation, and the stability analysis is not.
+epipack exists to make the *analysis* steps of compartmental modeling cheap enough that changing the model stays cheap. Its stated motivation is that adding or removing a compartment with pen and paper is easy, while redoing the ODE derivation, the numerical integration, the stochastic simulation, and the stability analysis is not.
 
 For this project it is the single most direct piece of evidence that **one process specification can drive multiple execution paradigms**, because that is literally its API surface: the same list of tuples goes to `EpiModel` (numeric ODE + Gillespie), `SymbolicEpiModel` (symbolic ODEs, Jacobian, fixed points), or `StochasticEpiModel` (network simulation).
 
@@ -104,7 +104,7 @@ This is where epipack is unlike anything else in the review. From the symbolic m
 - fixed points, symbolically
 - eigenvalues at the disease-free state — that is, **the epidemic threshold, derived**
 
-`SIRS.get_eigenvalues_at_disease_free_state()` returning `{-omega: 1, eta - rho: 1, 0: 1}` means R₀ > 1 ⟺ η > ρ, obtained from the model declaration with no derivation by the modeller.
+`SIRS.get_eigenvalues_at_disease_free_state()` returning `{-omega: 1, eta - rho: 1, 0: 1}` means R₀ > 1 ⟺ η > ρ, obtained from the model declaration with no derivation by the modeler.
 
 This is the payoff of transitions-as-data taken further than anyone else takes it: because the model is a symbolic object, standard dynamical-systems analysis is a method call.
 
@@ -116,7 +116,7 @@ This is the payoff of transitions-as-data taken further than anyone else takes i
 - **Time- and state-dependent rates in every mode**, including a correct inhomogeneous-Poisson Gillespie implementation.
 - **Conditional link transmission** — cascading events on an edge — which is the natural way to express contact tracing and is rare elsewhere.
 - **Tiny specification.** An SIRS model is five lines and reads like the reaction scheme.
-- **Interactive exploration** (`InteractiveIntegrator`) and animated network visualisation.
+- **Interactive exploration** (`InteractiveIntegrator`) and animated network visualization.
 
 ## Limitations
 

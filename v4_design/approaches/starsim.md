@@ -5,8 +5,8 @@
 | **Language** | Python (with Numba kernels and an optional Rust backend); R bindings via `rstarsim` |
 | **Paradigms** | Agent-based (primary); network; metapopulation and mixing-pool; compartmental / ODE-style |
 | **Specification style** | Class-based Python API, with declarative `define_pars()` / `define_states()` / `define_results()` inside imperative `step()` methods |
-| **Version reviewed** | 3.6.0 (2026-08-22) |
-| **Licence** | MIT |
+| **Version reviewed** | 3.6.0 (2026-08-28); facts re-checked against 3.7.2 (2026-10-06) |
+| **License** | MIT |
 | **Code** | <https://github.com/starsimhub/starsim> |
 | **Docs** | <https://docs.starsim.org> |
 | **Paper** | Kerr et al., Starsim methods paper; predecessor Covasim in *PLOS Comp Biol* [10.1371/journal.pcbi.1009149](https://doi.org/10.1371/journal.pcbi.1009149) |
@@ -54,12 +54,13 @@ class SIR(ss.Infection):
 
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infectious'),
+            ss.BoolState('infected', label='Infected'),
             ss.BoolState('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('rel_sus', default=1.0),
             ss.FloatArr('rel_trans', default=1.0),
+            reset = True, # Replace the states that ss.Infection already defines
         )
 
     def step_state(self):
@@ -68,7 +69,7 @@ class SIR(ss.Infection):
         self.recovered[recovered] = True
 ```
 
-The three `define_*` calls are the interesting part of the design. They are **declarations with types**: parameters carry time units (`ss.peryear`, `ss.years`) or distributions (`ss.bernoulli`, `ss.lognorm_ex`); states carry a dtype, a default, and a label; results carry a shape, a timevec, and a module. Nothing springs into existence on first use — `self.foo = 3` on a module raises unless `foo` was declared, and `define_states` locks the state list. That is a meaningful step beyond EpiModel's open `...` parameter lists, and it is the mechanism that makes `sim.to_json()`, automatic result generation, and mock initialization possible.
+The three `define_*` calls are the interesting part of the design. They are **declarations with types**: parameters carry time units (`ss.peryear`, `ss.years`) or distributions (`ss.bernoulli`, `ss.lognorm_ex`); states carry a dtype, a default, and a label; results carry a shape, a timevec, and a module. Parameters cannot spring into existence on first use — `update_pars` rejects a name that `define_pars` did not declare — and declared states and core attributes (`pars`, `results`, `sim`) cannot be overwritten by plain assignment. (Ordinary attributes can still be added to a module freely.) That is a meaningful step beyond EpiModel's open `...` parameter lists, and it is the mechanism that makes `sim.to_json()`, automatic result generation, and mock initialization possible.
 
 The step methods are ordinary imperative Python operating on vectorized agent arrays.
 
@@ -79,7 +80,7 @@ The step methods are ordinary imperative Python operating on vectorized agent ar
 | Simulation | `ss.Sim` | Owns `People`, `pars`, `Timeline`, `Loop`, `Results` |
 | Everything else | `ss.Module` | Diseases, networks, demographics, interventions, connectors, analyzers are all subclasses with the same lifecycle |
 | Population | `ss.People` | Agents identified by persistent `uid`; `auids` are the currently-alive subset |
-| State | `ss.BoolState`, `ss.FloatArr`, `ss.State` | Typed, labelled, per-agent arrays owned by the module that declares them. Boolean states automatically generate an `n_<state>` result |
+| State | `ss.BoolState`, `ss.BoolArr`, `ss.FloatArr`, `ss.IntArr`, `ss.IndexArr` | Typed, labeled, per-agent arrays owned by the module that declares them. Boolean states automatically generate an `n_<state>` result |
 | Transition | imperative code in `step_state()` / `set_prognoses()`, usually via scheduled `ti_*` times | Not a data object |
 | Transmission | `ss.Route` — `ss.Network` (edge-based) or `ss.MixingPool` / `ss.MixingPools` (aggregate) | The same `infect()` machinery handles both, so switching from an ABM to a metapopulation formulation is a route swap, not a model rewrite |
 | Contact | edge in `net.edges` with `p1`, `p2`, `beta`, and optional `dur` | Bidirectional by default with per-direction beta |
@@ -89,7 +90,7 @@ The step methods are ordinary imperative Python operating on vectorized agent ar
 | Randomness | `ss.Dist` | One RNG per distribution, seeded by hashing its name; see below |
 | Intervention | `ss.Intervention` subclass, with `RoutineDelivery` / `CampaignDelivery` mixins | A partial grammar, see below |
 | Cross-module coupling | `ss.Connector`, or direct modification of another module's states | Deliberately unstructured |
-| Output | `ss.Result` (a labelled, unit-aware array) in `ss.Results` | Declared, not created ad hoc |
+| Output | `ss.Result` (a labeled, unit-aware array) in `ss.Results` | Declared, not created ad hoc |
 | Execution order | `ss.Loop` | An explicit, inspectable, reorderable plan; see below |
 
 ## Time
@@ -104,7 +105,7 @@ There is a class hierarchy under `ss.TimePar`:
   - `ss.prob` — a unitless probability attached to a period (`ss.probperyear(0.1)`)
   - `ss.freq` — a count of events per unit time (`ss.freqperyear(3)`)
 
-Distinguishing *rate*, *probability*, and *frequency* at the type level is unusual and worth carrying forward: `0.1` per year could legitimately mean any of the three, they convert to a per-timestep quantity by different formulas (`1 - exp(-r·dt)`, rescaling, `r·dt`), and conflating them is one of the most common quiet errors in the field. Starsim makes the conversion the type's responsibility: `beta.to_prob(dt)`.
+Distinguishing *rate*, *probability*, and *frequency* at the type level is unusual and worth carrying forward: `0.1` per year could legitimately mean any of the three, they convert to a per-timestep quantity by different formulas (`1 - exp(-r·dt)`, `1 - (1-p)^dt`, `r·dt`), and conflating them is one of the most common quiet errors in the field. Starsim makes the conversion the type's responsibility: `beta.to_prob(dt)`.
 
 Durations and rates compose with dates: `ss.date` subclasses `pd.Timestamp`, so a sim can run on real calendar dates, and `ss.datedur` handles the month-length problem that pure float-year arithmetic gets wrong. A `Timeline` exposes the same time as `tvec` (ground truth), `tivec` (indices), `timevec` (human-friendly), `yearvec` (float years), `datevec` (dates), and `relvec` (relative), which is a lot of parallel representations but does mean output can be requested in whatever frame the data are in.
 
@@ -130,7 +131,7 @@ This is a genuine design achievement and also the source of some of the framewor
 Transmission goes through `ss.Route`, of which there are two families:
 
 - **`ss.Network`** — an edge list, regenerated or updated each step. Built-ins include random, static, maternal, sexual (`MFNet`, `MSMNet`), household, spatial, and disease-specific networks in `starsim.library.networks`. Transmission enumerates edges, computes per-edge probability from `beta`, `rel_trans`, and `rel_sus`, and draws.
-- **`ss.MixingPool` / `ss.MixingPools`** — aggregate force of infection between groups defined by arbitrary agent predicates, with a contact matrix. This is the metapopulation and age-contact-matrix formulation, and it runs through the same `Disease.infect()` path.
+- **`ss.MixingPool` / `ss.MixingPools`** — aggregate force of infection between groups defined by arbitrary agent predicates, with a contact matrix. This is the metapopulation and age-contact-matrix formulation, and it runs through the same `Infection.infect()` path (which calls each route's `compute_transmission()`).
 
 That both live behind one `Route` interface is the mechanism by which the *same disease module* can be run as an individual-network ABM or as a mixing-matrix metapopulation model without editing the disease. It is a partial version of the paradigm-independence this project is after — partial because the disease module is still written as agent code, so the compartmental limit is reached by making the population homogeneous rather than by solving equations.
 
@@ -138,16 +139,16 @@ That both live behind one `Route` interface is the mechanism by which the *same 
 
 The most developed intervention vocabulary in the landscape, built as a small class lattice rather than a grammar:
 
-- **Delivery mixins**: `RoutineDelivery` (start year, end year, coverage, interval) and `CampaignDelivery` (specific years, coverage).
+- **Delivery mixins**: `RoutineDelivery` (`years` or `start_year`/`end_year`, with `prob` or `annual_prob`) and `CampaignDelivery` (specific `years`, `prob`).
 - **Product base classes**: `BaseTest` → `BaseScreening`, `BaseTriage`; `BaseTreatment` → `treat_num`; `BaseVaccination`.
 - **Concrete combinations**: `routine_screening`, `campaign_screening`, `routine_triage`, `campaign_triage`, `routine_vx`, `campaign_vx`, `treat_num`.
-- **Products** (`ss.Product`) separate *what is delivered* — a diagnostic with sensitivity and specificity, a vaccine with efficacy and waning — from *how it is delivered*.
+- **Products** (`ss.Product`) separate *what is delivered* — a diagnostic (`ss.Dx`, defined by a table of the probability of each test result given each health state), a vaccine (`ss.Vx`; `ss.simple_vx` has an efficacy and no waning) — from *how it is delivered*.
 
-The product/delivery split is the right decomposition and should survive into the design. Eligibility is an arbitrary callable returning UIDs, which is fully general and completely opaque: it is Python, so it cannot be serialized, diagrammed, or checked. Anything the class lattice does not cover — a conditional cascade, a stock-constrained campaign, an adaptive trigger — is written as a bespoke `Intervention` subclass with a custom `step()`.
+The product/delivery split is the right decomposition and should survive into the design. Eligibility is an arbitrary callable of the sim returning UIDs or a boolean array, which is fully general and completely opaque: it is Python, so it cannot be serialized, diagrammed, or checked. Anything the class lattice does not cover — a conditional cascade, a stock-constrained campaign, an adaptive trigger — is written as a bespoke `Intervention` subclass with a custom `step()`.
 
 ## Execution order
 
-`ss.Loop` collects every module's step methods into an explicit, ordered plan, built by `collect_funcs()` in a fixed sequence: `start_step` for all modules → custom modules → demographics → disease `step_state` → connectors → networks → interventions → disease `step` (transmission) → deaths → results → analyzers → `finish_step`. The plan is a data object: it can be printed, exported with `loop.to_df()`, plotted (`plot_step_order`, `plot_cpu`), and modified with `loop.insert(func, label=..., before=True)`.
+`ss.Loop` collects every module's step methods into an explicit, ordered plan, built by `collect_funcs()` in a fixed sequence: `start_step` for all modules → population rescaling, if enabled → custom modules → demographics → disease `step_state` → connectors → networks → interventions → disease `step` (transmission) → deaths → results → analyzers → `finish_step`. The plan is a data object: it can be printed, exported with `loop.to_df()`, plotted (`plot_step_order`, `plot_cpu`), and modified with `loop.insert(func, label=..., before=True)`.
 
 Making execution order inspectable and editable — rather than implicit in the code, as it is nearly everywhere else — is one of Starsim's better ideas, and it directly serves the "no hidden behavior" design goal.
 
@@ -192,11 +193,11 @@ sexnet = sti.StructuredSexual()
 class HIVSyphConnector(ss.Connector):
     def step(self):
         # Syphilis co-infection raises HIV transmissibility
-        coinf = (self.sim.diseases.syphilis.active).uids
+        coinf = (self.sim.diseases.syph.infected).uids
         self.sim.diseases.hiv.rel_trans[coinf] = 2.0
 
 # Intervention: ART scale-up as routine delivery of a product
-art = sti.ART(coverage=[0.0, 0.4, 0.8], years=[2015, 2020, 2025])
+art = sti.ART(coverage={'year': [2015, 2020, 2025], 'value': [0.0, 0.4, 0.8]})
 
 sim = ss.Sim(
     n_agents      = 50_000,
@@ -245,7 +246,7 @@ The lesson recorded in the generalization: each of these hard-coded its disease 
 - **The compartmental limit is approximate, not exact.** Starsim can be run in an ODE-like configuration, but it gets there by simulating agents homogeneously, not by solving equations. It cannot produce the deterministic solution, and paradigm conversion is therefore one-directional.
 - **Two specification languages.** The dict/`type=` form is declarative and serializable; anything real is Python classes. There is no path from the first to the second, and the boundary is where most users get stuck.
 - **Python-object state is not serializable in general.** `sim.to_json()` captures parameters, not model structure; a Starsim model cannot be round-tripped as data.
-- **API surface is large.** Six module categories, four state types, ~20 distributions, ~15 time classes, three rate types, and a `Loop` API. Each piece is justified; the total is a lot to hold, and the framework leans heavily on AI tooling (`starsim_ai`) to make it navigable — which is a signal about the specification burden, not a solution to it.
+- **API surface is large.** Seven module categories, five array types, ~20 distributions, more than 20 time classes, three rate types, and a `Loop` API. Each piece is justified; the total is a lot to hold, and the framework leans heavily on AI tooling (`starsim_ai`) to make it navigable — which is a signal about the specification burden, not a solution to it.
 - **Time-type conversions have subtle corners**, particularly around calendar durations, `datedur` versus float-year arithmetic, and rate-to-probability conversion at large `dt`.
 - **Performance is Python-bound** for anything not vectorized; Numba kernels and a Rust backend cover the hot paths, but a custom `step()` written naively is slow, and there is no compilation step to catch that.
 
