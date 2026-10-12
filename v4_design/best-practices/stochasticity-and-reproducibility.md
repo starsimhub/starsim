@@ -6,7 +6,7 @@
 2. **Keep common random numbers, and make the CRN contract explicit and checked** rather than documented in comments.
 3. **Key common random numbers on declared agent attributes, not only on a slot index** — Vivarium's formulation generalizes better.
 4. **Adopt camdl's factored run identity**: model, parameters, config, scenario, and fit hashed separately.
-5. **Content-address runs.** An identical re-run should be a cache hit, and results should not be silently overwritable.
+5. **Offer content-addressed result caching as an option, off by default.** With it on, an identical re-run is a cache hit and results cannot be silently overwritten.
 6. **State the RNG semantics of an array draw in the specification.** odin's rule is the kind of ambiguity that produces silently wrong models.
 7. **Convergence is a claim to be checked**, not an assumption.
 
@@ -33,7 +33,7 @@ randomness:
     key_columns: ['entrance_time', 'age']
 ```
 
-Vivarium's version is the more general formulation, and its review says why: "Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalises better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly."
+Vivarium's version is the more general formulation, and its review says why: "Starsim keys on an agent slot; Vivarium keys on `['entrance_time', 'age']` — configurable, and meaningful across populations that are not the same set of agents. The latter generalizes better to comparing scenarios with different population sizes, which is a case Starsim's slot scheme handles awkwardly."
 
 Meanwhile [EpiModel](../approaches/epimodel.md), [odin](../approaches/odin.md), [epipack](../approaches/epipack.md), and most others have no CRN at all, "so paired scenario comparison is unavailable and small intervention effects need many replicates."
 
@@ -75,17 +75,17 @@ ss.Sim(sir, crn_key=None)                       # off
 
 ### Check the contract
 
-Because [transitions are declared](model-structure.md), the compiler knows which draws are per-agent inverse-CDF and which are not:
+Because [transitions are declared](model-structure.md) and every draw goes through an `ss.Dist`, the library knows which draws are per-agent inverse-CDF and which are not:
 
 ```text
->>> sim.summary()
+>>> sim.describe()
 common random numbers: on (key='slot')
   ✓ infection, recovery, mortality — per-agent, CRN-safe
   ! network.rewire — samples without replacement; CRN does not hold across scenarios
     paired differencing will include Monte Carlo noise from this draw
 ```
 
-This is [camdl](../approaches/camdl.md)'s capability-check discipline applied to CRN: name the limitation rather than leaving it in a comment. It is the difference between a guarantee and a habit.
+This is [camdl](../approaches/camdl.md)'s capability-check approach applied to CRN: name the limitation rather than leaving it in a comment. Draws made in custom `step()` code are reported the same way, from what the distributions saw during a run.
 
 ### The array-draw rule
 
@@ -98,8 +98,8 @@ Its review: "That distinction is exactly the kind of thing that is ambiguous in 
 Our version:
 
 ```python
-dur = ss.lognorm(mean=ss.days(10))      # in a transition: one draw per agent
-p   = ss.lognorm(mean=0.1).rvs()        # one draw, shared
+dur = ss.lognorm_ex(mean=ss.days(10), std=3)     # in a transition: one draw per agent
+p   = ss.lognorm_ex(mean=0.1, std=0.02).rvs()    # one draw, shared
 ```
 
 The rule: **a distribution in a per-agent slot draws per agent; a distribution evaluated to a scalar draws once.** Written down, not inferred.
@@ -111,7 +111,7 @@ The rule: **a distribution in a per-agent slot draws per agent; a distribution e
 model=8f3a21  pars=c47e90  config=1b6d55  scenario=vaccine  seed=1
 ```
 
-Four hashes, computed from the declared model, the resolved parameter values (including the provenance of any fetched data — see [parameters-and-distributions.md](parameters-and-distributions.md)), the execution configuration, and the scenario. Comparing two runs:
+Four hashes and the seed, computed from the declared model, the resolved parameter values (including the provenance of any fetched data — see [parameters-and-distributions.md](parameters-and-distributions.md)), the execution configuration, and the scenario. Comparing two runs:
 
 ```text
 >>> ss.diff(run_a, run_b)
@@ -123,7 +123,7 @@ scenario: baseline → vaccine
 
 That is the question every reviewer of a modeling analysis asks — *did the model change, or did the numbers?* — answered without diffing files.
 
-Content-addressing follows: a run whose four hashes already exist is a cache hit, and writing a different result to an existing identity is an error rather than an overwrite.
+The hashes are always computed. Caching results by them is optional and off by default: a re-run runs again unless caching has been turned on. With caching on, a run whose hashes already exist is a cache hit (and says so), and writing a different result to an existing identity is an error rather than an overwrite. Fitting settings have their own hash ([calibration.md](calibration.md)), so changing the number of trials does not look like a change to the model.
 
 ### Convergence is checked
 
@@ -149,19 +149,20 @@ Worth stating explicitly in the documentation because it is widely misunderstood
 
 - **CRN constrains how sampling can be implemented.** Anything not expressible as a per-agent inverse CDF falls outside the guarantee. Accepted, now checked and reported rather than assumed.
 - **Attribute-keyed CRN is slower than slot-keyed** (a hash over several columns rather than one integer). Default to slot; offer the other.
-- **Hashing the model requires a canonical form.** Two textually different but semantically identical models should hash the same, which needs a normalizer. That normalizer is also what makes prose→model determinism testable ([principles.md](principles.md)), so it is not an extra cost.
-- **Content-addressed caching surprises people** when they expect a re-run to actually re-run. camdl's answer — the cache hit is reported, and there is a `--force` — is the right one.
+- **Hashing the model requires a canonical form.** Two models written differently but meaning the same thing should hash the same, which needs a normalizer working on the [model spec](../design/14-model-spec.md). That normalizer is also what makes prose→model determinism testable ([principles.md](principles.md)), so it is not an extra cost.
+- **Content-addressed caching surprises people** when they expect a re-run to actually re-run. So it is off by default. When it is on, camdl's answer applies: the cache hit is reported, and there is a way to force a re-run.
 
 ## Rejected
 
 - **A single global RNG stream** (EpiModel). Adding a module changes everyone's draws.
 - **Reproducibility by seed alone.** Necessary, wildly insufficient.
-- **CRN as an implementation detail.** It changes what a comparison means; it belongs in the summary.
+- **CRN as an implementation detail.** It changes what a comparison means; it belongs in `describe()`.
+- **Caching on by default.** See the trade-off above.
 - **Per-particle streams as the only mechanism** (dust). Right for particle filters, insufficient for paired scenarios.
 - **Making CRN mandatory.** Some analyses want independent replicates, and a user comparing structurally different models across which agent identity is meaningless should be able to turn it off.
 
 ## Open questions
 
 - **What is the CRN guarantee when the population differs between scenarios?** Vivarium's attribute keying answers part of this; births, deaths, and migration mean the agent sets diverge over time even from a common start. There is probably a statable guarantee ("agents alive at the divergence point retain their draws") that is worth writing down.
-- **Does CRN survive paradigm conversion?** camdl pairs at the run level for compartmental backends; Starsim pairs at the agent level. Comparing an ODE baseline to an ABM intervention is not a paired comparison in any useful sense, and the summary should probably say so.
-- **Deterministic flows inside a stochastic model** — camdl's `deterministic()` and `overdispersed()` annotations, and [Catalyst.jl](../approaches/notes.md#modelingtoolkitjl--catalystjl)'s per-reaction `PhysicalScale`. This is really a [paradigm-conversion](paradigm-conversion.md) question, but the RNG implications (which streams exist, what CRN means) belong here.
+- **What does CRN mean across run methods?** camdl pairs at the run level for compartmental models; Starsim pairs at the agent level. Comparing an ODE baseline with an agent-based intervention run is not a paired comparison in any useful sense, and `ss.diff` should probably say so.
+- **Deterministic flows inside a stochastic model** — camdl's `deterministic()` and `overdispersed()` annotations, and [Catalyst.jl](../approaches/notes.md#modelingtoolkitjl--catalystjl)'s per-reaction `PhysicalScale`. Per-transition methods are deferred beyond v1 ([paradigm-conversion.md](paradigm-conversion.md)), but the RNG implications (which streams exist, what CRN means) belong here when they arrive.
