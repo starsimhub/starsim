@@ -4,9 +4,9 @@ The project's reason for existing, and the place where honesty matters most.
 
 ## Recommendation
 
-1. **Paradigm is a run-time choice, not a property of the model.** One model text; `run(method=...)` selects the backend.
+1. **Paradigm is a run-time choice, not a property of the model.** One model text; `run(method=...)` selects the backend. [CK: this is only possible for simple models ... for more complex models it will be in the specification. also, you might want to run even a simple model as agent based, to study eg eradication.]
 2. **Think in axes, not in a list of paradigms.** Aggregation, stochasticity, dwell time, and space are four independent axes; a model picks a point and a conversion moves along one axis.
-3. **Classify every conversion as exact, approximate-with-a-named-closure, or refused.** Never silently approximate.
+3. **Classify every conversion as exact, approximate-with-a-named-closure, or refused.** Never silently approximate. [CK: hm ... i might be ok with silent approximation! depends on the context]
 4. **Where a conversion needs a mathematical derivation rather than a compiler pass, refuse.** EoN's analytic hierarchy is a decade of mathematics saying when this is true.
 5. **Allow per-transition paradigm.** Catalyst.jl's `PhysicalScale` is the sharpest version of this idea anywhere, and hybrid epidemiological models need it.
 6. **Report the capability matrix.** A model should be able to say which backends it can run on and why not, before it runs.
@@ -41,7 +41,7 @@ Its review states the consequence directly:
 
 and the harder warning:
 
-> EoN's approximations cover SIS and SIR, not arbitrary `H`/`J` processes, because each closure has to be derived. That is a real warning about the cost of general paradigm conversion: it is a mathematical derivation per model class, not a compiler pass. Where the lingua franca cannot derive the conversion, it should refuse rather than approximate silently.
+> EoN's approximations cover SIS and SIR, not arbitrary `H`/`J` processes, because each closure has to be derived. That is a real warning about the cost of general paradigm conversion: it is a mathematical derivation per model class, not a compiler pass. Where the lingua franca cannot derive the conversion, it should refuse rather than approximate silently. [CK: i think an 'approximate' option would be very helpful, but would need to be explicitly invoked.]
 
 ## The proposal
 
@@ -65,7 +65,7 @@ The route changes; the disease does not. That is the [population-and-mixing](pop
 Before running anything:
 
 ```python
-sir.capabilities()
+sir.capabilities() # [CK: i don't like 'capabilities', maybe 'runtime' or 'integrator' or something ... would need to think more]
 ```
 
 ```text
@@ -76,10 +76,10 @@ mixing=RandomNet     ~      ~      ~      ~      ✓     ~ mean-field limit, exa
 mixing=SexualNet     ✗      ✗      ✗      ✗      ✓     ✗ concurrent partnerships: no closed form
 dur=lognorm          ~      ~      ~      ~      ✓     ~ nearest Erlang; discrepancy reported
 eligible=ss.age>65   ✓      ✓      ✓      ✓      ✓       (age is a dimension)
-eligible=lambda ...  ✗      ✗      ✗      ✗      ✓     ✗ opaque predicate
+eligible=lambda ...  ✗      ✗      ✗      ✗      ✓     ✗ opaque predicate # [CK: could have a lambda in an ODE model, sometimes]
 ```
 
-This is [camdl](../approaches/camdl.md)'s discipline — "every backend × method combination either works and is tested, or fails through a capability check that names the limitation — no silent gaps" — generalized to a much larger matrix, and it is the honest form of the project's central claim. The claim is not "any model runs any way"; it is "you will be told, by name, what does not."
+This is [camdl](../approaches/camdl.md)'s discipline — "every backend × method combination either works and is tested, or fails through a capability check that names the limitation — no silent gaps" — generalized to a much larger matrix, and it is the honest form of the project's central claim. The claim is not "any model runs any way"; it is "you will be told, by name, what does not." [CK: right, but rather than saying 'no i refuse', the lingua franca should offer approximations where possible. there are plenty of ODE models of sexually transmitted diseases, for example. so putting an 'X' for sexual network mixing with ODE models is not helpful nor correct. it's going to be different than the ABM version, sure, but it's a perfectly valid approximation.]
 
 ### Three classes of conversion
 
@@ -99,10 +99,10 @@ This is [camdl](../approaches/camdl.md)'s discipline — "every backend × metho
 
 **Refused, by name.**
 
-- Persisting concurrent partnerships → any compartmental form. There is no closure; concurrency is the thing being modelled.
-- An opaque `ss.process` or lambda predicate → anything but ABM.
-- Individual histories, contact tracing, transmission trees → anything but ABM.
-- A closure that has not been derived for the model class in question. **This is the important one**: EoN's ladder exists for SIS and SIR, not for arbitrary processes, and pretending otherwise is the failure mode this whole document exists to prevent.
+- Persisting concurrent partnerships → any compartmental form. There is no closure; concurrency is the thing being modelled. [CK: not sure i agree with this]
+- An opaque `ss.process` or lambda predicate → anything but ABM. [CK: strong disagree -- can definitely have a lambda in an ODE model, but obviously only a lambda that does something valid w.r.t. ODE states.]
+- Individual histories, contact tracing, transmission trees → anything but ABM. [CK: agree]
+- A closure that has not been derived for the model class in question. **This is the important one**: EoN's ladder exists for SIS and SIR, not for arbitrary processes, and pretending otherwise is the failure mode this whole document exists to prevent. [CK: having previously written an HIV ODE model, this seems unnecessarily difficult for users. we can do better than this. this is following too closely to camdl's purist approach.]
 
 ```text
 CapabilityError: cannot run 'hiv' as method='ode'.
@@ -155,14 +155,14 @@ The consequence for us is the [principles.md](principles.md) rule restated: this
 ## Trade-offs
 
 - **The capability matrix is a large testing obligation.** Every cell is a claim. Mitigation: most cells are structural (they follow from route × method), and the genuinely model-specific ones are few.
-- **Refusing is unfriendly.** A user who wants an ODE of their sexual-network model will be annoyed. They should be: the alternative is a number that looks fine and is wrong.
+- **Refusing is unfriendly.** A user who wants an ODE of their sexual-network model will be annoyed. They should be: the alternative is a number that looks fine and is wrong. [CK: strongly disagree. there are plenty of ODE sexual network models out there.]
 - **Named closures are a research surface.** Implementing heterogeneous pairwise for arbitrary declared processes is not a compiler pass. The honest v1 scope is: exact conversions everywhere they exist, mean-field with a loud label, and refusal otherwise — with the ladder as a later addition per model class.
-- **Per-transition `scale=` adds vocabulary** for a case (elimination) that most users never hit. One keyword, defaulting to "follow the run method", is the smallest form that works.
+- **Per-transition `scale=` adds vocabulary** for a case (elimination) that most users never hit. One keyword, defaulting to "follow the run method", is the smallest form that works. [CK: that's fine, but i don't like 'scale' as the keyword.]
 
 ## Rejected
 
 - **Presenting network → compartmental as one operation.** EoN's decade of mathematics says it is a choice of closure.
-- **Silent approximation of any kind.** The category error this document exists to prevent.
+- **Silent approximation of any kind.** The category error this document exists to prevent. [CK: i don't fee so strongly that this is a bad idea. i think sometimes it's a very good idea.]
 - **A separate model per paradigm** (MEmilio, EpiModel). The cost is quantified.
 - **Paradigm as a model property** (EMULSION's per-level `aggregation_type` as the *only* mechanism). It is a run-time choice, with per-transition and per-level override.
 - **Automatic conversion to whatever is fastest.** The paradigm changes what questions the model can answer; it is the modeler's choice, informed by the capability matrix.
@@ -170,7 +170,7 @@ The consequence for us is the [principles.md](principles.md) rule restated: this
 
 ## Open questions
 
-- **Are per-transition and per-level scale the same mechanism?** Catalyst does the first, EMULSION the second, MEmilio's hybrid family the second at the coupling boundary. Probably one mechanism with two spellings, but the coupling semantics at the boundary — MEmilio has a paper on exactly this — are not trivial.
-- **What is the exact statement of the ABM ↔ ODE agreement?** "Agrees in distribution as n → ∞ under Homogeneous mixing" is provable for the simple case, and the conditions for stratified, multi-route, non-exponential-dwell-time models need writing down rather than assuming.
-- **Should the closure ladder ship at all in v1?** It is the most intellectually interesting part and the least commonly needed. Refusal plus a documented pointer to EoN may be the right v1 answer.
-- **What is the granularity of the capability matrix?** Per (route × method) is coarse and cheap; per (transition × method) is precise and large. The escape hatches force at least some per-element resolution.
+- **Are per-transition and per-level scale the same mechanism?** Catalyst does the first, EMULSION the second, MEmilio's hybrid family the second at the coupling boundary. Probably one mechanism with two spellings, but the coupling semantics at the boundary — MEmilio has a paper on exactly this — are not trivial. [CK: not sure i followed this]
+- **What is the exact statement of the ABM ↔ ODE agreement?** "Agrees in distribution as n → ∞ under Homogeneous mixing" is provable for the simple case, and the conditions for stratified, multi-route, non-exponential-dwell-time models need writing down rather than assuming. [CK: i don't think we can get or should aim for exact agreement ... we're not interested in SIR models, we're interested in much more complex real world models for which exact equivalence will be hard or impossible to prove.]
+- **Should the closure ladder ship at all in v1?** It is the most intellectually interesting part and the least commonly needed. Refusal plus a documented pointer to EoN may be the right v1 answer. [CK: i don't want to point to EoN, but also not sure we need a 'closure ladder', seems very theoretical.]
+- **What is the granularity of the capability matrix?** Per (route × method) is coarse and cheap; per (transition × method) is precise and large. The escape hatches force at least some per-element resolution. [CK: not sure exactly what you mean by 'route' vs 'transition', but 'coarse' generally sounds good to me!]

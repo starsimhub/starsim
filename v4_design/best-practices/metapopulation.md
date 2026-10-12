@@ -125,7 +125,7 @@ with the source recorded in `sim.summary()` and in the [run hash](stochasticity-
 - **Patch counts multiply compartments.** 47 counties × 16 age groups × 3 states is 2,256 compartments before anything interesting happens. Report the count; note that an agent-based backend does not pay it.
 - **A mobility model needs distances, and distances need geography.** So `ss.gravity()` without a geo is an error — one of the few places where a guess is not available, because a gravity model over unknown distances is nothing.
 - **Commuting requires sub-step time structure**, which is genuine additional machinery in the execution loop. Justified by how common commuting metapopulations are.
-- **Travellers in transit are a third location** that neither `commute` nor `migrate` represents. MEmilio has a paper on it. We should decide deliberately whether we can say it, and the honest v1 answer is probably no, stated in the capability list.
+- **Travellers in transit are a third location** that neither `commute` nor `migrate` represents. MEmilio has a paper on it. We should decide deliberately whether we can say it, and the honest v1 answer is probably no, stated in the capability list. [CK: agree, too complex for now.]
 
 ## Rejected
 
@@ -138,6 +138,6 @@ with the source recorded in `sim.summary()` and in the [run hash](stochasticity-
 
 ## Open questions
 
-- **Should space get special treatment after all?** LASER's review argues for it from an eradication-scale perspective, and its `node_id`-in-the-core choice is not obviously wrong. The position taken here — space is a dimension carrying movement — may be too uniform for a subnational planning audience whose every question is spatial.
+- **Should space get special treatment after all?** LASER's review argues for it from an eradication-scale perspective, and its `node_id`-in-the-core choice is not obviously wrong. The position taken here — space is a dimension carrying movement — may be too uniform for a subnational planning audience whose every question is spatial. [CK: we need to support things like wastewater and malaria which is based on the environment, so I think space is a valid dimension even without movement.]
 - **What does a patch mean in an agent-based backend?** An agent property, per the [stratification](stratification.md) unification. But LASER's node-level force of infection with a migration matrix is a *third* thing: agents in patches with aggregate coupling. That is probably `ss.MixingPool` over a patch dimension, and it should be confirmed rather than assumed.
 - **Adaptive or behavior-driven mobility** — people stop travelling during an epidemic — is an [effect](composition-and-effects.md) on the mobility matrix, which the mechanism supports but nobody in the review does declaratively.

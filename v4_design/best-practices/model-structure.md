@@ -4,12 +4,12 @@ The central document. Everything else in this folder depends on the position tak
 
 ## Recommendation
 
-1. **Transitions are declared data, not imperative code.** This is the single largest gap between Starsim and this project's goals, and closing it is what makes everything downstream possible.
+1. **Transitions are declared data, not imperative code.** This is the single largest gap between Starsim and this project's goals, and closing it is what makes everything downstream possible. [CK: ok, but sometimes it will need to be imperative when the transitions are complex]
 2. **A transition is either spontaneous or contact-mediated, and the distinction is structural** — not implicit in whether a rate expression happens to mention another state.
 3. **The transition vocabulary is small, named, and closed, with one escape hatch that states its cost.**
-4. **Dwell time is a declared distribution per transition, defaulting to exponential**, and the backend decides how to realize it.
-5. **A state is one concept.** "Compartment" is what a state is called when the backend is an ODE; "boolean per-agent array" is what it is called when the backend is an ABM. The declaration is identical.
-6. **Infer the state list from the transitions.** Nobody should have to declare `S`, `I`, `R` and then write `S -> I`.
+4. **Dwell time is a declared distribution per transition, defaulting to exponential**, and the backend decides how to realize it. [CK: ok, but can also explicitly say how to realize it]
+5. **A state is one concept.** "Compartment" is what a state is called when the backend is an ODE; "boolean per-agent array" is what it is called when the backend is an ABM. The declaration is identical. [CK: yes]
+6. **Infer the state list from the transitions.** Nobody should have to declare `S`, `I`, `R` and then write `S -> I`. [CK: intrigued by this, but think i disagree. it's like a recipe, having the list of ingredients and then the method. i actually don't do that for my own recipe, but it's a standard for a reason.]
 7. **The disease model is a labelled directed graph over states.** Say so, and render it.
 
 ## Why: what "transitions are code" costs
@@ -35,7 +35,7 @@ And the payoff, wherever the model *is* data:
 | Translation between six model formats | [MIRA](../approaches/notes.md#askem-model-representation-amr--mira) | A closed Template taxonomy |
 | One model text on three backends | [camdl](../approaches/camdl.md), [epipack](../approaches/epipack.md) | The dynamics operator is chosen after the structure is declared |
 
-Starsim already proved half of this internally: `define_states` buys automatic `n_<state>` results, serialization, and validation. Declaring the transitions the same way buys the rest of the table.
+Starsim already proved half of this internally: `define_states` buys automatic `n_<state>` results, serialization, and validation. Declaring the transitions the same way buys the rest of the table. [CK: ok, i see that list is very camdl heavy, which is interesting!]
 
 ## The proposal
 
@@ -74,6 +74,21 @@ sir = ss.Disease(
 
 Two lines, four facts. States `S`, `I`, `R` are inferred. `I` is inferred infectious because it is the destination of the transmission. `N` never appears, because the force of infection is the route's job and not the modeler's — see [population-and-mixing.md](population-and-mixing.md). The transitions are named `infection` and `recovery` because they are keyword arguments, which means `sim.results.infection` and `incidence(infection)` exist without anyone declaring a result.
 
+[CK: this is nice, let's keep it. but I also want to support this form:
+
+```python
+beta = 0.05 # defaults to ss.perday
+dur = 10 # defaults to days
+
+S, I, R = ss.states()
+infection = S >> I @ beta
+recovery = I >> R @ dur
+
+sir = ss.compose(infection, recovery) # would need to think about the name -- maybe could pull from namespace to DRY?
+```
+
+]
+
 The dict form is the same thing with the constructors elided:
 
 ```python
@@ -84,11 +99,11 @@ sir = dict(infection=('S -> I', ss.perday(0.05)), recovery=('I -> R', ss.days(10
 
 ### The arrow string
 
-`'S -> I'` is the one place a string is load-bearing, and it is deliberate. It carries *structure* (two names and a direction), never an *expression*. The convergence is strong: camdl's `S --> I`, SimInf's `S -> ... -> I`, [Atomica](../approaches/atomica.md)'s transition matrix, [EoN](../approaches/eon.md)'s `H.add_edge('E','I')`, [EpiHiper](../approaches/epihiper.md)'s `entryState`/`exitState`, [Epydemix](../approaches/epydemix.md)'s `source`/`target`. Everyone draws the same arrow.
+`'S -> I'` is the one place a string is load-bearing, and it is deliberate. It carries *structure* (two names and a direction), never an *expression*. The convergence is strong: camdl's `S --> I`, SimInf's `S -> ... -> I`, [Atomica](../approaches/atomica.md)'s transition matrix, [EoN](../approaches/eon.md)'s `H.add_edge('E','I')`, [EpiHiper](../approaches/epihiper.md)'s `entryState`/`exitState`, [Epydemix](../approaches/epydemix.md)'s `source`/`target`. Everyone draws the same arrow. [CK: there must also be a nice non-string representation. above i suggested `S >> I` -- since `>>` but not `->` is a valid python operator -- and i think we could also do `ss.Transition(S, I)` for the fully explicit class form. but open to suggestions]
 
 What must never happen is [flepiMoP](../approaches/flepimop.md)'s `rate: ["Ro * gamma"]` or [EMULSION](../approaches/emulsion.md)'s `value: 'transmission_I * total_I / total_population'`. Rates are Python objects and Python expressions.
 
-Equivalent longhand for anyone who dislikes the arrow, or for programmatic construction:
+Equivalent longhand for anyone who dislikes the arrow, or for programmatic construction: [CK: yes this works too, but i think i still want a `Transition` class]
 
 ```python
 ss.transmission(src='S', dst='I', beta=ss.perday(0.05))
@@ -104,7 +119,7 @@ ss.transmission('S -> I', beta=ss.perday(0.05))                 # requires a con
 ss.transmission('S -> E', beta=ss.perday(0.05), source='I')     # SEIR: contact source is not the destination
 ```
 
-The `source=` default is "the destination state" — right for SIR, SIS, SIRS; wrong for SEIR, where naming `I` is the actual epidemiology and should be written down. This is the one place we ask for a word that a lazier design would guess.
+The `source=` default is "the destination state" — right for SIR, SIS, SIRS; wrong for SEIR, where naming `I` is the actual epidemiology and should be written down. This is the one place we ask for a word that a lazier design would guess. [CK: but how do we know if we're guessing or not? how does S->I know to work in the SIR case, and S->E know to fail in the SEIR case?]
 
 Multi-source transmission (competing or cooperating pathogens, multi-strain) takes a list: `source=['I_wild', 'I_alpha']`, which is MIRA's `GroupedControlledConversion`.
 
@@ -118,13 +133,13 @@ Small enough to hold in one screen. This is the whole of it:
 | `ss.progression(arrow, dur= \| rate= \| p=)` | Spontaneous | EoN `H`, epipack 3-tuple, EpiHiper `transitions`, MIRA `NaturalConversion` |
 | `ss.birth(arrow, rate=)` / `ss.death(arrow, rate=)` | Source and sink | camdl inflow/outflow, summer2 `add_crude_birth_flow` / `add_death_flow`, SimInf `@` |
 | `ss.transfer(<dim>='a -> b', rate= \| p=)` | Move between *strata*, not disease states | [MetaCast](../approaches/metacast.md) transfer dicts, camdl `transfer(...)` |
-| `ss.process(fn)` | The escape hatch: arbitrary Python | [`individual`](../approaches/individual.md)'s processes, Starsim's `step()` |
+| `ss.process(fn)` [CK: don't love 'process', what about 'func' or something] | The escape hatch: arbitrary Python | [`individual`](../approaches/individual.md)'s processes, Starsim's `step()` |
 
-`ss.transfer` is what vaccination, ageing, and migration are: the individual does not change disease state, they change dimension coordinate. Keeping it separate from `ss.progression` is [MetaCast](../approaches/metacast.md)'s insight and it is why interventions can be written without touching the disease model ([interventions.md](interventions.md)).
+`ss.transfer` is what vaccination, ageing, and migration are: the individual does not change disease state, they change dimension coordinate. Keeping it separate from `ss.progression` is [MetaCast](../approaches/metacast.md)'s insight and it is why interventions can be written without touching the disease model ([interventions.md](interventions.md)). [CK: this sounds good, but i'm worried about many-to-one (e.g. everyone dies), one-to-many (e.g. TB's fast/slow progression), and many-to-many (which i guess just needs to be written out). if you haven't already, we'll need to solve those.]
 
 Deliberately absent: [summer2](../approaches/summer2.md)'s eight named flow kinds, [flepiMoP](../approaches/flepimop.md)'s `proportional_to` / `proportion_exponent` pairs. summer2 needs `add_infection_frequency_flow` versus `add_infection_density_flow` because it has no route abstraction; we have one, and frequency-versus-density is a property of the route, not of the transition. flepiMoP's structured rate form is analysable and, per its own review, "opaque — getting frequency- versus density-dependence right through parallel lists of compartment sets and exponent strings is error-prone".
 
-### The escape hatch, priced
+### The escape hatch, priced [CK: please stop saying 'priced', it's so annoying. you can record this as a lesson]
 
 ```python
 sir = ss.Disease(
@@ -190,7 +205,7 @@ A scalar `dur=` means *exponential with that mean*, not "exactly 10 days". This 
 ss.progression('I -> R | D', dur=ss.days(10), p=[0.99, 0.01])
 ```
 
-Probabilities must sum to 1 (or one may be omitted and inferred). This is more legible than a zero-residence-time pseudo-compartment and it keeps `D` an ordinary state.
+Probabilities must sum to 1 (or one may be omitted and inferred). This is more legible than a zero-residence-time pseudo-compartment and it keeps `D` an ordinary state. [CK: ok, but realistically p is almost always going to be a complex function, not two constants. need to think about how that will work]
 
 ### States carry properties, not multipliers
 
@@ -218,7 +233,7 @@ Inference covers SIR. Declare states explicitly when they carry properties, labe
 
 ```python
 sir = ss.Disease(
-    S = ss.State(init=0.99),
+    S = ss.State(init=0.99), # [CK: don't love having to declare both 0.99 and 0.01]
     I = ss.State(init=0.01, infectious=True, label='Infectious'),
     R = ss.State(),
     infection = ss.transmission('S -> I', beta=ss.perday(0.05)),
@@ -243,9 +258,9 @@ Because the model is a graph, the pictures are nearly free, and they are the art
 Three projections, all derived from the same object:
 
 ```python
-sir.plot()      # state-transition diagram
-sir.summary()   # the resolved model as text, including every inferred default
-sir.to_df()     # the transition matrix — Atomica's grid, for free
+sir.plot()      # state-transition diagram [CK: no, sir.plot() should plot results ... sir.diagram() or something]
+sir.summary()   # the resolved model as text, including every inferred default [CK: ditto]
+sir.to_df()     # the transition matrix — Atomica's grid, for free # [CK: ditto]
 ```
 
 The tabular projection is how the [accessibility benchmark](principles.md) gets met without adopting spreadsheets as a language: since the model is data, a form, a grid, or a web UI is a serialization question rather than a language question.
@@ -267,6 +282,6 @@ The tabular projection is how the [accessibility benchmark](principles.md) gets 
 
 ## Open questions
 
-- Should `ss.transmission` be able to fire from a state that is not itself a disease state — environmental reservoirs, vectors? [SimInf](../approaches/siminf.md)'s `u`/`v` split (discrete compartments alongside continuous node-level variables) is the clean precedent, and environmental transmission is common enough to deserve an answer.
+- Should `ss.transmission` be able to fire from a state that is not itself a disease state — environmental reservoirs, vectors? [SimInf](../approaches/siminf.md)'s `u`/`v` split (discrete compartments alongside continuous node-level variables) is the clean precedent, and environmental transmission is common enough to deserve an answer. [CK: yes, it should]
 - Where exactly does the shorthand `('S -> I', rate)` stop being helpful and start being ambiguous? It needs a written rule, not a heuristic.
-- Multi-strain: HPVsim added genotype as a state *dimension* rather than duplicating the module; summer2 has a special-cased `StrainStratification`. Is a strain a dimension ([stratification.md](stratification.md)) or a second disease? Probably a dimension, but the force-of-infection restructuring summer2 special-cases has to be derivable.
+- Multi-strain: HPVsim added genotype as a state *dimension* rather than duplicating the module; summer2 has a special-cased `StrainStratification`. Is a strain a dimension ([stratification.md](stratification.md)) or a second disease? Probably a dimension, but the force-of-infection restructuring summer2 special-cases has to be derivable. [CK: yes, i think it should be expressible as either, but as a dimension would be good. consider especially TB and drug resistance]
