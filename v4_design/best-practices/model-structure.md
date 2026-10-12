@@ -4,13 +4,13 @@ The central document. Everything else in this folder depends on the position tak
 
 ## Recommendation
 
-1. **Transitions are declared data, not imperative code.** This is the single largest gap between Starsim and this project's goals, and closing it is what makes everything downstream possible. [CK: ok, but sometimes it will need to be imperative when the transitions are complex]
-2. **A transition is either spontaneous or contact-mediated, and the distinction is structural** — not implicit in whether a rate expression happens to mention another state.
-3. **The transition vocabulary is small, named, and closed, with one escape hatch that states its cost.**
-4. **Dwell time is a declared distribution per transition, defaulting to exponential**, and the backend decides how to realize it. [CK: ok, but can also explicitly say how to realize it]
-5. **A state is one concept.** "Compartment" is what a state is called when the backend is an ODE; "boolean per-agent array" is what it is called when the backend is an ABM. The declaration is identical. [CK: yes]
-6. **Infer the state list from the transitions.** Nobody should have to declare `S`, `I`, `R` and then write `S -> I`. [CK: intrigued by this, but think i disagree. it's like a recipe, having the list of ingredients and then the method. i actually don't do that for my own recipe, but it's a standard for a reason.]
-7. **The disease model is a labelled directed graph over states.** Say so, and render it.
+1. **Transitions are declared data wherever they can be, and plain Python wherever they cannot.** This is the single largest gap between Starsim and this project's goals. Declaring a transition does not mean giving up functions: any part of a transition may be a function when the logic is complex.
+2. **There is one kind of transition, and its rate says which mathematics applies.** A rate that mentions a state (`beta * I`) is contact-mediated; a rate that does not is spontaneous. The distinction is structural, read from what was written, and the user never has to pick a category.
+3. **States are declared like ingredients, then transitions are written like the method.** The two-line shorthand may infer them; anything longer should list them.
+4. **Three spellings, one object.** Arrow strings for the shortest form, operators (`S >> I @ beta * I`) for the form that reads like the equations, and `ss.Transition(...)` for the fully explicit form.
+5. **Dwell time is a declared distribution per transition, defaulting to exponential.** The run method decides how to realize it, and the user can say how explicitly.
+6. **A state is one concept.** "Compartment" is what a state is called when the model runs as an ODE; "boolean per-agent array" is what it is called when it runs with agents. The declaration is identical.
+7. **The disease model is a labeled directed graph over states.** Say so, and draw it.
 
 ## Why: what "transitions are code" costs
 
@@ -20,22 +20,24 @@ From the [Starsim review](../approaches/starsim.md), stated as a limitation:
 
 > **Transitions are still code.** `define_states` declares the state space, but there is no object representing "S → I at rate β·I/N". Progression is scheduled imperatively by writing `ti_recovered` in `set_prognoses()`. The model is therefore not introspectable as structure, cannot be diagrammed or dimension-checked as a transition system, and cannot be automatically converted to ODEs.
 
-The same finding in [EpiModel](../approaches/epimodel.md) ("There is no object representing 'S → I at rate λ'. A model cannot be introspected, diagrammed, dimension-checked, or converted to another paradigm without parsing R"), [`individual`](../approaches/individual.md) ("The model is entirely code. Processes are R closures. Nothing is introspectable, serialisable, diagrammable, or convertible"), [MetaCast](../approaches/metacast.md) ("`y_deltas[states_index['S']] += -infections` is not a specification; it is code"), and [LASER](../approaches/laser.md).
+The same finding in [EpiModel](../approaches/epimodel.md) ("There is no object representing 'S → I at rate λ'. A model cannot be introspected, diagrammed, dimension-checked, or converted to another paradigm without parsing R"), [`individual`](../approaches/individual.md) ("The model is entirely code. Processes are R closures. Nothing is introspectable, serializable, diagrammable, or convertible"), [MetaCast](../approaches/metacast.md) ("`y_deltas[states_index['S']] += -infections` is not a specification; it is code"), and [LASER](../approaches/laser.md).
 
 And the payoff, wherever the model *is* data:
 
 | Capability | Framework | Enabled by |
 |---|---|---|
-| Compile-time dimension checking | [camdl](../approaches/camdl.md) | Named transitions with typed rate expressions |
-| ODEs, Jacobian, fixed points, epidemic threshold, all derived | [epipack](../approaches/epipack.md) | Reaction tuples as SymPy |
+| Build-time dimension checking | [camdl](../approaches/camdl.md) | Named transitions with typed rate expressions |
+| ODEs derived from the model | [epipack](../approaches/epipack.md) | Reaction tuples as SymPy |
 | Automatic stratification of a finished model | [summer2](../approaches/summer2.md) | Named flow kinds the framework understands |
 | `incidence(transition)` as an observable | [camdl](../approaches/camdl.md) | Transitions have names |
-| Analytic gradients for NUTS, by source-to-source differentiation | [camdl](../approaches/camdl.md) | Symbolic rate expressions |
+| Analytic gradients for fitting | [camdl](../approaches/camdl.md), [summer2](../approaches/summer2.md) | Symbolic or traceable rate expressions |
 | Automatic model diagrams | [epiworld](../approaches/epiworld.md), [EMULSION](../approaches/emulsion.md), [EoN](../approaches/eon.md) | The model is a graph |
 | Translation between six model formats | [MIRA](../approaches/notes.md#askem-model-representation-amr--mira) | A closed Template taxonomy |
-| One model text on three backends | [camdl](../approaches/camdl.md), [epipack](../approaches/epipack.md) | The dynamics operator is chosen after the structure is declared |
+| One model text run several ways | [camdl](../approaches/camdl.md), [epipack](../approaches/epipack.md), [EMULSION](../approaches/emulsion.md) | The dynamics are chosen after the structure is declared |
 
-Starsim already proved half of this internally: `define_states` buys automatic `n_<state>` results, serialization, and validation. Declaring the transitions the same way buys the rest of the table. [CK: ok, i see that list is very camdl heavy, which is interesting!]
+Starsim already proved half of this internally: `define_states` buys automatic `n_<state>` results, serialization, and validation. Declaring the transitions the same way buys the rest of the table.
+
+That table leans heavily on camdl, which is the framework that took "the model is data" furthest. What we take from it is the payoff. What we do not take is its strictness: camdl refuses anything it cannot prove, and this project's users need a tool that lets them write the complicated transition anyway.
 
 ## The proposal
 
@@ -61,106 +63,203 @@ mparse(transitions = c("S -> beta * S * I / N -> I",
        compartments = c("S", "I", "R"), ...)
 ```
 
-**Starsim today** — 15 lines of `define_pars` / `define_states` plus a `step_state()` method that writes `ti_recovered`.
+**Starsim today**: 15 lines of `define_pars` / `define_states` plus a `step_state()` method that writes `ti_recovered`.
 
 **Lingua franca:**
 
 ```python
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.perday(0.05)),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.transmission('S -> I', beta=0.05),
+    recovery  = ss.progression('I -> R', dur=10),
 )
 ```
 
-Two lines, four facts. States `S`, `I`, `R` are inferred. `I` is inferred infectious because it is the destination of the transmission. `N` never appears, because the force of infection is the route's job and not the modeler's — see [population-and-mixing.md](population-and-mixing.md). The transitions are named `infection` and `recovery` because they are keyword arguments, which means `sim.results.infection` and `incidence(infection)` exist without anyone declaring a result.
+Two lines, four facts. States `S`, `I`, `R` are inferred from the arrows. `I` is taken to be infectious because it is where the transmission leads. `N` never appears, because dividing by the population is the library's job and not the modeler's (see [population-and-mixing.md](population-and-mixing.md)). The transitions are named `infection` and `recovery` because those are the keywords, so results for both exist without anyone declaring them.
 
-[CK: this is nice, let's keep it. but I also want to support this form:
-
-```python
-beta = 0.05 # defaults to ss.perday
-dur = 10 # defaults to days
-
-S, I, R = ss.states()
-infection = S >> I @ beta
-recovery = I >> R @ dur
-
-sir = ss.compose(infection, recovery) # would need to think about the name -- maybe could pull from namespace to DRY?
-```
-
-]
-
-The dict form is the same thing with the constructors elided:
+### The same model, written the way it is said
 
 ```python
-sir = dict(infection=('S -> I', ss.perday(0.05)), recovery=('I -> R', ss.days(10)))
+beta = 0.05           # per day: a bare number takes the sim's unit
+dur  = ss.days(10)
+
+S, I, R   = ss.states('S I R') # [CK: would really like to avoid having to duplicate "S I R"]
+infection = S >> I @ beta * I
+recovery  = I >> R @ dur
+
+sir = ss.Disease(infection, recovery)
 ```
 
-`ss.Disease` reads a positional `(arrow, quantity)` pair as `transmission` if the quantity is a rate the pathogen carries and `progression` if it is a duration — see the inference rules below, and note that this shorthand is for the SIR-shaped 90%, not a general syntax.
+Read `S >> I @ beta * I` as "S goes to I at rate beta times I". `>>` is a valid Python operator and `->` is not, which is the only reason the arrow looks different from the string form.
 
-### The arrow string
+- `ss.states('S I R')` returns three `ss.State` objects, the same idiom as `sympy.symbols('x y z')`.
+- `a >> b` makes a transition from `a` to `b`, and `@` attaches whatever drives it.
+- `ss.Disease(infection, recovery)` picks up the names `infection` and `recovery` from the variables, so nothing is typed twice. (Keywords work too, and win if both are given.)
 
-`'S -> I'` is the one place a string is load-bearing, and it is deliberate. It carries *structure* (two names and a direction), never an *expression*. The convergence is strong: camdl's `S --> I`, SimInf's `S -> ... -> I`, [Atomica](../approaches/atomica.md)'s transition matrix, [EoN](../approaches/eon.md)'s `H.add_edge('E','I')`, [EpiHiper](../approaches/epihiper.md)'s `entryState`/`exitState`, [Epydemix](../approaches/epydemix.md)'s `source`/`target`. Everyone draws the same arrow. [CK: there must also be a nice non-string representation. above i suggested `S >> I` -- since `>>` but not `->` is a valid python operator -- and i think we could also do `ss.Transition(S, I)` for the fully explicit class form. but open to suggestions]
+What may follow `@`:
 
-What must never happen is [flepiMoP](../approaches/flepimop.md)'s `rate: ["Ro * gamma"]` or [EMULSION](../approaches/emulsion.md)'s `value: 'transmission_I * total_I / total_population'`. Rates are Python objects and Python expressions.
-
-Equivalent longhand for anyone who dislikes the arrow, or for programmatic construction: [CK: yes this works too, but i think i still want a `Transition` class]
-
-```python
-ss.transmission(src='S', dst='I', beta=ss.perday(0.05))
-```
-
-### Two kinds, because the mathematics is different
-
-Four independent frameworks arrived at this split. [EoN](../approaches/eon.md) uses two directed graphs (`H` spontaneous, `J` neighbour-induced). [epipack](../approaches/epipack.md) uses 3-tuples and 5-tuples. [EpiHiper](../approaches/epihiper.md) has separate `transitions` and `transmissions` arrays. [MIRA](../approaches/notes.md#askem-model-representation-amr--mira) formalizes it as `NaturalConversion` versus `ControlledConversion`.
-
-```python
-ss.progression('I -> R', dur=ss.days(10))                       # autonomous
-ss.transmission('S -> I', beta=ss.perday(0.05))                 # requires a contact
-ss.transmission('S -> E', beta=ss.perday(0.05), source='I')     # SEIR: contact source is not the destination
-```
-
-The `source=` default is "the destination state" — right for SIR, SIS, SIRS; wrong for SEIR, where naming `I` is the actual epidemiology and should be written down. This is the one place we ask for a word that a lazier design would guess. [CK: but how do we know if we're guessing or not? how does S->I know to work in the SIR case, and S->E know to fail in the SEIR case?]
-
-Multi-source transmission (competing or cooperating pathogens, multi-strain) takes a list: `source=['I_wild', 'I_alpha']`, which is MIRA's `GroupedControlledConversion`.
-
-### The vocabulary, in full
-
-Small enough to hold in one screen. This is the whole of it:
-
-| Constructor | Meaning | Prior art |
+| After `@` | Means | Example |
 |---|---|---|
-| `ss.transmission(arrow, beta=, source=)` | Contact-mediated | EoN `J`, epipack 5-tuple, EpiHiper `transmissions`, MIRA `ControlledConversion` |
-| `ss.progression(arrow, dur= \| rate= \| p=)` | Spontaneous | EoN `H`, epipack 3-tuple, EpiHiper `transitions`, MIRA `NaturalConversion` |
-| `ss.birth(arrow, rate=)` / `ss.death(arrow, rate=)` | Source and sink | camdl inflow/outflow, summer2 `add_crude_birth_flow` / `add_death_flow`, SimInf `@` |
-| `ss.transfer(<dim>='a -> b', rate= \| p=)` | Move between *strata*, not disease states | [MetaCast](../approaches/metacast.md) transfer dicts, camdl `transfer(...)` |
-| `ss.process(fn)` [CK: don't love 'process', what about 'func' or something] | The escape hatch: arbitrary Python | [`individual`](../approaches/individual.md)'s processes, Starsim's `step()` |
+| A duration | Mean time spent in the source state | `I >> R @ ss.days(10)` |
+| A rate, or a bare number | A hazard per unit time | `I >> R @ ss.perday(0.1)`, `I >> R @ 0.1` |
+| A distribution of durations | The dwell-time distribution | `I >> R @ ss.lognorm_ex(mean=10, std=3, unit='days')` |
+| An expression containing a state | A force of infection | `S >> I @ beta * I` |
+| A function | Called to get the rate | `I >> D @ death_rate` (see [below](#when-a-transition-is-complicated)) |
 
-`ss.transfer` is what vaccination, ageing, and migration are: the individual does not change disease state, they change dimension coordinate. Keeping it separate from `ss.progression` is [MetaCast](../approaches/metacast.md)'s insight and it is why interventions can be written without touching the disease model ([interventions.md](interventions.md)). [CK: this sounds good, but i'm worried about many-to-one (e.g. everyone dies), one-to-many (e.g. TB's fast/slow progression), and many-to-many (which i guess just needs to be written out). if you haven't already, we'll need to solve those.]
+A bare number after `@` is a rate, because "at" reads as "at rate". For a bare-number duration use the keyword form, `ss.progression('I -> R', dur=10)`.
 
-Deliberately absent: [summer2](../approaches/summer2.md)'s eight named flow kinds, [flepiMoP](../approaches/flepimop.md)'s `proportional_to` / `proportion_exponent` pairs. summer2 needs `add_infection_frequency_flow` versus `add_infection_density_flow` because it has no route abstraction; we have one, and frequency-versus-density is a property of the route, not of the transition. flepiMoP's structured rate form is analysable and, per its own review, "opaque — getting frequency- versus density-dependence right through parallel lists of compartment sets and exponent strings is error-prone".
+### Fully explicit
 
-### The escape hatch, priced [CK: please stop saying 'priced', it's so annoying. you can record this as a lesson]
+Everything above builds the same object, and it can be built directly:
 
 ```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.perday(0.05)),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
-    weirdness = ss.process(my_function),
+ss.Transition(S, I, rate=beta * I, name='infection')
+ss.Transition('I', 'R', dur=ss.days(10), name='recovery')
+```
+
+`ss.Transition(src, dst, rate= | dur= | p=, ...)` takes states or their names. This is the form for programmatic construction and for anyone who dislikes operators. The shorthand constructors are thin wrappers around it:
+
+| Shorthand | Is |
+|---|---|
+| `ss.transmission('S -> I', beta=b, source='I')` | `ss.Transition('S', 'I', rate=b * I)` |
+| `ss.progression('I -> R', dur=d)` | `ss.Transition('I', 'R', dur=d)` |
+| `ss.birth('-> S', rate=r)` | `ss.Transition(None, 'S', rate=r)` |
+| `ss.death('I ->', rate=r)` | `ss.Transition('I', None, rate=r)` |
+| `ss.transfer(risk='low -> high', rate=r)` | A move between strata; see [stratification.md](stratification.md) |
+
+On capitalization, which follows Starsim's existing habit (`ss.Dist` and `ss.normal`, `ss.Rate` and `ss.perday`): modules and base classes are CamelCase (`ss.Disease`, `ss.State`, `ss.Transition`); the concrete pieces you put inside a module are lowercase (`ss.transmission`, `ss.par`, `ss.days`).
+
+### Declaring states
+
+A recipe lists the ingredients and then the method, and that convention exists for a reason: the list is where you see the whole model at a glance, and it is what catches a misspelled name in the method. So:
+
+```python
+S, I, R = ss.states('S I R')                     # the short way
+E = ss.State('E', label='Exposed')               # one at a time, when a state has properties
+I = ss.State('I', init=0.01, infectious=True)
+```
+
+**Declare states or let them be inferred; both work.** Inference from arrow strings is what makes the two-line model possible, and it stays. Once any state is declared, all of them must be, and an arrow that names an undeclared state is an error with the nearest match suggested.
+
+Initial conditions are given only where they are not zero. `ss.State('I', init=0.01)` puts 1% in `I` and the rest in the first state; `init_prev=0.01` on the disease does the same thing, as in Starsim. Nobody should have to write both 0.99 and 0.01.
+
+[odin](../approaches/odin.md)'s rule that the state set is whatever has an `initial()` is the same idea from the other side: the states are shared by every way of running the model, and only the dynamics differ.
+
+### One kind of transition
+
+Four frameworks independently split transitions into two kinds. [EoN](../approaches/eon.md) uses two directed graphs (`H` spontaneous, `J` neighbor-induced). [epipack](../approaches/epipack.md) uses 3-tuples and 5-tuples. [EpiHiper](../approaches/epihiper.md) has separate `transitions` and `transmissions` arrays. [MIRA](../approaches/notes.md#askem-model-representation-amr--mira) formalizes it as `NaturalConversion` versus `ControlledConversion`.
+
+The split is real, because the mathematics differs. But the user does not need two classes to express it, because the rate already says which one it is:
+
+```python
+I >> R @ gamma          # no state in the rate: spontaneous
+S >> I @ beta * I       # a state in the rate: someone in I is doing the infecting
+```
+
+This is exactly how the equations are written, and it is why camdl and SimInf can use one transition syntax. The library reads the kind from the rate and uses it for everything that depends on it (diagrams, stratification, running on a network).
+
+**A bare state in a rate means exposure to that state through the model's contact structure.** With no network given, mixing is homogeneous, so `beta * I` is the textbook β·I/N and `beta` is the classical transmission rate. Add a contact matrix or a network and the same line means "per contact with someone in `I`", with the network supplying who meets whom. The disease does not change. This is the unification argued in [population-and-mixing.md](population-and-mixing.md).
+
+### The source of infection
+
+In the operator form the source is written down: `S >> E @ beta * I` says people leave `S` for `E` because of contact with `I`. Nothing is guessed.
+
+In the string form it is a keyword:
+
+```python
+ss.transmission('S -> I', beta=0.05)                 # source not given
+ss.transmission('S -> E', beta=0.05, source='I')     # SEIR: given
+```
+
+When `source=` is omitted, the library uses the states declared `infectious=True` if there are any, and otherwise the destination. That guess is right for SIR and SIS and wrong for an SEIR whose author forgot the keyword, and **there is no way to tell those apart from the structure**: both are a chain out of `S`. So the guess is not checked; it is printed (`describe()` shows `infection: S -> E, infected by E [guessed]`), and the documentation recommends the operator form, where the question does not arise, for anything beyond SIR and SIS.
+
+Several sources are a sum: `S >> I @ beta * (I + 0.5 * A)` for an asymptomatic state half as infectious, or `source=['I', 'A']` in the string form. This is MIRA's `GroupedControlledConversion`.
+
+### Transmission that is not person to person
+
+`I.n` is the plain number of people in a state, and a rate may be any expression of counts and parameters, used as written. That covers the cases where there is no contact for `beta` to be per:
+
+```python
+# Cholera: infection from a water reservoir, with dose response
+water = ss.Compartments(
+    shedding = ss.Transition(None, 'W', rate=shed * I.n),
+    decay    = ss.Transition('W', None, rate=ss.perday(0.3)),
 )
+W = water.W
+infection = S >> I @ beta * W.n / (W.n + K)
+```
+
+```python
+# Malaria: humans are infected by mosquitoes, mosquitoes by humans
+Sv, Ev, Iv = ss.states('Sv Ev Iv')
+mosquitoes = ss.Compartments(
+    biting     = Sv >> Ev @ a * c * Ih.n / Nh,
+    incubation = Ev >> Iv @ ss.days(10),
+    death      = ss.death(rate=ss.perday(0.1)),
+)
+human_infection = Sh >> Eh @ a * b * Iv.n / Nh
+```
+
+(`Sh`, `Eh`, `Ih` are the human disease's states and `Nh` the human population size; `a`, `b`, `c` are the biting rate and the two transmission probabilities.)
+
+`ss.Compartments` is a module whose states are counts rather than agents: a water reservoir, a mosquito population, a wastewater signal. It uses the same transition syntax and can sit in the same sim as agent-based modules, per patch if the model is spatial. [SimInf](../approaches/siminf.md)'s split between discrete compartments and continuous node-level variables is the precedent, and its `SISe` models are this pattern. [CK: "Compartments" is a bad name since just sounds like SIR compartments.]
+
+### Branching, merging, and everything in between
+
+**One to many.** TB's fast and slow progression, or recovery versus death:
+
+```python
+p = 0.1
+S >> (p * Lfast + (1 - p) * Lslow) @ beta * I       # weights on the destinations
+ss.Transition(S, [Lfast, Lslow], p=[p, 1 - p], rate=beta * I)   # the same, explicit
+ss.transmission('S -> Lfast | Lslow', beta=0.05, p=[0.1, 0.9])  # the same, as a string
+```
+
+In real models the split is rarely two constants. `p` takes anything a parameter can take: a table by stratum (`ss.by(age=[0.02, 0.1, 0.3])`) or a function of the sim that returns one value per agent or per group. Where the branches also take different amounts of time, write them as two transitions that each carry `p=` and their own `dur=`: the branch is chosen on leaving the source state, then each waits its own time, which is what Starsim's `set_prognoses` does by hand.
+
+```python
+recovery = ss.progression('I -> R', p=0.99, dur=ss.days(10))
+death    = ss.progression('I -> D', p=0.01, dur=ss.days(18))
+```
+
+[Atomica](../approaches/atomica.md) does this with a *junction* (a zero-residence-time compartment), [epymorph](../approaches/epymorph.md) with `fork(...)`. The weighted arrow says the same thing without a state that is not a state.
+
+**Many to one.** `(S | I | R) >> D @ mu`, or `ss.death(rate=mu)`, which applies to every state.
+
+**Many to many.** Vaccination, aging, and migration move people between strata whatever their disease state. That is `ss.transfer`, kept separate from disease transitions following [MetaCast](../approaches/metacast.md), and it is why interventions can be written without touching the disease model ([stratification.md](stratification.md), [interventions.md](interventions.md)). Anything that fits none of these is written out one transition at a time.
+
+### When a transition is complicated
+
+Declared does not mean simple. Every slot (`rate`, `dur`, `p`, `beta`) accepts a function:
+
+```python
+def death_rate(sim):
+    age = sim.people.age
+    return 0.001 * np.exp(0.08 * age)
+
+death = I >> D @ death_rate
+```
+
+The transition is still an edge in the graph: it is drawn, it has a result, it can be stratified. Only its rate is opaque.
+
+A function is called with whatever the run provides. In an agent-based run `sim.people.age` is one value per agent. In a compartmental run it is one value per age group, if age is a stratification. A function that only uses things that exist in both (state counts, parameters, time, stratification coordinates) therefore works in both, and one that reaches for something only agents have stops a compartmental run with a message naming what it asked for. The library does not try to analyze the function in advance; it tries it.
+
+When even the endpoints are not fixed, pass a plain function as a keyword and it is called every step, or override `step()` in a class:
+
+```python
+sir = ss.Disease(infection, recovery, weirdness=my_function)
 ```
 
 ```text
->>> sir.summary()
+>>> sir.describe()
 ...
-weirdness  custom process
-  ! not stratifiable, not convertible to ODE/CTMC, excluded from R0 and Jacobian
+weirdness   custom function, called each step
 ```
 
-This is [camdl](../approaches/camdl.md)'s capability-check discipline — "where a paradigm × feature combination is not supported, say so by name" — applied to the user's own code. [`epidemics`](../approaches/epidemics.md) does the same thing for a different reason and explains it: you cannot rate-intervene on `infectiousness_rate` because that parameter sets the number of Erlang sub-compartments.
+Within-host viral load, partnership formation, and care cascades are normally written this way, and that is fine.
 
-### Dwell time is a distribution, and it is the sharpest test of paradigm independence
+### Dwell time is a distribution
 
-This is finding 7 of the [landscape review](../approaches/README.md#cross-cutting-findings): "Dwell-time distribution is a first-class axis that most frameworks silently fix." ODE means exponential, and nearly every framework assumes it without saying so. [MEmilio](../approaches/memilio.md) needed four separate model families (ODE / LCT / GLCT / IDE) to span the axis. [EpiHiper](../approaches/epihiper.md) declares a distribution per transition. camdl has `via erlang` / `via hyper_erlang`. `individual` and Starsim schedule sampled times.
+Finding 7 of the [landscape review](../approaches/README.md#cross-cutting-findings): "Dwell-time distribution is a first-class axis that most frameworks silently fix." ODE means exponential, and nearly every framework assumes it without saying so. [MEmilio](../approaches/memilio.md) needed four separate model families (ODE / LCT / GLCT / IDE) to span the axis. [EpiHiper](../approaches/epihiper.md) declares a distribution per transition. camdl has `via erlang` / `via hyper_erlang`. `individual` and Starsim schedule sampled times.
 
 **EpiHiper** ([approaches/epihiper.md](../approaches/epihiper.md)):
 
@@ -172,42 +271,33 @@ This is finding 7 of the [landscape review](../approaches/README.md#cross-cuttin
 **Lingua franca:**
 
 ```python
-ss.progression('I -> R', dur=ss.gamma(shape=1.0, scale=ss.days(5)))
+I >> R @ ss.gamma(a=2, scale=5, unit='days')
+# [CK: or this form:]
+ss.progression('I -> R', dur=ss.gamma(a=2.0, scale=ss.days(5)))
+# [CK: string form should accept I -> R, I->R, I>>R, etc]
 ```
 
-and the compiler realizes it per backend, which is the concrete, testable instance of the project's central claim:
+and each run method realizes it its own way:
 
-| Backend | Realization | Precedent |
+| Run method | Realization | Precedent |
 |---|---|---|
-| ODE (exponential) | `rate = 1/mean` | Everyone |
-| ODE (non-exponential) | Erlang sub-compartments, generated | camdl `via erlang`, [MEmilio](../approaches/memilio.md) LCT |
-| IDE | Memory kernel | MEmilio IDE |
-| CTMC / Gillespie | Exponential clock, or sub-states | [SimInf](../approaches/siminf.md) |
+| ODE, exponential | `rate = 1/mean` | Everyone |
+| ODE or stochastic compartmental, non-exponential | Erlang sub-stages, generated | camdl `via erlang`, [MEmilio](../approaches/memilio.md) LCT |
 | Agent-based | Sample a time, schedule the event | [`individual`](../approaches/individual.md)'s `TargetedEvent`, Starsim's `ti_*` |
 
-Three equivalent spellings, following [EMULSION](../approaches/emulsion.md)'s three transition keys (`rate:`, `proba:`, `duration:`) and Starsim's three rate types:
+The user can also say how, rather than leave it to the method: `stages=3` uses three sub-stages everywhere, including in an agent-based run, which is the way to make an agent-based and a compartmental version of a model match stage for stage.
+
+Three equivalent ways to give the timing, following [EMULSION](../approaches/emulsion.md)'s three transition keys (`rate:`, `proba:`, `duration:`) and Starsim's time types:
 
 ```python
-ss.progression('I -> R', dur=ss.days(10))          # mean dwell time      → Exp(mean=10 days)
-ss.progression('I -> R', rate=ss.perday(0.1))      # hazard               → Exp(mean=10 days)
-ss.progression('I -> R', p=ss.probperday(0.1))     # per-period probability
+ss.progression('I -> R', dur=ss.days(10))          # mean dwell time   → Exp(mean = 10 days)
+ss.progression('I -> R', rate=ss.perday(0.1))      # hazard            → Exp(mean = 10 days)
+ss.progression('I -> R', rate=ss.probperday(0.1))  # probability per period
 ```
 
-A scalar `dur=` means *exponential with that mean*, not "exactly 10 days". This is the guess that most needs printing, so `summary()` shows `recovery: I -> R, dwell ~ Exp(mean=10 days)` — the visible expansion that [odin](../approaches/odin.md) achieves by making the modeler write `1 - exp(-gamma*dt)` by hand, without making them write it.
+A scalar `dur=` means *exponential with that mean*, not "exactly 10 days". This is the guess that most needs printing, so `describe()` shows `recovery: I -> R, dwell ~ Exp(mean = 10 days)`. [odin](../approaches/odin.md) achieves the same visibility by making the modeler write `1 - exp(-gamma*dt)` by hand; we print it instead.
 
-### Branching
-
-**Atomica** ([approaches/atomica.md](../approaches/atomica.md)) uses a *junction*: a compartment flagged `Is Junction` with zero residence time, splitting inflow by proportion. **epymorph** ([approaches/epymorph.md](../approaches/epymorph.md)) has `fork(...)`. camdl has branching transitions.
-
-**Lingua franca** — one arrow, several destinations:
-
-```python
-ss.progression('I -> R | D', dur=ss.days(10), p=[0.99, 0.01])
-```
-
-Probabilities must sum to 1 (or one may be omitted and inferred). This is more legible than a zero-residence-time pseudo-compartment and it keeps `D` an ordinary state. [CK: ok, but realistically p is almost always going to be a complex function, not two constants. need to think about how that will work]
-
-### States carry properties, not multipliers
+### States carry properties
 
 **EpiHiper** ([approaches/epihiper.md](../approaches/epihiper.md)) puts `infectivity` and `susceptibility` on the *state*:
 
@@ -216,72 +306,57 @@ Probabilities must sum to 1 (or one may be omitted and inferred). This is more l
 { "id": "wanedV", "susceptibility": 0.5 }
 ```
 
-That two-scalar declaration *is* the vaccine model — no multipliers threaded through transmission code, and a new state composes without editing anything else. Starsim's `rel_sus` / `rel_trans` are the per-agent version of the same idea.
+That two-number declaration *is* the vaccine model: no multipliers threaded through transmission code, and a new state composes without editing anything else. Starsim's `rel_sus` / `rel_trans` are the per-agent version of the same idea.
 
-**Lingua franca** — keep both, because they answer different questions:
-
-```python
-ss.State('V',     rel_sus=0.1)    # a property of being in this state
-ss.State('wanedV', rel_sus=0.5)
-```
-
-with per-agent `rel_sus` retained for heterogeneity that is not a state (age, comorbidity, an intervention someone received). The state-level version is the declarative default; the agent-level version is what [composition-and-effects.md](composition-and-effects.md) governs.
-
-### Explicit state declaration, when you want it
-
-Inference covers SIR. Declare states explicitly when they carry properties, labels, or initial conditions:
+**Lingua franca**: keep both, because they answer different questions:
 
 ```python
-sir = ss.Disease(
-    S = ss.State(init=0.99), # [CK: don't love having to declare both 0.99 and 0.01]
-    I = ss.State(init=0.01, infectious=True, label='Infectious'),
-    R = ss.State(),
-    infection = ss.transmission('S -> I', beta=ss.perday(0.05)),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
-)
+V      = ss.State('V',      rel_sus=0.1)    # a property of being in this state
+wanedV = ss.State('wanedV', rel_sus=0.5)
 ```
 
-States and transitions share one namespace of keyword arguments, so the name on the left is the name used everywhere else. [odin](../approaches/odin.md)'s rule — the state set is whatever has an `initial()`, and `deriv()` versus `update()` selects the paradigm — is the same factoring: the state space is shared across paradigms, only the dynamics operator differs.
+with per-agent `rel_sus` retained for heterogeneity that is not a state (age, comorbidity, an intervention someone received), which is what [composition-and-effects.md](composition-and-effects.md) covers.
 
-### Order does not matter
+### Order
 
-[odin](../approaches/odin.md) topologically sorts its equations; [SimInf](../approaches/siminf.md) resolves its dependency graph; [summer2](../approaches/summer2.md) builds a `networkx` DAG; camdl compiles to a flat IR. From the odin review:
+Transitions out of the same state are resolved together, as competing hazards, so the order in which a disease's transitions are listed does not favor the first one. Across modules, order is Starsim's loop and it does matter, deliberately: see [composition-and-effects.md](composition-and-effects.md).
 
-> Order-independence is a requirement, not a nicety. Any lingua franca whose statements have to be read in order has failed the "no hidden behavior" goal, because execution order *is* hidden behavior.
+### Show it
 
-Declared transitions are a set. Within a timestep they all see start-of-step state and are applied together — [`individual`](../approaches/individual.md)'s queued-update semantics, which is "the strongest correctness property of any agent-based framework in the review". Only `ss.process` escape hatches need an ordering, and that is what Starsim's `Loop` is for ([composition-and-effects.md](composition-and-effects.md)).
-
-### Render it
-
-Because the model is a graph, the pictures are nearly free, and they are the artifact non-modelers actually read. [epiworld](../approaches/epiworld.md) has `ModelDiagram`; [EMULSION](../approaches/emulsion.md) puts `fillcolor` on states because the engine draws the model; [EoN](../approaches/eon.md) literally executes a `networkx.DiGraph`; [Atomica](../approaches/atomica.md)'s transition matrix is an adjacency matrix that a domain expert fills in by hand.
-
-Three projections, all derived from the same object:
+Because the model is a graph, the pictures are nearly free, and they are what non-modelers actually read. [epiworld](../approaches/epiworld.md) has `ModelDiagram`; [EMULSION](../approaches/emulsion.md) puts `fillcolor` on states because the engine draws the model; [EoN](../approaches/eon.md) literally executes a `networkx.DiGraph`; [Atomica](../approaches/atomica.md)'s transition matrix is an adjacency matrix that a domain expert fills in by hand.
 
 ```python
-sir.plot()      # state-transition diagram [CK: no, sir.plot() should plot results ... sir.diagram() or something]
-sir.summary()   # the resolved model as text, including every inferred default [CK: ditto]
-sir.to_df()     # the transition matrix — Atomica's grid, for free # [CK: ditto]
+sir.diagram()       # the state-transition diagram
+sir.describe()      # the resolved model as text, with every guessed default marked
+sir.equations()     # the ODE system, with parameter names
+sir.transitions     # the transitions as a table: Atomica's grid
 ```
 
-The tabular projection is how the [accessibility benchmark](principles.md) gets met without adopting spreadsheets as a language: since the model is data, a form, a grid, or a web UI is a serialization question rather than a language question.
+These names are deliberately not `plot()`, `summary()`, or `to_df()`, which in Starsim are about results and stay that way.
+
+The table is how the [accessibility benchmark](principles.md) gets met without adopting spreadsheets as a language: since the model is data, a form, a grid, or a web UI is a serialization question, not a language question.
 
 ## Trade-offs
 
-- **A closed vocabulary means some models take the escape hatch.** summer2 pays this and it is why its stratification works. The mitigation is that the hatch is one call, not a fork of the framework, and that its cost is printed rather than discovered.
-- **Inference means the printed summary is load-bearing.** If someone writes an SEIR and does not read the summary, they may not notice that `E` was assumed infectious. Mitigation: `source=` defaults to the destination, so SEIR is *wrong in an obvious way* (the summary says `E infectious`) rather than subtly. Consider warning when a transmission destination has an onward progression before any transmission sources it — the SEIR shape is detectable.
-- **Rate expressions in Python are checkable at build time, not compile time.** Later than camdl. Earlier than every Python framework here.
-- **Transitions-as-data does not make imperative code go away.** Within-host viral load, partnership formation, and care cascades will still be written as `step()` methods. The claim is only that the *disease structure* need not be.
+- **Two ways to write an arrow is one more than the minimum.** The string form is the shortest path to a running model and is what Starsim users will expect; the operator form reads like the equations and makes the source explicit. Both build the same object, and `describe()` prints one canonical form.
+- **Operators have precedence rules the user does not see.** `S >> I @ beta * I` works without parentheses, but `S >> p * A + (1 - p) * B @ rate` does not, and needs them around the destinations. The error for the second should say so.
+- **Inference means the described model matters.** If someone writes an SEIR in the string form and forgets `source=`, the only signal is the `[guessed]` line.
+- **A function in a rate is opaque.** The library cannot print it as an equation or differentiate it symbolically. It can still run it wherever it works.
+- **`ss.Compartments` is a second kind of population.** It is justified by vector-borne and environmental diseases, which are a large share of the global burden and which no amount of contact structure describes.
 
 ## Rejected
 
-- **A general reaction primitive `A + B → C + D`** ([epipack](../approaches/epipack.md)). Maximally expressive and, as summer2 shows from the other side, unstratifiable — the framework cannot transform a flow whose meaning it does not know. The two named kinds cover the same epidemiological ground with the meaning attached.
+- **Separate classes for spontaneous and contact-mediated transitions as the user-facing choice.** The split is real and the library tracks it; the user's rate expression already says which is which.
+- **A general reaction primitive `A + B → C + D`** ([epipack](../approaches/epipack.md)). `S >> I @ beta * I` covers the same ground while keeping "who moves" separate from "who causes it", which is what stratification and networks need.
+- **Requiring `/N` in the rate.** camdl is right that `beta * S * (I/N)` should type-check, but a modeler who writes `/N` by hand can write it wrongly, and the denominator depends on the mixing. It is allowed (via counts, `I.n / N`) and never needed in the common case.
+- **A dict shorthand with positional tuples**, `dict(infection=('S -> I', 0.05))`. The first draft proposed it; deciding whether `0.05` is a transmission rate or a recovery rate from context turned out to need rules that misfire (SIRS, for one). The two-line constructor form is as short and is not ambiguous.
 - **Integer state indices** ([epiworld](../approaches/epiworld.md)'s `target_states = 2L`). Named, checked references only.
-- **Requiring `N` in the rate expression.** camdl is right that `beta * S * (I/N)` should type-check, and right that "no hidden multiplication" is safer — but a modeler who writes `/N` by hand can write `/N` wrongly, and the denominator convention is a route property. See [population-and-mixing.md](population-and-mixing.md).
-- **A separate `Junction` state kind** ([Atomica](../approaches/atomica.md)). The branching arrow says the same thing without adding a state that is not a state.
+- **A separate `Junction` state kind** ([Atomica](../approaches/atomica.md)). The weighted arrow says the same thing.
 - **Mandatory ontology identifiers** ([MIRA](../approaches/notes.md#askem-model-representation-amr--mira)). Optional `ss.State('I', ontology='ido:0000511')` for anyone doing model merging; never required.
 
 ## Open questions
 
-- Should `ss.transmission` be able to fire from a state that is not itself a disease state — environmental reservoirs, vectors? [SimInf](../approaches/siminf.md)'s `u`/`v` split (discrete compartments alongside continuous node-level variables) is the clean precedent, and environmental transmission is common enough to deserve an answer. [CK: yes, it should]
-- Where exactly does the shorthand `('S -> I', rate)` stop being helpful and start being ambiguous? It needs a written rule, not a heuristic.
-- Multi-strain: HPVsim added genotype as a state *dimension* rather than duplicating the module; summer2 has a special-cased `StrainStratification`. Is a strain a dimension ([stratification.md](stratification.md)) or a second disease? Probably a dimension, but the force-of-infection restructuring summer2 special-cases has to be derivable. [CK: yes, i think it should be expressible as either, but as a dimension would be good. consider especially TB and drug resistance]
+- **Should a bare number after `@` be a rate or a duration?** This document says rate. `I >> R @ 10` meaning "after 10 days" is tempting and is how some people think, but `@ 0.1` and `@ 10` cannot both be guessed safely from magnitude.
+- **Multi-strain.** HPVsim added genotype as a state dimension; summer2 has a special-cased `StrainStratification`; Starsim would use two disease modules. Both should be expressible: a dimension when the strains share a structure (TB with drug-sensitive and drug-resistant strains, plus a transfer for acquired resistance), separate diseases when they do not. See [stratification.md](stratification.md).
+- **How much should `ss.Compartments` be able to do?** Counts with transitions is enough for reservoirs and simple vector models. Whether it needs its own stratification (mosquito species, larval stages by habitat) or should stay deliberately small is not settled. [CK: not sure I entirely understand, but yes will need to support complex vector models, certainly different species. But could just use regular states for that perhaps?]
+- **Picking up names from variables.** `ss.Disease(infection, recovery)` finds the names by looking at the caller's variables. That is convenient and slightly magical; the fallback when it fails (two names for one object, a transition built inline) is a name made from the states, `S_to_I`. [CK: ok]
